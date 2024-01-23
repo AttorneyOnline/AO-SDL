@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        uint8_t* tex_data = stbi_load("C:\\Users\\Marisa\\source\\repos\\bangle\\assets\\extures\\container.jpg",
+        uint8_t* tex_data = stbi_load("C:\\Users\\Marisa\\source\\repos\\bangle\\assets\\textures\\container.jpg",
                                       &tex_width, &tex_height, &tex_num_channels, 0);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex_width, tex_height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex_data);
         glGenerateMipmap(GL_TEXTURE_2D);
