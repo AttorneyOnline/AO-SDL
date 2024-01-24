@@ -7,7 +7,6 @@ in vec2 vert_texcoord;
 uniform sampler2D texture_sample;
 
 void main() {
-	// frag_color = vec4(vert_albedo.x, vert_albedo.y, vert_albedo.z, 1.0f);
-	//frag_color = vec4(vert_texcoord, 0.0f, 1.0f);
-	frag_color = texture(texture_sample, vert_texcoord) * vec4(vert_albedo, 1.0f);
+	vec4 tex_color = texture(texture_sample, vert_texcoord);
+	frag_color = tex_color;
 }

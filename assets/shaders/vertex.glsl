@@ -1,7 +1,7 @@
 #version 450
-in vec3 vertex_pos;
-in vec3 vertex_color;
-in vec2 vertex_tex_coord;
+layout (location = 0) in vec3 vertex_pos;
+layout (location = 1) in vec3 vertex_color;
+layout (location = 2) in vec2 vertex_tex_coord;
 
 out vec3 vert_albedo;
 out vec2 vert_texcoord;

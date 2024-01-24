@@ -6,11 +6,11 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-project ("bangle" LANGUAGES CXX C)
+project ("saiban" LANGUAGES CXX C)
 add_executable ( ${CMAKE_PROJECT_NAME}
     "src/main.cpp"
 
-    "src/render/ShaderLibrary.cpp"
+    "src/render/Shader.cpp"
 
     "src/utils/Log.cpp"
     

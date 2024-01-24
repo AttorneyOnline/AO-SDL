@@ -1,7 +1,4 @@
 ﻿#include <cmath>
-#include <fstream>
-#include <iostream>
-#include <sstream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -10,16 +7,8 @@
 
 #include <GL/glew.h>
 
-#include "render/ShaderLibrary.h"
+#include "render/Shader.h"
 #include "utils/Log.h"
-
-std::string read_file(std::string path) {
-    std::ifstream file(path);
-    std::stringstream buf;
-    buf << file.rdbuf();
-
-    return buf.str();
-}
 
 int main(int argc, char* argv[]) {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -56,9 +45,8 @@ int main(int argc, char* argv[]) {
         Log::log_print(LogLevel::ERROR, "Failed to disable VSync: %s", SDL_GetError());
     }
 
-    GLuint program_id;
+    GLProgram program;
     GLuint texture;
-    ShaderLibrary lib;
     GLuint vao, vbo, ebo;
 
     int num_attr;
@@ -70,35 +58,25 @@ int main(int argc, char* argv[]) {
 
         glGenTextures(1, &texture);
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        uint8_t* tex_data = stbi_load("C:\\Users\\Marisa\\source\\repos\\bangle\\assets\\textures\\container.jpg",
+        stbi_set_flip_vertically_on_load(true);
+        uint8_t* tex_data = stbi_load("C:\\Users\\Marisa\\Documents\\saiban\\assets\\textures\\container.jpg",
                                       &tex_width, &tex_height, &tex_num_channels, 0);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex_width, tex_height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex_data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex_data);
         glGenerateMipmap(GL_TEXTURE_2D);
         stbi_image_free(tex_data);
 
-        program_id = lib.add_program("prog");
+        GLShader vert(ShaderType::Vertex, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\vertex.glsl");
+        GLShader frag(ShaderType::Fragment, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\fragment.glsl");
+        program.link_shaders({vert, frag});
 
-        std::string vert_shader = read_file("C:\\Users\\Marisa\\source\\repos\\bangle\\assets\\shaders\\vertex.glsl");
-        const char* vert_shader_source = vert_shader.c_str();
-        lib.add_shader("vert", GL_VERTEX_SHADER, &vert_shader_source);
-        lib.attach_shader("vert", "prog");
-
-        std::string frag_shader = read_file("C:\\Users\\Marisa\\source\\repos\\bangle\\assets\\shaders\\fragment.glsl");
-        const char* frag_shader_source = frag_shader.c_str();
-        lib.add_shader("frag", GL_FRAGMENT_SHADER, &frag_shader_source);
-        lib.attach_shader("frag", "prog");
-
-        // Link program
-        lib.link_program("prog");
-
-        GLint glsl_vertex_pos = glGetAttribLocation(program_id, "vertex_pos");
-        GLint glsl_vertex_color = glGetAttribLocation(program_id, "vertex_color");
-        GLint glsl_vertex_tex_coord = glGetAttribLocation(program_id, "vertex_tex_coord");
+        GLint glsl_vertex_pos = 0;
+        GLint glsl_vertex_color = 1;
+        GLint glsl_vertex_tex_coord = 2;
 
         // VBO data
         GLfloat vertices[] = {
@@ -145,8 +123,8 @@ int main(int argc, char* argv[]) {
         glBindVertexArray(0);
 
         glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
-
-    } catch (std::exception ex) {
+    }
+    catch (std::exception ex) {
         Log::log_print(LogLevel::ERROR, "Caught exception");
         return false;
     }
@@ -168,11 +146,14 @@ int main(int argc, char* argv[]) {
 
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(program_id);
+        program.use();
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
-        glUniform1i(glGetUniformLocation(program_id, "texture_sample"), 0);
+        program.uniform_int("texture_sample", 0);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glBindVertexArray(vao);
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -195,7 +176,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    glDeleteProgram(program_id);
     SDL_DestroyWindow(window);
     SDL_Quit();
 
