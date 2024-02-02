@@ -1,4 +1,5 @@
 #include "render/Shader.h"
+
 #include "utils/log.h"
 
 #include <cstdlib>
@@ -25,7 +26,7 @@ GLShader::GLShader(ShaderType type, const std::string& path) : shader_type(type)
     glGetShaderiv(shader, GL_COMPILE_STATUS, &shader_compiled);
     if (shader_compiled != GL_TRUE) {
         Log::log_print(LogLevel::ERROR, "Unable to compile shader 0x%08X", shader);
-        print_log();
+        print_log(shader);
         id = 0;
     }
     else {
@@ -38,14 +39,14 @@ GLShader::~GLShader() {
     glDeleteShader(id);
 }
 
-void GLShader::print_log() {
-    if (glIsShader(id)) {
+void GLShader::print_log(GLuint shader) {
+    if (glIsShader(shader)) {
         int info_log_len, max_len;
 
-        glGetShaderiv(id, GL_INFO_LOG_LENGTH, &max_len);
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_len);
         char* info_log = (char*)malloc(max_len);
 
-        glGetShaderInfoLog(id, max_len, &info_log_len, info_log);
+        glGetShaderInfoLog(shader, max_len, &info_log_len, info_log);
         if (info_log_len > 0) {
             Log::log_print(LogLevel::DEBUG, "%s", info_log);
         }
@@ -72,8 +73,9 @@ GLProgram::~GLProgram() {
     glDeleteProgram(id);
 }
 
-bool GLProgram::link_shaders(std::vector<GLShader> shaders) {
-    for (auto shader : shaders) {
+bool GLProgram::link_shaders(std::initializer_list<std::reference_wrapper<GLShader>> shaders) {
+    for (GLShader& shader : shaders) {
+        Log::log_print(LogLevel::DEBUG, "Attached shader %d", shader.get_id());
         glAttachShader(id, shader.get_id());
     }
 

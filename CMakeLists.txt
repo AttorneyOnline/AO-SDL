@@ -9,12 +9,11 @@ endif()
 project ("saiban" LANGUAGES CXX C)
 add_executable ( ${CMAKE_PROJECT_NAME}
     "src/main.cpp"
-
     "src/render/Shader.cpp"
-
+    "src/render/Texture.cpp"
     "src/utils/Log.cpp"
-    
-)
+ "src/render/Vertex.cpp" "include/render/Vertex.h")
+
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE third-party/stb)

@@ -1,13 +1,11 @@
 ﻿#include <cmath>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
 #include <SDL2/SDL.h>
 
 #include <GL/glew.h>
 
 #include "render/Shader.h"
+#include "render/Texture.h"
 #include "utils/Log.h"
 
 int main(int argc, char* argv[]) {
@@ -46,29 +44,10 @@ int main(int argc, char* argv[]) {
     }
 
     GLProgram program;
-    GLuint texture;
+    Texture2D tex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\textures\\container.jpg", GL_RGB, GL_RGB);
     GLuint vao, vbo, ebo;
 
-    int num_attr;
-    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &num_attr);
-    Log::log_print(LogLevel::DEBUG, "Hardware supports %d vertex attributes", num_attr);
-
     try {
-        int tex_width, tex_height, tex_num_channels;
-
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_set_flip_vertically_on_load(true);
-        uint8_t* tex_data = stbi_load("C:\\Users\\Marisa\\Documents\\saiban\\assets\\textures\\container.jpg",
-                                      &tex_width, &tex_height, &tex_num_channels, 0);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex_data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        stbi_image_free(tex_data);
 
         GLShader vert(ShaderType::Vertex, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\vertex.glsl");
         GLShader frag(ShaderType::Fragment, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\fragment.glsl");
@@ -148,12 +127,11 @@ int main(int argc, char* argv[]) {
 
         program.use();
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        tex.activate(0);
         program.uniform_int("texture_sample", 0);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // glEnable(GL_BLEND);
+        // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glBindVertexArray(vao);
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);

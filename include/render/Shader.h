@@ -1,5 +1,5 @@
-#ifndef GL_SHADER_H
-#define GL_SHADER_H
+#ifndef RENDER_SHADER_H
+#define RENDER_SHADER_H
 
 #include <string>
 #include <vector>
@@ -17,7 +17,7 @@ class GLShader {
     ShaderType get_shader_type();
 
   private:
-    void print_log();
+    void print_log(GLuint shader);
 
     GLuint id;
     ShaderType shader_type;
@@ -28,7 +28,7 @@ class GLProgram {
     GLProgram();
     ~GLProgram();
 
-    bool link_shaders(std::vector<GLShader> shaders);
+    bool link_shaders(std::initializer_list<std::reference_wrapper<GLShader>> shaders);
     void use();
 
     void uniform_int(const std::string& name, GLint value);
