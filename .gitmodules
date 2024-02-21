@@ -1,3 +1,6 @@
 [submodule "third-party/SDL"]
 	path = third-party/SDL
 	url = https://github.com/libsdl-org/SDL
+[submodule "lib/libsaiban"]
+	path = lib/libsaiban
+	url = git@github.com:AttorneyOnline/libsaiban.git
