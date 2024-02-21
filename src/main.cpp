@@ -1,20 +1,27 @@
 ﻿#include <cmath>
+#include <ctime>
 
 #include <SDL2/SDL.h>
 
 #include <GL/glew.h>
 
 #include "render/Shader.h"
+#include "render/Sprite.h"
 #include "render/Texture.h"
+#include "render/Transform.h"
 #include "utils/Log.h"
 
 int main(int argc, char* argv[]) {
+    srand(time(0));
+    Log::log_print(LogLevel::DEBUG, "test %d %f", 1, 0.5f);
+
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         Log::log_print(LogLevel::FATAL, "Failed to initialize SDL2: %s", SDL_GetError());
     }
 
     SDL_Window* window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480,
                                           SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    Transform::set_aspect_ratio(640.0f / 480.0f);
 
     if (!window) {
         Log::log_print(LogLevel::FATAL, "Failed to create window: %s", SDL_GetError());
@@ -38,79 +45,54 @@ int main(int argc, char* argv[]) {
         Log::log_print(LogLevel::FATAL, "Failed to initialize GLEW: %s", glewGetErrorString(glewError));
     }
 
-    // Disable VSync
+    // Enable VSync
     if (SDL_GL_SetSwapInterval(0) < 0) {
-        Log::log_print(LogLevel::ERROR, "Failed to disable VSync: %s", SDL_GetError());
+        Log::log_print(LogLevel::ERROR, "Failed to enable VSync: %s", SDL_GetError());
     }
 
     GLProgram program;
-    Texture2D tex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\textures\\container.jpg", GL_RGB, GL_RGB);
-    GLuint vao, vbo, ebo;
+    Texture2D bgtex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\background\\default\\defenseempty.png", GL_RGB,
+                    GL_RGB);
+    Texture2D charatex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\characters\\Phoenix\\nope.apng", GL_RGBA,
+                       GL_RGBA);
+    Texture2D fgtex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\background\\default\\defensedesk.png", GL_RGBA,
+                    GL_RGBA);
 
-    try {
+    GLShader vert(ShaderType::Vertex, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\vertex.glsl");
+    GLShader frag(ShaderType::Fragment, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\fragment.glsl");
+    program.link_shaders({vert, frag});
 
-        GLShader vert(ShaderType::Vertex, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\vertex.glsl");
-        GLShader frag(ShaderType::Fragment, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\fragment.glsl");
-        program.link_shaders({vert, frag});
+    Sprite bg(bgtex);
+    Sprite ch(charatex);
+    Sprite fg(fgtex);
 
-        GLint glsl_vertex_pos = 0;
-        GLint glsl_vertex_color = 1;
-        GLint glsl_vertex_tex_coord = 2;
+    bg.zindex(0);
+    ch.zindex(1);
+    fg.zindex(2);
 
-        // VBO data
-        GLfloat vertices[] = {
-            // positions        // colors         // texture coords
-            0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top right
-            0.5f,  -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
-            -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom left
-            -0.5f, 0.5f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f  // top left
-        };
-
-        // EBO data
-        GLuint indexData[] = {0, 1, 3, 1, 2, 3};
-
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-        glGenBuffers(1, &ebo);
-
-        glBindVertexArray(vao);
-
-        // Create VBO
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-        // Create EBO
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * sizeof(GLuint), indexData, GL_STATIC_DRAW);
-
-        // Setup vertex attributes
-
-        // Position
-        glVertexAttribPointer(glsl_vertex_pos, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), NULL);
-        glEnableVertexAttribArray(glsl_vertex_pos);
-
-        // Color
-        glVertexAttribPointer(glsl_vertex_color, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                              (void*)(3 * sizeof(GLfloat)));
-        glEnableVertexAttribArray(glsl_vertex_color);
-
-        // Texture coordinate
-        glVertexAttribPointer(glsl_vertex_tex_coord, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                              (void*)(6 * sizeof(GLfloat)));
-        glEnableVertexAttribArray(glsl_vertex_tex_coord);
-
-        glBindVertexArray(0);
-
-        glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+    /*
+    std::vector<Sprite> sprites;
+    for (int i = 0; i < 1000; i++) {
+        Sprite sprite(charatex);
+        sprite.scale({0.05f, 0.05f});
+        float randf1 = ((((float)rand()) / RAND_MAX) * 2) - 1.0f;
+        float randf2 = ((((float)rand()) / RAND_MAX) * 2) - 1.0f;
+        sprite.translate({randf1, randf2});
+        sprite.zindex(i);
+        sprites.push_back(sprite);
     }
-    catch (std::exception ex) {
-        Log::log_print(LogLevel::ERROR, "Caught exception");
-        return false;
-    }
+    */
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glDepthFunc(GL_LESS);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
 
     // SDL main loop
     Log::log_print(LogLevel::DEBUG, "Entering main render loop");
     int frame_counter = 0;
+    uint64_t t = 0;
     uint64_t cumulative_times = 0;
     bool run = true;
     while (run) {
@@ -121,30 +103,63 @@ int main(int argc, char* argv[]) {
             if (ev.type == SDL_QUIT) {
                 run = false;
             }
+            else if (ev.type == SDL_WINDOWEVENT) {
+                if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    int w = ev.window.data1;
+                    int h = ev.window.data2;
+
+                    glViewport(0, 0, w, h);
+                    Transform::set_aspect_ratio((float)w / (float)h);
+                }
+            }
         }
 
-        glClear(GL_COLOR_BUFFER_BIT);
+        // sprite.scale({glm::sin(glm::radians((float)t)), glm::sin(glm::radians((float)t))});
+        // sprite.rotate(t);
+        // sprite.translate({glm::sin(glm::radians((float)t)), glm::cos(glm::radians((float)t))});
 
-        program.use();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        tex.activate(0);
-        program.uniform_int("texture_sample", 0);
+        for (int n = 0; n < 100; n++) {
+            Texture2D badtex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\evidence\\cardkey.png", GL_RGBA,
+                             GL_RGBA);
+            Sprite badsprite(badtex);
+            badsprite.scale({0.25f, 0.25f});
+            float randf1 = ((((float)rand()) / RAND_MAX) * 2) - 1.0f;
+            float randf2 = ((((float)rand()) / RAND_MAX) * 2) - 1.0f;
+            badsprite.translate({randf1, randf2});
+            badsprite.rotate(45);
+            badsprite.draw(program);
+        }
+        // fg.draw(program);
+        // ch.draw(program);
+        bg.draw(program);
 
-        // glEnable(GL_BLEND);
-        // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        /*
+        for (auto sprite : sprites) {
+            // sprite.rotate(t);
+            sprite.draw(program);
+        }
+        */
 
-        glBindVertexArray(vao);
-        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL);
-        glBindVertexArray(0);
+        // bg.scale({glm::sin(glm::radians((float)t)), glm::sin(glm::radians((float)t))});
+        // ch.scale({glm::sin(glm::radians((float)t)), glm::sin(glm::radians((float)t))});
+        // fg.scale({glm::sin(glm::radians((float)t)), glm::sin(glm::radians((float)t))});
 
-        glUseProgram(NULL);
+        // bg.translate({glm::sin(glm::radians((float)t)), 0.0f});
+        // ch.translate({glm::sin(glm::radians((float)t)), 0.0f});
+        // fg.translate({glm::sin(glm::radians((float)t)), 0.0f});
+
+        // bg.rotate(t);
+        // ch.rotate(t);
+        // fg.rotate(t);
 
         SDL_GL_SwapWindow(window);
 
         uint64_t frame_time = SDL_GetTicks64() - frame_start;
         cumulative_times += frame_time;
         frame_counter++;
+        t++;
 
         if (cumulative_times >= 1000) {
             float avg = (float)cumulative_times / (float)frame_counter;
