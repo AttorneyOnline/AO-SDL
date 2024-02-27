@@ -5,11 +5,16 @@ add_executable ( ${CMAKE_PROJECT_NAME}
     "src/main.cpp"
     "src/utils/Log.cpp"
 )
+set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include)
 
 add_subdirectory(lib/libsaiban)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE lib/libsaiban/include)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE saiban)
+
+# STB utilities
+target_include_directories(${PROJECT_NAME} PRIVATE third-party/stb)
 
 # SDL2
 add_subdirectory(third-party/SDL)
@@ -18,3 +23,17 @@ if(TARGET SDL2::SDL2main)
 endif()
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE SDL2::SDL2)
 
+if (WIN32)
+
+    # Copy DLLs to binary location
+    add_custom_command(
+        TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/lib/libsaiban/third-party/glew/bin/Release/x64/glew32.dll "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+        VERBATIM
+    )
+    add_custom_command(
+        TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2::SDL2>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+        VERBATIM
+    )
+endif()

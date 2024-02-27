@@ -1,17 +1,21 @@
-﻿#include <cmath>
-#include <ctime>
+﻿#include <chrono>
+#include <cmath>
+#include <thread>
 
 #include <SDL2/SDL.h>
 
-#include <GL/glew.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
-#include "render/Shader.h"
-#include "render/Sprite.h"
-#include "render/Texture.h"
-#include "render/Transform.h"
+#include <Image.h>
+#include <Layer.h>
+#include <RenderState.h>
+#include <RenderThread.h>
+#include <StateBuffer.h>
+
 #include "utils/Log.h"
 
-int main(int argc, char* argv[]) {
+void* init_graphics() {
     srand(time(0));
     Log::log_print(LogLevel::DEBUG, "test %d %f", 1, 0.5f);
 
@@ -21,7 +25,7 @@ int main(int argc, char* argv[]) {
 
     SDL_Window* window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480,
                                           SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-    Transform::set_aspect_ratio(640.0f / 480.0f);
+    // Transform::set_aspect_ratio(640.0f / 480.0f);
 
     if (!window) {
         Log::log_print(LogLevel::FATAL, "Failed to create window: %s", SDL_GetError());
@@ -38,29 +42,25 @@ int main(int argc, char* argv[]) {
         Log::log_print(LogLevel::FATAL, "Failed to create OpenGL context: %s", SDL_GetError());
     }
 
-    // Initialize GLEW
-    glewExperimental = GL_TRUE;
-    GLenum glewError = glewInit();
-    if (glewError != GLEW_OK) {
-        Log::log_print(LogLevel::FATAL, "Failed to initialize GLEW: %s", glewGetErrorString(glewError));
-    }
-
     // Enable VSync
-    if (SDL_GL_SetSwapInterval(0) < 0) {
+    if (SDL_GL_SetSwapInterval(1) < 0) {
         Log::log_print(LogLevel::ERROR, "Failed to enable VSync: %s", SDL_GetError());
     }
 
-    GLProgram program;
-    Texture2D bgtex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\background\\default\\defenseempty.png", GL_RGB,
-                    GL_RGB);
-    Texture2D charatex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\characters\\Phoenix\\nope.apng", GL_RGBA,
-                       GL_RGBA);
-    Texture2D fgtex("C:\\Users\\Marisa\\Documents\\saiban\\assets\\base\\background\\default\\defensedesk.png", GL_RGBA,
-                    GL_RGBA);
+    return (void*)window;
+}
 
-    GLShader vert(ShaderType::Vertex, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\vertex.glsl");
-    GLShader frag(ShaderType::Fragment, "C:\\Users\\Marisa\\Documents\\saiban\\assets\\shaders\\fragment.glsl");
-    program.link_shaders({vert, frag});
+void glswap(void* data) {
+    SDL_Window* window = (SDL_Window*)data;
+    SDL_GL_SwapWindow(window);
+    // Log::log_print(LogLevel::DEBUG, "Called SDL_GL_SwapWindow()");
+}
+
+int main(int argc, char* argv[]) {
+    /*
+
+
+
 
     Sprite bg(bgtex);
     Sprite ch(charatex);
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
         sprite.zindex(i);
         sprites.push_back(sprite);
     }
-    */
+
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
             // sprite.rotate(t);
             sprite.draw(program);
         }
-        */
+
 
         // bg.scale({glm::sin(glm::radians((float)t)), glm::sin(glm::radians((float)t))});
         // ch.scale({glm::sin(glm::radians((float)t)), glm::sin(glm::radians((float)t))});
@@ -171,6 +171,59 @@ int main(int argc, char* argv[]) {
 
     SDL_DestroyWindow(window);
     SDL_Quit();
+    */
+
+    // Set up initial RenderState
+
+    RenderState initial_state;
+
+    int width, height, num_channels;
+
+    stbi_set_flip_vertically_on_load(true);
+    uint8_t* bg_pixels = stbi_load(
+        "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\background\\default\\defenseempty.png",
+        &width, &height, &num_channels, 0);
+    Image bg_img(width, height, bg_pixels, num_channels);
+
+    uint8_t* desk_pixels = stbi_load(
+        "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\background\\default\\defensedesk.png", &width,
+        &height, &num_channels, 0);
+    Image desk_img(width, height, desk_pixels, num_channels);
+
+    uint8_t* char_pixels = stbi_load(
+        "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\characters\\Phoenix\\(a)normal.apng", &width,
+        &height, &num_channels, 0);
+    Animation char_img(width, height, char_pixels, num_channels);
+
+    Layer background(bg_img, 0);
+    Layer character(char_img, 1);
+    Layer desk(desk_img, 2);
+
+    LayerGroup main_layers;
+    main_layers.add_layer(0, background);
+    main_layers.add_layer(1, desk);
+    main_layers.add_layer(2, character);
+
+    initial_state.add_layer_group(0, main_layers);
+
+    // Initialize StateBuffer
+    StateBuffer buffer(initial_state);
+
+    // Start RenderThread
+    RenderThread render_thread(buffer, init_graphics, glswap);
+
+    // This part goes in the game logic loop
+
+    while (true) {
+        RenderState* state = buffer.get_producer_buf();
+
+        // Do stuff to state object here
+
+        buffer.present();
+
+        // Log::log_print(LogLevel::DEBUG, "Finished game loop");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
 
     return 0;
 }
