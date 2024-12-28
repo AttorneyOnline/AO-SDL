@@ -1,10 +1,13 @@
 ﻿cmake_minimum_required (VERSION 3.8)
 
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+
 project ("tsurushiage" LANGUAGES CXX C)
 add_executable ( ${CMAKE_PROJECT_NAME}
     "src/main.cpp"
     "src/utils/Log.cpp"
-)
+  "src/video/GameWindow.cpp" "src/game/GameThread.h" "src/game/GameThread.cpp")
 set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include)
