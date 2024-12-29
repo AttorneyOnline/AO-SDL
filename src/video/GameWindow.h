@@ -1,8 +1,8 @@
 #ifndef GAMEWINDOW_H
 #define GAMEWINDOW_H
 
-#include <SDL2/SDL.h>
 #include "render/RenderManager.h"
+#include <SDL2/SDL.h>
 
 class GameWindow {
   public:
@@ -14,9 +14,7 @@ class GameWindow {
 
     SDL_Window* window;
 
-
     bool running;
-
 };
 
 #endif

@@ -43,7 +43,7 @@ void GameWindow::start_loop(RenderManager& render) {
         // Swap
         SDL_GL_SwapWindow(window);
 
-        //Log::log_print(INFO, "Rendered a frame");
+        // Log::log_print(INFO, "Rendered a frame");
     }
 }
 
@@ -55,7 +55,7 @@ void GameWindow::init_sdl() {
     }
 
     window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480,
-                                          SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+                              SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
     if (!window) {
         Log::log_print(LogLevel::FATAL, "Failed to create window: %s", SDL_GetError());

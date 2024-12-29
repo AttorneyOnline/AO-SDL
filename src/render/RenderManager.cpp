@@ -7,8 +7,7 @@
 
 #include <cstdio>
 
-RenderManager::RenderManager(StateBuffer& buf)
-    : state_buf(buf), renderer_ptr(nullptr) {
+RenderManager::RenderManager(StateBuffer& buf) : state_buf(buf), renderer_ptr(nullptr) {
 
     // Initialize GLEW
     glewExperimental = GL_TRUE;
@@ -19,7 +18,6 @@ RenderManager::RenderManager(StateBuffer& buf)
     }
 
     renderer_ptr.reset(new Renderer);
-
 }
 
 uint32_t RenderManager::render_frame() {

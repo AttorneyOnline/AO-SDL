@@ -2,9 +2,8 @@
 #include <cmath>
 #include <thread>
 
-#include "video/GameWindow.h"
 #include "game/GameThread.h"
-
+#include "video/GameWindow.h"
 
 int main(int argc, char* argv[]) {
     GameWindow game_window;
@@ -17,7 +16,7 @@ int main(int argc, char* argv[]) {
 
     // Instantiate renderer
     RenderManager renderer(buffer);
-    
+
     // Start game logic thread
     GameThread game_logic(buffer);
 

@@ -3,8 +3,10 @@
 #include "Sprite.h"
 
 Renderer::Renderer() {
-    GLShader vert(ShaderType::Vertex, "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\shaders\\vertex.glsl");
-    GLShader frag(ShaderType::Fragment, "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\shaders\\fragment.glsl");
+    GLShader vert(ShaderType::Vertex,
+                  "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\shaders\\vertex.glsl");
+    GLShader frag(ShaderType::Fragment,
+                  "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\shaders\\fragment.glsl");
     program.link_shaders({vert, frag});
 
     glEnable(GL_DEPTH_TEST);

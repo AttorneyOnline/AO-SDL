@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <functional>
 #include <map>
-#include <thread>
 #include <memory>
+#include <thread>
 
 class Renderer;
 

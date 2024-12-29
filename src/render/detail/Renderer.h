@@ -1,9 +1,9 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include "render/RenderState.h"
 #include "Shader.h"
 #include "Texture.h"
+#include "render/RenderState.h"
 
 class Renderer {
   public:

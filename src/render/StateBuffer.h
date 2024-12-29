@@ -3,8 +3,8 @@
 
 #include "RenderState.h"
 
-#include <mutex>
 #include <atomic>
+#include <mutex>
 
 class StateBuffer {
   public:
