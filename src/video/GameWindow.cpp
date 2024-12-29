@@ -4,6 +4,10 @@
 
 #include <SDL2/SDL.h>
 
+#include <imgui.h>
+#include <imgui_impl_opengl3.h>
+#include <imgui_impl_sdl2.h>
+
 GameWindow::GameWindow() : window(nullptr), running(true) {
     init_sdl();
 }
@@ -17,10 +21,22 @@ void GameWindow::start_loop(RenderManager& render) {
             if (event.type == SDL_QUIT) {
                 running = false;
             }
+            ImGui_ImplSDL2_ProcessEvent(&event);
         }
 
         // Render our buffer
-        render.render_frame();
+        uint32_t render_texture = render.render_frame();
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        ImGui::Begin("Test");
+        ImGui::Image(render_texture, ImGui::GetContentRegionAvail(), {0, 1}, {1, 0});
+        ImGui::End();
+
+        render.clear_framebuffer();
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Swap
         SDL_GL_SwapWindow(window);
@@ -59,4 +75,14 @@ void GameWindow::init_sdl() {
     if (SDL_GL_SetSwapInterval(1) < 0) {
         Log::log_print(LogLevel::ERROR, "Failed to enable VSync: %s", SDL_GetError());
     }
+
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    (void)io;
+    ImGui::StyleColorsDark();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowPadding = ImVec2(0, 0);
+
+    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL3_Init();
 }

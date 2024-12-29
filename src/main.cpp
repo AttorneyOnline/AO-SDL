@@ -8,7 +8,8 @@
 
 int main(int argc, char* argv[]) {
     GameWindow game_window;
-
+    // workaround for qt creator
+    setbuf(stdout, NULL);
     // Set up initial RenderState
 
 

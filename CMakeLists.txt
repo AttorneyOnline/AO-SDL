@@ -40,3 +40,27 @@ if (WIN32)
         VERBATIM
     )
 endif()
+
+include_directories(
+    third-party/SDL/include
+)
+
+# imgui
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
+
+set(IMGUI_FILES
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+
+add_library(imgui ${IMGUI_FILES})
+target_include_directories(imgui PUBLIC
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+    # Add additional include directories for SDL and OpenGL if needed
+)
+target_link_libraries(${PROJECT_NAME} PRIVATE imgui)
