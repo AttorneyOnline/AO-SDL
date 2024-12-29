@@ -10,7 +10,9 @@ class GameThread {
     GameThread(StateBuffer& render_buffer);
 
   private:
-    void tick();
+    void game_loop();
+    void tick(uint64_t t);
+    void render(RenderState new_state);
 
     StateBuffer& render_buffer;
     std::thread tick_thread;
