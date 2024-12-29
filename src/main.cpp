@@ -8,20 +8,23 @@
 
 int main(int argc, char* argv[]) {
     GameWindow game_window;
-    // workaround for qt creator
-    setbuf(stdout, NULL);
-    // Set up initial RenderState
 
+    // Workaround for Qt Creator
+    setbuf(stdout, NULL);
 
     // Initialize StateBuffer
     StateBuffer buffer;
+
+    // Instantiate renderer
     RenderManager renderer(buffer);
     
+    // Start game logic thread
     GameThread game_logic(buffer);
 
+    // Kick off the render loop
     game_window.start_loop(renderer);
 
-    // todo: cleanup
+    // todo: cleanup memory
 
     return 0;
 }
