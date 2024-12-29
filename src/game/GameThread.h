@@ -3,7 +3,7 @@
 
 #include <thread>
 
-#include <StateBuffer.h>
+#include "render/StateBuffer.h"
 
 class GameThread {
   public:

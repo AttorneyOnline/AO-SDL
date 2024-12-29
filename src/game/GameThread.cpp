@@ -4,15 +4,15 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include <Image.h>
-#include <Layer.h>
-#include <RenderState.h>
-#include <RenderManager.h>
-#include <StateBuffer.h>
+#include "render/Image.h"
+#include "render/Layer.h"
+#include "render/RenderState.h"
+#include "render/RenderManager.h"
+#include "render/StateBuffer.h"
 
 #include "utils/Log.h"
 
-#include <RenderState.h>
+#include "render/RenderState.h"
 
 GameThread::GameThread(StateBuffer& render_buffer) : render_buffer(render_buffer), tick_thread(&GameThread::tick, this) {
 
@@ -23,11 +23,11 @@ void GameThread::tick() {
     int width, height, num_channels;
 
     stbi_set_flip_vertically_on_load(true);
-    uint8_t* bg_pixels = stbi_load("S:\\Projects\\tsurushiage\\assets\\base\\background\\default\\defenseempty.png",
+    uint8_t* bg_pixels = stbi_load("C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\background\\default\\defenseempty.png",
                                    &width, &height, &num_channels, 0);
     Image bg_img(width, height, bg_pixels, num_channels);
 
-    uint8_t* desk_pixels = stbi_load("S:\\Projects\\tsurushiage\\assets\\base\\background\\default\\defensedesk.png",
+    uint8_t* desk_pixels = stbi_load("C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\background\\default\\defensedesk.png",
                                      &width, &height, &num_channels, 0);
     Image desk_img(width, height, desk_pixels, num_channels);
 

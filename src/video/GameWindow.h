@@ -2,7 +2,7 @@
 #define GAMEWINDOW_H
 
 #include <SDL2/SDL.h>
-#include <RenderManager.h>
+#include "render/RenderManager.h"
 
 class GameWindow {
   public:

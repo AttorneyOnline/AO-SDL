@@ -24,9 +24,10 @@ void GameWindow::start_loop(RenderManager& render) {
             ImGui_ImplSDL2_ProcessEvent(&event);
         }
 
-        // Render our buffer
+        // Render viewport
         uint32_t render_texture = render.render_frame();
 
+        // Set up UI
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
@@ -34,6 +35,7 @@ void GameWindow::start_loop(RenderManager& render) {
         ImGui::Image(render_texture, ImGui::GetContentRegionAvail(), {0, 1}, {1, 0});
         ImGui::End();
 
+        // Render UI
         render.clear_framebuffer();
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -54,7 +56,6 @@ void GameWindow::init_sdl() {
 
     window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480,
                                           SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-    // Transform::set_aspect_ratio(640.0f / 480.0f);
 
     if (!window) {
         Log::log_print(LogLevel::FATAL, "Failed to create window: %s", SDL_GetError());

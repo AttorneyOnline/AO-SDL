@@ -1,12 +1,12 @@
 [submodule "third-party/SDL"]
 	path = third-party/SDL
 	url = https://github.com/libsdl-org/SDL
-[submodule "lib/libsaiban"]
-	path = lib/libsaiban
-	url = git@github.com:AttorneyOnline/libsaiban.git
 [submodule "third-party/stb"]
 	path = third-party/stb
 	url = https://github.com/nothings/stb
 [submodule "third-party/imgui"]
 	path = third-party/imgui
 	url = https://github.com/ocornut/imgui
+[submodule "third-party/glm"]
+	path = third-party/glm
+	url = https://github.com/g-truc/glm
