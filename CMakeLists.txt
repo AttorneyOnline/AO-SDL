@@ -1,6 +1,9 @@
 ﻿cmake_minimum_required(VERSION 3.3)
 project(tsurushiage LANGUAGES CXX C)
 
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+
 # Source files
 set(SRC_FILES
     src/main.cpp
@@ -20,7 +23,8 @@ set(SRC_FILES
     src/render/Layer.cpp
     src/asset/AssetLibrary.cpp
     src/asset/Asset.cpp
-)
+    src/asset/AssetCache.cpp
+    src/asset/ImageAsset.cpp)
 
 # Include directories
 set(INCLUDE_DIRS

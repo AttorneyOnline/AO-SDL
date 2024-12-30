@@ -24,6 +24,7 @@ int main(int argc, char* argv[]) {
     game_window.start_loop(renderer);
 
     // todo: cleanup memory
+    game_logic.stop();
 
     return 0;
 }
