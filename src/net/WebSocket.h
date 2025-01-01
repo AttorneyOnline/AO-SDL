@@ -60,6 +60,9 @@ class WebSocket {
      */
     WebSocket(const std::string& host, uint16_t port);
 
+    WebSocket(WebSocket&&) = default;
+    WebSocket& operator=(WebSocket&&) = default;
+
     /**
      * @brief Add or overwrite an HTTP header to be sent during the handshake.
      */
@@ -86,6 +89,11 @@ class WebSocket {
      * @param data_bytes The data to send (unmasked).
      */
     void write(std::span<const uint8_t> data_bytes);
+
+    /**
+     * @brief Get if the socket is connected or trying to connect
+     */
+    bool is_connected();
 
   private:
     /* ==================== 1) Raw I/O ==================== */

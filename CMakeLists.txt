@@ -7,6 +7,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
 # Source files
 set(SRC_FILES
     src/main.cpp
+    src/ao/net/AOClient.cpp
+    src/ao/net/AOPacket.cpp
+    src/ao/net/PacketTypes.cpp
     src/utils/Log.cpp
     src/utils/Base64.cpp
     src/video/GameWindow.cpp

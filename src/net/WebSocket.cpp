@@ -107,9 +107,10 @@ void WebSocket::connect(const std::string& endpoint) {
 
 std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
     std::vector<WebSocketFrame> messages;
-    std::vector<uint8_t> bytes = read_raw();
 
     do {
+        std::vector<uint8_t> bytes = read_raw();
+
         if (bytes.size() == 0) {
             // Nothing available for us on the socket, so we can just return an empty list
             return messages;
@@ -184,6 +185,10 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
         frame.len = pl_len;
 
         frame.mask_key = 0x00000000;
+        if (masked) {
+            // no need to read mask_key from message bc it is invalid no matter what
+            throw WebSocketException("Client received masked frame from server");
+        }
 
         frame.data.insert(frame.data.end(), bytes.begin() + data_offset, bytes.begin() + bytes_needed);
         if (frame.data.size() != pl_len) {
@@ -193,7 +198,27 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
         extra_data.clear();
         extra_data.insert(extra_data.end(), bytes.begin() + bytes_needed, bytes.end());
 
-        messages.push_back(frame);
+        if (frame.opcode == PING) {
+            WebSocketFrame pong;
+
+            pong.fin = true;
+            pong.rsv = 0;
+            pong.opcode = PONG;
+
+            pong.mask = true;
+            pong.len = frame.len;
+
+            std::vector<uint8_t> randbuf(4);
+            std::generate(randbuf.begin(), randbuf.end(), []() { return std::rand() % 256; });
+            pong.mask_key = *reinterpret_cast<const uint32_t*>(randbuf.data());
+
+            pong.data.insert(pong.data.begin(), frame.data.begin(), frame.data.end());
+            std::vector<uint8_t> pongwire = pong.serialize();
+            write_raw(pongwire);
+        }
+        else {
+            messages.push_back(frame);
+        }
     } while (extra_data.size() != 0);
 
     return messages;
@@ -228,6 +253,10 @@ void WebSocket::write(std::span<const uint8_t> data_bytes) {
     std::vector<uint8_t> wireframe = frame.serialize();
 
     write_raw(wireframe);
+}
+
+bool WebSocket::is_connected() {
+    return ready || connecting;
 }
 
 void WebSocket::generate_mask() {
@@ -561,7 +590,6 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
        header field to determine which extensions are requested is
        discussed in Section 9.1.)
      */
-
     if (response.get_header("Sec-WebSocket-Extensions") == "") {
         extensions_ok = true;
     }
@@ -577,7 +605,6 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
        subprotocol not requested by the client), the client MUST _Fail
        the WebSocket Connection_.
      */
-
     if (response.get_header("Sec-WebSocket-Protocol") == "") {
         protocol_ok = true;
     }
@@ -610,20 +637,28 @@ std::vector<uint8_t> WebSocket::WebSocketFrame::serialize() {
     }
     out_buf.insert(out_buf.end(), lenbuf.begin(), lenbuf.end());
 
-    std::vector<uint8_t> maskbuf(4);
-    uint32_t mask_net = htonl(mask_key);
-    std::memcpy(maskbuf.data(), &mask_net, sizeof(mask_net));
-    out_buf.insert(out_buf.end(), maskbuf.begin(), maskbuf.end());
+    if (mask) {
+        std::vector<uint8_t> maskbuf(4);
+        uint32_t mask_net = htonl(mask_key);
+        std::memcpy(maskbuf.data(), &mask_net, sizeof(mask_net));
+        out_buf.insert(out_buf.end(), maskbuf.begin(), maskbuf.end());
+    }
 
     out_buf.reserve(out_buf.size() + data.size());
-    std::transform(data.begin(), data.end(), std::back_inserter(out_buf),
-                   [mask_key = this->mask_key, index = size_t(0)](uint8_t c) mutable {
-                       int shift = 24 - ((index % 4) * 8);
-                       uint8_t mask_byte = static_cast<uint8_t>((mask_key >> shift) & 0xFF);
 
-                       ++index;
-                       return static_cast<uint8_t>(c ^ mask_byte);
-                   });
+    if (mask) {
+        auto key = mask_key;
+        size_t idx = 0;
+        std::transform(data.begin(), data.end(), std::back_inserter(out_buf), [&key, &idx](uint8_t c) {
+            int shift = 24 - ((idx % 4) * 8);
+            uint8_t mask_byte = static_cast<uint8_t>((key >> shift) & 0xFF);
+            ++idx;
+            return static_cast<uint8_t>(c ^ mask_byte);
+        });
+    }
+    else {
+        out_buf.insert(out_buf.end(), data.begin(), data.end());
+    }
 
     return out_buf;
 }

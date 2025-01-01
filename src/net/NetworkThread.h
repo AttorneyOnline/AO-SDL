@@ -7,11 +7,13 @@
 
 class NetworkThread {
   public:
-    NetworkThread(WebSocket sock);
+    NetworkThread(WebSocket& sock);
 
   private:
+    void net_loop();
+
     std::thread net_thread;
-    WebSocket sock;
+    WebSocket& sock;
 };
 
 #endif
