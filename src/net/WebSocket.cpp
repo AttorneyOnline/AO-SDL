@@ -9,6 +9,8 @@
 #include <format>
 #include <functional>
 
+// todo: support closing, ping/pong, and continuation frames
+
 HTTPResponse::HTTPResponse(StatusLine status_line, HTTPHeaders headers) : status_line(status_line), headers(headers) {
 }
 
@@ -89,8 +91,8 @@ void WebSocket::connect(const std::string& endpoint) {
     try {
         handshake_good = validate_handshake(handshake_response);
     }
-    catch (WebSocketException ex) {
-        throw ex;
+    catch (const WebSocketException& ex) {
+        throw;
     }
 
     if (!handshake_good) {
@@ -98,6 +100,7 @@ void WebSocket::connect(const std::string& endpoint) {
     }
     else {
         ready = true;
+        connecting = false;
         tcp_sock.set_non_blocking(true);
     }
 }
@@ -596,13 +599,13 @@ std::vector<uint8_t> WebSocket::WebSocketFrame::serialize() {
 
     std::vector<uint8_t> lenbuf;
     if (len_code == 126) {
-        uint16_t net_order = htons((len & 0xFFFF));
-        lenbuf.reserve(2);
+        uint16_t net_order = htons((uint16_t)(len & 0xFFFF));
+        lenbuf.resize(2);
         std::memcpy(lenbuf.data(), &net_order, sizeof(net_order));
     }
     else if (len_code == 127) {
-        uint64_t net_order = htons(len);
-        lenbuf.reserve(8);
+        uint64_t net_order = htonll(len);
+        lenbuf.resize(8);
         std::memcpy(lenbuf.data(), &net_order, sizeof(net_order));
     }
     out_buf.insert(out_buf.end(), lenbuf.begin(), lenbuf.end());

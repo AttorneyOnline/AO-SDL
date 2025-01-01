@@ -34,7 +34,7 @@ class HTTPResponse {
 
 class WebSocket {
   public:
-    enum Opcode { CONTIUNUATION = 0x00, TEXT = 0x01, BINARY = 0x02, CLOSE = 0x08, PING = 0x09, PONG = 0x0A };
+    enum Opcode { CONTINUATION = 0x00, TEXT = 0x01, BINARY = 0x02, CLOSE = 0x08, PING = 0x09, PONG = 0x0A };
 
     struct WebSocketFrame {
         bool complete;
