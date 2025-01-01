@@ -1,7 +1,7 @@
 #ifndef UTILS_LOG_H
 #define UTILS_LOG_H
 
-enum LogLevel { INVALID = 0, VERBOSE, DEBUG, INFO, WARNING, ERROR, FATAL, COUNT };
+enum LogLevel { INVALID = 0, VERBOSE, DEBUG, INFO, WARNING, ERR, FATAL, COUNT };
 
 class Log {
   public:

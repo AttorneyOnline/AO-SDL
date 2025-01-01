@@ -8,6 +8,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
 set(SRC_FILES
     src/main.cpp
     src/utils/Log.cpp
+    src/utils/Base64.cpp
     src/video/GameWindow.cpp
     src/game/GameThread.cpp
     src/render/detail/Renderer.cpp
@@ -24,7 +25,9 @@ set(SRC_FILES
     src/asset/AssetLibrary.cpp
     src/asset/Asset.cpp
     src/asset/AssetCache.cpp
-    src/asset/ImageAsset.cpp)
+    src/asset/ImageAsset.cpp
+    src/net/WebSocket.cpp
+    src/net/NetworkThread.cpp)
 
 # Include directories
 set(INCLUDE_DIRS
@@ -95,3 +98,6 @@ target_include_directories(imgui PUBLIC
     ${INCLUDE_DIRS}
 )
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui)
+
+# Kissnet
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/kissnet)

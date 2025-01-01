@@ -74,7 +74,7 @@ void GameWindow::init_sdl() {
 
     // Enable VSync
     if (SDL_GL_SetSwapInterval(1) < 0) {
-        Log::log_print(LogLevel::ERROR, "Failed to enable VSync: %s", SDL_GetError());
+        Log::log_print(LogLevel::ERR, "Failed to enable VSync: %s", SDL_GetError());
     }
 
     ImGui::CreateContext();

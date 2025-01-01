@@ -10,3 +10,6 @@
 [submodule "third-party/glm"]
 	path = third-party/glm
 	url = https://github.com/g-truc/glm
+[submodule "third-party/kissnet"]
+	path = third-party/kissnet
+	url = https://github.com/Ybalrid/kissnet
