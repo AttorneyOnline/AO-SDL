@@ -4,27 +4,53 @@
 #include <unordered_map>
 #include <vector>
 
-// todo: validate this, it probably sucks
 std::string Base64::encode(std::span<const uint8_t> data) {
-    static constexpr char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                           "abcdefghijklmnopqrstuvwxyz"
-                                           "0123456789+/";
+    static const char encoding_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                         "abcdefghijklmnopqrstuvwxyz"
+                                         "0123456789+/";
+    static const char padding_char = '=';
+    size_t input_length = data.size();
+    size_t full_chunks = input_length / 3;
+    size_t remaining_bytes = input_length % 3;
 
+    // Calculate output length
+    size_t output_length = 4 * ((input_length + 2) / 3);
     std::string encoded;
-    encoded.reserve((data.size() + 2) / 3 * 4);
+    encoded.reserve(output_length);
 
     size_t i = 0;
-    while (i < data.size()) {
-        uint32_t octet_a = i < data.size() ? data[i++] : 0;
-        uint32_t octet_b = i < data.size() ? data[i++] : 0;
-        uint32_t octet_c = i < data.size() ? data[i++] : 0;
 
-        uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+    // Process full 3-byte chunks
+    for (size_t chunk = 0; chunk < full_chunks; ++chunk) {
+        uint32_t triple = (data[i] << 16) + (data[i + 1] << 8) + data[i + 2];
+        encoded += encoding_table[(triple >> 18) & 0x3F];
+        encoded += encoding_table[(triple >> 12) & 0x3F];
+        encoded += encoding_table[(triple >> 6) & 0x3F];
+        encoded += encoding_table[triple & 0x3F];
+        i += 3;
+    }
 
-        encoded.push_back(base64_chars[(triple >> 18) & 0x3F]);
-        encoded.push_back(base64_chars[(triple >> 12) & 0x3F]);
-        encoded.push_back((i - 1) < data.size() ? base64_chars[(triple >> 6) & 0x3F] : '=');
-        encoded.push_back(i < data.size() ? base64_chars[triple & 0x3F] : '=');
+    // Handle remaining bytes and padding
+    if (remaining_bytes > 0) {
+        uint32_t triple = data[i] << 16;
+        if (remaining_bytes == 2) {
+            triple += data[i + 1] << 8;
+        }
+
+        // Encode first two characters
+        encoded += encoding_table[(triple >> 18) & 0x3F];
+        encoded += encoding_table[(triple >> 12) & 0x3F];
+
+        if (remaining_bytes == 1) {
+            // Only one byte left, pad the last two characters
+            encoded += padding_char;
+            encoded += padding_char;
+        }
+        else { // remaining_bytes == 2
+            // Encode the third character and pad the fourth
+            encoded += encoding_table[(triple >> 6) & 0x3F];
+            encoded += padding_char;
+        }
     }
 
     return encoded;

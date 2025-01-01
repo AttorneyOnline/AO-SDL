@@ -8,7 +8,15 @@
 #include <string>
 #include <vector>
 
-typedef std::map<std::string, std::string> HTTPHeaders;
+struct CaseInsensitiveCompare {
+    bool operator()(const std::string& a, const std::string& b) const {
+        return std::lexicographical_compare(
+            a.begin(), a.end(), b.begin(), b.end(),
+            [](unsigned char ac, unsigned char bc) { return std::tolower(ac) < std::tolower(bc); });
+    }
+};
+
+typedef std::map<std::string, std::string, CaseInsensitiveCompare> HTTPHeaders;
 
 class WebSocketException : public std::runtime_error {
   public:

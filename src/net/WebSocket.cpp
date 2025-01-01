@@ -21,12 +21,9 @@ HTTPResponse::StatusLine HTTPResponse::get_status() const {
 std::string HTTPResponse::get_header(std::string header) const {
     std::string headerval = "";
 
-    // todo: potential issue, headers are case sensitive!!
-    try {
-        headerval = headers.at(header);
-    }
-    catch (std::out_of_range) {
-        ; // just return empty string
+    auto it = headers.find(header);
+    if (it != headers.end()) {
+        headerval = it->second;
     }
 
     return headerval;
@@ -83,7 +80,7 @@ void WebSocket::connect(const std::string& endpoint) {
 
     const std::string carriage_return = "\r\n";
     handshake_buf.insert(handshake_buf.end(), carriage_return.begin(), carriage_return.end());
-
+    std::string debug_str(handshake_buf.begin(), handshake_buf.end());
     write_raw(handshake_buf);
 
     HTTPResponse handshake_response = read_handshake();
@@ -92,7 +89,7 @@ void WebSocket::connect(const std::string& endpoint) {
         handshake_good = validate_handshake(handshake_response);
     }
     catch (const WebSocketException& ex) {
-        throw;
+        throw ex;
     }
 
     if (!handshake_good) {
