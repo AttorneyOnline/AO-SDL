@@ -194,7 +194,22 @@ PacketRegistrar AOPacketRC::registrar("RC", [](const std::vector<std::string>& f
     return std::make_unique<AOPacketHI>(fields);
 });
 
-// SC
+// SC (Send Charlist)
+
+AOPacketSC::AOPacketSC(const std::vector<std::string>& fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        header = "SC";
+
+        for (const std::string& character : fields) {
+            character_list.push_back(character);
+        }
+        valid = true;
+    }
+    else {
+        valid = false;
+        throw PacketFormatException("Not enough fields on packet SC");
+    }
+}
 
 // RM
 

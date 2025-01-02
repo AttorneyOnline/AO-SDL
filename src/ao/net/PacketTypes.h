@@ -103,4 +103,14 @@ class AOPacketRC : public AOPacket {
     static constexpr int MIN_FIELDS = 0;
 };
 
+class AOPacketSC : public AOPacket {
+  public:
+    AOPacketSC(const std::vector<std::string>& fields);
+
+  private:
+    std::vector<std::string> character_list;
+
+    static constexpr int MIN_FIELDS = 1;
+};
+
 #endif
