@@ -94,4 +94,13 @@ class AOPacketSI : public AOPacket {
     static constexpr int MIN_FIELDS = 3;
 };
 
+class AOPacketRC : public AOPacket {
+  public:
+    AOPacketRC();
+
+  private:
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
 #endif

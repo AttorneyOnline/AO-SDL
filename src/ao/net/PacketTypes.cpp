@@ -182,7 +182,17 @@ AOPacketSI::AOPacketSI(const std::vector<std::string>& fields) {
     }
 }
 
-// RC
+// RC (Request Charlist)
+
+AOPacketRC::AOPacketRC() {
+    header = "RC";
+    valid = true;
+}
+
+// todo: not sure this works; RC has no fields
+PacketRegistrar AOPacketRC::registrar("RC", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketHI>(fields);
+});
 
 // SC
 
