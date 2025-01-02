@@ -82,4 +82,16 @@ class AOPacketASS : public AOPacket {
     static constexpr int MIN_FIELDS = 1;
 };
 
+class AOPacketSI : public AOPacket {
+  public:
+    AOPacketSI(const std::vector<std::string>& fields);
+
+  private:
+    int character_count;
+    int evidence_count;
+    int music_count;
+
+    static constexpr int MIN_FIELDS = 3;
+};
+
 #endif

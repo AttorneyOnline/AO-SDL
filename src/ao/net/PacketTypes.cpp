@@ -164,7 +164,23 @@ AOPacketASS::AOPacketASS(const std::vector<std::string>& fields) {
     }
 }
 
-// SI
+// SI (Server Information, aka Resource Counts)
+// TODO: askchaa
+
+AOPacketSI::AOPacketSI(const std::vector<std::string>& fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        header = "SI";
+
+        character_count = std::atoi(fields.at(0).c_str());
+        evidence_count = std::atoi(fields.at(1).c_str());
+        music_count = std::atoi(fields.at(2).c_str());
+        valid = true;
+    }
+    else {
+        valid = false;
+        throw PacketFormatException("Not enough fields on packet SI");
+    }
+}
 
 // RC
 
