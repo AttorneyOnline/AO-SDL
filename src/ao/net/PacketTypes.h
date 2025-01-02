@@ -60,4 +60,16 @@ class AOPacketIDServer : public AOPacket {
     static constexpr int MIN_FIELDS = 2;
 };
 
+class AOPacketPN : public AOPacket {
+  public:
+    AOPacketPN(const std::vector<std::string>& fields);
+
+  private:
+    int current_players;
+    int max_players;
+    std::string server_description;
+
+    static constexpr int MIN_FIELDS = 2;
+};
+
 #endif

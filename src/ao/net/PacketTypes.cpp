@@ -127,9 +127,27 @@ AOPacketIDServer::AOPacketIDServer(const std::vector<std::string>& fields) {
     }
 }
 
-// PN
+// PN (Player count)
 
-// FL
+AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        header = "PN";
+
+        current_players = std::atoi(fields.at(0).c_str());
+        max_players = std::atoi(fields.at(1).c_str());
+
+        if (fields.size() >= MIN_FIELDS + 1) {
+            server_description = fields.at(2);
+        }
+
+        this->fields = fields;
+        valid = true;
+    }
+    else {
+        valid = false;
+        throw PacketFormatException("Not enough fields on packet ID");
+    }
+}
 
 // ASS
 
