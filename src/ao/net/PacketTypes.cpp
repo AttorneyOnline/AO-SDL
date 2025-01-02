@@ -191,7 +191,7 @@ AOPacketRC::AOPacketRC() {
 
 // todo: not sure this works; RC has no fields
 PacketRegistrar AOPacketRC::registrar("RC", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketHI>(fields);
+    return std::make_unique<AOPacketRC>();
 });
 
 // SC (Send Charlist)
@@ -208,6 +208,35 @@ AOPacketSC::AOPacketSC(const std::vector<std::string>& fields) {
     else {
         valid = false;
         throw PacketFormatException("Not enough fields on packet SC");
+    }
+}
+
+// RM (Request Music)
+
+AOPacketRM::AOPacketRM() {
+    header = "RM";
+    valid = true;
+}
+
+// todo: not sure this works; RM has no fields
+PacketRegistrar AOPacketRM::registrar("RM", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketRM>();
+});
+
+// SM (Sadism/Masochism)
+
+AOPacketSM::AOPacketSM(const std::vector<std::string>& fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        header = "SM";
+
+        for (const std::string& character : fields) {
+            music_list.push_back(character);
+        }
+        valid = true;
+    }
+    else {
+        valid = false;
+        throw PacketFormatException("Not enough fields on packet SM");
     }
 }
 

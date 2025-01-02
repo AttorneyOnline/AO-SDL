@@ -113,4 +113,23 @@ class AOPacketSC : public AOPacket {
     static constexpr int MIN_FIELDS = 1;
 };
 
+class AOPacketRM : public AOPacket {
+  public:
+    AOPacketRM();
+
+  private:
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
+class AOPacketSM : public AOPacket {
+  public:
+    AOPacketSM(const std::vector<std::string>& fields);
+
+  private:
+    std::vector<std::string> music_list;
+
+    static constexpr int MIN_FIELDS = 1;
+};
+
 #endif
