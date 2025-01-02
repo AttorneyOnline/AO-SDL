@@ -145,11 +145,24 @@ AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) {
     }
     else {
         valid = false;
-        throw PacketFormatException("Not enough fields on packet ID");
+        throw PacketFormatException("Not enough fields on packet PN");
     }
 }
 
-// ASS
+// ASS (Remote Asset URL)
+
+AOPacketASS::AOPacketASS(const std::vector<std::string>& fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        header = "ASS";
+
+        asset_url = fields.at(0);
+        valid = true;
+    }
+    else {
+        valid = false;
+        throw PacketFormatException("Not enough fields on packet ASS");
+    }
+}
 
 // SI
 

@@ -72,4 +72,14 @@ class AOPacketPN : public AOPacket {
     static constexpr int MIN_FIELDS = 2;
 };
 
+class AOPacketASS : public AOPacket {
+  public:
+    AOPacketASS(const std::vector<std::string>& fields);
+
+  private:
+    std::string asset_url;
+
+    static constexpr int MIN_FIELDS = 1;
+};
+
 #endif
