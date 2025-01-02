@@ -61,7 +61,8 @@ void GameWindow::init_sdl() {
         Log::log_print(LogLevel::FATAL, "Failed to create window: %s", SDL_GetError());
     }
 
-    // OpenGL 3.1
+    // OpenGL 4.5
+    // todo: find a better opengl level to target and make the shaders match. we don't need 4.5
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);

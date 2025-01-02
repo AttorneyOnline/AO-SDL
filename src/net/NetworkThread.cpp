@@ -31,7 +31,7 @@ void NetworkThread::net_loop() {
             // todo: cleanly handle and stitch continuation packets
             msgs = sock.read();
             // todo: make this timeout a bit less stupid
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
 
         for (auto msg : msgs) {

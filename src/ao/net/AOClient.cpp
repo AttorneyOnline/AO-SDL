@@ -18,7 +18,7 @@ void AOClient::handle_message(const std::string& message) {
     size_t delimiter_pos;
     // Process all complete messages in the buffer
     while ((delimiter_pos = incomplete_buf.find(AOPacket::DELIMITER)) != std::string::npos) {
-        // Extract the complete message up to the delimiter
+        // Extract the complete message up to (and including) the delimiter
         std::string complete_msg = incomplete_buf.substr(0, delimiter_pos + std::strlen(AOPacket::DELIMITER));
 
         // Remove the processed message and the delimiter from the buffer
@@ -29,13 +29,18 @@ void AOClient::handle_message(const std::string& message) {
             // Parse the serialized message into an AOPacket
             std::unique_ptr<AOPacket> packet = AOPacket::deserialize(complete_msg);
             if (packet->is_valid()) {
+                // Call the packet handler if it is valid
                 packet->handle(*this);
             }
             else {
+                // Write a log if valid is false, but generally speaking, we should be throwing an exception before we
+                // get here. Need to handle it anyways in case whatever failure path we take doesn't yield an exception
                 Log::log_print(ERR, "Failed to parse AOPacket from message: %s", complete_msg.c_str());
             }
         }
         catch (const std::exception& e) {
+            // todo: maybe rethrow here? packet exceptions signal protocol errors which may need to be handled
+            // separately. We could also add more complex exception handling logic here.
             Log::log_print(ERR, "Exception while handling message: %s, Error: %s", complete_msg.c_str(), e.what());
         }
     }

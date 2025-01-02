@@ -9,7 +9,7 @@
 #include "video/GameWindow.h"
 
 int main(int argc, char* argv[]) {
-    // GameWindow game_window;
+    GameWindow game_window;
 
     // Workaround for Qt Creator
     setbuf(stdout, NULL);
@@ -17,14 +17,8 @@ int main(int argc, char* argv[]) {
     // Initialize StateBuffer
     StateBuffer buffer;
 
-    WebSocket sock("localhost", 27017);
+    WebSocket sock("securevanilla.aceattorneyonline.com", 2095);
     NetworkThread net_thread(sock);
-
-    while (true) {
-        ;
-    }
-
-    return 0;
 
     // Instantiate renderer
     RenderManager renderer(buffer);
@@ -33,7 +27,7 @@ int main(int argc, char* argv[]) {
     GameThread game_logic(buffer);
 
     // Kick off the render loop
-    // game_window.start_loop(renderer);
+    game_window.start_loop(renderer);
 
     // todo: cleanup memory
     game_logic.stop();

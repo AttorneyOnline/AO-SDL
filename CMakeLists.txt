@@ -10,6 +10,7 @@ set(SRC_FILES
     src/ao/net/AOClient.cpp
     src/ao/net/AOPacket.cpp
     src/ao/net/PacketTypes.cpp
+    src/ao/net/PacketBehavior.cpp
     src/utils/Log.cpp
     src/utils/Base64.cpp
     src/video/GameWindow.cpp

@@ -23,8 +23,12 @@ class AOClient {
     std::string server_software;
     std::string server_version;
 
-    // todo
+    // todo:
     // a lot of this should probably not live here
+    // the correct solution is probably to generate events which contain this info.
+    // this will rely on finishing the event handling framework (currently in progress)
+    // regardless, just storing this state for now to validate that everything is loading correctly is still useful so
+    // we can look at it in a debugger.
     int current_players;
     int max_players;
     std::string server_description;

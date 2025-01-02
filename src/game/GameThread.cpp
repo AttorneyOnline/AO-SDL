@@ -25,8 +25,45 @@ void GameThread::stop() {
 void GameThread::game_loop() {
     uint64_t t = 0;
 
+    // todo: remove all of this and call the tick(t) function instead.
+    // just putting it here for now to prevent the memory leak until we write the code that will solve this issue
+    // properly
+
+    int width, height, num_channels;
+
+    stbi_set_flip_vertically_on_load(true);
+    uint8_t* bg_pixels = stbi_load(
+        "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\background\\default\\defenseempty.png",
+        &width, &height, &num_channels, 0);
+    Image bg_img(width, height, bg_pixels, num_channels);
+
+    uint8_t* desk_pixels = stbi_load(
+        "C:\\Users\\Marisa\\Documents\\aolibs\\tsurushiage\\assets\\base\\background\\default\\defensedesk.png", &width,
+        &height, &num_channels, 0);
+    Image desk_img(width, height, desk_pixels, num_channels);
+
     while (running) {
-        tick(t);
+        // tick(t);
+        uint64_t ticks = t % 20;
+
+        RenderState new_state;
+        LayerGroup main;
+
+        if (ticks >= 0 && ticks < 10) {
+            Layer thing(bg_img, 0);
+            Layer thing2(desk_img, 1);
+            main.add_layer(0, thing);
+            main.add_layer(1, thing2);
+        }
+        else if (ticks >= 10 && ticks < 20) {
+            Layer thing(desk_img, 0);
+            main.add_layer(0, thing);
+        }
+
+        new_state.add_layer_group(0, main);
+
+        render(new_state);
+
         t++;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
