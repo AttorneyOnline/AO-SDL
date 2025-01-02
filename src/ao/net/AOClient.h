@@ -23,6 +23,22 @@ class AOClient {
     std::string server_software;
     std::string server_version;
 
+    // todo
+    // a lot of this should probably not live here
+    int current_players;
+    int max_players;
+    std::string server_description;
+
+    std::string asset_url;
+
+    int character_count;
+    int evidence_count;
+    int music_count;
+
+    std::vector<std::string> character_list;
+
+    std::vector<std::string> music_list;
+
   private:
     std::string incomplete_buf;
     std::vector<std::string> buffered_messages;

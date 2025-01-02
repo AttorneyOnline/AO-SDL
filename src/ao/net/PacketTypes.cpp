@@ -139,6 +139,9 @@ AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) {
         if (fields.size() >= MIN_FIELDS + 1) {
             server_description = fields.at(2);
         }
+        else {
+            server_description = "";
+        }
 
         this->fields = fields;
         valid = true;
@@ -147,6 +150,30 @@ AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) {
         valid = false;
         throw PacketFormatException("Not enough fields on packet PN");
     }
+}
+
+PacketRegistrar AOPacketPN::registrar("PN", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketPN>(fields);
+});
+
+void AOPacketPN::handle(AOClient& cli) {
+    if (cli.conn_state != CONNECTED) {
+        throw ProtocolStateException("Received PN when client is not in CONNECTED state");
+    }
+
+    cli.current_players = current_players;
+    cli.max_players = max_players;
+    cli.server_description = server_description;
+
+    AOPacketAskChaa ask_chars;
+    cli.add_message(ask_chars);
+}
+
+// askchaa
+
+AOPacketAskChaa::AOPacketAskChaa() {
+    header = "askchaa";
+    valid = true;
 }
 
 // ASS (Remote Asset URL)
@@ -162,6 +189,18 @@ AOPacketASS::AOPacketASS(const std::vector<std::string>& fields) {
         valid = false;
         throw PacketFormatException("Not enough fields on packet ASS");
     }
+}
+
+PacketRegistrar AOPacketASS::registrar("ASS", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketASS>(fields);
+});
+
+void AOPacketASS::handle(AOClient& cli) {
+    if (cli.conn_state != CONNECTED) {
+        throw ProtocolStateException("Received ASS when client is not in CONNECTED state");
+    }
+
+    cli.asset_url = asset_url;
 }
 
 // SI (Server Information, aka Resource Counts)
@@ -182,17 +221,29 @@ AOPacketSI::AOPacketSI(const std::vector<std::string>& fields) {
     }
 }
 
+PacketRegistrar AOPacketSI::registrar("SI", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketSI>(fields);
+});
+
+void AOPacketSI::handle(AOClient& cli) {
+    if (cli.conn_state != CONNECTED) {
+        throw ProtocolStateException("Received SI when client is not in CONNECTED state");
+    }
+
+    cli.character_count = character_count;
+    cli.evidence_count = evidence_count;
+    cli.music_count = music_count;
+
+    AOPacketRC ask_for_chars;
+    cli.add_message(ask_for_chars);
+}
+
 // RC (Request Charlist)
 
 AOPacketRC::AOPacketRC() {
     header = "RC";
     valid = true;
 }
-
-// todo: not sure this works; RC has no fields
-PacketRegistrar AOPacketRC::registrar("RC", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketRC>();
-});
 
 // SC (Send Charlist)
 
@@ -211,17 +262,27 @@ AOPacketSC::AOPacketSC(const std::vector<std::string>& fields) {
     }
 }
 
+PacketRegistrar AOPacketSC::registrar("SC", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketSC>(fields);
+});
+
+void AOPacketSC::handle(AOClient& cli) {
+    if (cli.conn_state != CONNECTED) {
+        throw ProtocolStateException("Received SC when client is not in CONNECTED state");
+    }
+
+    cli.character_list = character_list;
+
+    AOPacketRM ask_for_music;
+    cli.add_message(ask_for_music);
+}
+
 // RM (Request Music)
 
 AOPacketRM::AOPacketRM() {
     header = "RM";
     valid = true;
 }
-
-// todo: not sure this works; RM has no fields
-PacketRegistrar AOPacketRM::registrar("RM", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketRM>();
-});
 
 // SM (Sadism/Masochism)
 
@@ -240,10 +301,42 @@ AOPacketSM::AOPacketSM(const std::vector<std::string>& fields) {
     }
 }
 
-// RM
+PacketRegistrar AOPacketSM::registrar("SM", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketSM>(fields);
+});
 
-// SM
+void AOPacketSM::handle(AOClient& cli) {
+    if (cli.conn_state != CONNECTED) {
+        throw ProtocolStateException("Received SM when client is not in CONNECTED state");
+    }
+
+    cli.music_list = music_list;
+
+    AOPacketRD signal_done;
+    cli.add_message(signal_done);
+}
 
 // RD
 
+AOPacketRD::AOPacketRD() {
+    header = "RD";
+    valid = true;
+}
+
 // DONE
+
+AOPacketDONE::AOPacketDONE() {
+    header = "DONE";
+    valid = true;
+}
+PacketRegistrar AOPacketDONE::registrar("DONE",
+                                        [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+                                            return std::make_unique<AOPacketDONE>();
+                                        });
+
+void AOPacketDONE::handle(AOClient& cli) {
+    if (cli.conn_state != CONNECTED) {
+        throw ProtocolStateException("Received DONE when client is not in CONNECTED state");
+    }
+    // do nothing for now
+}

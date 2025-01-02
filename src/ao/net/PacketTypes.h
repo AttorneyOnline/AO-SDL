@@ -64,21 +64,35 @@ class AOPacketPN : public AOPacket {
   public:
     AOPacketPN(const std::vector<std::string>& fields);
 
+    virtual void handle(AOClient& cli) override;
+
   private:
     int current_players;
     int max_players;
     std::string server_description;
 
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 2;
+};
+
+class AOPacketAskChaa : public AOPacket {
+  public:
+    AOPacketAskChaa();
+
+  private:
+    static constexpr int MIN_FIELDS = 0;
 };
 
 class AOPacketASS : public AOPacket {
   public:
     AOPacketASS(const std::vector<std::string>& fields);
 
+    virtual void handle(AOClient& cli) override;
+
   private:
     std::string asset_url;
 
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 1;
 };
 
@@ -86,11 +100,14 @@ class AOPacketSI : public AOPacket {
   public:
     AOPacketSI(const std::vector<std::string>& fields);
 
+    virtual void handle(AOClient& cli) override;
+
   private:
     int character_count;
     int evidence_count;
     int music_count;
 
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 3;
 };
 
@@ -99,7 +116,6 @@ class AOPacketRC : public AOPacket {
     AOPacketRC();
 
   private:
-    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
 };
 
@@ -107,9 +123,12 @@ class AOPacketSC : public AOPacket {
   public:
     AOPacketSC(const std::vector<std::string>& fields);
 
+    virtual void handle(AOClient& cli) override;
+
   private:
     std::vector<std::string> character_list;
 
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 1;
 };
 
@@ -118,7 +137,6 @@ class AOPacketRM : public AOPacket {
     AOPacketRM();
 
   private:
-    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
 };
 
@@ -126,10 +144,32 @@ class AOPacketSM : public AOPacket {
   public:
     AOPacketSM(const std::vector<std::string>& fields);
 
+    virtual void handle(AOClient& cli) override;
+
   private:
     std::vector<std::string> music_list;
 
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 1;
+};
+
+class AOPacketRD : public AOPacket {
+  public:
+    AOPacketRD();
+
+  private:
+    static constexpr int MIN_FIELDS = 0;
+};
+
+class AOPacketDONE : public AOPacket {
+  public:
+    AOPacketDONE();
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
 };
 
 #endif
