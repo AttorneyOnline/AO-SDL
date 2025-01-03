@@ -7,9 +7,9 @@ enum UIEventType { CHAR_LOADING_DONE };
 
 class UIEvent : public Event {
   public:
-    UIEvent(UIEventType type);
+    UIEvent(UIEventType type, EventTarget target);
 
-    std::string to_string() override;
+    std::string to_string() const override;
     UIEventType get_type();
 
   private:

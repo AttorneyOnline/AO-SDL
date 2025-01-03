@@ -258,6 +258,19 @@ PacketRegistrar AOPacketDONE::registrar("DONE",
 
 // CT
 
+AOPacketCT::AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message)
+    : sender_name(sender_name), message(message), system_message(system_message) {
+    header = "CT";
+
+    fields.push_back(sender_name);
+    fields.push_back(message);
+    if (system_message) {
+        fields.push_back("1");
+    }
+
+    valid = true;
+}
+
 AOPacketCT::AOPacketCT(const std::vector<std::string>& fields) {
     if (fields.size() >= MIN_FIELDS) {
         header = "CT";

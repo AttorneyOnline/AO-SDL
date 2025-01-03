@@ -24,6 +24,8 @@ class UIManager {
 
     // todo: bad, do this right
     std::string chat_buffer;
+    char chat_name[32] = "";
+    char chat_message[1024] = "";
 };
 
 #endif

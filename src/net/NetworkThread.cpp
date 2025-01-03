@@ -16,7 +16,6 @@ void NetworkThread::net_loop() {
     // this same generalization should be done to the WebSocket API
     // the current public API is just a read, write, (blocking) connect, and is_connected()
     AOClient ao_client;
-    bool fuk = false;
 
     if (!sock.is_connected()) {
         // todo: this function is blocking
@@ -32,6 +31,16 @@ void NetworkThread::net_loop() {
         while (msgs.size() < 1) {
             // todo: cleanly handle and stitch continuation packets
             msgs = sock.read();
+
+            // handle any client events or messages while we are waiting on the socket
+            ao_client.handle_events();
+            std::vector<std::string> client_msgs = ao_client.get_messages();
+            for (auto cli_msg : client_msgs) {
+                std::vector<uint8_t> msg_bytes(cli_msg.begin(), cli_msg.end());
+                Log::log_print(DEBUG, "CLIENT: %s", cli_msg.c_str());
+                sock.write(msg_bytes);
+            }
+
             // todo: make this timeout a bit less stupid
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
@@ -42,16 +51,5 @@ void NetworkThread::net_loop() {
             ao_client.handle_message(msgstr);
         }
         msgs.clear();
-
-        std::vector<std::string> client_msgs = ao_client.get_messages();
-        for (auto cli_msg : client_msgs) {
-            std::vector<uint8_t> msg_bytes(cli_msg.begin(), cli_msg.end());
-            Log::log_print(DEBUG, "CLIENT: %s", cli_msg.c_str());
-            sock.write(msg_bytes);
-        }
-
-        // todo: add interface to get events from AOClient, add event framework (lol), pass events into queue with locks
-        // auto events = ao_client.get_client_events();
-        // event_queue.push(events);
     }
 }

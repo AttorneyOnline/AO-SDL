@@ -1,13 +1,13 @@
 #include "UIEvent.h"
 
-UIEvent::UIEvent(UIEventType type) : type(type) {
+UIEvent::UIEvent(UIEventType type, EventTarget target) : type(type), Event(target) {
 }
 
 UIEventType UIEvent::get_type() {
     return type;
 }
 
-std::string UIEvent::to_string() {
+std::string UIEvent::to_string() const {
     switch (type) {
     case CHAR_LOADING_DONE:
         return "Character loading done";

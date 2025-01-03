@@ -3,6 +3,8 @@
 #include <imgui.h>
 
 #include "event/EventManager.h"
+#include "event/UIEvent.h"
+#include "event/ChatEvent.h"
 #include "utils/Log.h"
 
 #include <format>
@@ -11,9 +13,9 @@ UIManager::UIManager() : current_view(SERVER_LIST) {
 }
 
 void UIManager::handle_events() {
-    EventChannel<UIEvent>* event_channel = EventManager::get_instance().get_ui_channel();
+    auto& event_channel = EventManager::instance().get_channel<UIEvent>();
 
-    while (auto optev = event_channel->get_event()) {
+    while (auto optev = event_channel.get_event(EventTarget::UI)) {
         UIEvent ev = *optev;
         Log::log_print(DEBUG, "Received UI event: %s", ev.to_string().c_str());
 
@@ -25,8 +27,8 @@ void UIManager::handle_events() {
     }
 
     // todo: put this in the correct place!!!!!
-    EventChannel<ChatEvent>* chat_event_channel = EventManager::get_instance().get_chat_channel();
-    auto optev = chat_event_channel->get_event();
+    auto& chat_event_channel = EventManager::instance().get_channel<ChatEvent>();
+    auto optev = chat_event_channel.get_event(EventTarget::CHAT);
     if (optev) {
         ChatEvent ev = *optev;
         chat_buffer = std::format("{}\n{}", chat_buffer, ev.to_string());
@@ -62,6 +64,11 @@ void UIManager::render_current_view(RenderManager& render) {
 
         ImGui::Begin("Chat");
         ImGui::Text(chat_buffer.c_str());
+        ImGui::InputText("name", chat_name, IM_ARRAYSIZE(chat_name));
+        ImGui::InputText("message", chat_message, IM_ARRAYSIZE(chat_message));
+        if (ImGui::Button("Send Message")) {
+            EventManager::instance().get_channel<ChatEvent>().publish(ChatEvent(std::string(chat_name), std::string(chat_message), false, EventTarget::NETWORK));
+        }
         ImGui::End();
     }
     else if (current_view == SERVER_LIST) {

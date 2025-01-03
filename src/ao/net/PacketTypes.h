@@ -174,6 +174,7 @@ class AOPacketDONE : public AOPacket {
 
 class AOPacketCT : public AOPacket {
   public:
+    AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message);
     AOPacketCT(const std::vector<std::string>& fields);
 
     virtual void handle(AOClient& cli) override;

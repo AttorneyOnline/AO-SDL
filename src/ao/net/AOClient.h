@@ -14,6 +14,7 @@ class AOClient {
 
     std::vector<std::string> get_messages();
     void handle_message(const std::string& message);
+    void handle_events();
     void add_message(const AOPacket& packet);
 
     AOConnectionState conn_state;

@@ -1,6 +1,9 @@
 #include "AOClient.h"
 
+#include "ao/net/PacketTypes.h"
 #include "utils/Log.h"
+#include "event/EventManager.h"
+#include "event/ChatEvent.h"
 
 AOClient::AOClient() : incomplete_buf(""), conn_state(NOT_CONNECTED) {
 }
@@ -43,6 +46,19 @@ void AOClient::handle_message(const std::string& message) {
             // separately. We could also add more complex exception handling logic here.
             Log::log_print(ERR, "Exception while handling message: %s, Error: %s", complete_msg.c_str(), e.what());
         }
+    }
+}
+
+void AOClient::handle_events() {
+    // Handle any events sent to the network thread that we care about
+    // todo: generalize this a bit more
+
+    // Outgoing OOC chat messages
+    auto& chat_ev_channel = EventManager::instance().get_channel<ChatEvent>();
+    while (chat_ev_channel.has_events(EventTarget::NETWORK)) {
+        auto ev = chat_ev_channel.get_event(EventTarget::NETWORK).value();
+        AOPacketCT chat_packet(ev.get_sender_name(), ev.get_message(), ev.get_system_message());
+        add_message(chat_packet);
     }
 }
 

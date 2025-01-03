@@ -2,6 +2,8 @@
 
 #include "AOClient.h"
 #include "event/EventManager.h"
+#include "event/UIEvent.h"
+#include "event/ChatEvent.h"
 
 // Keeping the actual handler functions in a separate file here just for clarity
 
@@ -92,10 +94,10 @@ void AOPacketDONE::handle(AOClient& cli) {
 
     cli.conn_state = JOINED;
 
-    EventManager::get_instance().get_ui_channel()->publish(UIEvent(UIEventType::CHAR_LOADING_DONE));
+    EventManager::instance().get_channel<UIEvent>().publish(UIEvent(UIEventType::CHAR_LOADING_DONE, EventTarget::UI));
     // do nothing else for now
 }
 
 void AOPacketCT::handle(AOClient& cli) {
-    EventManager::get_instance().get_chat_channel()->publish(ChatEvent(sender_name, message, system_message));
+    EventManager::instance().get_channel<ChatEvent>().publish(ChatEvent(sender_name, message, system_message, EventTarget::CHAT));
 }

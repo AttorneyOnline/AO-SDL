@@ -12,7 +12,6 @@ set(SRC_FILES
     src/ao/net/PacketTypes.cpp
     src/ao/net/PacketBehavior.cpp
     src/event/Event.cpp
-    src/event/EventManager.cpp
     src/event/ChatEvent.cpp
     src/event/UIEvent.cpp
     src/utils/Log.cpp
