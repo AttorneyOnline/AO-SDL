@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.3)
-project(tsurushiage LANGUAGES CXX C)
+project(aosdl LANGUAGES CXX C)
 
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
