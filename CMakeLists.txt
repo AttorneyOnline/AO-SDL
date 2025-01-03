@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.10)
+﻿cmake_minimum_required(VERSION 3.11)
 project(aosdl LANGUAGES CXX C)
 
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
@@ -14,10 +14,12 @@ set(SRC_FILES
     src/event/Event.cpp
     src/event/ChatEvent.cpp
     src/event/UIEvent.cpp
+    src/event/ServerListEvent.cpp
     src/utils/Log.cpp
     src/utils/Base64.cpp
     src/video/GameWindow.cpp
     src/game/GameThread.cpp
+    src/game/ServerList.cpp
     src/render/detail/Renderer.cpp
     src/render/detail/Shader.cpp
     src/render/detail/Sprite.cpp
