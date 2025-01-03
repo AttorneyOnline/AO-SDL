@@ -3,7 +3,7 @@
 #include "RenderState.h"
 #include "detail/Renderer.h"
 
-#include <gl/glew.h>
+#include <GL/glew.h>
 
 #include <cstdio>
 
