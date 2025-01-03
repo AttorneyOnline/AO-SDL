@@ -15,8 +15,10 @@ class Renderer;
 class RenderManager {
   public:
     RenderManager(StateBuffer& buf);
+
     uint32_t render_frame();
     void clear_framebuffer();
+    void bind_framebuffer(unsigned int fb);
 
   private:
     StateBuffer& state_buf;

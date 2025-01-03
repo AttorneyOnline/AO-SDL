@@ -3,31 +3,48 @@
 
 #include "Event.h"
 
-#include <atomic>
-#include <functional>
-#include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
-#include <vector>
+#include <type_traits>
+#include <utility>
 
-class EventLoop;
-
+template <typename T>
 class EventChannel {
+    static_assert(std::is_base_of<Event, T>::value, "EventChannel only supports Event objects");
+
   public:
-    EventChannel();
+    EventChannel() = default;
 
-    typedef event_callback std::function<void(const Event&)>;
+    EventChannel(const EventChannel&) = delete;
+    EventChannel& operator=(const EventChannel&) = delete;
 
-    void publish(Event ev);
-    void subscribe(event_callback callback);
+    EventChannel(EventChannel&&) = default;
+    EventChannel& operator=(EventChannel&&) = default;
+
+    void publish(T&& ev) {
+        const std::lock_guard<std::mutex> lock(event_queue_mutex);
+
+        event_queue.push(std::move(ev));
+    }
+
+    std::optional<T> get_event() {
+        const std::lock_guard<std::mutex> lock(event_queue_mutex);
+
+        if (event_queue.empty()) {
+            return std::nullopt;
+        }
+
+        T ev = std::move(event_queue.front());
+        event_queue.pop();
+
+        return ev;
+    }
 
   private:
-    friend class EventLoop;
-
     std::mutex event_queue_mutex;
 
-    std::queue<Event> event_queue;
-    std::vector<event_callback> subscribers;
+    std::queue<T> event_queue;
 };
 
 #endif

@@ -8,6 +8,7 @@
 class Renderer {
   public:
     Renderer();
+
     GLuint draw(const RenderState* state);
 
     std::tuple<GLuint, GLuint> setup_render_texture();

@@ -8,6 +8,21 @@
 #include <string>
 #include <vector>
 
+// Define byte swap macro based on compiler
+#if defined(__GNUC__) || defined(__clang__)
+#define BSWAP64(x) __builtin_bswap64(x)
+#elif defined(_MSC_VER)
+#include <cstdlib> // For _byteswap_uint64
+#define BSWAP64(x) _byteswap_uint64(x)
+#else
+static inline uint64_t BSWAP64(uint64_t x) {
+    return ((x & 0x00000000000000FFULL) << 56) | ((x & 0x000000000000FF00ULL) << 40) |
+           ((x & 0x0000000000FF0000ULL) << 24) | ((x & 0x00000000FF000000ULL) << 8) |
+           ((x & 0x000000FF00000000ULL) >> 8) | ((x & 0x0000FF0000000000ULL) >> 24) |
+           ((x & 0x00FF000000000000ULL) >> 40) | ((x & 0xFF00000000000000ULL) >> 56);
+}
+#endif
+
 struct CaseInsensitiveCompare {
     bool operator()(const std::string& a, const std::string& b) const {
         return std::lexicographical_compare(
@@ -171,9 +186,12 @@ class WebSocket {
     /* ==================== 4) Utility & Internal Data ==================== */
 
     /**
-     * @brief Case-insensitive string compare for header fields, etc.
+     * @brief Case-insensitive string equality test for header fields, etc.
      */
-    bool case_insensitive_compare(const std::string& a, const std::string& b);
+    bool case_insensitive_equal(const std::string& a, const std::string& b);
+
+    static inline uint64_t ntohll(uint64_t net_value);
+    static inline uint64_t htonll(uint64_t host_value);
 
     /**
      * @brief Buffer size for raw reads from the TCP socket.

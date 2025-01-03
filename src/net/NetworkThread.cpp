@@ -1,6 +1,7 @@
 #include "NetworkThread.h"
 
 #include "ao/net/AOClient.h"
+#include "ao/net/PacketTypes.h"
 #include "utils/Log.h"
 
 // todo: instead of passing the socket through the constructor, NetworkThread should have thread-safe mechanisms to
@@ -15,6 +16,7 @@ void NetworkThread::net_loop() {
     // this same generalization should be done to the WebSocket API
     // the current public API is just a read, write, (blocking) connect, and is_connected()
     AOClient ao_client;
+    bool fuk = false;
 
     if (!sock.is_connected()) {
         // todo: this function is blocking

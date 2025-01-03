@@ -4,12 +4,13 @@
 #include "utils/sha1.h"
 
 #include <algorithm>
+#include <bit>
 #include <cstdlib>
 #include <ctime>
 #include <format>
 #include <functional>
 
-// todo: support closing, ping/pong, and continuation frames
+// todo: support closing, ping to server, and continuation frames
 
 HTTPResponse::HTTPResponse(StatusLine status_line, HTTPHeaders headers) : status_line(status_line), headers(headers) {
 }
@@ -138,27 +139,35 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
             bytes_needed += pl_len;
         }
         else if (pl_len == 126) {
-            bytes_needed += 2;
+            bytes_needed += sizeof(uint16_t);
 
             if (bytes.size() < bytes_needed) {
                 extra_data.insert(extra_data.end(), bytes.begin(), bytes.end());
                 return messages;
             }
 
-            // Strict aliasing is for cowards
-            pl_len = ntohs(*(uint16_t*)(&bytes[2]));
+            // copying is actually faster here because we don't make assumptions about alignment that way
+            // doing microbenchmarks here was probably a total and complete waste of my time, but unaligned reads are
+            // indeed slower than an aligned read after an aligned copy
+            uint16_t pl_len_netorder;
+            std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint16_t));
+            // kissnet includes either winsock.h or arpa/inet.h which gives us this function on every platform it
+            // supports
+            pl_len = ntohs(pl_len_netorder);
             bytes_needed += pl_len;
         }
         else if (pl_len == 127) {
-            bytes_needed += 8;
+            bytes_needed += sizeof(uint64_t);
 
             if (bytes.size() < bytes_needed) {
                 extra_data.insert(extra_data.end(), bytes.begin(), bytes.end());
                 return messages;
             }
 
-            // Strict aliasing is still for cowards
-            pl_len = ntohll(*(uint64_t*)(&bytes[2]));
+            // same caveat as above applies
+            uint64_t pl_len_netorder;
+            std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint16_t));
+            pl_len = WebSocket::ntohll(pl_len_netorder);
             bytes_needed += pl_len;
         }
 
@@ -232,7 +241,7 @@ void WebSocket::write(std::span<const uint8_t> data_bytes) {
     frame.len = data_bytes.size();
 
     if (frame.len <= 125) {
-        frame.len_code = frame.len;
+        frame.len_code = (uint8_t)(frame.len & 0xFF);
     }
     else if (frame.len >= 126 && frame.len <= UINT16_MAX) {
         frame.len_code = 126;
@@ -480,7 +489,7 @@ HTTPResponse WebSocket::read_handshake() {
     return response;
 }
 
-bool WebSocket::case_insensitive_compare(const std::string& a, const std::string& b) {
+bool WebSocket::case_insensitive_equal(const std::string& a, const std::string& b) {
     std::string a_lower, b_lower;
     a_lower.resize(a.size());
     b_lower.resize(b.size());
@@ -526,7 +535,7 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
        insensitive match for the value "websocket", the client MUST
        _Fail the WebSocket Connection_.
     */
-    if (case_insensitive_compare(response.get_header("Upgrade"), "websocket")) {
+    if (case_insensitive_equal(response.get_header("Upgrade"), "websocket")) {
         upgrade_ok = true;
     }
     else {
@@ -539,7 +548,7 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
        ASCII case-insensitive match for the value "Upgrade", the client
        MUST _Fail the WebSocket Connection_.
     */
-    if (case_insensitive_compare(response.get_header("Connection"), "Upgrade")) {
+    if (case_insensitive_equal(response.get_header("Connection"), "Upgrade")) {
         connection_ok = true;
     }
     else {
@@ -628,7 +637,7 @@ std::vector<uint8_t> WebSocket::WebSocketFrame::serialize() {
         std::memcpy(lenbuf.data(), &net_order, sizeof(net_order));
     }
     else if (len_code == 127) {
-        uint64_t net_order = htonll(len);
+        uint64_t net_order = WebSocket::htonll(len);
         lenbuf.resize(8);
         std::memcpy(lenbuf.data(), &net_order, sizeof(net_order));
     }
@@ -658,4 +667,30 @@ std::vector<uint8_t> WebSocket::WebSocketFrame::serialize() {
     }
 
     return out_buf;
+}
+
+inline uint64_t WebSocket::ntohll(uint64_t net_value) {
+    if constexpr (std::endian::native == std::endian::big) {
+        return net_value;
+    }
+    else if constexpr (std::endian::native == std::endian::little) {
+        return BSWAP64(net_value);
+    }
+    else {
+        static_assert(std::endian::native == std::endian::big || std::endian::native == std::endian::little,
+                      "Unsupported endianess");
+    }
+}
+
+inline uint64_t WebSocket::htonll(uint64_t host_value) {
+    if constexpr (std::endian::native == std::endian::big) {
+        return host_value;
+    }
+    else if constexpr (std::endian::native == std::endian::little) {
+        return BSWAP64(host_value);
+    }
+    else {
+        static_assert(std::endian::native == std::endian::big || std::endian::native == std::endian::little,
+                      "Unsupported endianess");
+    }
 }

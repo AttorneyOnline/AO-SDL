@@ -225,6 +225,7 @@ AOPacketSM::AOPacketSM(const std::vector<std::string>& fields) {
         for (const std::string& character : fields) {
             music_list.push_back(character);
         }
+
         valid = true;
     }
     else {
@@ -254,3 +255,32 @@ PacketRegistrar AOPacketDONE::registrar("DONE",
                                         [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
                                             return std::make_unique<AOPacketDONE>();
                                         });
+
+// CT
+
+AOPacketCT::AOPacketCT(const std::vector<std::string>& fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        header = "CT";
+
+        sender_name = fields.at(0);
+        message = fields.at(1);
+
+        if (fields.size() >= MIN_FIELDS + 1) {
+            system_message = std::atoi(fields.at(2).c_str()) == 1;
+        }
+        else {
+            system_message = false;
+        }
+
+        this->fields = fields;
+        valid = true;
+    }
+    else {
+        valid = false;
+        throw PacketFormatException("Not enough fields on packet CT");
+    }
+}
+
+PacketRegistrar AOPacketCT::registrar("CT", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
+    return std::make_unique<AOPacketCT>(fields);
+});

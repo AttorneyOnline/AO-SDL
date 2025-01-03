@@ -1,5 +1,6 @@
 #include "GameWindow.h"
 
+#include "ui/UIManager.h"
 #include "utils/Log.h"
 
 #include <SDL2/SDL.h>
@@ -8,7 +9,7 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_sdl2.h>
 
-GameWindow::GameWindow() : window(nullptr), running(true) {
+GameWindow::GameWindow(UIManager& ui_manager) : window(nullptr), running(true), ui_manager(ui_manager) {
     init_sdl();
 }
 
@@ -24,26 +25,21 @@ void GameWindow::start_loop(RenderManager& render) {
             ImGui_ImplSDL2_ProcessEvent(&event);
         }
 
-        // Render viewport
-        uint32_t render_texture = render.render_frame();
-
-        // Set up UI
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-        ImGui::Begin("Test");
-        ImGui::Image(render_texture, ImGui::GetContentRegionAvail(), {0, 1}, {1, 0});
-        ImGui::End();
 
-        // Render UI
-        render.clear_framebuffer();
-        ImGui::Render();
+        ui_manager.handle_events();
+        ui_manager.render_current_view(render);
+
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Swap
         SDL_GL_SwapWindow(window);
 
         // Log::log_print(INFO, "Rendered a frame");
+        // todo: add some instrumentation to measure frame times, target a specific framerate to keep this thread from
+        // gobbling CPU
     }
 }
 

@@ -23,6 +23,8 @@ Renderer::Renderer() {
 
 GLuint Renderer::draw(const RenderState* state) {
     // Render to our framebuffer
+    // todo: manage the framebuffer and bind it elsewhere. that functionality doesn't really belong in this class.
+    // the code to generate the render textures should also be done elsewhere
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
     glViewport(0, 0, 1920,
                1080); // Render on the whole framebuffer, complete from the lower left corner to the upper right
@@ -45,8 +47,6 @@ GLuint Renderer::draw(const RenderState* state) {
             layer_sprite.draw(program);
         }
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     return render_texture;
 }

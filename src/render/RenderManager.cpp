@@ -21,7 +21,6 @@ RenderManager::RenderManager(StateBuffer& buf) : state_buf(buf), renderer_ptr(nu
 }
 
 uint32_t RenderManager::render_frame() {
-
     const RenderState* state = state_buf.get_consumer_buf();
     uint32_t render_texture = renderer_ptr->draw(state);
     state_buf.update();
@@ -42,6 +41,10 @@ uint32_t RenderManager::render_frame() {
         frame_counter = 0;
     }
     */
+}
+
+void RenderManager::bind_framebuffer(unsigned int fb) {
+    glBindFramebuffer(GL_FRAMEBUFFER, fb);
 }
 
 void RenderManager::clear_framebuffer() {

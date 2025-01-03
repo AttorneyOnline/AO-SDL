@@ -11,6 +11,10 @@ set(SRC_FILES
     src/ao/net/AOPacket.cpp
     src/ao/net/PacketTypes.cpp
     src/ao/net/PacketBehavior.cpp
+    src/event/Event.cpp
+    src/event/EventManager.cpp
+    src/event/ChatEvent.cpp
+    src/event/UIEvent.cpp
     src/utils/Log.cpp
     src/utils/Base64.cpp
     src/video/GameWindow.cpp
@@ -31,7 +35,8 @@ set(SRC_FILES
     src/asset/AssetCache.cpp
     src/asset/ImageAsset.cpp
     src/net/WebSocket.cpp
-    src/net/NetworkThread.cpp)
+    src/net/NetworkThread.cpp
+    src/ui/UIManager.cpp)
 
 # Include directories
 set(INCLUDE_DIRS

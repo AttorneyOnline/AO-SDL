@@ -172,4 +172,19 @@ class AOPacketDONE : public AOPacket {
     static constexpr int MIN_FIELDS = 0;
 };
 
+class AOPacketCT : public AOPacket {
+  public:
+    AOPacketCT(const std::vector<std::string>& fields);
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    std::string sender_name;
+    std::string message;
+    bool system_message;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 2;
+};
+
 #endif
