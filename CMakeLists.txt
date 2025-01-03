@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.3)
+﻿cmake_minimum_required(VERSION 3.10)
 project(aosdl LANGUAGES CXX C)
 
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
@@ -86,6 +86,10 @@ if(WIN32)
             "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>"
         VERBATIM
     )
+else()
+    find_package(GLEW REQUIRED)
+    include_directories(${GLEW_INCLUDE_DIRS})
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${GLEW_LIBRARIES})
 endif()
 
 # ImGui setup

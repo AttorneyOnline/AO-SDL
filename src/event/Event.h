@@ -1,6 +1,8 @@
 #ifndef EVENT_H
 #define EVENT_H
 
+#include <cstring>
+#include <algorithm>
 #include <string>
 
 // todo: investigate a more generic/extensible way to do this
