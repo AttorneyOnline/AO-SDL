@@ -17,9 +17,11 @@ set(SRC_FILES
     src/event/ServerListEvent.cpp
     src/utils/Log.cpp
     src/utils/Base64.cpp
+    src/utils/JsonValidation.cpp
     src/video/GameWindow.cpp
     src/game/GameThread.cpp
     src/game/ServerList.cpp
+    src/game/ServerList.h
     src/render/detail/Renderer.cpp
     src/render/detail/Shader.cpp
     src/render/detail/Sprite.cpp
