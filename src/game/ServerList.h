@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "utils/json.hpp"
+#include "json.hpp"
 
 struct ServerEntry {
     std::string hostname;

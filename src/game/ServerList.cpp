@@ -3,9 +3,9 @@
 #include <exception>
 #include <optional>
 
+#include "json.hpp"
 #include "utils/JsonValidation.h"
 #include "utils/Log.h"
-#include "utils/json.hpp"
 
 ServerList::ServerList(const std::string& serverlist_json) {
     nlohmann::basic_json respobj;
