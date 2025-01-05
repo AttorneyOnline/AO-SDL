@@ -400,3 +400,4 @@ FodyWeavers.xsd
 
 out/
 assets/
+CMakeFiles/

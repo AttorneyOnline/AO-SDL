@@ -4,6 +4,8 @@ project(aosdl LANGUAGES CXX C)
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Source files
 set(SRC_FILES
     src/main.cpp
@@ -116,3 +118,23 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui)
 
 # Kissnet
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/kissnet)
+
+
+find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+
+# todo: make this work on windows
+
+if(CLANG_TIDY_EXE)
+    message(STATUS "Found clang-tidy: ${CLANG_TIDY_EXE}")
+
+    add_custom_target(run-clang-tidy
+        COMMAND ${CMAKE_COMMAND} -E echo "Running clang-tidy..."
+        # The easiest way is to run a shell command that pipes find -> xargs
+       COMMAND /bin/sh -c "find ${CMAKE_SOURCE_DIR} -path '${CMAKE_SOURCE_DIR}/third-party' -prune -o -name '*.cpp' -print0 | xargs -0 ${CLANG_TIDY_EXE} -header-filter='.*[/\\]src[/\\].*' -p ${CMAKE_BINARY_DIR}"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running clang-tidy on the project sources using compile_commands.json"
+        VERBATIM
+    )
+else()
+    message(WARNING "clang-tidy not found! The 'run-clang-tidy' target will not be available.")
+endif()
