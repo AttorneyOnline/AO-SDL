@@ -1,5 +1,4 @@
-#ifndef EVENTMANAGER_H
-#define EVENTMANAGER_H
+#pragma once
 
 #include "Event.h"
 #include "EventChannel.h"
@@ -78,5 +77,3 @@ class EventManager {
     std::unordered_map<std::type_index, std::unique_ptr<BaseEventChannel>> channels_;
     std::mutex mutex_;
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef EVENTCHANNEL_H
-#define EVENTCHANNEL_H
+#pragma once
 
 #include "Event.h"
 
@@ -63,5 +62,3 @@ class EventChannel {
 
     std::deque<T> event_queue;
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef AOCLIENT_H
-#define AOCLIENT_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -48,5 +47,3 @@ class AOClient {
     std::string incomplete_buf;
     std::vector<std::string> buffered_messages;
 };
-
-#endif

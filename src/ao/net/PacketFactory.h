@@ -1,5 +1,4 @@
-#ifndef PACKETFACTORY_H
-#define PACKETFACTORY_H
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -33,5 +32,3 @@ class PacketFactory {
   private:
     std::unordered_map<std::string, CreatorFunc> creators;
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef LAYER_H
-#define LAYER_H
+#pragma once
 
 #include "Image.h"
 
@@ -29,5 +28,3 @@ class LayerGroup {
   private:
     std::map<const int, Layer> layers;
 };
-
-#endif

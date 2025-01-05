@@ -1,5 +1,4 @@
-#ifndef SERVERLIST_H
-#define SERVERLIST_H
+#pragma once
 
 #include <cstdint>
 #include <optional>
@@ -30,5 +29,3 @@ class ServerList {
   private:
     std::vector<ServerEntry> servers;
 };
-
-#endif

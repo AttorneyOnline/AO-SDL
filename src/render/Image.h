@@ -1,5 +1,4 @@
-#ifndef IMAGE_H
-#define IMAGE_H
+#pragma once
 
 #include <cstdint>
 
@@ -32,5 +31,3 @@ class Animation : public Image {
 
     void update_image(uint8_t* pixels);
 };
-
-#endif

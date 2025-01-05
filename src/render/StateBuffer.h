@@ -1,5 +1,4 @@
-#ifndef SRenderStateARenderStateEBUFFER_H
-#define SRenderStateARenderStateEBUFFER_H
+#pragma once
 
 #include "RenderState.h"
 
@@ -25,5 +24,3 @@ class StateBuffer {
     std::atomic<bool> stale;
     std::mutex swap_mutex;
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef PACKETREGISTRAR_H
-#define PACKETREGISTRAR_H
+#pragma once
 
 #include "PacketFactory.h"
 
@@ -9,5 +8,3 @@ class PacketRegistrar {
         PacketFactory::instance().register_packet(header, creator);
     }
 };
-
-#endif

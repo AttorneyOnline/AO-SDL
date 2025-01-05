@@ -1,5 +1,4 @@
-#ifndef BASE64_H
-#define BASE64_H
+#pragma once
 
 #include <cstdint>
 #include <span>
@@ -10,5 +9,3 @@ class Base64 {
     static std::string encode(std::span<const uint8_t> data);
     static std::span<const uint8_t> decode(std::string& input);
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef ASSET_H
-#define ASSET_H
+#pragma once
 
 #include <string>
 
@@ -11,5 +10,3 @@ class Asset {
     std::string path;
 
 };
-
-#endif
