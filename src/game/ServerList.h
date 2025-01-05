@@ -2,16 +2,23 @@
 #define SERVERLIST_H
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "utils/json.hpp"
+
 struct ServerEntry {
     std::string hostname;
-    uint16_t ws_port;
+    std::optional<uint16_t> tcp_port = std::nullopt;
+    std::optional<uint16_t> ws_port = std::nullopt;
+    std::optional<uint16_t> wss_port = std::nullopt;
 
     std::string name;
     std::string description;
     int players;
+
+    static std::optional<ServerEntry> from_json(const nlohmann::json& entry);
 };
 
 class ServerList {
