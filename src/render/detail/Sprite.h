@@ -6,8 +6,6 @@
 #include "Transform.h"
 #include "Vertex.h"
 
-#include <vector>
-
 class Sprite : public Transform {
   public:
     Sprite(Texture2D texture);

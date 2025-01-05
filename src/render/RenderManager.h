@@ -1,14 +1,11 @@
 #ifndef RENDERMANAGER_H
 #define RENDERMANAGER_H
 
-#include "RenderState.h"
 #include "StateBuffer.h"
+#include "render/detail/Renderer.h"
 
 #include <cstdint>
-#include <functional>
-#include <map>
 #include <memory>
-#include <thread>
 
 class Renderer;
 

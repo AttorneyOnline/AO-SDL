@@ -64,14 +64,14 @@ void WebSocket::connect(const std::string& endpoint) {
 
     // Keep things synchronous until we finish the handshake
     tcp_sock.set_non_blocking(false);
-    auto stat = tcp_sock.connect();
+    auto stat = tcp_sock.connect(); // TODO : Use it.
 
     std::vector<uint8_t> handshake_buf;
 
     const std::string http_get = std::format("GET /{} HTTP/1.1\r\n", endpoint);
     handshake_buf.insert(handshake_buf.end(), http_get.begin(), http_get.end());
 
-    for (auto header : http_headers) {
+    for (const auto& header : http_headers) {
         std::string key = header.first;
         std::string val = header.second;
 
@@ -480,7 +480,7 @@ HTTPResponse WebSocket::read_handshake() {
     status_line = parse_status_line(status_line_str);
 
     // Now, parse the response headers
-    for (auto hline : response_lines) {
+    for (const auto& hline : response_lines) {
         auto headerkv = parse_http_header(hline);
         headers.emplace(headerkv);
     }

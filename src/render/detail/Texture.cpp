@@ -1,7 +1,7 @@
 #include "Texture.h"
 
 Texture::Texture(const uint8_t* pixels, GLint internal_format, GLenum source_format)
-    : pixels(pixels), internal_format(internal_format), source_format(source_format), num_channels(0), texture(0) {
+    : pixels(pixels), num_channels(0), internal_format(internal_format), source_format(source_format), texture(0) {
     glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_texture_units);
     // Log::log_print(LogLevel::DEBUG, "%d texture units available", max_texture_units);
 }

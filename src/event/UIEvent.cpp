@@ -1,6 +1,6 @@
 #include "UIEvent.h"
 
-UIEvent::UIEvent(UIEventType type, EventTarget target) : type(type), Event(target) {
+UIEvent::UIEvent(UIEventType type, EventTarget target) : Event(target), type(type) {
 }
 
 UIEventType UIEvent::get_type() {

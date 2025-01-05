@@ -31,8 +31,8 @@ GLuint Renderer::draw(const RenderState* state) {
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    for (auto layer_group_pair : state->get_layer_groups()) {
-        for (auto layer_pair : layer_group_pair.second.get_layers()) {
+    for (const auto& layer_group_pair : state->get_layer_groups()) {
+        for (const auto& layer_pair : layer_group_pair.second.get_layers()) {
             Layer layer = layer_pair.second;
             Image layer_image = layer.get_image();
 
