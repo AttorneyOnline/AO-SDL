@@ -6,7 +6,7 @@
 
 // todo: instead of passing the socket through the constructor, NetworkThread should have thread-safe mechanisms to
 // manage the lifecycle of the underlying sockets
-NetworkThread::NetworkThread(WebSocket& sock) : sock(sock), net_thread(&NetworkThread::net_loop, this) {
+NetworkThread::NetworkThread(WebSocket& sock) : net_thread(&NetworkThread::net_loop, this), sock(sock) {
 }
 
 void NetworkThread::net_loop() {
@@ -45,7 +45,7 @@ void NetworkThread::net_loop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
 
-        for (auto msg : msgs) {
+        for (const auto& msg : msgs) {
             msgstr = std::string(msg.data.begin(), msg.data.end());
             Log::log_print(DEBUG, "SERVER: %s", msgstr.c_str());
             ao_client.handle_message(msgstr);

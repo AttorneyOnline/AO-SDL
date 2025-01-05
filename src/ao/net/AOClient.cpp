@@ -5,7 +5,7 @@
 #include "event/EventManager.h"
 #include "event/ChatEvent.h"
 
-AOClient::AOClient() : incomplete_buf(""), conn_state(NOT_CONNECTED) {
+AOClient::AOClient() : conn_state(NOT_CONNECTED), incomplete_buf("") {
 }
 
 std::vector<std::string> AOClient::get_messages() {

@@ -1,7 +1,5 @@
 #include "PacketTypes.h"
 
-#include <format>
-
 // This file only includes the logic to construct packets and do validation
 // Actual behavior handling is in PacketBehavior.cpp
 

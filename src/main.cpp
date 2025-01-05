@@ -1,16 +1,9 @@
-﻿#include <chrono>
-#include <cmath>
-#include <thread>
-
-#include <iostream>
-
-#include "event/EventManager.h"
+﻿#include "event/EventManager.h"
 #include "event/ServerListEvent.h"
 #include "game/GameThread.h"
 #include "game/ServerList.h"
 #include "net/NetworkThread.h"
 #include "net/WebSocket.h"
-#include "utils/Log.h"
 #include "utils/httplib.h"
 #include "video/GameWindow.h"
 
@@ -29,7 +22,7 @@ int main(int argc, char* argv[]) {
     GameWindow game_window(ui_mgr);
 
     // Workaround for Qt Creator
-    setbuf(stdout, NULL);
+    setvbuf(stdout, NULL, _IONBF, 0);
 
     // Initialize StateBuffer
     StateBuffer buffer;

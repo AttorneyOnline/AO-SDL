@@ -6,7 +6,6 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <stdexcept>
 
 GLShader::GLShader(ShaderType type, const std::string& path) : shader_type(type) {
     std::ifstream file(path);

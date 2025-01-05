@@ -9,7 +9,7 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_sdl2.h>
 
-GameWindow::GameWindow(UIManager& ui_manager) : window(nullptr), running(true), ui_manager(ui_manager) {
+GameWindow::GameWindow(UIManager& ui_manager) : window(nullptr), ui_manager(ui_manager), running(true) {
     init_sdl();
 }
 

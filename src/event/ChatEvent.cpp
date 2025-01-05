@@ -3,7 +3,7 @@
 #include <format>
 
 ChatEvent::ChatEvent(std::string sender_name, std::string message, bool system_message, EventTarget target)
-    : sender_name(sender_name), message(message), system_message(system_message), Event(target) {
+    : Event(target), sender_name(sender_name), message(message), system_message(system_message) {
 }
 
 std::string ChatEvent::to_string() const {

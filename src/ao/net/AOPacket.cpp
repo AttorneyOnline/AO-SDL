@@ -2,7 +2,6 @@
 
 #include "AOClient.h"
 #include "PacketFactory.h"
-#include "PacketRegistrar.h"
 #include "utils/Log.h"
 
 #include <format>

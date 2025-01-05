@@ -20,7 +20,7 @@ void Log::log_print(LogLevel log_level, const char* fmt, ...) {
     char messagebuf[MESSAGEBUF_SIZE];
 
     time_t timer = time(NULL);
-    struct tm* tm_info = localtime(&timer);
+    struct tm* tm_info = localtime(&timer); // TODO : MSVC considers this unsafe and use localtime_s instead.
 
     strftime(timebuf, TIMEBUF_SIZE, "%I:%M:%S %p", tm_info);
 

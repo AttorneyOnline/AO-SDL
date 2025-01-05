@@ -1,12 +1,11 @@
 #include "Image.h"
 
-#include <cmath>
 #include <random>
 
 #include <GL/glew.h>
 
 Image::Image(int width, int height, uint8_t* pixels, int num_channels)
-    : width(width), height(height), pixels(pixels), num_channels(num_channels) {
+    : width(width), height(height), num_channels(num_channels), pixels(pixels) {
     // TODO: Replace with hash of image data
     std::random_device rd;
     std::mt19937_64 random(rd());

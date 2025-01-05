@@ -2,7 +2,7 @@
 
 #include <format>
 
-ServerListEvent::ServerListEvent(ServerList server_list, EventTarget target) : server_list(server_list), Event(target) {
+ServerListEvent::ServerListEvent(ServerList server_list, EventTarget target) : Event(target), server_list(server_list) {
 }
 
 std::string ServerListEvent::to_string() const {

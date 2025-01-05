@@ -5,11 +5,8 @@
 
 #include "render/Image.h"
 #include "render/Layer.h"
-#include "render/RenderManager.h"
 #include "render/RenderState.h"
 #include "render/StateBuffer.h"
-
-#include "utils/Log.h"
 
 #include "render/RenderState.h"
 

@@ -63,7 +63,7 @@ void UIManager::render_current_view(RenderManager& render) {
         ImGui::End();
 
         ImGui::Begin("Chat");
-        ImGui::Text(chat_buffer.c_str());
+        ImGui::Text("%s", chat_buffer.c_str());
         ImGui::InputText("name", chat_name, IM_ARRAYSIZE(chat_name));
         ImGui::InputText("message", chat_message, IM_ARRAYSIZE(chat_message));
         if (ImGui::Button("Send Message")) {

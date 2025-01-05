@@ -2,7 +2,6 @@
 #define RENDER_TEXTURE_H
 
 #include <cstdint>
-#include <string>
 
 #include "render/Image.h"
 
