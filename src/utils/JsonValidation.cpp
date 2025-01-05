@@ -1,19 +1,16 @@
 #include "JsonValidation.h"
 
-#include "utils/Log.h"
+#include <format>
 
-bool JsonValidation::containsKeys(nlohmann::json json_data, ValidationSettings settings) {
+void JsonValidation::containsKeys(const nlohmann::json& json_data, const ValidationSettings& settings) {
     for (const auto& [key, value_type] : settings) {
 
         if (!json_data.contains(key)) {
-            Log::log_print(DEBUG, std::format("Missing key {} in object", key).c_str());
-            return false;
+            throw std::exception(std::format("Missing key {} in json object", key).c_str());
         }
 
         if (json_data[key].type() != value_type) {
-            Log::log_print(DEBUG, std::format("Type mismatch on key {}", key).c_str());
-            return false;
+            throw std::exception(std::format("Type mismatch on key {}", key).c_str());
         }
     }
-    return true;
 }

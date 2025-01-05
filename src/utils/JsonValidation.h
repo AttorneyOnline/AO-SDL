@@ -7,7 +7,7 @@ namespace JsonValidation {
 using ValueType = nlohmann::json::value_t;
 using ValidationSettings = std::map<std::string, ValueType>;
 
-bool containsKeys(nlohmann::json json_data, ValidationSettings settings);
+void containsKeys(const nlohmann::json& json_data, const ValidationSettings& settings);
 
 }; // namespace JsonValidation
 

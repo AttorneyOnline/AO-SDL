@@ -21,7 +21,6 @@ set(SRC_FILES
     src/video/GameWindow.cpp
     src/game/GameThread.cpp
     src/game/ServerList.cpp
-    src/game/ServerList.h
     src/render/detail/Renderer.cpp
     src/render/detail/Shader.cpp
     src/render/detail/Sprite.cpp

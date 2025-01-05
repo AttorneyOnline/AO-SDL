@@ -18,7 +18,7 @@ struct ServerEntry {
     std::string description;
     int players;
 
-    static std::optional<ServerEntry> from_json(nlohmann::json entry, int server_id);
+    static std::optional<ServerEntry> from_json(const nlohmann::json& entry);
 };
 
 class ServerList {
