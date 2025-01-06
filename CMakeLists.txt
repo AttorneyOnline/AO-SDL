@@ -37,6 +37,8 @@ set(SRC_FILES
     src/asset/AssetLibrary.cpp
     src/asset/Asset.cpp
     src/asset/AssetCache.cpp
+    src/asset/MediaManager.cpp
+    src/asset/MountAccessManager.cpp
     src/asset/ImageAsset.cpp
     src/net/WebSocket.cpp
     src/net/NetworkThread.cpp
