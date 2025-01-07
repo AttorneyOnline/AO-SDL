@@ -2,7 +2,7 @@
 
 #include <memory>
 
-class MountAccessManager;
+class MountManager;
 
 class MediaManager {
   public:
@@ -13,5 +13,5 @@ class MediaManager {
 
   private:
     MediaManager();
-    std::unique_ptr<MountAccessManager> mount_access;
+    std::unique_ptr<MountManager> mount_manager;
 };
