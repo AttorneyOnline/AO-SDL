@@ -1,7 +1,8 @@
 #include "WebSocket.h"
 
-#include "sha1.h"
 #include "utils/Base64.h"
+
+#include <sha1.h>
 
 #include <algorithm>
 #include <bit>

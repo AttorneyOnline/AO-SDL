@@ -1,9 +1,9 @@
 #pragma once
 
+#include "AOPacket.h"
+
 #include <string>
 #include <vector>
-
-#include "AOPacket.h"
 
 enum AOConnectionState { NOT_CONNECTED, CONNECTED, JOINED };
 

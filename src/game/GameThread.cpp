@@ -1,14 +1,13 @@
 #include "GameThread.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
 #include "render/Image.h"
 #include "render/Layer.h"
 #include "render/RenderState.h"
 #include "render/StateBuffer.h"
-
 #include "render/RenderState.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 GameThread::GameThread(StateBuffer& render_buffer)
     : running(true), render_buffer(render_buffer), tick_thread(&GameThread::game_loop, this) {

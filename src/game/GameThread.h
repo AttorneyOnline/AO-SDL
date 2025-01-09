@@ -1,9 +1,9 @@
 #pragma once
 
+#include "render/StateBuffer.h"
+
 #include <atomic>
 #include <thread>
-
-#include "render/StateBuffer.h"
 
 class GameThread {
   public:

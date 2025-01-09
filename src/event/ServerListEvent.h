@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Event.h"
-
 #include "game/ServerList.h"
 
 class ServerListEvent : public Event {

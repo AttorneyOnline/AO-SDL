@@ -1,11 +1,11 @@
 #pragma once
 
+#include <json.hpp>
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include "json.hpp"
 
 struct ServerEntry {
     std::string hostname;
