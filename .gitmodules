@@ -13,3 +13,6 @@
 [submodule "third-party/kissnet"]
 	path = third-party/kissnet
 	url = https://github.com/Ybalrid/kissnet
+[submodule "third-party/bit7z"]
+	path = third-party/bit7z
+	url = https://github.com/rikyoz/bit7z.git
