@@ -22,9 +22,10 @@ class Mount {
     virtual bool contains_file(std::string path) = 0;
     virtual std::vector<std::byte> fetch_data(std::string path) = 0;
 
+  protected:
+    std::filesystem::path path;
+
   private:
     virtual bool load_cache() = 0;
     virtual void save_cache() = 0;
-
-    std::filesystem::path path;
 };
