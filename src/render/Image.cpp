@@ -1,8 +1,8 @@
 #include "Image.h"
 
-#include <random>
-
 #include <GL/glew.h>
+
+#include <random>
 
 Image::Image(int width, int height, uint8_t* pixels, int num_channels)
     : width(width), height(height), num_channels(num_channels), pixels(pixels) {

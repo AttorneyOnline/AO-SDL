@@ -1,5 +1,4 @@
-#ifndef RENDERSTATE_H
-#define RENDERSTATE_H
+#pragma once
 
 #include "Layer.h"
 
@@ -17,5 +16,3 @@ class RenderState {
   private:
     std::map<int, LayerGroup> layer_groups;
 };
-
-#endif

@@ -2,7 +2,6 @@
 #define RENDER_VERTEX_H
 
 #include <glm/glm.hpp>
-
 #include <GL/glew.h>
 
 #include <vector>

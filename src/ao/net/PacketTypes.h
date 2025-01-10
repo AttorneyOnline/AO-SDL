@@ -1,5 +1,4 @@
-#ifndef PACKETTYPES_H
-#define PACKETTYPES_H
+#pragma once
 
 #include "AOPacket.h"
 #include "PacketRegistrar.h"
@@ -187,5 +186,3 @@ class AOPacketCT : public AOPacket {
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 2;
 };
-
-#endif

@@ -1,10 +1,9 @@
-#ifndef GAMETHREAD_H
-#define GAMETHREAD_H
+#pragma once
+
+#include "render/StateBuffer.h"
 
 #include <atomic>
 #include <thread>
-
-#include "render/StateBuffer.h"
 
 class GameThread {
   public:
@@ -21,5 +20,3 @@ class GameThread {
     StateBuffer& render_buffer;
     std::thread tick_thread;
 };
-
-#endif

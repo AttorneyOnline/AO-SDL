@@ -1,5 +1,4 @@
-#ifndef GAMEWINDOW_H
-#define GAMEWINDOW_H
+#pragma once
 
 #include "render/RenderManager.h"
 #include "ui/UIManager.h"
@@ -20,5 +19,3 @@ class GameWindow {
 
     bool running;
 };
-
-#endif

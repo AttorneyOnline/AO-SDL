@@ -1,9 +1,6 @@
-#ifndef UIMANAGER_H
-#define UIMANAGER_H
+#pragma once
 
 #include "render/RenderManager.h"
-#include "event/EventChannel.h"
-#include "event/UIEvent.h"
 
 enum UIView {
     SERVER_LIST,
@@ -27,5 +24,3 @@ class UIManager {
     char chat_name[32] = "";
     char chat_message[1024] = "";
 };
-
-#endif

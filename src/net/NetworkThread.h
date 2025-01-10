@@ -1,5 +1,4 @@
-#ifndef NETWORKTHREAD_H
-#define NETWORKTHREAD_H
+#pragma once
 
 #include "WebSocket.h"
 
@@ -15,5 +14,3 @@ class NetworkThread {
     std::thread net_thread;
     WebSocket& sock;
 };
-
-#endif

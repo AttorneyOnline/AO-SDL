@@ -1,12 +1,11 @@
 #ifndef RENDER_SHADER_H
 #define RENDER_SHADER_H
 
+#include <glm/glm.hpp>
+#include <GL/glew.h>
+
 #include <string>
 #include <vector>
-
-#include <glm/glm.hpp>
-
-#include <GL/glew.h>
 
 enum ShaderType { Vertex = GL_VERTEX_SHADER, Fragment = GL_FRAGMENT_SHADER, Compute = GL_COMPUTE_SHADER };
 

@@ -45,6 +45,7 @@ set(SRC_FILES
 # Include directories
 set(INCLUDE_DIRS
     src
+    third-party/header-libs
     third-party/stb
     third-party/glm
     third-party/SDL/include

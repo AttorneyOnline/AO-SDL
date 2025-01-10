@@ -1,12 +1,11 @@
-#ifndef SERVERLIST_H
-#define SERVERLIST_H
+#pragma once
+
+#include <json.hpp>
 
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include "utils/json.hpp"
 
 struct ServerEntry {
     std::string hostname;
@@ -30,5 +29,3 @@ class ServerList {
   private:
     std::vector<ServerEntry> servers;
 };
-
-#endif

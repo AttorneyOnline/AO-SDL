@@ -1,5 +1,4 @@
-#ifndef RENDERMANAGER_H
-#define RENDERMANAGER_H
+#pragma once
 
 #include "StateBuffer.h"
 #include "render/detail/Renderer.h"
@@ -29,5 +28,3 @@ class RenderManager {
 
     std::unique_ptr<class Renderer, RendererDeleter> renderer_ptr;
 };
-
-#endif

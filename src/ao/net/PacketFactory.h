@@ -1,12 +1,11 @@
-#ifndef PACKETFACTORY_H
-#define PACKETFACTORY_H
+#pragma once
+
+#include "AOPacket.h"
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
-
-#include "AOPacket.h"
 
 class PacketFactory {
   public:
@@ -33,5 +32,3 @@ class PacketFactory {
   private:
     std::unordered_map<std::string, CreatorFunc> creators;
 };
-
-#endif

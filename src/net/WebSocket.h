@@ -1,7 +1,7 @@
-#ifndef WEBSOCKET_H
-#define WEBSOCKET_H
+#pragma once
 
 #include <kissnet.hpp>
+
 #include <map>
 #include <span>
 #include <stdexcept>
@@ -214,5 +214,3 @@ class WebSocket {
     bool ready;
     bool connecting;
 };
-
-#endif

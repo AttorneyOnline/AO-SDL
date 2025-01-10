@@ -1,5 +1,4 @@
-#ifndef CHATEVENT_H
-#define CHATEVENT_H
+#pragma once
 
 #include "Event.h"
 
@@ -17,5 +16,3 @@ class ChatEvent : public Event {
     std::string message;
     bool system_message;
 };
-
-#endif

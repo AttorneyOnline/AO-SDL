@@ -1,11 +1,11 @@
 #include "UIManager.h"
 
-#include <imgui.h>
-
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
 #include "event/ChatEvent.h"
 #include "utils/Log.h"
+
+#include <imgui.h>
 
 #include <format>
 

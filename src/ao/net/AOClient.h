@@ -1,10 +1,9 @@
-#ifndef AOCLIENT_H
-#define AOCLIENT_H
+#pragma once
+
+#include "AOPacket.h"
 
 #include <string>
 #include <vector>
-
-#include "AOPacket.h"
 
 enum AOConnectionState { NOT_CONNECTED, CONNECTED, JOINED };
 
@@ -48,5 +47,3 @@ class AOClient {
     std::string incomplete_buf;
     std::vector<std::string> buffered_messages;
 };
-
-#endif

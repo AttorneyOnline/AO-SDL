@@ -1,8 +1,6 @@
-#ifndef SERVERLISTEVENT_H
-#define SERVERLISTEVENT_H
+#pragma once
 
 #include "Event.h"
-
 #include "game/ServerList.h"
 
 class ServerListEvent : public Event {
@@ -15,5 +13,3 @@ class ServerListEvent : public Event {
   private:
     ServerList server_list;
 };
-
-#endif

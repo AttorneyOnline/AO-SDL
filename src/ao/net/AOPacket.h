@@ -1,5 +1,4 @@
-#ifndef AOPACKET_H
-#define AOPACKET_H
+#pragma once
 
 #include <memory>
 #include <stdexcept>
@@ -37,5 +36,3 @@ class AOPacket {
     std::string header;
     std::vector<std::string> fields;
 };
-
-#endif

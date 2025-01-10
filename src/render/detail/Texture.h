@@ -1,11 +1,11 @@
 #ifndef RENDER_TEXTURE_H
 #define RENDER_TEXTURE_H
 
-#include <cstdint>
-
 #include "render/Image.h"
 
 #include <GL/glew.h>
+
+#include <cstdint>
 
 class Texture {
   public:

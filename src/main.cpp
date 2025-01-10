@@ -4,8 +4,9 @@
 #include "game/ServerList.h"
 #include "net/NetworkThread.h"
 #include "net/WebSocket.h"
-#include "utils/httplib.h"
 #include "video/GameWindow.h"
+
+#include "httplib.h"
 
 int main(int argc, char* argv[]) {
     // todo: kick off another thread to do this

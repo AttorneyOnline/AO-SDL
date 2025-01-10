@@ -1,5 +1,4 @@
-#ifndef UIEVENT_H
-#define UIEVENT_H
+#pragma once
 
 #include "Event.h"
 
@@ -15,5 +14,3 @@ class UIEvent : public Event {
   private:
     UIEventType type;
 };
-
-#endif
