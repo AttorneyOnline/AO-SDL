@@ -19,11 +19,14 @@ void MountManager::loadMounts(const std::vector<std::filesystem::path>& target_m
 
         try {
             std::unique_ptr<MountArchive> archive = std::make_unique<MountArchive>(mount_path);
-            archive.get()->load();
+            archive->load();
             loaded_mounts.push_back(std::move(archive));
         }
         catch (std::exception exception) {
-            // TODO: Add exception handling here
+            Log::log_print(
+                WARNING,
+                std::format("Failed to create mount at {}: {}", mount_path.string(), exception.what()).c_str());
+            continue;
         }
     }
 }
