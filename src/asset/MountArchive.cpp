@@ -51,6 +51,8 @@ void MountArchive::load_cache() {
 
     const auto items = reader->items();
     for (const auto& item : items) {
+        // 7zip returns files with a double-backslash prefix
+        // These are stripped to be consistent with filesystem relative paths
         static_cache.at(item.path().replace(0, 2, "/")) = item.index();
     }
 }
