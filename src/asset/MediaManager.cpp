@@ -5,7 +5,7 @@
 MediaManager::MediaManager() : mount_manager(std::make_unique<MountManager>()) {
 }
 
-MediaManager* MediaManager::instance() {
+MediaManager& MediaManager::instance() {
     static MediaManager instance;
-    return &instance;
+    return instance;
 }

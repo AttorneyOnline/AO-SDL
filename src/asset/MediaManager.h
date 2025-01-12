@@ -6,12 +6,15 @@ class MountManager;
 
 class MediaManager {
   public:
-    static MediaManager* instance();
+    static MediaManager& instance();
 
   private:
+    MediaManager() = default;
+
+    // Delete copy and move semantics
     MediaManager(MediaManager&) = delete;
     void operator=(MediaManager const&) = delete;
 
-    MediaManager();
+    // Access to the underlying storage system
     std::unique_ptr<MountManager> mount_manager;
 };
