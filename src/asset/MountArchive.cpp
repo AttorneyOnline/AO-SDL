@@ -7,9 +7,6 @@ MountArchive::MountArchive(const std::filesystem::path& archive_path)
     : Mount(archive_path), reader(std::make_unique<bit7z::BitArchiveReader>(library, path.string())) {
 }
 
-MountArchive::~MountArchive() {
-}
-
 void MountArchive::load() {
     reset_reader();
 
@@ -24,7 +21,7 @@ void MountArchive::load() {
     load_cache();
 }
 
-bool MountArchive::seek_file(const std::string& path) {
+bool MountArchive::seek_file(const std::string& path) const {
     return static_cache.contains(path);
 }
 

@@ -9,11 +9,11 @@
 class MountArchive : public Mount {
   public:
     explicit MountArchive(const std::filesystem::path& archive_path);
-    virtual ~MountArchive();
+    ~MountArchive() = default;
 
     void load() override;
 
-    bool seek_file(const std::string& path) override;
+    bool seek_file(const std::string& path) const override;
     std::vector<uint8_t> fetch_data(const std::string& path) override;
 
   private:
