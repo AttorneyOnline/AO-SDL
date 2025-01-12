@@ -4,6 +4,7 @@
 #include "utils/Log.h"
 
 #include <format>
+#include <shared_mutex>
 
 MountManager::MountManager() {
 }
@@ -32,6 +33,7 @@ void MountManager::loadMounts(const std::vector<std::filesystem::path>& target_m
 }
 
 std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& relative_path) {
+    std::shared_lock<std::shared_mutex> locker(lock);
     Log::log_print(INFO, std::format("Loading file at {}", relative_path).c_str());
     for (auto& mount : loaded_mounts) {
         if (mount->seek_file(relative_path)) {
