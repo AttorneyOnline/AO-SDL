@@ -9,7 +9,7 @@ class MediaManager {
     static MediaManager& instance();
 
   private:
-    MediaManager() = default;
+    MediaManager();
 
     // Delete copy and move semantics
     MediaManager(MediaManager&) = delete;
