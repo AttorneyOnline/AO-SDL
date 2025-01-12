@@ -21,11 +21,12 @@ void MountManager::loadMounts(std::vector<std::filesystem::path> target_mount_pa
 
     for (const std::filesystem::path& mount_target : target_mount_path) {
         try {
+            // TODO: Add backend selector so the right type of mount is created!
             Mount* mount = new MountArchive(mount_target);
             mount->load();
         }
         catch (std::exception exception) {
-            continue;
+            throw exception;
         }
     }
 }

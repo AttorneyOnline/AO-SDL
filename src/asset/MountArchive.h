@@ -22,7 +22,7 @@ class MountArchive : public Mount {
     std::vector<std::byte> fetch_data(std::string path) override;
 
   private:
-    bool load_cache() override;
+    void load_cache() override;
     void save_cache() override;
 
     void reset_reader();

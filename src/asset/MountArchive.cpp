@@ -4,7 +4,9 @@
 #include "utils/Log.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <format>
+#include <string>
 #include <vector>
 
 MountArchive::MountArchive(std::filesystem::path archive_path)
@@ -12,6 +14,7 @@ MountArchive::MountArchive(std::filesystem::path archive_path)
 }
 
 MountArchive::~MountArchive() {
+    MountArchive::save_cache();
 }
 
 Mount::MountType MountArchive::get_type() {
@@ -29,7 +32,9 @@ bool MountArchive::load() {
         return false;
     }
 
-    // Add cache load logic here
+    load_cache();
+
+    return true;
 }
 
 bool MountArchive::contains_file(std::string path) {
@@ -54,10 +59,21 @@ std::vector<std::byte> MountArchive::fetch_data(std::string path) {
     return buffer;
 }
 
-bool MountArchive::load_cache() {
+void MountArchive::load_cache() {
+    const std::filesystem::path cache_file_path = get_path().replace_filename("cache");
+
+    if (std::filesystem::exists(cache_file_path)) {
+        return;
+    }
+
+    const auto items = reader->items();
+    for (const auto& item : items) {
+        static_cache[item.path().replace(0, 2, "/")] = item.index();
+    }
 }
 
 void MountArchive::save_cache() {
+    // Unused
 }
 
 void MountArchive::reset_reader() {

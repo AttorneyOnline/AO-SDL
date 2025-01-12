@@ -23,9 +23,9 @@ class Mount {
     virtual std::vector<std::byte> fetch_data(std::string path) = 0;
 
   protected:
-    std::filesystem::path path;
+    const std::filesystem::path path;
 
   private:
-    virtual bool load_cache() = 0;
+    virtual void load_cache() = 0;
     virtual void save_cache() = 0;
 };
