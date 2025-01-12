@@ -1,50 +1,45 @@
 #include "MountManager.h"
 
 #include "MountArchive.h"
+#include "utils/Log.h"
 
-#include "Mount.h"
-#include <cstddef>
-#include <exception>
-#include <filesystem>
-#include <mutex>
-#include <optional>
-#include <shared_mutex>
-#include <vector>
+#include <format>
 
 MountManager::MountManager() {
 }
 
-void MountManager::loadMounts(std::vector<std::filesystem::path> target_mount_path) {
+void MountManager::loadMounts(const std::vector<std::filesystem::path>& target_mount_path) {
+    std::unique_lock<std::shared_mutex> locker(lock);
+
     if (!loaded_mounts.empty()) {
-        cleanupMounts();
+        loaded_mounts.clear();
     }
 
-    for (const std::filesystem::path& mount_target : target_mount_path) {
+    for (const std::filesystem::path& mount_path : target_mount_path) {
+
         try {
-            // TODO: Add backend selector so the right type of mount is created!
-            Mount* mount = new MountArchive(mount_target);
-            mount->load();
+            std::unique_ptr<MountArchive> archive = std::make_unique<MountArchive>(mount_path);
+            archive.get()->load();
+            loaded_mounts.push_back(std::move(archive));
         }
         catch (std::exception exception) {
-            throw exception;
+            // TODO: Add exception handling here
         }
     }
 }
 
-std::optional<std::vector<std::byte>> MountManager::fetch_data(std::string relative_path) {
-    std::shared_lock locker(lock);
-    for (const auto mount : loaded_mounts) {
-        if (mount->contains_file(relative_path)) {
-            return std::optional<std::vector<std::byte>>(mount->fetch_data(relative_path));
+std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& relative_path) {
+    Log::log_print(INFO, std::format("Loading file at {}", relative_path).c_str());
+    for (auto& mount : loaded_mounts) {
+        if (mount->seek_file(relative_path)) {
+            try {
+                return std::make_optional<std::vector<uint8_t>>(mount->fetch_data(relative_path));
+            }
+            catch (std::exception exception) {
+                Log::log_print(
+                    ERR, std::format("Failed to load data due to the following errror {}", exception.what()).c_str());
+            }
         }
-        continue;
     }
     return std::nullopt;
-}
-
-void MountManager::cleanupMounts() {
-    std::unique_lock locker(lock);
-    for (Mount* mount : loaded_mounts) {
-        delete mount;
-    }
 }

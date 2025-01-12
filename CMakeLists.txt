@@ -125,7 +125,6 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_
 
 #bit7z
 set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
-set(BIT7Z_USE_STD_BYTE ON CACHE BOOL "enable or disable using type safe byte type (like std::byte) for buffers" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/bit7z)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE bit7z)
 

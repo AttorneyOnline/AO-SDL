@@ -2,10 +2,10 @@
 
 #include "MountManager.h"
 
-MediaManager::MediaManager() : mount_manager(std::unique_ptr<MountManager>(new MountManager())) {
+MediaManager::MediaManager() : mount_manager(std::make_unique<MountManager>()) {
 }
 
-MediaManager* MediaManager::get() {
+MediaManager* MediaManager::instance() {
     static MediaManager instance;
     return &instance;
 }

@@ -6,20 +6,15 @@
 #include <include/bit7z/bit7zlibrary.hpp>
 #include <include/bit7z/bitarchivereader.hpp>
 
-#include <cstdint>
-#include <filesystem>
-#include <unordered_map>
-
 class MountArchive : public Mount {
   public:
-    explicit MountArchive(std::filesystem::path archive_path);
-    ~MountArchive();
+    explicit MountArchive(const std::filesystem::path& archive_path);
+    virtual ~MountArchive();
 
-    MountType get_type() override;
-    bool load() override;
+    void load() override;
 
-    bool contains_file(std::string path) override;
-    std::vector<std::byte> fetch_data(std::string path) override;
+    bool seek_file(const std::string& path) override;
+    std::vector<uint8_t> fetch_data(const std::string& path) override;
 
   private:
     void load_cache() override;
@@ -29,7 +24,7 @@ class MountArchive : public Mount {
 
     std::unordered_map<std::string, uint32_t> static_cache;
     const bit7z::Bit7zLibrary library;
-    bit7z::BitArchiveReader* reader = nullptr;
+    std::unique_ptr<bit7z::BitArchiveReader> reader;
 };
 
 #endif // MOUNTARCHIVE_H
