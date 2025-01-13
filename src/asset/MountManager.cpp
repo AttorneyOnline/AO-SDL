@@ -9,7 +9,7 @@
 MountManager::MountManager() {
 }
 
-void MountManager::loadMounts(const std::vector<std::filesystem::path>& target_mount_path) {
+void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_mount_path) {
     std::unique_lock<std::shared_mutex> locker(lock);
 
     if (!loaded_mounts.empty()) {

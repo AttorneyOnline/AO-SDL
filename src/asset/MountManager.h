@@ -10,7 +10,7 @@ class MountManager {
   public:
     MountManager();
 
-    void loadMounts(const std::vector<std::filesystem::path>& target_mount_path);
+    void load_mounts(const std::vector<std::filesystem::path>& target_mount_path);
     std::optional<std::vector<uint8_t>> fetch_data(const std::string& relative_path);
 
   private:
