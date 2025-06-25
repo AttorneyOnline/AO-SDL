@@ -37,6 +37,9 @@ set(SRC_FILES
     src/asset/AssetLibrary.cpp
     src/asset/Asset.cpp
     src/asset/AssetCache.cpp
+    src/asset/MediaManager.cpp
+    src/asset/MountManager.cpp
+    src/asset/MountArchive.cpp
     src/asset/ImageAsset.cpp
     src/net/WebSocket.cpp
     src/net/NetworkThread.cpp
@@ -49,6 +52,7 @@ set(INCLUDE_DIRS
     third-party/stb
     third-party/glm
     third-party/SDL/include
+    third-party/bit7z
 )
 
 # Add executable
@@ -119,6 +123,11 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui)
 
 # Kissnet
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/kissnet)
+
+#bit7z
+set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/bit7z)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE bit7z)
 
 
 find_program(CLANG_TIDY_EXE NAMES clang-tidy)
