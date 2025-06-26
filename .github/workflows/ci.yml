@@ -19,7 +19,7 @@ jobs:
         check-path: './src/'
         
   build-linux:
-    needs: formatting-check
+#    needs: formatting-check
     runs-on: ubuntu-latest
 
     steps:
@@ -30,3 +30,10 @@ jobs:
         with:
           packages: libsdl3-dev
           version: 1.0
+
+      - name: Build with cmake
+        run:
+          mkdir build
+          cd build
+          cmake ..
+          make
