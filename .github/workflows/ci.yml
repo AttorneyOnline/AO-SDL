@@ -16,7 +16,7 @@ jobs:
       uses: jidicula/clang-format-action@v4.5.0
       with:
         clang-format-version: '14'
-        check-path: '.'
+        check-path: './src/'
         
   build-linux:
     needs: formatting-check
