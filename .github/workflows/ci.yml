@@ -32,7 +32,7 @@ jobs:
           version: 1.0
 
       - name: Build with cmake
-        run:
+        run: |
           mkdir build
           cd build
           cmake ..
