@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: libsdl3-dev
+          packages: libsdl2-dev
           version: 1.0
 
       - name: Build with cmake
