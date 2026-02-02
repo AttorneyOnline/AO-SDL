@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  repository_dispatch:
+    types: [run_build]
+
+jobs:
+  formatting-check:
+    name: check-clang-format
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run clang-format style check.
+      uses: jidicula/clang-format-action@v4.5.0
+      with:
+        clang-format-version: '14'
+        check-path: './src/'
+        
+  build-linux:
+#    needs: formatting-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Install dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libsdl2-dev libglew-dev
+          version: 1.0
+
+      - name: Build with cmake
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make
