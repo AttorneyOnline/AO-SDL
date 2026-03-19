@@ -226,7 +226,7 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields)
         pre_emote  = fields[1];
         character  = fields[2];
         emote      = fields[3];
-        // fields[4] = message (skipped for now)
+        message    = fields[4];
         side       = fields[5];
         // fields[6] = sfx_name (skipped for now)
         emote_mod  = std::stoi(fields[7]);
@@ -236,7 +236,10 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields)
         // fields[11] = evidence_id (skipped)
         flip       = fields[12] == "1";
         // fields[13] = realization (skipped)
-        // fields[14] = text_color (skipped)
+        text_color = std::stoi(fields[14]);
+
+        // Showname (optional field 15)
+        showname   = fields.size() > 15 ? fields[15] : character;
 
         // Legacy emote_mod remapping
         if (emote_mod == 4) emote_mod = 6; // legacy → PREANIM_ZOOM

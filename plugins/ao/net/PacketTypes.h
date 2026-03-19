@@ -224,10 +224,13 @@ class AOPacketMS : public AOPacket {
     std::string pre_emote;
     std::string character;
     std::string emote;
+    std::string message;
     std::string side;
+    std::string showname;
     int emote_mod;
     int char_id;
     bool flip;
+    int text_color;
 
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 15;

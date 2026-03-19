@@ -1,4 +1,5 @@
 #include "ao/game/AOEmotePlayer.h"
+#include "ao/asset/AOAssetLibrary.h"
 
 #include "asset/AssetLibrary.h"
 #include "asset/MountManager.h"
@@ -6,15 +7,16 @@
 #include <gtest/gtest.h>
 
 // ---------------------------------------------------------------------------
-// Helpers: empty MountManager + AssetLibrary that always returns nullptr.
+// Helpers
 // ---------------------------------------------------------------------------
 
 namespace {
 
 class AOEmotePlayerTest : public ::testing::Test {
   protected:
-    MountManager mounts;  // No mounts loaded — all lookups return nullopt.
-    AssetLibrary assets{mounts, 0};
+    MountManager mounts;
+    AssetLibrary engine_assets{mounts, 0};
+    AOAssetLibrary ao_assets{engine_assets};
     AOEmotePlayer player;
 };
 
@@ -49,18 +51,18 @@ TEST_F(AOEmotePlayerTest, InitialAssetIsNull) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOEmotePlayerTest, StartIdleSetsStateToIdle) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
 }
 
 TEST_F(AOEmotePlayerTest, StartIdleWithNoAssetsHasNoFrame) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     EXPECT_FALSE(player.has_frame());
     EXPECT_EQ(player.current_frame(), nullptr);
 }
 
 TEST_F(AOEmotePlayerTest, StartIdleWithNoAssetsAssetIsNull) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     EXPECT_EQ(player.asset(), nullptr);
 }
 
@@ -71,17 +73,17 @@ TEST_F(AOEmotePlayerTest, StartIdleWithNoAssetsAssetIsNull) {
 TEST_F(AOEmotePlayerTest, StartPreanimWithNoAssetFallsToTalking) {
     // pre_emote is "objecting" but the asset won't be found.
     // preanim_asset is null → frame_count check is skipped → state = TALKING.
-    player.start(assets, "Phoenix", "normal", "objecting", EmoteMod::PREANIM);
+    player.start(ao_assets, "Phoenix", "normal", "objecting", EmoteMod::PREANIM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 TEST_F(AOEmotePlayerTest, StartPreanimWithEmptyPreEmoteFallsToTalking) {
-    player.start(assets, "Phoenix", "normal", "", EmoteMod::PREANIM);
+    player.start(ao_assets, "Phoenix", "normal", "", EmoteMod::PREANIM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 TEST_F(AOEmotePlayerTest, StartPreanimWithDashPreEmoteFallsToTalking) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::PREANIM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::PREANIM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
@@ -90,7 +92,7 @@ TEST_F(AOEmotePlayerTest, StartPreanimWithDashPreEmoteFallsToTalking) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOEmotePlayerTest, StartPreanimZoomWithNoAssetFallsToTalking) {
-    player.start(assets, "Phoenix", "normal", "objecting", EmoteMod::PREANIM_ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "objecting", EmoteMod::PREANIM_ZOOM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
@@ -99,7 +101,7 @@ TEST_F(AOEmotePlayerTest, StartPreanimZoomWithNoAssetFallsToTalking) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOEmotePlayerTest, StartZoomSetsStateToTalking) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
@@ -113,19 +115,19 @@ TEST_F(AOEmotePlayerTest, TickInNoneStateDoesNotCrash) {
 }
 
 TEST_F(AOEmotePlayerTest, TickInIdleStateDoesNotCrash) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     player.tick(16);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
 }
 
 TEST_F(AOEmotePlayerTest, TickInTalkingStateDoesNotCrash) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     player.tick(16);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 TEST_F(AOEmotePlayerTest, MultipleTicksInIdleDoNotCrash) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     for (int i = 0; i < 100; ++i) {
         player.tick(16);
     }
@@ -137,22 +139,22 @@ TEST_F(AOEmotePlayerTest, MultipleTicksInIdleDoNotCrash) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOEmotePlayerTest, CurrentFrameNullInTalking) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.current_frame(), nullptr);
 }
 
 TEST_F(AOEmotePlayerTest, CurrentFrameIndexZeroInTalking) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.current_frame_index(), 0);
 }
 
 TEST_F(AOEmotePlayerTest, CurrentFrameNullInIdle) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     EXPECT_EQ(player.current_frame(), nullptr);
 }
 
 TEST_F(AOEmotePlayerTest, CurrentFrameIndexZeroInIdle) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     EXPECT_EQ(player.current_frame_index(), 0);
 }
 
@@ -161,17 +163,17 @@ TEST_F(AOEmotePlayerTest, CurrentFrameIndexZeroInIdle) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOEmotePlayerTest, RestartFromIdleToTalking) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
 
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 TEST_F(AOEmotePlayerTest, RestartFromTalkingToIdle) {
-    player.start(assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
+    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 
-    player.start(assets, "Edgeworth", "normal", "-", EmoteMod::IDLE);
+    player.start(ao_assets, "Edgeworth", "normal", "-", EmoteMod::IDLE);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
 }

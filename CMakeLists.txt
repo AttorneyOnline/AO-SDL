@@ -15,6 +15,12 @@ add_subdirectory(third-party/SDL)
 set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
 add_subdirectory(third-party/bit7z)
 
+set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+add_subdirectory(third-party/freetype)
+
 find_package(OpenGL REQUIRED)
 
 # ImGui (static lib — SDL + GL specific)
@@ -93,6 +99,7 @@ add_library(aoengine STATIC
     engine/render/Image.cpp
     engine/render/Layer.cpp
     engine/render/AnimationPlayer.cpp
+    engine/render/TextRenderer.cpp
 )
 set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
@@ -106,7 +113,7 @@ target_include_directories(aoengine
             third-party/bit7z
 )
 
-target_link_libraries(aoengine PUBLIC bit7z)
+target_link_libraries(aoengine PUBLIC bit7z freetype)
 
 # =============================================================================
 # Plugins
@@ -145,9 +152,11 @@ endif()
 add_library(ao_protocol STATIC
     plugins/ao/ao_plugin.cpp
     plugins/ao/event/ICMessageEvent.cpp
+    plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/game/AOCourtroomPresenter.cpp
     plugins/ao/game/AOBackground.cpp
     plugins/ao/game/AOEmotePlayer.cpp
+    plugins/ao/game/AOTextBox.cpp
     plugins/ao/net/AOClient.cpp
     plugins/ao/net/AOPacket.cpp
     plugins/ao/net/PacketTypes.cpp

@@ -13,7 +13,9 @@ void GLRenderer::init_gl() {
     }
 }
 
-GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& fragment_source) {
+GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& fragment_source,
+                       int width, int height)
+    : fb_width(width), fb_height(height) {
     GLShader vert(ShaderType::Vertex, vertex_source, true);
     GLShader frag(ShaderType::Fragment, fragment_source, true);
     program.link_shaders({vert, frag});
@@ -87,12 +89,14 @@ void GLRenderer::evict_expired_textures() {
 
 GLuint GLRenderer::draw(const RenderState* state) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
-    glViewport(0, 0, 1280, 720);
+    glViewport(0, 0, fb_width, fb_height);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Sweep expired textures once per frame
-    evict_expired_textures();
+    // Sweep expired textures periodically (every ~60 frames, not every frame)
+    if (++frame_counter % 60 == 0) {
+        evict_expired_textures();
+    }
 
     for (const auto& [_, group] : state->get_layer_groups()) {
         for (const auto& [__, layer] : group.get_layers()) {
@@ -122,9 +126,10 @@ void GLRenderer::clear() {
 }
 
 std::unique_ptr<IRenderer> create_gl_renderer(const std::string& vertex_source,
-                                               const std::string& fragment_source) {
+                                               const std::string& fragment_source,
+                                               int width, int height) {
     GLRenderer::init_gl();
-    return std::make_unique<GLRenderer>(vertex_source, fragment_source);
+    return std::make_unique<GLRenderer>(vertex_source, fragment_source, width, height);
 }
 
 std::tuple<GLuint, GLuint> GLRenderer::setup_render_texture() {
@@ -136,7 +141,7 @@ std::tuple<GLuint, GLuint> GLRenderer::setup_render_texture() {
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1280, 720, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, fb_width, fb_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -144,7 +149,7 @@ std::tuple<GLuint, GLuint> GLRenderer::setup_render_texture() {
     GLuint depth;
     glGenRenderbuffers(1, &depth);
     glBindRenderbuffer(GL_RENDERBUFFER, depth);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, 1280, 720);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, fb_width, fb_height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth);
 
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, tex, 0);

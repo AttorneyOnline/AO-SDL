@@ -47,42 +47,34 @@ enum class DeskMod {
 class ICMessageEvent : public Event {
   public:
     ICMessageEvent(std::string character, std::string emote, std::string pre_emote,
-                   std::string side, EmoteMod emote_mod, DeskMod desk_mod,
-                   bool flip, int char_id);
+                   std::string message, std::string showname, std::string side,
+                   EmoteMod emote_mod, DeskMod desk_mod,
+                   bool flip, int char_id, int text_color);
 
     std::string to_string() const override;
 
-    /** @brief Character folder name (e.g. "Phoenix"). */
     const std::string& get_character() const { return character; }
-
-    /** @brief Base emote name (e.g. "normal", "pointing"). Used to build (a)/(b) paths. */
     const std::string& get_emote() const { return emote; }
-
-    /** @brief Pre-animation emote filename (from char.ini, e.g. "objecting"). */
     const std::string& get_pre_emote() const { return pre_emote; }
-
-    /** @brief Courtroom position (e.g. "def", "pro", "wit"). */
+    const std::string& get_message() const { return message; }
+    const std::string& get_showname() const { return showname; }
     const std::string& get_side() const { return side; }
-
-    /** @brief Animation mode controlling the pre-anim → talking → idle sequence. */
     EmoteMod get_emote_mod() const { return emote_mod; }
-
-    /** @brief Desk overlay visibility mode. */
     DeskMod get_desk_mod() const { return desk_mod; }
-
-    /** @brief Whether the character sprite should be flipped horizontally. */
     bool get_flip() const { return flip; }
-
-    /** @brief Character ID in the server's character list. */
     int get_char_id() const { return char_id; }
+    int get_text_color() const { return text_color; }
 
   private:
     std::string character;
     std::string emote;
     std::string pre_emote;
+    std::string message;
+    std::string showname;
     std::string side;
     EmoteMod emote_mod;
     DeskMod desk_mod;
     bool flip;
     int char_id;
+    int text_color;
 };

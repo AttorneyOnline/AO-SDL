@@ -118,10 +118,10 @@ void AOPacketCharsCheck::handle(AOClient& cli) {
 
 void AOPacketMS::handle(AOClient& cli) {
     EventManager::instance().get_channel<ICMessageEvent>().publish(
-        ICMessageEvent(character, emote, pre_emote, side,
+        ICMessageEvent(character, emote, pre_emote, message, showname, side,
                        static_cast<EmoteMod>(emote_mod),
                        static_cast<DeskMod>(desk_mod),
-                       flip, char_id));
+                       flip, char_id, text_color));
 }
 
 void AOPacketBN::handle(AOClient& cli) {

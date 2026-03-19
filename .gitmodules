@@ -16,3 +16,6 @@
 [submodule "third-party/bit7z"]
 	path = third-party/bit7z
 	url = https://github.com/rikyoz/bit7z.git
+[submodule "third-party/freetype"]
+	path = third-party/freetype
+	url = https://github.com/freetype/freetype.git

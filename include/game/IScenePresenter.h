@@ -15,16 +15,16 @@
  * mode. Each call to tick() advances the simulation and produces a RenderState
  * snapshot that the renderer can display.
  *
- * Implementations are driven by GameThread at approximately 10 Hz.
+ * Implementations are driven by GameThread at approximately 60 Hz.
  */
 class IScenePresenter {
   public:
     virtual ~IScenePresenter() = default;
 
     /**
-     * @brief Advance the scene by one tick and produce a render snapshot.
-     * @param t The current timestamp in milliseconds (monotonic).
+     * @brief Advance the scene and produce a render snapshot.
+     * @param delta_ms Milliseconds elapsed since the last tick.
      * @return A RenderState describing what should be drawn this frame.
      */
-    virtual RenderState tick(uint64_t t) = 0;
+    virtual RenderState tick(uint64_t delta_ms) = 0;
 };

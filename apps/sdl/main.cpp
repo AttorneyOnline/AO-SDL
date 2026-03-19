@@ -56,8 +56,8 @@ int main(int argc, char* argv[]) {
     std::string vert_source(vert_data->begin(), vert_data->end());
     std::string frag_source(frag_data->begin(), frag_data->end());
 
-    // Render backend — swap this to change renderers
-    RenderManager renderer(buffer, create_gl_renderer(vert_source, frag_source));
+    // Render backend — AO2 viewport is 256x192
+    RenderManager renderer(buffer, create_gl_renderer(vert_source, frag_source, 256, 192));
 
     // Scene presenter — swap this to change game logic
     auto presenter = ao::create_presenter();

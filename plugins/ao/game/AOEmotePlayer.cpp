@@ -2,31 +2,21 @@
 
 #include "utils/Log.h"
 
-void AOEmotePlayer::start(AssetLibrary& assets, const std::string& character,
+void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& character,
                           const std::string& emote, const std::string& pre_emote,
                           EmoteMod emote_mod) {
-    std::string base = "characters/" + character + "/";
-
-    // Pre-animation: direct name (e.g. "objecting"), no prefix
+    // Preanim: direct name, no prefix
     std::shared_ptr<ImageAsset> preanim_asset;
     if (!pre_emote.empty() && pre_emote != "-") {
-        preanim_asset = assets.image(base + pre_emote);
+        preanim_asset = ao_assets.character_emote(character, pre_emote, "");
     }
 
-    // Idle (a-emote): try (a){emote}, fall back to {emote}
-    auto idle_asset = assets.image(base + "(a)" + emote);
-    if (!idle_asset) {
-        idle_asset = assets.image(base + emote);
-    }
+    // Idle: (a) prefix
+    auto idle_asset = ao_assets.character_emote(character, emote, "(a)");
 
-    // Talking (b-emote): try (b){emote}, fall back to {emote}, then idle
-    auto talk_asset = assets.image(base + "(b)" + emote);
-    if (!talk_asset) {
-        talk_asset = assets.image(base + emote);
-    }
-    if (!talk_asset) {
-        talk_asset = idle_asset;
-    }
+    // Talking: (b) prefix, fall back to idle
+    auto talk_asset = ao_assets.character_emote(character, emote, "(b)");
+    if (!talk_asset) talk_asset = idle_asset;
 
     idle.load(idle_asset, true);
     talk.load(talk_asset, true);
@@ -56,6 +46,12 @@ void AOEmotePlayer::start(AssetLibrary& assets, const std::string& character,
                    static_cast<int>(current_state));
 }
 
+void AOEmotePlayer::transition_to_idle() {
+    if (current_state == State::TALKING) {
+        current_state = State::IDLE;
+    }
+}
+
 void AOEmotePlayer::tick(int delta_ms) {
     switch (current_state) {
         case State::PREANIM:
@@ -66,7 +62,6 @@ void AOEmotePlayer::tick(int delta_ms) {
             break;
         case State::TALKING:
             talk.tick(delta_ms);
-            // TODO: transition to IDLE when text finishes scrolling
             break;
         case State::IDLE:
             idle.tick(delta_ms);

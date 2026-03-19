@@ -11,16 +11,20 @@ void GameThread::stop() {
 }
 
 void GameThread::game_loop() {
-    uint64_t t = 0;
+    auto last = std::chrono::steady_clock::now();
 
     while (running) {
-        RenderState state = presenter.tick(t);
+        auto now = std::chrono::steady_clock::now();
+        auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count();
+        last = now;
+
+        RenderState state = presenter.tick(static_cast<uint64_t>(delta_ms));
 
         RenderState* buf = render_buffer.get_producer_buf();
         *buf = state;
         render_buffer.present();
 
-        t++;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // ~60 Hz for smooth text and animation timing
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 }

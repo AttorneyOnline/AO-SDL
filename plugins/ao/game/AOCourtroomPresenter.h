@@ -5,26 +5,36 @@
 
 #include "AOBackground.h"
 #include "AOEmotePlayer.h"
+#include "AOTextBox.h"
+#include "ao/asset/AOAssetLibrary.h"
 #include "game/IScenePresenter.h"
+#include "asset/ImageAsset.h"
+
+#include <memory>
 
 /// AO2 courtroom scene presenter.
 ///
-/// Thin orchestrator: drains events, delegates to AOBackground and
-/// AOEmotePlayer, assembles the RenderState. Contains no asset loading
-/// logic, no filename conventions, no animation state machine — those
-/// live in the components.
-///
-/// Layers carry shared_ptr<ImageAsset> + frame index — no raw pixel
-/// data crosses the triple-buffer. The renderer uploads all frames to
-/// the GPU once as a texture array, then selects frames via shader uniform.
+/// Owns an AOAssetLibrary that all components share for path resolution.
+/// Thin orchestrator: drains events → delegates to components → assembles RenderState.
 class AOCourtroomPresenter : public IScenePresenter {
   public:
     RenderState tick(uint64_t t) override;
 
   private:
+    std::unique_ptr<AOAssetLibrary> ao_assets;
     AOBackground background;
     AOEmotePlayer emote_player;
+    AOTextBox textbox;
 
     bool show_desk = true;
     bool current_flip = false;
+    bool initialized = false;
+
+    std::shared_ptr<ImageAsset> textbox_overlay;
+    bool textbox_dirty = false;
+
+    int evict_timer_ms = 0;
+
+    static constexpr int VIEWPORT_W = 256;
+    static constexpr int VIEWPORT_H = 192;
 };

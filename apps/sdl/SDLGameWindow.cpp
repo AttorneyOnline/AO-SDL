@@ -34,11 +34,12 @@ void SDLGameWindow::start_loop(RenderManager& render, IUIRenderer& ui_renderer) 
             ui_renderer.begin_frame();
             ui_renderer.render_screen(*screen, render);
             ui_renderer.end_frame();
+
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
 
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        // Swap
+        // Always swap — this is where vsync throttles the loop.
+        // Without it, the loop spins at 100% CPU when no screen is active.
         SDL_GL_SwapWindow(window);
     }
 }
@@ -50,7 +51,7 @@ void SDLGameWindow::init_sdl() {
         Log::log_print(LogLevel::FATAL, "Failed to initialize SDL2: %s", SDL_GetError());
     }
 
-    window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480,
+    window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720,
                               SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
     if (!window) {

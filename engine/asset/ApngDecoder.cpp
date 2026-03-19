@@ -1,5 +1,6 @@
 #include "asset/ApngDecoder.h"
 
+#include "utils/BlendOps.h"
 #include "utils/Log.h"
 
 #include "stb_image.h"
@@ -105,15 +106,12 @@ static std::vector<uint8_t> build_png(
     return png;
 }
 
-namespace ApngDecoder {
+struct FrameInfo {
+    FcTL fctl;
+    std::vector<std::vector<uint8_t>> data;
+};
 
-std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, bool flip_y) {
-    static const uint8_t png_sig[] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
-    if (size < 8 || std::memcmp(data, png_sig, 8) != 0) {
-        return std::nullopt;
-    }
-
-    // Parse all chunks
+static std::vector<ChunkRef> parse_chunks(const uint8_t* data, size_t size) {
     std::vector<ChunkRef> chunks;
     size_t pos = 8;
     while (pos + 8 <= size) {
@@ -128,7 +126,135 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
 
         pos += 12 + len;
     }
+    return chunks;
+}
 
+static std::vector<FrameInfo> collect_frames(const std::vector<ChunkRef>& chunks, std::vector<ChunkRef>& ancillary) {
+    std::vector<FrameInfo> frame_infos;
+    int active_frame = -1;
+
+    // Collect ancillary chunks that appear before IDAT (PLTE, tRNS, etc.)
+    // These are needed for paletted PNGs and must be included in synthetic PNGs.
+    std::vector<std::vector<uint8_t>> all_idats;
+
+    for (size_t i = 1; i < chunks.size(); i++) {
+        auto& c = chunks[i];
+
+        if (tag_eq(c.type, "fcTL") && c.length >= 26) {
+            frame_infos.emplace_back();
+            active_frame = (int)frame_infos.size() - 1;
+            frame_infos.back().fctl = parse_fctl(c.body);
+        }
+        else if (tag_eq(c.type, "IDAT")) {
+            all_idats.emplace_back(c.body, c.body + c.length);
+        }
+        else if (tag_eq(c.type, "fdAT") && c.length > 4) {
+            if (active_frame >= 0) {
+                frame_infos[active_frame].data.emplace_back(c.body + 4, c.body + c.length);
+            }
+        }
+        else if (!tag_eq(c.type, "acTL") && !tag_eq(c.type, "IEND") &&
+                 !tag_eq(c.type, "tEXt") && !tag_eq(c.type, "iTXt") &&
+                 !tag_eq(c.type, "zTXt") && all_idats.empty()) {
+            // Ancillary chunk before any IDAT — keep for synthetic PNGs
+            ancillary.push_back(c);
+        }
+    }
+
+    if (!frame_infos.empty() && frame_infos[0].data.empty()) {
+        frame_infos[0].data = all_idats;
+    }
+
+    Log::log_print(DEBUG, "APNG: parsed %zu frame_infos, %zu IDAT chunks, %zu ancillary chunks",
+                   frame_infos.size(), all_idats.size(), ancillary.size());
+
+    return frame_infos;
+}
+
+static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx,
+                                               const uint8_t* ihdr_body, uint32_t ihdr_len,
+                                               const std::vector<ChunkRef>& ancillary,
+                                               std::vector<uint8_t>& canvas,
+                                               uint32_t canvas_w, uint32_t canvas_h, bool flip_y) {
+    auto& fctl = fi.fctl;
+    int duration_ms = fctl_duration_ms(fctl);
+
+    auto png_data = build_png(ihdr_body, ihdr_len,
+                              fctl.width, fctl.height, ancillary, fi.data);
+
+    stbi_set_flip_vertically_on_load(flip_y);
+    int w, h, ch;
+    uint8_t* pixels = stbi_load_from_memory(png_data.data(), (int)png_data.size(), &w, &h, &ch, 4);
+    stbi_set_flip_vertically_on_load(false);
+
+    if (!pixels) {
+        const char* reason = stbi_failure_reason();
+        Log::log_print(WARNING, "APNG: stbi failed to decode frame %zu (png_size=%zu, frame=%ux%u): %s",
+                       fi_idx, png_data.size(), fctl.width, fctl.height,
+                       reason ? reason : "unknown");
+        return std::nullopt;
+    }
+
+    std::vector<uint8_t> prev_canvas;
+    if (fctl.dispose_op == DISPOSE_PREVIOUS) {
+        prev_canvas = canvas;
+    }
+
+    // Composite onto canvas
+    uint32_t fx = fctl.x_offset;
+    uint32_t fy = fctl.y_offset;
+    uint32_t fw = (uint32_t)w;
+    uint32_t fh = (uint32_t)h;
+
+    for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
+        uint32_t src_row = flip_y ? (fh - 1 - row) : row;
+        uint32_t dst_row = flip_y ? (canvas_h - 1 - (fy + row)) : (fy + row);
+
+        for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
+            size_t src_idx = (src_row * fw + col) * 4;
+            size_t dst_idx = (dst_row * canvas_w + (fx + col)) * 4;
+
+            if (fctl.blend_op == BLEND_OVER) {
+                BlendOps::blend_over(&canvas[dst_idx], &pixels[src_idx]);
+            } else {
+                std::memcpy(&canvas[dst_idx], &pixels[src_idx], 4);
+            }
+        }
+    }
+
+    stbi_image_free(pixels);
+
+    ImageFrame frame;
+    frame.width = (int)canvas_w;
+    frame.height = (int)canvas_h;
+    frame.duration_ms = duration_ms > 0 ? duration_ms : 100;
+    frame.pixels = canvas;
+
+    // Dispose
+    if (fctl.dispose_op == DISPOSE_BACKGROUND) {
+        for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
+            uint32_t dst_row = flip_y ? (canvas_h - 1 - (fy + row)) : (fy + row);
+            for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
+                size_t dst_idx = (dst_row * canvas_w + (fx + col)) * 4;
+                std::memset(&canvas[dst_idx], 0, 4);
+            }
+        }
+    } else if (fctl.dispose_op == DISPOSE_PREVIOUS) {
+        canvas = prev_canvas;
+    }
+
+    return frame;
+}
+
+namespace ApngDecoder {
+
+std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, bool flip_y) {
+    static const uint8_t png_sig[] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    if (size < 8 || std::memcmp(data, png_sig, 8) != 0) {
+        return std::nullopt;
+    }
+
+    auto chunks = parse_chunks(data, size);
     if (chunks.empty()) return std::nullopt;
 
     if (!tag_eq(chunks[0].type, "IHDR") || chunks[0].length < 13) {
@@ -171,55 +297,10 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
     }
 
     // ---- APNG multi-frame decoding ----
-
-    struct FrameInfo {
-        FcTL fctl;
-        std::vector<std::vector<uint8_t>> data;
-    };
-
-    std::vector<FrameInfo> frame_infos;
-    int active_frame = -1;
-
-    // Collect ancillary chunks that appear before IDAT (PLTE, tRNS, etc.)
-    // These are needed for paletted PNGs and must be included in synthetic PNGs.
     std::vector<ChunkRef> ancillary;
-    std::vector<std::vector<uint8_t>> all_idats;
+    auto frame_infos = collect_frames(chunks, ancillary);
 
-    for (size_t i = 1; i < chunks.size(); i++) {
-        auto& c = chunks[i];
-
-        if (tag_eq(c.type, "fcTL") && c.length >= 26) {
-            frame_infos.emplace_back();
-            active_frame = (int)frame_infos.size() - 1;
-            frame_infos.back().fctl = parse_fctl(c.body);
-        }
-        else if (tag_eq(c.type, "IDAT")) {
-            all_idats.emplace_back(c.body, c.body + c.length);
-        }
-        else if (tag_eq(c.type, "fdAT") && c.length > 4) {
-            if (active_frame >= 0) {
-                frame_infos[active_frame].data.emplace_back(c.body + 4, c.body + c.length);
-            }
-        }
-        else if (!tag_eq(c.type, "acTL") && !tag_eq(c.type, "IEND") &&
-                 !tag_eq(c.type, "tEXt") && !tag_eq(c.type, "iTXt") &&
-                 !tag_eq(c.type, "zTXt") && all_idats.empty()) {
-            // Ancillary chunk before any IDAT — keep for synthetic PNGs
-            ancillary.push_back(c);
-        }
-    }
-
-    if (!frame_infos.empty() && frame_infos[0].data.empty()) {
-        frame_infos[0].data = all_idats;
-    }
-
-    Log::log_print(DEBUG, "APNG: parsed %zu frame_infos, %zu IDAT chunks, %zu ancillary chunks",
-                   frame_infos.size(), all_idats.size(), ancillary.size());
-
-    // Decode and composite each frame
     std::vector<uint8_t> canvas(canvas_w * canvas_h * 4, 0);
-    std::vector<uint8_t> prev_canvas;
-
     std::vector<ImageFrame> frames;
     frames.reserve(frame_infos.size());
 
@@ -230,80 +311,10 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
             continue;
         }
 
-        auto& fctl = fi.fctl;
-        int duration_ms = fctl_duration_ms(fctl);
-
-        auto png_data = build_png(ihdr_body, chunks[0].length,
-                                  fctl.width, fctl.height, ancillary, fi.data);
-
-        stbi_set_flip_vertically_on_load(flip_y);
-        int w, h, ch;
-        uint8_t* pixels = stbi_load_from_memory(png_data.data(), (int)png_data.size(), &w, &h, &ch, 4);
-        stbi_set_flip_vertically_on_load(false);
-
-        if (!pixels) {
-            const char* reason = stbi_failure_reason();
-            Log::log_print(WARNING, "APNG: stbi failed to decode frame %zu (png_size=%zu, frame=%ux%u): %s",
-                           fi_idx, png_data.size(), fctl.width, fctl.height,
-                           reason ? reason : "unknown");
-            continue;
-        }
-
-        if (fctl.dispose_op == DISPOSE_PREVIOUS) {
-            prev_canvas = canvas;
-        }
-
-        // Composite onto canvas
-        uint32_t fx = fctl.x_offset;
-        uint32_t fy = fctl.y_offset;
-        uint32_t fw = (uint32_t)w;
-        uint32_t fh = (uint32_t)h;
-
-        for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
-            uint32_t src_row = flip_y ? (fh - 1 - row) : row;
-            uint32_t dst_row = flip_y ? (canvas_h - 1 - (fy + row)) : (fy + row);
-
-            for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
-                size_t src_idx = (src_row * fw + col) * 4;
-                size_t dst_idx = (dst_row * canvas_w + (fx + col)) * 4;
-
-                if (fctl.blend_op == BLEND_OVER && pixels[src_idx + 3] < 255) {
-                    float sa = pixels[src_idx + 3] / 255.0f;
-                    float da = canvas[dst_idx + 3] / 255.0f;
-                    float oa = sa + da * (1 - sa);
-                    if (oa > 0) {
-                        for (int c = 0; c < 3; c++) {
-                            canvas[dst_idx + c] = (uint8_t)((pixels[src_idx + c] * sa + canvas[dst_idx + c] * da * (1 - sa)) / oa);
-                        }
-                        canvas[dst_idx + 3] = (uint8_t)(oa * 255);
-                    }
-                } else {
-                    std::memcpy(&canvas[dst_idx], &pixels[src_idx], 4);
-                }
-            }
-        }
-
-        stbi_image_free(pixels);
-
-        ImageFrame frame;
-        frame.width = (int)canvas_w;
-        frame.height = (int)canvas_h;
-        frame.duration_ms = duration_ms > 0 ? duration_ms : 100;
-        frame.pixels = canvas;
-
-        frames.push_back(std::move(frame));
-
-        // Dispose
-        if (fctl.dispose_op == DISPOSE_BACKGROUND) {
-            for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
-                uint32_t dst_row = flip_y ? (canvas_h - 1 - (fy + row)) : (fy + row);
-                for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
-                    size_t dst_idx = (dst_row * canvas_w + (fx + col)) * 4;
-                    std::memset(&canvas[dst_idx], 0, 4);
-                }
-            }
-        } else if (fctl.dispose_op == DISPOSE_PREVIOUS) {
-            canvas = prev_canvas;
+        auto result = decode_frame(fi, fi_idx, ihdr_body, chunks[0].length,
+                                    ancillary, canvas, canvas_w, canvas_h, flip_y);
+        if (result) {
+            frames.push_back(std::move(*result));
         }
     }
 

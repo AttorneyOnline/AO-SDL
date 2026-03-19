@@ -14,6 +14,8 @@ set(TEST_SOURCES
     ao/net/test_NewPackets.cpp
     ao/event/test_ICMessageEvent.cpp
     ao/game/test_AOEmotePlayer.cpp
+    ao/asset/test_AOAssetLibrary.cpp
+    ao/game/test_AOTextBox.cpp
     ao/game/test_AOBackground.cpp
     asset/test_AssetCache.cpp
     asset/test_ApngDecoder.cpp
@@ -22,8 +24,11 @@ set(TEST_SOURCES
     game/test_ServerList.cpp
     render/test_AnimationPlayer.cpp
     render/test_Layer.cpp
+    render/test_TextRendererLayout.cpp
     utils/test_Base64.cpp
+    utils/test_BlendOps.cpp
     utils/test_JsonValidation.cpp
+    utils/test_UTF8.cpp
 )
 
 add_executable(aosdl_tests ${TEST_SOURCES})
