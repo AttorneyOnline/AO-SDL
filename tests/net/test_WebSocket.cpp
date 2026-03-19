@@ -2,6 +2,15 @@
 #include "MockTcpSocket.h"
 #include "utils/Base64.h"
 
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <winsock2.h>
+#else
+#  include <arpa/inet.h>
+#endif
+
 #include <sha1.h>
 
 #include <gtest/gtest.h>

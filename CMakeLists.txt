@@ -25,7 +25,7 @@ set(SRC_FILES
     src/utils/Log.cpp
     src/utils/Base64.cpp
     src/utils/JsonValidation.cpp
-    src/video/GameWindow.cpp
+    src/video/sdl/SDLGameWindow.cpp
     src/game/GameThread.cpp
     src/game/CourtroomPresenter.cpp
     src/game/ServerList.cpp
