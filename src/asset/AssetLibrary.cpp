@@ -5,11 +5,11 @@
 #include "stb_image.h"
 
 AssetLibrary::AssetLibrary(MountManager& mounts, size_t cache_max_bytes)
-    : m_mounts(mounts), m_cache(cache_max_bytes) {
+    : mounts(mounts), cache_(cache_max_bytes) {
 }
 
 std::shared_ptr<ImageAsset> AssetLibrary::image(const std::string& path) {
-    auto cached = m_cache.get(path);
+    auto cached = cache_.get(path);
     if (cached) return std::static_pointer_cast<ImageAsset>(cached);
 
     auto result = probe(path, {"webp", "apng", "gif", "png"});
@@ -32,7 +32,7 @@ std::shared_ptr<ImageAsset> AssetLibrary::image(const std::string& path) {
     stbi_image_free(pixels);
 
     auto asset = std::make_shared<ImageAsset>(path, format, std::vector<ImageFrame>{std::move(frame)});
-    m_cache.insert(asset);
+    cache_.insert(asset);
     return asset;
 }
 
@@ -46,7 +46,7 @@ std::shared_ptr<Asset> AssetLibrary::audio(const std::string& path) {
 }
 
 std::optional<IniDocument> AssetLibrary::config(const std::string& path) {
-    auto data = m_mounts.fetch_data(path);
+    auto data = mounts.fetch_data(path);
     if (!data) return std::nullopt;
 
     IniDocument doc;
@@ -88,21 +88,21 @@ std::optional<IniDocument> AssetLibrary::config(const std::string& path) {
 }
 
 std::shared_ptr<Asset> AssetLibrary::shader(const std::string& path) {
-    auto data = m_mounts.fetch_data(path);
+    auto data = mounts.fetch_data(path);
     if (!data) return nullptr;
     // todo: return a ShaderAsset once that type exists
     return nullptr;
 }
 
 std::shared_ptr<Asset> AssetLibrary::font(const std::string& path) {
-    auto data = m_mounts.fetch_data(path);
+    auto data = mounts.fetch_data(path);
     if (!data) return nullptr;
     // todo: return a FontAsset once that type exists
     return nullptr;
 }
 
 std::optional<std::vector<uint8_t>> AssetLibrary::raw(const std::string& path) {
-    return m_mounts.fetch_data(path);
+    return mounts.fetch_data(path);
 }
 
 std::vector<std::string> AssetLibrary::list(const std::string& directory) {
@@ -111,14 +111,14 @@ std::vector<std::string> AssetLibrary::list(const std::string& directory) {
 }
 
 void AssetLibrary::evict_unused() {
-    m_cache.evict_unused();
+    cache_.evict_unused();
 }
 
 std::optional<std::pair<std::string, std::vector<uint8_t>>>
 AssetLibrary::probe(const std::string& path, const std::vector<std::string>& extensions) {
     for (const auto& ext : extensions) {
         std::string candidate = path + "." + ext;
-        auto data = m_mounts.fetch_data(candidate);
+        auto data = mounts.fetch_data(candidate);
         if (data) return std::make_pair(candidate, std::move(*data));
     }
     return std::nullopt;

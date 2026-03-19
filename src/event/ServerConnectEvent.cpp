@@ -1,13 +1,13 @@
 #include "ServerConnectEvent.h"
 
 ServerConnectEvent::ServerConnectEvent(std::string host, uint16_t port)
-    : m_host(std::move(host)), m_port(port) {
+    : host(std::move(host)), port(port) {
 }
 
 const std::string& ServerConnectEvent::get_host() const {
-    return m_host;
+    return host;
 }
 
 uint16_t ServerConnectEvent::get_port() const {
-    return m_port;
+    return port;
 }

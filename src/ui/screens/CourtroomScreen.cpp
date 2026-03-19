@@ -7,7 +7,7 @@ void CourtroomScreen::enter(ScreenController&) {}
 void CourtroomScreen::exit() {}
 
 void CourtroomScreen::handle_events() {
-    m_chat.handle_events();
+    chat.handle_events();
 }
 
 void CourtroomScreen::render(RenderManager& render) {
@@ -19,7 +19,7 @@ void CourtroomScreen::render(RenderManager& render) {
     ImGui::Image(render_texture, ImGui::GetContentRegionAvail(), {0, 1}, {1, 0});
     ImGui::End();
 
-    m_chat.render();
+    chat.render();
 
     ImGui::Render();
 }

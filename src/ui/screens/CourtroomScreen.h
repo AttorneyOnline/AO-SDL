@@ -11,5 +11,5 @@ class CourtroomScreen : public Screen {
     void render(RenderManager& render) override;
 
   private:
-    ChatWidget m_chat;
+    ChatWidget chat;
 };

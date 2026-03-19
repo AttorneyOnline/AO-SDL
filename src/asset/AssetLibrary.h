@@ -55,7 +55,7 @@ class AssetLibrary {
     // Useful after a scene transition to free memory from the previous scene.
     void evict_unused();
 
-    const AssetCache& cache() const { return m_cache; }
+    const AssetCache& cache() const { return cache_; }
 
   private:
     // Probe a path against a prioritised list of extensions.
@@ -63,6 +63,6 @@ class AssetLibrary {
     std::optional<std::pair<std::string, std::vector<uint8_t>>>
     probe(const std::string& path, const std::vector<std::string>& extensions);
 
-    MountManager& m_mounts;
-    AssetCache m_cache;
+    MountManager& mounts;
+    AssetCache cache_;
 };

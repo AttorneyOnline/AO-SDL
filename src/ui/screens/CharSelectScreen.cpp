@@ -13,21 +13,21 @@
 #include <imgui.h>
 
 void CharSelectScreen::enter(ScreenController& controller) {
-    m_controller = &controller;
+    controller = &controller;
 }
 
 void CharSelectScreen::exit() {
-    m_chars.clear();
-    m_controller = nullptr;
+    chars.clear();
+    controller = nullptr;
 }
 
 void CharSelectScreen::handle_events() {
     // Receive character list from the network
     auto& char_list_channel = EventManager::instance().get_channel<CharacterListEvent>();
     while (auto optev = char_list_channel.get_event()) {
-        m_chars.clear();
+        chars.clear();
         for (const auto& folder : optev->get_characters()) {
-            m_chars.push_back({folder, std::nullopt, false});
+            chars.push_back({folder, std::nullopt, false});
         }
         load_icons();
     }
@@ -36,8 +36,8 @@ void CharSelectScreen::handle_events() {
     auto& chars_check_channel = EventManager::instance().get_channel<CharsCheckEvent>();
     while (auto optev = chars_check_channel.get_event()) {
         const auto& taken = optev->get_taken();
-        for (size_t i = 0; i < taken.size() && i < m_chars.size(); i++) {
-            m_chars[i].taken = taken[i];
+        for (size_t i = 0; i < taken.size() && i < chars.size(); i++) {
+            chars[i].taken = taken[i];
         }
     }
 
@@ -45,17 +45,17 @@ void CharSelectScreen::handle_events() {
     auto& ui_channel = EventManager::instance().get_channel<UIEvent>();
     while (auto optev = ui_channel.get_event()) {
         if (optev->get_type() == UIEventType::ENTERED_COURTROOM) {
-            m_controller->push_screen(std::make_unique<CourtroomScreen>());
+            controller->push_screen(std::make_unique<CourtroomScreen>());
         }
     }
 
-    m_chat.handle_events();
+    chat.handle_events();
 }
 
 void CharSelectScreen::load_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
-    for (auto& entry : m_chars) {
+    for (auto& entry : chars) {
         std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
         auto asset = lib.image(icon_path);
 
@@ -74,7 +74,7 @@ void CharSelectScreen::render(RenderManager& render) {
 
     ImGui::Begin("Character Select");
 
-    if (m_chars.empty()) {
+    if (chars.empty()) {
         ImGui::Text("Waiting for character list...");
     }
     else {
@@ -85,12 +85,12 @@ void CharSelectScreen::render(RenderManager& render) {
         const float panel_width = ImGui::GetContentRegionAvail().x;
         int columns = std::max(1, (int)((panel_width + item_spacing) / (button_size + item_spacing)));
 
-        for (int i = 0; i < (int)m_chars.size(); i++) {
-            const auto& entry = m_chars[i];
+        for (int i = 0; i < (int)chars.size(); i++) {
+            const auto& entry = chars[i];
 
             ImGui::PushID(i);
 
-            bool selected = (m_selected == i);
+            bool selected = (selected == i);
             if (selected)
                 ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
             if (entry.taken)
@@ -110,7 +110,7 @@ void CharSelectScreen::render(RenderManager& render) {
             if (entry.taken) ImGui::PopStyleColor();
 
             if (clicked && !entry.taken) {
-                m_selected = i;
+                selected = i;
                 EventManager::instance().get_channel<CharSelectRequestEvent>().publish(
                     CharSelectRequestEvent(i));
             }
@@ -119,7 +119,7 @@ void CharSelectScreen::render(RenderManager& render) {
                 ImGui::SetTooltip("%s%s", entry.folder.c_str(), entry.taken ? " (taken)" : "");
             }
 
-            if ((i + 1) % columns != 0 && i + 1 < (int)m_chars.size()) {
+            if ((i + 1) % columns != 0 && i + 1 < (int)chars.size()) {
                 ImGui::SameLine();
             }
 
@@ -129,7 +129,7 @@ void CharSelectScreen::render(RenderManager& render) {
 
     ImGui::End();
 
-    m_chat.render();
+    chat.render();
 
     ImGui::Render();
 }

@@ -13,5 +13,5 @@ class CharacterListEvent : public Event {
     std::string to_string() const override;
 
   private:
-    std::vector<std::string> m_characters;
+    std::vector<std::string> characters;
 };

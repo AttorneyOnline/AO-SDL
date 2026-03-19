@@ -10,5 +10,5 @@ class CharsCheckEvent : public Event {
     const std::vector<bool>& get_taken() const;
 
   private:
-    std::vector<bool> m_taken;
+    std::vector<bool> taken;
 };

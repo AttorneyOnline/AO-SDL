@@ -14,6 +14,6 @@ class CourtroomPresenter : public IScenePresenter {
   private:
     void load_assets();
 
-    std::shared_ptr<ImageAsset> m_phoenix_asset;
-    std::optional<Image> m_phoenix_img; // stable ID; pixel data owned by m_phoenix_asset
+    std::shared_ptr<ImageAsset> phoenix_asset;
+    std::optional<Image> phoenix_img; // stable ID; pixel data owned by phoenix_asset
 };

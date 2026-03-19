@@ -31,23 +31,23 @@ class AssetCache {
     // Evict all entries with no external holders (use_count == 1) regardless of limit.
     void evict_unused();
 
-    size_t used_bytes() const { return m_used_bytes; }
-    size_t max_bytes() const { return m_max_bytes; }
+    size_t used_bytes() const { return used_bytes_; }
+    size_t max_bytes() const { return max_bytes_; }
 
   private:
     void evict_to_limit();
 
-    size_t m_max_bytes;
-    size_t m_used_bytes = 0;
+    size_t max_bytes_;
+    size_t used_bytes_ = 0;
 
     // LRU ordering: front = most recently used, back = least recently used.
     using LruList = std::list<std::string>;
-    LruList m_lru;
+    LruList lru;
 
     struct Entry {
         std::shared_ptr<Asset> asset;
         LruList::iterator lru_pos;
     };
 
-    std::unordered_map<std::string, Entry> m_entries;
+    std::unordered_map<std::string, Entry> entries;
 };

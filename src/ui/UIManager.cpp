@@ -7,24 +7,24 @@ UIManager::UIManager() {
 }
 
 void UIManager::push_screen(std::unique_ptr<Screen> screen) {
-    if (!m_stack.empty()) {
-        m_stack.back()->exit();
+    if (!stack.empty()) {
+        stack.back()->exit();
     }
-    m_stack.push_back(std::move(screen));
-    m_stack.back()->enter(*this);
+    stack.push_back(std::move(screen));
+    stack.back()->enter(*this);
 }
 
 void UIManager::pop_screen() {
-    if (m_stack.empty()) return;
-    m_stack.back()->exit();
-    m_stack.pop_back();
-    if (!m_stack.empty()) {
-        m_stack.back()->enter(*this);
+    if (stack.empty()) return;
+    stack.back()->exit();
+    stack.pop_back();
+    if (!stack.empty()) {
+        stack.back()->enter(*this);
     }
 }
 
 Screen* UIManager::top() const {
-    return m_stack.empty() ? nullptr : m_stack.back().get();
+    return stack.empty() ? nullptr : stack.back().get();
 }
 
 void UIManager::handle_events() {

@@ -10,19 +10,19 @@
 void ChatWidget::handle_events() {
     auto& channel = EventManager::instance().get_channel<ChatEvent>();
     while (auto optev = channel.get_event()) {
-        m_buffer = std::format("{}\n{}", m_buffer, optev->to_string());
+        buffer = std::format("{}\n{}", buffer, optev->to_string());
     }
 }
 
 void ChatWidget::render() {
     ImGui::Begin("Chat");
-    ImGui::Text("%s", m_buffer.c_str());
-    ImGui::InputText("name", m_name, IM_ARRAYSIZE(m_name));
-    ImGui::InputText("message", m_message, IM_ARRAYSIZE(m_message));
+    ImGui::Text("%s", buffer.c_str());
+    ImGui::InputText("name", name, IM_ARRAYSIZE(name));
+    ImGui::InputText("message", message, IM_ARRAYSIZE(message));
     if (ImGui::Button("Send")) {
         EventManager::instance().get_channel<OutgoingChatEvent>().publish(
-            OutgoingChatEvent(std::string(m_name), std::string(m_message)));
-        m_message[0] = '\0';
+            OutgoingChatEvent(std::string(name), std::string(message)));
+        message[0] = '\0';
     }
     ImGui::End();
 }

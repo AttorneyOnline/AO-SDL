@@ -11,7 +11,7 @@ struct Texture2D::Impl {
 };
 
 Texture2D::Texture2D(int width, int height, const uint8_t* pixels, int channels)
-    : m_impl(std::make_unique<Impl>(width, height, pixels, channels)) {
+    : impl(std::make_unique<Impl>(width, height, pixels, channels)) {
 }
 
 Texture2D::~Texture2D() = default;
@@ -20,13 +20,13 @@ Texture2D::Texture2D(Texture2D&&) noexcept = default;
 Texture2D& Texture2D::operator=(Texture2D&&) noexcept = default;
 
 uint64_t Texture2D::get_id() const {
-    return m_impl->gl_texture.get_id();
+    return impl->gl_texture.get_id();
 }
 
 int Texture2D::get_width() const {
-    return m_impl->gl_texture.get_width();
+    return impl->gl_texture.get_width();
 }
 
 int Texture2D::get_height() const {
-    return m_impl->gl_texture.get_height();
+    return impl->gl_texture.get_height();
 }

@@ -24,9 +24,9 @@ class CharSelectScreen : public Screen {
         bool taken = false;
     };
 
-    ScreenController* m_controller = nullptr;
-    std::vector<CharEntry> m_chars;
-    int m_selected = -1;
+    ScreenController* controller = nullptr;
+    std::vector<CharEntry> chars;
+    int selected = -1;
 
-    ChatWidget m_chat;
+    ChatWidget chat;
 };

@@ -23,6 +23,6 @@ class MediaManager {
     MediaManager(MediaManager&) = delete;
     void operator=(MediaManager const&) = delete;
 
-    std::unique_ptr<MountManager> m_mounts;
-    std::unique_ptr<AssetLibrary> m_library;
+    std::unique_ptr<MountManager> mounts;
+    std::unique_ptr<AssetLibrary> library;
 };

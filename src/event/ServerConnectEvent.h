@@ -12,6 +12,6 @@ class ServerConnectEvent : public Event {
     uint16_t get_port() const;
 
   private:
-    std::string m_host;
-    uint16_t m_port;
+    std::string host;
+    uint16_t port;
 };

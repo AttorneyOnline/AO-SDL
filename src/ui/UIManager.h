@@ -22,5 +22,5 @@ class UIManager : public ScreenController {
   private:
     Screen* top() const;
 
-    std::vector<std::unique_ptr<Screen>> m_stack;
+    std::vector<std::unique_ptr<Screen>> stack;
 };

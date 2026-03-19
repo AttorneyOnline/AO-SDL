@@ -13,8 +13,8 @@ class ServerListScreen : public Screen {
     void render(RenderManager& render) override;
 
   private:
-    ScreenController* m_controller = nullptr;
-    std::vector<ServerEntry> m_servers;
-    int m_selected = -1;
-    bool m_pending_connect = false;
+    ScreenController* controller = nullptr;
+    std::vector<ServerEntry> servers;
+    int selected = -1;
+    bool pending_connect = false;
 };

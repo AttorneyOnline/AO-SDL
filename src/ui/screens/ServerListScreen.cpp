@@ -8,22 +8,22 @@
 #include <imgui.h>
 
 void ServerListScreen::enter(ScreenController& controller) {
-    m_controller = &controller;
+    controller = &controller;
 }
 
 void ServerListScreen::exit() {
-    m_controller = nullptr;
+    controller = nullptr;
 }
 
 void ServerListScreen::handle_events() {
     auto& list_channel = EventManager::instance().get_channel<ServerListEvent>();
     while (auto optev = list_channel.get_event()) {
-        m_servers = optev->get_server_list().get_servers();
+        servers = optev->get_server_list().get_servers();
     }
 
-    if (m_pending_connect) {
-        m_pending_connect = false;
-        m_controller->push_screen(std::make_unique<CharSelectScreen>());
+    if (pending_connect) {
+        pending_connect = false;
+        controller->push_screen(std::make_unique<CharSelectScreen>());
     }
 }
 
@@ -32,7 +32,7 @@ void ServerListScreen::render(RenderManager& render) {
 
     ImGui::Begin("Servers");
 
-    if (m_servers.empty()) {
+    if (servers.empty()) {
         ImGui::Text("Fetching server list...");
     }
     else {
@@ -45,8 +45,8 @@ void ServerListScreen::render(RenderManager& render) {
             ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 3.0f);
             ImGui::TableHeadersRow();
 
-            for (int i = 0; i < (int)m_servers.size(); i++) {
-                const auto& s = m_servers[i];
+            for (int i = 0; i < (int)servers.size(); i++) {
+                const auto& s = servers[i];
 
                 // Determine connectable WebSocket port. ws_port preferred over wss_port.
                 std::optional<uint16_t> port = s.ws_port.has_value() ? s.ws_port : s.wss_port;
@@ -54,14 +54,14 @@ void ServerListScreen::render(RenderManager& render) {
                 ImGui::TableNextRow();
 
                 ImGui::TableSetColumnIndex(0);
-                bool selected = (m_selected == i);
+                bool selected = (selected == i);
                 ImGui::PushID(i);
                 if (ImGui::Selectable(s.name.c_str(), selected,
                                       ImGuiSelectableFlags_SpanAllColumns,
                                       ImVec2(0, 0))) {
                     if (port.has_value()) {
-                        m_selected = i;
-                        m_pending_connect = true;
+                        selected = i;
+                        pending_connect = true;
                         EventManager::instance().get_channel<ServerConnectEvent>().publish(
                             ServerConnectEvent(s.hostname, *port));
                     }

@@ -8,5 +8,5 @@ class CharSelectRequestEvent : public Event {
     int get_char_id() const;
 
   private:
-    int m_char_id;
+    int char_id;
 };

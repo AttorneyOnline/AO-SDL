@@ -1,5 +1,6 @@
 #include "WebSocket.h"
 
+#include "KissnetTcpSocket.h"
 #include "utils/Base64.h"
 
 #include <sha1.h>
@@ -32,18 +33,16 @@ std::string HTTPResponse::get_header(std::string header) const {
 }
 
 WebSocket::WebSocket(const std::string& host, uint16_t port)
-    : tcp_sock(kissnet::endpoint(host, port)), ready(false), connecting(false) {
+    : WebSocket(host, port, std::make_unique<KissnetTcpSocket>(host, port)) {}
+
+WebSocket::WebSocket(const std::string& host, uint16_t port, std::unique_ptr<ITcpSocket> socket)
+    : socket(std::move(socket)), ready(false), connecting(false) {
     set_header("Host", std::format("{}:{}", host, port));
     set_header("Upgrade", "websocket");
     set_header("Connection", "Upgrade");
     set_header("Sec-WebSocket-Version", "13");
     // todo: better versioning
-    // this header should probably be set not in the constructor
     set_header("User-Agent", "tsurushiage/indev");
-    // todo: more of a note than anything, but may be of interest in the future-
-    // Sec-WebSocket-Protocol could provide a graceful transition mechanism if we want to make servers that speak
-    // multiple protocols for AO. Other mechanisms like Authorization could provide clean ways of doing client auth for
-    // various reasons, like moderator logins or centralized accounts if we move to that model
 }
 
 void WebSocket::set_header(const std::string& header, const std::string& value) {
@@ -63,9 +62,8 @@ void WebSocket::connect(const std::string& endpoint) {
     generate_mask();
     set_header("Sec-WebSocket-Key", Base64::encode(sec_ws_key));
 
-    // Keep things synchronous until we finish the handshake
-    tcp_sock.set_non_blocking(false);
-    auto stat = tcp_sock.connect(); // TODO : Use it.
+    socket->set_non_blocking(false);
+    socket->connect();
 
     std::vector<uint8_t> handshake_buf;
 
@@ -82,7 +80,6 @@ void WebSocket::connect(const std::string& endpoint) {
 
     const std::string carriage_return = "\r\n";
     handshake_buf.insert(handshake_buf.end(), carriage_return.begin(), carriage_return.end());
-    std::string debug_str(handshake_buf.begin(), handshake_buf.end());
     write_raw(handshake_buf);
 
     HTTPResponse handshake_response = read_handshake();
@@ -100,7 +97,7 @@ void WebSocket::connect(const std::string& endpoint) {
     else {
         ready = true;
         connecting = false;
-        tcp_sock.set_non_blocking(true);
+        socket->set_non_blocking(true);
     }
 }
 
@@ -111,22 +108,16 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
         std::vector<uint8_t> bytes = read_raw();
 
         if (bytes.size() == 0) {
-            // Nothing available for us on the socket, so we can just return an empty list
             return messages;
         }
 
-        // We can guarantee that the data we read contains the start of a valid WebSocket frame.
-        // If we start processing the data and there is some left over, that's the start of another frame.
-        // We put that data into extra_data and read_raw will keep it at the start of the buffer it returns.
-        // However, we cannot guarantee we have enough data to figure out the length. If we can't compute
-        // the length of the next frame, stick the data we have into extra_data and return.
         uint64_t bytes_needed = 2;
         if (bytes.size() < bytes_needed) {
             extra_data.insert(extra_data.end(), bytes.begin(), bytes.end());
             return messages;
         }
 
-        uint64_t pl_len = bytes[1] & 0x7F; // Payload len field per RFC
+        uint64_t pl_len = bytes[1] & 0x7F;
         bool masked = (bytes[1] & 0x80) != 0;
 
         if (masked) {
@@ -135,8 +126,6 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
         }
 
         if (pl_len <= 125) {
-            // Payload length is 0-125, so we can calculate how many more bytes we need.
-            // Don't need to account for mask data as we are a client and should have already failed if it is there.
             bytes_needed += pl_len;
         }
         else if (pl_len == 126) {
@@ -147,13 +136,8 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
                 return messages;
             }
 
-            // copying is actually faster here because we don't make assumptions about alignment that way
-            // doing microbenchmarks here was probably a total and complete waste of my time, but unaligned reads are
-            // indeed slower than an aligned read after an aligned copy
             uint16_t pl_len_netorder;
             std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint16_t));
-            // kissnet includes either winsock.h or arpa/inet.h which gives us this function on every platform it
-            // supports
             pl_len = ntohs(pl_len_netorder);
             bytes_needed += pl_len;
         }
@@ -165,7 +149,6 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
                 return messages;
             }
 
-            // same caveat as above applies
             uint64_t pl_len_netorder;
             std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint16_t));
             pl_len = WebSocket::ntohll(pl_len_netorder);
@@ -179,7 +162,6 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
 
         size_t data_offset = bytes_needed - pl_len;
 
-        // At this point, we know we have enough data to decode a whole frame.
         WebSocketFrame frame;
         frame.complete = true;
 
@@ -193,7 +175,6 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
 
         frame.mask_key = 0x00000000;
         if (masked) {
-            // no need to read mask_key from message bc it is invalid no matter what
             throw WebSocketException("Client received masked frame from server");
         }
 
@@ -258,7 +239,6 @@ void WebSocket::write(std::span<const uint8_t> data_bytes) {
     frame.data.insert(frame.data.end(), data_bytes.begin(), data_bytes.end());
 
     std::vector<uint8_t> wireframe = frame.serialize();
-
     write_raw(wireframe);
 }
 
@@ -272,7 +252,7 @@ void WebSocket::generate_mask() {
 }
 
 void WebSocket::write_raw(std::span<const uint8_t> data_bytes) {
-    tcp_sock.send(reinterpret_cast<const std::byte*>(data_bytes.data()), data_bytes.size());
+    socket->send(data_bytes.data(), data_bytes.size());
 }
 
 std::vector<uint8_t> WebSocket::read_raw() {
@@ -281,18 +261,9 @@ std::vector<uint8_t> WebSocket::read_raw() {
     extra_data.clear();
 
     do {
-        kissnet::buffer<RECV_BUF_SIZE> buf;
-        const auto [recv_size, status_code] = tcp_sock.recv(buf);
-
-        if (!status_code.valid) {
-            throw WebSocketException("TCP socket read invalid");
-        }
-
-        if (recv_size != 0) {
-            std::transform(buf.begin(), buf.begin() + recv_size, std::back_inserter(out_buf),
-                           [](std::byte b) { return static_cast<uint8_t>(b); });
-        }
-    } while (tcp_sock.bytes_available());
+        std::vector<uint8_t> chunk = socket->recv();
+        out_buf.insert(out_buf.end(), chunk.begin(), chunk.end());
+    } while (socket->bytes_available());
 
     return out_buf;
 }
@@ -300,26 +271,21 @@ std::vector<uint8_t> WebSocket::read_raw() {
 std::vector<std::string> WebSocket::get_lines(std::span<uint8_t> input) {
     std::vector<std::string> lines;
 
-    // Our delimiter (as bytes)
     static const uint8_t DELIMITER[] = {'\r', '\n'};
     const size_t DELIM_SIZE = sizeof(DELIMITER);
 
     size_t start = 0;
     while (start < input.size()) {
-        // Find the next occurrence of "\r\n" starting from input.begin() + start
         auto it = std::search(input.begin() + static_cast<std::ptrdiff_t>(start), input.end(), std::begin(DELIMITER),
                               std::end(DELIMITER));
 
         if (it == input.end()) {
-            // No more delimiters found, so the rest of the data is a final chunk.
             auto lastchunk = input.subspan(start);
-            extra_data.clear(); // Should already be cleared by read_raw(), but do it again to make Extra Sure
+            extra_data.clear();
             extra_data.insert(extra_data.end(), lastchunk.begin(), lastchunk.end());
             break;
         }
         else {
-            // Found the delimiter.
-            // Calculate the position and size of this chunk so that it includes the delimiter.
             size_t foundPos = static_cast<size_t>(std::distance(input.begin(), it));
             size_t chunkSize = (foundPos - start);
 
@@ -327,7 +293,6 @@ std::vector<std::string> WebSocket::get_lines(std::span<uint8_t> input) {
             std::string chunkstr(chunk.begin(), chunk.end());
             lines.push_back(chunkstr);
 
-            // Advance start just beyond the found delimiter.
             start = foundPos + DELIM_SIZE;
         }
     }
@@ -335,18 +300,15 @@ std::vector<std::string> WebSocket::get_lines(std::span<uint8_t> input) {
     return lines;
 }
 
-// Helper function to trim leading/trailing whitespace.
 inline std::string WebSocket::trim(const std::string& str) {
     if (str.empty())
         return str;
 
-    // find first non-whitespace
     std::size_t start = 0;
     while (start < str.size() && std::isspace(static_cast<unsigned char>(str[start]))) {
         ++start;
     }
 
-    // find last non-whitespace
     std::size_t end = str.size();
     while (end > start && std::isspace(static_cast<unsigned char>(str[end - 1]))) {
         --end;
@@ -355,8 +317,6 @@ inline std::string WebSocket::trim(const std::string& str) {
     return str.substr(start, end - start);
 }
 
-// Helper function to collapse internal linear whitespace (LWS) to a single space.
-// According to RFC 2616, LWS inside field-content can be replaced with a single SP.
 inline std::string WebSocket::collapse_lws(const std::string& str) {
     std::string result;
     result.reserve(str.size());
@@ -364,13 +324,10 @@ inline std::string WebSocket::collapse_lws(const std::string& str) {
     bool in_whitespace = false;
     for (char c : str) {
         if (std::isspace(static_cast<unsigned char>(c))) {
-            // If we encounter whitespace, remember it and only add a single space if
-            // subsequent characters are non-whitespace.
             in_whitespace = true;
         }
         else {
             if (in_whitespace) {
-                // If we were just in whitespace, insert a single space before the next token.
                 result.push_back(' ');
                 in_whitespace = false;
             }
@@ -382,42 +339,29 @@ inline std::string WebSocket::collapse_lws(const std::string& str) {
 }
 
 std::pair<std::string, std::string> WebSocket::parse_http_header(const std::string& header) {
-    // According to RFC 2616 4.2:
-    //    message-header = field-name ":" [ field-value ]
-
-    // 1. Locate the first colon, which separates field-name from field-value.
     auto colonPos = header.find(':');
     if (colonPos == std::string::npos) {
-        // No colon found -> Malformed header? Return entire line as field-name or handle differently.
-        // Here, we'll treat the entire `header` as a field-name with an empty value:
         return std::make_pair(trim(header), std::string{});
     }
 
-    // 2. Extract the field-name (to the left of the colon).
     std::string fieldName = trim(header.substr(0, colonPos));
 
-    // 3. Extract the field-value (to the right of the colon).
-    //    (the substring starts at colonPos+1 to skip the colon)
     std::string fieldValue;
     if (colonPos + 1 < header.size()) {
         fieldValue = header.substr(colonPos + 1);
     }
     fieldValue = trim(fieldValue);
-
-    // 4. Optionally collapse internal whitespace in the field-value to a single space (RFC 2616 LWS rules).
     fieldValue = collapse_lws(fieldValue);
 
     return std::make_pair(fieldName, fieldValue);
 }
 
 HTTPResponse::StatusLine WebSocket::parse_status_line(const std::string& line) {
-    // 1. Find first space (between HTTP-Version and Status-Code).
     std::size_t firstSpace = line.find(' ');
     if (firstSpace == std::string::npos) {
         throw WebSocketException("Invalid status line: missing space after HTTP version.");
     }
 
-    // Extract the HTTP-Version substring.
     std::string httpVersion = line.substr(0, firstSpace);
 
     std::size_t secondSpace = line.find(' ', firstSpace + 1);
@@ -425,20 +369,13 @@ HTTPResponse::StatusLine WebSocket::parse_status_line(const std::string& line) {
         throw WebSocketException("Invalid status line: missing space after status code.");
     }
 
-    // Extract the Status-Code substring.
     std::string statusCodeStr = line.substr(firstSpace + 1, secondSpace - (firstSpace + 1));
-
-    // 3. Extract the Reason-Phrase (which may contain additional spaces).
     std::string reasonPhrase = line.substr(secondSpace + 1);
 
-    // --- Validate the HTTP-Version. ---
-    // Per RFC 2616, typical format is "HTTP/x.x" but we'll do a minimal check here.
     if (httpVersion.size() < 5 || httpVersion.compare(0, 5, "HTTP/") != 0) {
         throw WebSocketException("Invalid HTTP version: must start with 'HTTP/'.");
     }
 
-    // --- Validate the Status-Code. ---
-    // Must be numeric, typically 3 digits (e.g., 200). We do a basic integer parse and range check.
     int statusCode;
     try {
         statusCode = std::stoi(statusCodeStr);
@@ -447,25 +384,20 @@ HTTPResponse::StatusLine WebSocket::parse_status_line(const std::string& line) {
         throw WebSocketException("Invalid status code: not an integer.");
     }
 
-    // Check typical range: 100-599 (most common HTTP status codes).
     if (statusCode < 100 || statusCode > 599) {
         throw WebSocketException("Invalid status code: out of HTTP standard range 100-599.");
     }
 
-    // Reason-Phrase can be almost anything, but we'll just ensure it's not empty.
-    // (RFC 7230 states it's optional, but older RFCs suggest it's typically present.)
     if (reasonPhrase.empty()) {
         throw WebSocketException("Empty reason phrase.");
     }
 
-    // Return the successfully parsed status line.
     return HTTPResponse::StatusLine{httpVersion, statusCode, reasonPhrase};
 }
 
 HTTPResponse WebSocket::read_handshake() {
     std::vector<std::string> response_lines;
 
-    // Keep reading in data until we got an empty line (\r\n\r\n in the binary stream)
     while (std::find(response_lines.begin(), response_lines.end(), "") == response_lines.end()) {
         std::vector<uint8_t> response_buf = read_raw();
         auto new_lines = get_lines(response_buf);
@@ -475,12 +407,10 @@ HTTPResponse WebSocket::read_handshake() {
     HTTPResponse::StatusLine status_line;
     HTTPHeaders headers;
 
-    // First, get the response Status-Line
     std::string status_line_str = response_lines[0];
     response_lines.erase(response_lines.begin());
     status_line = parse_status_line(status_line_str);
 
-    // Now, parse the response headers
     for (const auto& hline : response_lines) {
         auto headerkv = parse_http_header(hline);
         headers.emplace(headerkv);
@@ -513,29 +443,14 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
 
     static constexpr int HTTP_STATUS_SWITCHING_PROTOCOLS = 101;
 
-    /*
-       1.  If the status code received from the server is not 101, the
-       client handles the response per HTTP [RFC2616] procedures.  In
-       particular, the client might perform authentication if it
-       receives a 401 status code; the server might redirect the client
-       using a 3xx status code (but clients are not required to follow
-       them), etc.  Otherwise, proceed as follows.
-    */
     if (response.get_status().status_code == HTTP_STATUS_SWITCHING_PROTOCOLS) {
         response_code_ok = true;
     }
     else {
-        // Technically non-conformant, but implementing any other HTTP status code is far, far, far out of scope.
         throw WebSocketException(std::format("Response status code was not 101, got {} ({})",
                                              response.get_status().status_code, response.get_status().status_reason));
     }
 
-    /*
-       2.  If the response lacks an |Upgrade| header field or the |Upgrade|
-       header field contains a value that is not an ASCII case-
-       insensitive match for the value "websocket", the client MUST
-       _Fail the WebSocket Connection_.
-    */
     if (case_insensitive_equal(response.get_header("Upgrade"), "websocket")) {
         upgrade_ok = true;
     }
@@ -543,12 +458,6 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
         throw WebSocketException("Upgrade header not present or malformed");
     }
 
-    /*
-       3.  If the response lacks a |Connection| header field or the
-       |Connection| header field doesn't contain a token that is an
-       ASCII case-insensitive match for the value "Upgrade", the client
-       MUST _Fail the WebSocket Connection_.
-    */
     if (case_insensitive_equal(response.get_header("Connection"), "Upgrade")) {
         connection_ok = true;
     }
@@ -556,15 +465,6 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
         throw WebSocketException("Connection header not present or malformed");
     }
 
-    /*
-       4.  If the response lacks a |Sec-WebSocket-Accept| header field or
-       the |Sec-WebSocket-Accept| contains a value other than the
-       base64-encoded SHA-1 of the concatenation of the |Sec-WebSocket-
-       Key| (as a string, not base64-decoded) with the string "258EAFA5-
-       E914-47DA-95CA-C5AB0DC85B11" but ignoring any leading and
-       trailing whitespace, the client MUST _Fail the WebSocket
-       Connection_.
-    */
     std::string ws_accept_recvd = response.get_header("Sec-WebSocket-Accept");
     if (ws_accept_recvd == "") {
         throw WebSocketException("Sec-WebSocket-Accept not present");
@@ -588,15 +488,6 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
                                              ws_accept_calculated, ws_accept_recvd));
     }
 
-    /*
-       5.  If the response includes a |Sec-WebSocket-Extensions| header
-       field and this header field indicates the use of an extension
-       that was not present in the client's handshake (the server has
-       indicated an extension not requested by the client), the client
-       MUST _Fail the WebSocket Connection_.  (The parsing of this
-       header field to determine which extensions are requested is
-       discussed in Section 9.1.)
-     */
     if (response.get_header("Sec-WebSocket-Extensions") == "") {
         extensions_ok = true;
     }
@@ -605,13 +496,6 @@ bool WebSocket::validate_handshake(const HTTPResponse& response) {
                                              response.get_header("Sec-WebSocket-Extensions")));
     }
 
-    /*
-       6.  If the response includes a |Sec-WebSocket-Protocol| header field
-       and this header field indicates the use of a subprotocol that was
-       not present in the client's handshake (the server has indicated a
-       subprotocol not requested by the client), the client MUST _Fail
-       the WebSocket Connection_.
-     */
     if (response.get_header("Sec-WebSocket-Protocol") == "") {
         protocol_ok = true;
     }

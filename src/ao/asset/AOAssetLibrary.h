@@ -125,7 +125,7 @@ class AOAssetLibrary {
     std::vector<std::string> music_list();
 
   private:
-    AssetLibrary& m_assets;
+    AssetLibrary& assets;
 
     // Builds an ordered list of virtual paths to probe for a given asset,
     // implementing the AO2 fallback chain.

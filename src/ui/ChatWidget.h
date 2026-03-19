@@ -9,7 +9,7 @@ class ChatWidget {
     void render();
 
   private:
-    std::string m_buffer;
-    char m_name[32] = "";
-    char m_message[1024] = "";
+    std::string buffer;
+    char name[32] = "";
+    char message[1024] = "";
 };

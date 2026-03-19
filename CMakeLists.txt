@@ -51,6 +51,7 @@ set(SRC_FILES
     src/asset/ImageAsset.cpp
     src/asset/stb_image_impl.cpp
     src/net/WebSocket.cpp
+    src/net/KissnetTcpSocket.cpp
     src/net/NetworkThread.cpp
     src/ui/UIManager.cpp
     src/ui/ChatWidget.cpp
@@ -142,6 +143,9 @@ set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/bit7z)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE bit7z)
 
+
+enable_testing()
+add_subdirectory(tests)
 
 find_program(CLANG_TIDY_EXE NAMES clang-tidy)
 
