@@ -1,55 +1,58 @@
 #include "NetworkThread.h"
 
-#include "ao/net/AOClient.h"
-#include "ao/net/PacketTypes.h"
+#include "WebSocket.h"
+#include "event/EventManager.h"
+#include "event/ServerConnectEvent.h"
 #include "utils/Log.h"
 
-// todo: instead of passing the socket through the constructor, NetworkThread should have thread-safe mechanisms to
-// manage the lifecycle of the underlying sockets
-NetworkThread::NetworkThread(WebSocket& sock) : net_thread(&NetworkThread::net_loop, this), sock(sock) {
+#include <chrono>
+#include <optional>
+#include <thread>
+
+NetworkThread::NetworkThread(ProtocolHandler& handler)
+    : handler(handler), net_thread(&NetworkThread::net_loop, this) {
 }
 
 void NetworkThread::net_loop() {
-    // todo: define a more generalized API for network backends that AOClient implements
-    // should do this later so the requirements are understood better
-    // once this is done, we can even load network backends dynamically from shared libs(!!)
-    // this same generalization should be done to the WebSocket API
-    // the current public API is just a read, write, (blocking) connect, and is_connected()
-    AOClient ao_client;
-
-    if (!sock.is_connected()) {
-        // todo: this function is blocking
-        // should implement a timeout
-        sock.connect();
-        ao_client.conn_state = CONNECTED;
+    // Wait for the user to select a server before connecting.
+    std::optional<WebSocket> sock;
+    while (!sock.has_value()) {
+        if (auto ev = EventManager::instance().get_channel<ServerConnectEvent>().get_event()) {
+            sock.emplace(ev->get_host(), ev->get_port());
+        }
+        else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
     }
+
+    // todo: sock.connect() is blocking — implement a timeout
+    if (!sock->is_connected()) {
+        sock->connect();
+    }
+
+    handler.on_connect();
 
     std::vector<WebSocket::WebSocketFrame> msgs;
-    std::string msgstr;
 
     while (true) {
-        while (msgs.size() < 1) {
-            // todo: cleanly handle and stitch continuation packets
-            msgs = sock.read();
-
-            // handle any client events or messages while we are waiting on the socket
-            ao_client.handle_events();
-            std::vector<std::string> client_msgs = ao_client.get_messages();
-            for (auto cli_msg : client_msgs) {
-                std::vector<uint8_t> msg_bytes(cli_msg.begin(), cli_msg.end());
-                Log::log_print(DEBUG, "CLIENT: %s", cli_msg.c_str());
-                sock.write(msg_bytes);
-            }
-
-            // todo: make this timeout a bit less stupid
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        }
+        // todo: cleanly handle and stitch continuation frames
+        msgs = sock->read();
 
         for (const auto& msg : msgs) {
-            msgstr = std::string(msg.data.begin(), msg.data.end());
+            std::string msgstr(msg.data.begin(), msg.data.end());
             Log::log_print(DEBUG, "SERVER: %s", msgstr.c_str());
-            ao_client.handle_message(msgstr);
+            handler.on_message(msgstr);
         }
         msgs.clear();
+
+        for (const auto& out : handler.flush_outgoing()) {
+            Log::log_print(DEBUG, "CLIENT: %s", out.c_str());
+            sock->write(std::vector<uint8_t>(out.begin(), out.end()));
+        }
+
+        // todo: make this timeout less stupid
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
+
+    handler.on_disconnect();
 }

@@ -29,7 +29,7 @@ void GameWindow::start_loop(RenderManager& render) {
         ImGui::NewFrame();
 
         ui_manager.handle_events();
-        ui_manager.render_current_view(render);
+        ui_manager.render(render);
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

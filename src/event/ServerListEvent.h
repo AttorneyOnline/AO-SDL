@@ -5,7 +5,7 @@
 
 class ServerListEvent : public Event {
   public:
-    ServerListEvent(ServerList server_list, EventTarget target);
+    ServerListEvent(ServerList server_list);
 
     std::string to_string() const override;
     ServerList get_server_list();

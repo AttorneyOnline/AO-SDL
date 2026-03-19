@@ -8,7 +8,6 @@
 #include <type_traits>
 #include <utility>
 
-// todo: we should probably store our event objects into a std::shared_ptr to manage the lifetime
 template <typename T>
 class EventChannel {
     static_assert(std::is_base_of<Event, T>::value, "EventChannel only supports Event objects");
@@ -24,41 +23,23 @@ class EventChannel {
 
     void publish(T&& ev) {
         const std::lock_guard<std::mutex> lock(event_queue_mutex);
-
         event_queue.push_back(std::move(ev));
     }
 
-    bool has_events(EventTarget target) {
+    bool has_events() {
         const std::lock_guard<std::mutex> lock(event_queue_mutex);
-
-        auto it = std::find_if(event_queue.begin(), event_queue.end(),
-                               [target](const T& event) { return event.get_target() == target; });
-
-        if (it != event_queue.end()) {
-            return true;
-        }
-        else {
-            return false;
-        }
+        return !event_queue.empty();
     }
 
-    std::optional<T> get_event(EventTarget target) {
+    std::optional<T> get_event() {
         const std::lock_guard<std::mutex> lock(event_queue_mutex);
-
-        auto it = std::find_if(event_queue.begin(), event_queue.end(),
-                               [target](const T& event) { return event.get_target() == target; });
-
-        if (it != event_queue.end()) {
-            T ev = std::move(*it);
-            event_queue.erase(it);
-            return ev;
-        }
-
-        return std::nullopt;
+        if (event_queue.empty()) return std::nullopt;
+        T ev = std::move(event_queue.front());
+        event_queue.pop_front();
+        return ev;
     }
 
   private:
     std::mutex event_queue_mutex;
-
     std::deque<T> event_queue;
 };

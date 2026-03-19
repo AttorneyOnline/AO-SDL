@@ -1,26 +1,26 @@
 #pragma once
 
+#include "Screen.h"
+#include "ScreenController.h"
 #include "render/RenderManager.h"
 
-enum UIView {
-    SERVER_LIST,
-    CHAR_SELECT,
-    COURTROOM
-};
+#include <memory>
+#include <vector>
 
-class UIManager {
+class UIManager : public ScreenController {
   public:
     UIManager();
 
-    UIView get_current_view();
-    void render_current_view(RenderManager& render);
+    // ScreenController interface
+    void push_screen(std::unique_ptr<Screen> screen) override;
+    void pop_screen() override;
+
+    // Called each frame by the game loop.
     void handle_events();
+    void render(RenderManager& render);
 
   private:
-    UIView current_view;
+    Screen* top() const;
 
-    // todo: bad, do this right
-    std::string chat_buffer;
-    char chat_name[32] = "";
-    char chat_message[1024] = "";
+    std::vector<std::unique_ptr<Screen>> m_stack;
 };

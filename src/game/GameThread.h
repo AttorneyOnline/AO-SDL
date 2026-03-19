@@ -1,5 +1,6 @@
 #pragma once
 
+#include "IScenePresenter.h"
 #include "render/StateBuffer.h"
 
 #include <atomic>
@@ -7,16 +8,14 @@
 
 class GameThread {
   public:
-    GameThread(StateBuffer& render_buffer);
+    GameThread(StateBuffer& render_buffer, IScenePresenter& presenter);
     void stop();
 
   private:
     void game_loop();
-    void tick(uint64_t t);
-    void render(RenderState new_state);
 
     std::atomic<bool> running;
-
     StateBuffer& render_buffer;
+    IScenePresenter& presenter;
     std::thread tick_thread;
 };

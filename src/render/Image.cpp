@@ -4,7 +4,7 @@
 
 #include <random>
 
-Image::Image(int width, int height, uint8_t* pixels, int num_channels)
+Image::Image(int width, int height, const uint8_t* pixels, int num_channels)
     : width(width), height(height), num_channels(num_channels), pixels(pixels) {
     // TODO: Replace with hash of image data
     std::random_device rd;
@@ -40,7 +40,7 @@ Animation::Animation(int width, int height, uint8_t* pixels, int num_channels)
     : Image(width, height, pixels, num_channels) {
 }
 
-void Animation::update_image(uint8_t* pixels) {
+void Animation::update_image(const uint8_t* pixels) {
     this->pixels = pixels;
 }
 

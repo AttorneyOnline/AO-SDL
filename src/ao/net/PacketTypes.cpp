@@ -1,297 +1,249 @@
 #include "PacketTypes.h"
 
-// This file only includes the logic to construct packets and do validation
-// Actual behavior handling is in PacketBehavior.cpp
+// ---------------------------------------------------------------------------
+// AOPacketDecryptor
+// ---------------------------------------------------------------------------
 
-// decryptor
-
-AOPacketDecryptor::AOPacketDecryptor(const std::vector<std::string>& fields) {
-    if (fields.size() >= MIN_FIELDS) {
-        header = "decyptor";
-
-        decryptor = fields.at(0);
-
-        this->fields = fields;
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet decryptor");
-    }
-}
-
-PacketRegistrar AOPacketDecryptor::registrar("decryptor",
-                                             [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-                                                 return std::make_unique<AOPacketDecryptor>(fields);
-                                             });
-
-// HI
-
-AOPacketHI::AOPacketHI(const std::string& hardware_id) : hardware_id(hardware_id) {
-    header = "HI";
-    fields.push_back(hardware_id);
-    valid = true;
-}
-
-AOPacketHI::AOPacketHI(const std::vector<std::string>& fields) {
-    if (fields.size() >= MIN_FIELDS) {
-        header = "HI";
-
-        hardware_id = fields.at(0);
-
-        this->fields = fields;
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet HI");
-    }
-}
-
-PacketRegistrar AOPacketHI::registrar("HI", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketHI>(fields);
+PacketRegistrar AOPacketDecryptor::registrar("decryptor", [](const auto& f) {
+    return std::make_unique<AOPacketDecryptor>(f);
 });
 
-// ID (version client gets from server)
-
-AOPacketIDClient::AOPacketIDClient(const std::vector<std::string>& fields) {
+AOPacketDecryptor::AOPacketDecryptor(const std::vector<std::string>& fields)
+    : AOPacket("decryptor", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        header = "ID";
-
-        player_number = std::atoi(fields.at(0).c_str());
-        server_software = fields.at(1);
-        server_version = fields.at(2);
-
-        this->fields = fields;
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet ID");
+        decryptor = fields[0];
     }
 }
 
-PacketRegistrar AOPacketIDClient::registrar("ID",
-                                            [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-                                                return std::make_unique<AOPacketIDClient>(fields);
-                                            });
+// ---------------------------------------------------------------------------
+// AOPacketHI
+// ---------------------------------------------------------------------------
 
-// ID (version client sends to the server)
+PacketRegistrar AOPacketHI::registrar("HI", [](const auto& f) {
+    return std::make_unique<AOPacketHI>(f);
+});
+
+AOPacketHI::AOPacketHI(const std::string& hardware_id)
+    : AOPacket("HI", {hardware_id}), hardware_id(hardware_id) {
+}
+
+AOPacketHI::AOPacketHI(const std::vector<std::string>& fields)
+    : AOPacket("HI", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        hardware_id = fields[0];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketIDClient  (server → client)
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketIDClient::registrar("ID", [](const auto& f) {
+    return std::make_unique<AOPacketIDClient>(f);
+});
+
+AOPacketIDClient::AOPacketIDClient(const std::vector<std::string>& fields)
+    : AOPacket("ID", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        player_number  = std::stoi(fields[0]);
+        server_software = fields[1];
+        server_version  = fields[2];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketIDServer  (client → server)
+// ---------------------------------------------------------------------------
 
 AOPacketIDServer::AOPacketIDServer(const std::string& client_software, const std::string& client_version)
-    : client_software(client_software), client_version(client_version) {
-    header = "ID";
-    fields.push_back(client_software);
-    fields.push_back(client_version);
-    valid = true;
+    : AOPacket("ID", {client_software, client_version}),
+      client_software(client_software), client_version(client_version) {
 }
 
-AOPacketIDServer::AOPacketIDServer(const std::vector<std::string>& fields) {
+AOPacketIDServer::AOPacketIDServer(const std::vector<std::string>& fields)
+    : AOPacket("ID", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        header = "ID";
-
-        client_software = fields.at(0);
-        client_version = fields.at(1);
-
-        this->fields = fields;
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet ID");
+        client_software = fields[0];
+        client_version  = fields[1];
     }
 }
 
-// PN (Player count)
+// ---------------------------------------------------------------------------
+// AOPacketPN
+// ---------------------------------------------------------------------------
 
-AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) {
-    if (fields.size() >= MIN_FIELDS) {
-        header = "PN";
-
-        current_players = std::atoi(fields.at(0).c_str());
-        max_players = std::atoi(fields.at(1).c_str());
-
-        if (fields.size() >= MIN_FIELDS + 1) {
-            server_description = fields.at(2);
-        }
-        else {
-            server_description = "";
-        }
-
-        this->fields = fields;
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet PN");
-    }
-}
-
-PacketRegistrar AOPacketPN::registrar("PN", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketPN>(fields);
+PacketRegistrar AOPacketPN::registrar("PN", [](const auto& f) {
+    return std::make_unique<AOPacketPN>(f);
 });
 
-// askchaa
-
-AOPacketAskChaa::AOPacketAskChaa() {
-    header = "askchaa";
-    valid = true;
-}
-
-// ASS (Remote Asset URL)
-
-AOPacketASS::AOPacketASS(const std::vector<std::string>& fields) {
+AOPacketPN::AOPacketPN(const std::vector<std::string>& fields)
+    : AOPacket("PN", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        header = "ASS";
-
-        asset_url = fields.at(0);
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet ASS");
+        current_players    = std::stoi(fields[0]);
+        max_players        = std::stoi(fields[1]);
+        server_description = fields.size() > 2 ? fields[2] : "";
     }
 }
 
-PacketRegistrar AOPacketASS::registrar("ASS", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketASS>(fields);
+// ---------------------------------------------------------------------------
+// AOPacketAskChaa  (client → server, no handle)
+// ---------------------------------------------------------------------------
+
+AOPacketAskChaa::AOPacketAskChaa() : AOPacket("askchaa", {}) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketASS
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketASS::registrar("ASS", [](const auto& f) {
+    return std::make_unique<AOPacketASS>(f);
 });
 
-// SI (Server Information, aka Resource Counts)
-// TODO: askchaa
-
-AOPacketSI::AOPacketSI(const std::vector<std::string>& fields) {
+AOPacketASS::AOPacketASS(const std::vector<std::string>& fields)
+    : AOPacket("ASS", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        header = "SI";
-
-        character_count = std::atoi(fields.at(0).c_str());
-        evidence_count = std::atoi(fields.at(1).c_str());
-        music_count = std::atoi(fields.at(2).c_str());
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet SI");
+        asset_url = fields[0];
     }
 }
 
-PacketRegistrar AOPacketSI::registrar("SI", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketSI>(fields);
+// ---------------------------------------------------------------------------
+// AOPacketSI
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketSI::registrar("SI", [](const auto& f) {
+    return std::make_unique<AOPacketSI>(f);
 });
 
-// RC (Request Charlist)
-
-AOPacketRC::AOPacketRC() {
-    header = "RC";
-    valid = true;
-}
-
-// SC (Send Charlist)
-
-AOPacketSC::AOPacketSC(const std::vector<std::string>& fields) {
+AOPacketSI::AOPacketSI(const std::vector<std::string>& fields)
+    : AOPacket("SI", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        header = "SC";
-
-        for (const std::string& character : fields) {
-            character_list.push_back(character);
-        }
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet SC");
+        character_count = std::stoi(fields[0]);
+        evidence_count  = std::stoi(fields[1]);
+        music_count     = std::stoi(fields[2]);
     }
 }
 
-PacketRegistrar AOPacketSC::registrar("SC", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketSC>(fields);
+// ---------------------------------------------------------------------------
+// AOPacketRC  (client → server, no handle)
+// ---------------------------------------------------------------------------
+
+AOPacketRC::AOPacketRC() : AOPacket("RC", {}) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketSC
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketSC::registrar("SC", [](const auto& f) {
+    return std::make_unique<AOPacketSC>(f);
 });
 
-// RM (Request Music)
-
-AOPacketRM::AOPacketRM() {
-    header = "RM";
-    valid = true;
+AOPacketSC::AOPacketSC(const std::vector<std::string>& fields)
+    : AOPacket("SC", fields), character_list(fields) {
 }
 
-// SM (Sadism/Masochism)
+// ---------------------------------------------------------------------------
+// AOPacketRM  (client → server, no handle)
+// ---------------------------------------------------------------------------
 
-AOPacketSM::AOPacketSM(const std::vector<std::string>& fields) {
-    if (fields.size() >= MIN_FIELDS) {
-        header = "SM";
-
-        for (const std::string& character : fields) {
-            music_list.push_back(character);
-        }
-
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet SM");
-    }
+AOPacketRM::AOPacketRM() : AOPacket("RM", {}) {
 }
 
-PacketRegistrar AOPacketSM::registrar("SM", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketSM>(fields);
+// ---------------------------------------------------------------------------
+// AOPacketSM
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketSM::registrar("SM", [](const auto& f) {
+    return std::make_unique<AOPacketSM>(f);
 });
 
-// RD
-
-AOPacketRD::AOPacketRD() {
-    header = "RD";
-    valid = true;
+AOPacketSM::AOPacketSM(const std::vector<std::string>& fields)
+    : AOPacket("SM", fields), music_list(fields) {
 }
 
-// DONE
+// ---------------------------------------------------------------------------
+// AOPacketRD  (client → server, no handle)
+// ---------------------------------------------------------------------------
 
-AOPacketDONE::AOPacketDONE() {
-    header = "DONE";
-    valid = true;
+AOPacketRD::AOPacketRD() : AOPacket("RD", {}) {
 }
-PacketRegistrar AOPacketDONE::registrar("DONE",
-                                        [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-                                            return std::make_unique<AOPacketDONE>();
-                                        });
 
-// CT
+// ---------------------------------------------------------------------------
+// AOPacketDONE
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketDONE::registrar("DONE", [](const auto& f) {
+    return std::make_unique<AOPacketDONE>();
+});
+
+AOPacketDONE::AOPacketDONE() : AOPacket("DONE", {}) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketCharsCheck
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketCharsCheck::registrar("CharsCheck", [](const auto& f) {
+    return std::make_unique<AOPacketCharsCheck>(f);
+});
+
+AOPacketCharsCheck::AOPacketCharsCheck(const std::vector<std::string>& fields)
+    : AOPacket("CharsCheck", fields) {
+    taken.reserve(fields.size());
+    for (const auto& f : fields) {
+        taken.push_back(f == "-1");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketPW
+// ---------------------------------------------------------------------------
+
+AOPacketPW::AOPacketPW(const std::string& password) : AOPacket("PW", {password}) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketCC
+// ---------------------------------------------------------------------------
+
+AOPacketCC::AOPacketCC(int player_num, int char_id, const std::string& hdid)
+    : AOPacket("CC", {std::to_string(player_num), std::to_string(char_id), hdid}) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketPV
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketPV::registrar("PV", [](const auto& f) {
+    return std::make_unique<AOPacketPV>(f);
+});
+
+AOPacketPV::AOPacketPV(const std::vector<std::string>& fields)
+    : AOPacket("PV", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        char_id = std::stoi(fields[2]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketCT
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketCT::registrar("CT", [](const auto& f) {
+    return std::make_unique<AOPacketCT>(f);
+});
 
 AOPacketCT::AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message)
-    : sender_name(sender_name), message(message), system_message(system_message) {
-    header = "CT";
-
-    fields.push_back(sender_name);
-    fields.push_back(message);
-    if (system_message) {
-        fields.push_back("1");
-    }
-
-    valid = true;
+    : AOPacket("CT", {sender_name, message, system_message ? "1" : "0"}),
+      sender_name(sender_name), message(message), system_message(system_message) {
 }
 
-AOPacketCT::AOPacketCT(const std::vector<std::string>& fields) {
+AOPacketCT::AOPacketCT(const std::vector<std::string>& fields)
+    : AOPacket("CT", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        header = "CT";
-
-        sender_name = fields.at(0);
-        message = fields.at(1);
-
-        if (fields.size() >= MIN_FIELDS + 1) {
-            system_message = std::atoi(fields.at(2).c_str()) == 1;
-        }
-        else {
-            system_message = false;
-        }
-
-        this->fields = fields;
-        valid = true;
-    }
-    else {
-        valid = false;
-        throw PacketFormatException("Not enough fields on packet CT");
+        sender_name    = fields[0];
+        message        = fields[1];
+        system_message = fields.size() > 2 && fields[2] == "1";
     }
 }
-
-PacketRegistrar AOPacketCT::registrar("CT", [](const std::vector<std::string>& fields) -> std::unique_ptr<AOPacket> {
-    return std::make_unique<AOPacketCT>(fields);
-});

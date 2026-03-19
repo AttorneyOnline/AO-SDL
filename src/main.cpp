@@ -1,22 +1,24 @@
-﻿#include "event/EventManager.h"
+#include "ao/net/AOClient.h"
+#include "asset/MediaManager.h"
+#include "event/EventManager.h"
 #include "event/ServerListEvent.h"
+#include "game/CourtroomPresenter.h"
 #include "game/GameThread.h"
 #include "game/ServerList.h"
 #include "net/NetworkThread.h"
-#include "net/WebSocket.h"
 #include "video/GameWindow.h"
 
 #include "httplib.h"
 
 int main(int argc, char* argv[]) {
-    // todo: kick off another thread to do this
+    MediaManager::instance().init("G:/AO2/base");
 
+    // todo: kick off another thread to do this
     httplib::Client cli("http://servers.aceattorneyonline.com");
     auto res = cli.Get("/servers");
-
-    if (res->status == 200) {
+    if (res && res->status == 200) {
         ServerList svlist(res->body);
-        EventManager::instance().get_channel<ServerListEvent>().publish(ServerListEvent(svlist, EventTarget::UI));
+        EventManager::instance().get_channel<ServerListEvent>().publish(ServerListEvent(svlist));
     }
 
     UIManager ui_mgr;
@@ -28,15 +30,15 @@ int main(int argc, char* argv[]) {
     // Initialize StateBuffer
     StateBuffer buffer;
 
-    WebSocket sock("securevanilla.aceattorneyonline.com", 2095);
-    // WebSocket sock("localhost", 27017);
-    NetworkThread net_thread(sock);
+    AOClient ao_client;
+    NetworkThread net_thread(ao_client);
 
     // Instantiate renderer
     RenderManager renderer(buffer);
 
     // Start game logic thread
-    GameThread game_logic(buffer);
+    CourtroomPresenter presenter;
+    GameThread game_logic(buffer, presenter);
 
     // Kick off the render loop
     game_window.start_loop(renderer);

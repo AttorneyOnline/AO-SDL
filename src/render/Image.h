@@ -4,7 +4,7 @@
 
 class Image {
   public:
-    Image(int width, int height, uint8_t* pixels, int num_channels);
+    Image(int width, int height, const uint8_t* pixels, int num_channels);
     uint64_t get_id();
 
     const uint8_t* get_pixels();
@@ -18,7 +18,7 @@ class Image {
     int width;
     int height;
     int num_channels;
-    uint8_t* pixels;
+    const uint8_t* pixels;
 
     uint64_t id;
 };
@@ -29,5 +29,5 @@ class Animation : public Image {
 
     virtual void prepare();
 
-    void update_image(uint8_t* pixels);
+    void update_image(const uint8_t* pixels);
 };

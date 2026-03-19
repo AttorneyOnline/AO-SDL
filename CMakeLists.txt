@@ -15,20 +15,27 @@ set(SRC_FILES
     src/ao/net/PacketBehavior.cpp
     src/event/Event.cpp
     src/event/ChatEvent.cpp
+    src/event/OutgoingChatEvent.cpp
     src/event/UIEvent.cpp
     src/event/ServerListEvent.cpp
+    src/event/CharacterListEvent.cpp
+    src/event/CharsCheckEvent.cpp
+    src/event/CharSelectRequestEvent.cpp
+    src/event/ServerConnectEvent.cpp
     src/utils/Log.cpp
     src/utils/Base64.cpp
     src/utils/JsonValidation.cpp
     src/video/GameWindow.cpp
     src/game/GameThread.cpp
+    src/game/CourtroomPresenter.cpp
     src/game/ServerList.cpp
-    src/render/detail/Renderer.cpp
-    src/render/detail/Shader.cpp
-    src/render/detail/Sprite.cpp
-    src/render/detail/Texture.cpp
-    src/render/detail/Transform.cpp
-    src/render/detail/Vertex.cpp
+    src/render/Transform.cpp
+    src/render/Texture.cpp
+    src/render/gl/Shader.cpp
+    src/render/gl/GLTexture.cpp
+    src/render/gl/GLMesh.cpp
+    src/render/gl/GLSprite.cpp
+    src/render/gl/GLRenderer.cpp
     src/render/StateBuffer.cpp
     src/render/RenderState.cpp
     src/render/RenderManager.cpp
@@ -40,10 +47,16 @@ set(SRC_FILES
     src/asset/MediaManager.cpp
     src/asset/MountManager.cpp
     src/asset/MountArchive.cpp
+    src/asset/MountDirectory.cpp
     src/asset/ImageAsset.cpp
+    src/asset/stb_image_impl.cpp
     src/net/WebSocket.cpp
     src/net/NetworkThread.cpp
-    src/ui/UIManager.cpp)
+    src/ui/UIManager.cpp
+    src/ui/ChatWidget.cpp
+    src/ui/screens/ServerListScreen.cpp
+    src/ui/screens/CharSelectScreen.cpp
+    src/ui/screens/CourtroomScreen.cpp)
 
 # Include directories
 set(INCLUDE_DIRS

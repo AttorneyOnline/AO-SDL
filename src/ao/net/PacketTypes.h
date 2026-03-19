@@ -171,6 +171,48 @@ class AOPacketDONE : public AOPacket {
     static constexpr int MIN_FIELDS = 0;
 };
 
+class AOPacketCharsCheck : public AOPacket {
+  public:
+    AOPacketCharsCheck(const std::vector<std::string>& fields);
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    std::vector<bool> taken;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 1;
+};
+
+class AOPacketPW : public AOPacket {
+  public:
+    AOPacketPW(const std::string& password);
+
+  private:
+    static constexpr int MIN_FIELDS = 1;
+};
+
+class AOPacketCC : public AOPacket {
+  public:
+    AOPacketCC(int player_num, int char_id, const std::string& hdid);
+
+  private:
+    static constexpr int MIN_FIELDS = 3;
+};
+
+class AOPacketPV : public AOPacket {
+  public:
+    AOPacketPV(const std::vector<std::string>& fields);
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    int char_id = -1;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 3;
+};
+
 class AOPacketCT : public AOPacket {
   public:
     AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message);

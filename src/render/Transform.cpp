@@ -27,11 +27,7 @@ void Transform::translate(glm::vec2 offset) {
 }
 
 void Transform::zindex(uint16_t index) {
-    // Nudge one bump forward so that idx 0 meets the clipping plane.
-    // This means index=UINT16_MAX gets clipped, but that is okay
-
     translation.z = (((float)index / UINT16_MAX) * -2.0f) + (1.0f - (1.0f / UINT16_MAX));
-    // Log::log_print(LogLevel::DEBUG, "Set z-index to %d (%f in NDC)", index, translation.z);
     recalculate();
 }
 
@@ -46,15 +42,12 @@ void Transform::set_aspect_ratio(float aspect) {
 void Transform::recalculate() {
     glm::mat4 basis(1.0f);
 
-    // Translate
     basis = glm::translate(basis, translation);
 
-    // Rotate with aspect ratio correction
     basis = glm::scale(basis, {1.0f / aspect_ratio, 1.0f, 1.0f});
     basis = glm::rotate(basis, glm::radians(rotation), glm::vec3(0, 0, 1));
     basis = glm::scale(basis, {aspect_ratio, 1.0f, 1.0f});
 
-    // Scale
     basis = glm::scale(basis, scaling);
 
     transform = basis;

@@ -1,19 +1,24 @@
 #pragma once
 
 #include "AOPacket.h"
+#include "net/ProtocolHandler.h"
 
 #include <string>
 #include <vector>
 
 enum AOConnectionState { NOT_CONNECTED, CONNECTED, JOINED };
 
-class AOClient {
+class AOClient : public ProtocolHandler {
   public:
     AOClient();
 
-    std::vector<std::string> get_messages();
-    void handle_message(const std::string& message);
-    void handle_events();
+    // ProtocolHandler interface
+    void on_connect() override;
+    void on_message(const std::string& msg) override;
+    void on_disconnect() override;
+    std::vector<std::string> flush_outgoing() override;
+
+    // Used by packet handlers in PacketBehavior.cpp to queue outgoing packets.
     void add_message(const AOPacket& packet);
 
     AOConnectionState conn_state;
@@ -23,12 +28,7 @@ class AOClient {
     std::string server_software;
     std::string server_version;
 
-    // todo:
-    // a lot of this should probably not live here
-    // the correct solution is probably to generate events which contain this info.
-    // this will rely on finishing the event handling framework (currently in progress)
-    // regardless, just storing this state for now to validate that everything is loading correctly is still useful so
-    // we can look at it in a debugger.
+    // todo: most of this state should move to events once the event system is more complete.
     int current_players;
     int max_players;
     std::string server_description;
@@ -40,7 +40,6 @@ class AOClient {
     int music_count;
 
     std::vector<std::string> character_list;
-
     std::vector<std::string> music_list;
 
   private:

@@ -1,5 +1,4 @@
-#ifndef RENDER_TRANSFORM_H
-#define RENDER_TRANSFORM_H
+#pragma once
 
 #include <glm/glm.hpp>
 
@@ -29,5 +28,3 @@ class Transform {
   private:
     void recalculate();
 };
-
-#endif

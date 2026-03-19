@@ -1,6 +1,7 @@
 #include "MountManager.h"
 
 #include "MountArchive.h"
+#include "MountDirectory.h"
 #include "utils/Log.h"
 
 #include <format>
@@ -12,39 +13,42 @@ MountManager::MountManager() {
 void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_mount_path) {
     std::unique_lock<std::shared_mutex> locker(lock);
 
-    if (!loaded_mounts.empty()) {
-        loaded_mounts.clear();
-    }
+    loaded_mounts.clear();
 
     for (const std::filesystem::path& mount_path : target_mount_path) {
-
         try {
-            std::unique_ptr<MountArchive> archive = std::make_unique<MountArchive>(mount_path);
-            archive->load();
-            loaded_mounts.push_back(std::move(archive));
+            std::unique_ptr<Mount> mount;
+
+            if (std::filesystem::is_directory(mount_path)) {
+                mount = std::make_unique<MountDirectory>(mount_path);
+            }
+            else {
+                mount = std::make_unique<MountArchive>(mount_path);
+            }
+
+            mount->load();
+            loaded_mounts.push_back(std::move(mount));
         }
-        catch (std::exception exception) {
-            Log::log_print(
-                WARNING,
-                std::format("Failed to create mount at {}: {}", mount_path.string(), exception.what()).c_str());
-            continue;
+        catch (const std::exception& e) {
+            Log::log_print(WARNING,
+                           std::format("Failed to create mount at {}: {}", mount_path.string(), e.what()).c_str());
         }
     }
 }
 
 std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& relative_path) {
     std::shared_lock<std::shared_mutex> locker(lock);
-    Log::log_print(INFO, std::format("Loading file at {}", relative_path).c_str());
+
     for (auto& mount : loaded_mounts) {
         if (mount->seek_file(relative_path)) {
             try {
-                return std::make_optional<std::vector<uint8_t>>(mount->fetch_data(relative_path));
+                return mount->fetch_data(relative_path);
             }
-            catch (std::exception exception) {
-                Log::log_print(
-                    ERR, std::format("Failed to load data due to the following errror {}", exception.what()).c_str());
+            catch (const std::exception& e) {
+                Log::log_print(ERR, std::format("Failed to fetch {}: {}", relative_path, e.what()).c_str());
             }
         }
     }
+
     return std::nullopt;
 }

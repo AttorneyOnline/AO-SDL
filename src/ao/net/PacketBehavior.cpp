@@ -4,6 +4,8 @@
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
 #include "event/ChatEvent.h"
+#include "event/CharacterListEvent.h"
+#include "event/CharsCheckEvent.h"
 
 // Keeping the actual handler functions in a separate file here just for clarity
 
@@ -72,6 +74,16 @@ void AOPacketSC::handle(AOClient& cli) {
 
     cli.character_list = character_list;
 
+    // Each field is "folder_name&display_name" — extract just the folder name.
+    std::vector<std::string> folder_names;
+    folder_names.reserve(character_list.size());
+    for (const auto& entry : character_list) {
+        folder_names.push_back(entry.substr(0, entry.find('&')));
+    }
+
+    EventManager::instance().get_channel<CharacterListEvent>().publish(
+        CharacterListEvent(std::move(folder_names)));
+
     AOPacketRM ask_for_music;
     cli.add_message(ask_for_music);
 }
@@ -94,10 +106,18 @@ void AOPacketDONE::handle(AOClient& cli) {
 
     cli.conn_state = JOINED;
 
-    EventManager::instance().get_channel<UIEvent>().publish(UIEvent(UIEventType::CHAR_LOADING_DONE, EventTarget::UI));
+    EventManager::instance().get_channel<UIEvent>().publish(UIEvent(UIEventType::CHAR_LOADING_DONE));
     // do nothing else for now
 }
 
+void AOPacketCharsCheck::handle(AOClient& cli) {
+    EventManager::instance().get_channel<CharsCheckEvent>().publish(CharsCheckEvent(taken));
+}
+
+void AOPacketPV::handle(AOClient& cli) {
+    EventManager::instance().get_channel<UIEvent>().publish(UIEvent(UIEventType::ENTERED_COURTROOM));
+}
+
 void AOPacketCT::handle(AOClient& cli) {
-    EventManager::instance().get_channel<ChatEvent>().publish(ChatEvent(sender_name, message, system_message, EventTarget::CHAT));
+    EventManager::instance().get_channel<ChatEvent>().publish(ChatEvent(sender_name, message, system_message));
 }
