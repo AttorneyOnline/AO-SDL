@@ -1,14 +1,15 @@
 // Engine
+#include "asset/AssetLibrary.h"
 #include "asset/MediaManager.h"
 #include "event/EventManager.h"
 #include "event/ServerListEvent.h"
-#include "game/CourtroomPresenter.h"
 #include "game/GameThread.h"
 #include "game/ServerList.h"
 #include "net/NetworkThread.h"
 #include "render/RenderManager.h"
 #include "render/StateBuffer.h"
 #include "ui/UIManager.h"
+#include "utils/Log.h"
 
 // Plugins
 #include "ao/ao_plugin.h"
@@ -44,12 +45,23 @@ int main(int argc, char* argv[]) {
     auto protocol = ao::create_protocol();
     NetworkThread net_thread(*protocol);
 
-    // Render backend — swap this to change renderers
-    RenderManager renderer(buffer, create_gl_renderer());
+    // Load shaders from the asset system
+    auto& assets = MediaManager::instance().assets();
+    auto vert_data = assets.raw("shaders/vertex.glsl");
+    auto frag_data = assets.raw("shaders/fragment.glsl");
+    if (!vert_data || !frag_data) {
+        Log::log_print(FATAL, "Failed to load shaders from asset system");
+        return 1;
+    }
+    std::string vert_source(vert_data->begin(), vert_data->end());
+    std::string frag_source(frag_data->begin(), frag_data->end());
 
-    // Start game logic thread
-    CourtroomPresenter presenter;
-    GameThread game_logic(buffer, presenter);
+    // Render backend — swap this to change renderers
+    RenderManager renderer(buffer, create_gl_renderer(vert_source, frag_source));
+
+    // Scene presenter — swap this to change game logic
+    auto presenter = ao::create_presenter();
+    GameThread game_logic(buffer, *presenter);
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;

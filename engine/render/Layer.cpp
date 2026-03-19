@@ -1,27 +1,10 @@
 #include "render/Layer.h"
 
-Layer::Layer(Image image, uint16_t z_index) : image(image), z_index(z_index) {
-}
+Layer::Layer(std::shared_ptr<ImageAsset> asset, int frame_index, uint16_t z_index)
+    : asset(std::move(asset)), frame_index(frame_index), z_index(z_index) {}
 
-Image Layer::get_image() {
-    return image;
-}
+LayerGroup::LayerGroup() {}
 
-uint16_t Layer::get_z_index() {
-    return z_index;
-}
-
-LayerGroup::LayerGroup() {
-}
-
-void LayerGroup::add_layer(const int id, Layer layer) {
-    layers.emplace(id, layer);
-}
-
-const Layer LayerGroup::get_layer(const int id) {
-    return layers.at(id);
-}
-
-const std::map<const int, Layer> LayerGroup::get_layers() const {
-    return layers;
+void LayerGroup::add_layer(int id, Layer layer) {
+    layers.insert_or_assign(id, std::move(layer));
 }

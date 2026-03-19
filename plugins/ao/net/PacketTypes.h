@@ -213,6 +213,40 @@ class AOPacketPV : public AOPacket {
     static constexpr int MIN_FIELDS = 3;
 };
 
+class AOPacketMS : public AOPacket {
+  public:
+    AOPacketMS(const std::vector<std::string>& fields);
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    int desk_mod;
+    std::string pre_emote;
+    std::string character;
+    std::string emote;
+    std::string side;
+    int emote_mod;
+    int char_id;
+    bool flip;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 15;
+};
+
+class AOPacketBN : public AOPacket {
+  public:
+    AOPacketBN(const std::vector<std::string>& fields);
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    std::string background;
+    std::string position;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 1;
+};
+
 class AOPacketCT : public AOPacket {
   public:
     AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message);

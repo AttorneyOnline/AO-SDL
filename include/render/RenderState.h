@@ -38,7 +38,7 @@ class RenderState {
      * @brief Get all layer groups.
      * @return A const copy of the internal map of LayerGroups keyed by id.
      */
-    const std::map<int, LayerGroup> get_layer_groups() const;
+    const std::map<int, LayerGroup>& get_layer_groups() const;
 
   private:
     std::map<int, LayerGroup> layer_groups; ///< All layer groups in this state.

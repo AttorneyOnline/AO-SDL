@@ -56,16 +56,17 @@ add_library(aoengine STATIC
     engine/event/CharsCheckEvent.cpp
     engine/event/CharSelectRequestEvent.cpp
     engine/event/ServerConnectEvent.cpp
+    engine/event/BackgroundEvent.cpp
 
     engine/utils/Log.cpp
     engine/utils/Base64.cpp
     engine/utils/JsonValidation.cpp
 
     engine/game/GameThread.cpp
-    engine/game/CourtroomPresenter.cpp
     engine/game/ServerList.cpp
 
     engine/asset/AssetLibrary.cpp
+    engine/asset/ApngDecoder.cpp
     engine/asset/Asset.cpp
     engine/asset/AssetCache.cpp
     engine/asset/MediaManager.cpp
@@ -91,6 +92,7 @@ add_library(aoengine STATIC
     engine/render/RenderManager.cpp
     engine/render/Image.cpp
     engine/render/Layer.cpp
+    engine/render/AnimationPlayer.cpp
 )
 set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
@@ -142,6 +144,10 @@ endif()
 
 add_library(ao_protocol STATIC
     plugins/ao/ao_plugin.cpp
+    plugins/ao/event/ICMessageEvent.cpp
+    plugins/ao/game/AOCourtroomPresenter.cpp
+    plugins/ao/game/AOBackground.cpp
+    plugins/ao/game/AOEmotePlayer.cpp
     plugins/ao/net/AOClient.cpp
     plugins/ao/net/AOPacket.cpp
     plugins/ao/net/PacketTypes.cpp

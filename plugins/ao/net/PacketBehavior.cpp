@@ -2,6 +2,8 @@
 
 #include "AOClient.h"
 #include "event/EventManager.h"
+#include "event/BackgroundEvent.h"
+#include "ao/event/ICMessageEvent.h"
 #include "event/UIEvent.h"
 #include "event/ChatEvent.h"
 #include "event/CharacterListEvent.h"
@@ -112,6 +114,19 @@ void AOPacketDONE::handle(AOClient& cli) {
 
 void AOPacketCharsCheck::handle(AOClient& cli) {
     EventManager::instance().get_channel<CharsCheckEvent>().publish(CharsCheckEvent(taken));
+}
+
+void AOPacketMS::handle(AOClient& cli) {
+    EventManager::instance().get_channel<ICMessageEvent>().publish(
+        ICMessageEvent(character, emote, pre_emote, side,
+                       static_cast<EmoteMod>(emote_mod),
+                       static_cast<DeskMod>(desk_mod),
+                       flip, char_id));
+}
+
+void AOPacketBN::handle(AOClient& cli) {
+    EventManager::instance().get_channel<BackgroundEvent>().publish(
+        BackgroundEvent(background, position));
 }
 
 void AOPacketPV::handle(AOClient& cli) {

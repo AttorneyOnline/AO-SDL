@@ -10,15 +10,18 @@ enum ShaderType { Vertex = GL_VERTEX_SHADER, Fragment = GL_FRAGMENT_SHADER, Comp
 
 class GLShader {
   public:
+    /// Load shader source from a file path.
     GLShader(ShaderType type, const std::string& path);
+
+    /// Compile shader from source code directly.
+    GLShader(ShaderType type, const std::string& source, bool from_source);
+
     ~GLShader();
 
     GLuint get_id();
     ShaderType get_shader_type();
 
   private:
-    void print_log(GLuint shader);
-
     GLuint id;
     ShaderType shader_type;
 };

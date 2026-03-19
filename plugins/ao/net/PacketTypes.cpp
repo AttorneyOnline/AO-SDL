@@ -212,6 +212,58 @@ AOPacketCC::AOPacketCC(int player_num, int char_id, const std::string& hdid)
 }
 
 // ---------------------------------------------------------------------------
+// AOPacketMS
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketMS::registrar("MS", [](const auto& f) {
+    return std::make_unique<AOPacketMS>(f);
+});
+
+AOPacketMS::AOPacketMS(const std::vector<std::string>& fields)
+    : AOPacket("MS", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        desk_mod   = std::stoi(fields[0]);
+        pre_emote  = fields[1];
+        character  = fields[2];
+        emote      = fields[3];
+        // fields[4] = message (skipped for now)
+        side       = fields[5];
+        // fields[6] = sfx_name (skipped for now)
+        emote_mod  = std::stoi(fields[7]);
+        char_id    = std::stoi(fields[8]);
+        // fields[9] = sfx_delay (skipped)
+        // fields[10] = objection_mod (skipped)
+        // fields[11] = evidence_id (skipped)
+        flip       = fields[12] == "1";
+        // fields[13] = realization (skipped)
+        // fields[14] = text_color (skipped)
+
+        // Legacy emote_mod remapping
+        if (emote_mod == 4) emote_mod = 6; // legacy → PREANIM_ZOOM
+        if (emote_mod == 2) emote_mod = 1; // deprecated → PREANIM
+        if (emote_mod != 0 && emote_mod != 1 && emote_mod != 5 && emote_mod != 6) {
+            emote_mod = 0; // invalid → IDLE
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketBN
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketBN::registrar("BN", [](const auto& f) {
+    return std::make_unique<AOPacketBN>(f);
+});
+
+AOPacketBN::AOPacketBN(const std::vector<std::string>& fields)
+    : AOPacket("BN", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        background = fields[0];
+        position = fields.size() >= 2 ? fields[1] : "";
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AOPacketPV
 // ---------------------------------------------------------------------------
 

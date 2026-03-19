@@ -11,9 +11,17 @@ set(TEST_SOURCES
     net/test_WebSocket.cpp
     ao/net/test_AOPacket.cpp
     ao/net/test_PacketTypes.cpp
+    ao/net/test_NewPackets.cpp
+    ao/event/test_ICMessageEvent.cpp
+    ao/game/test_AOEmotePlayer.cpp
+    ao/game/test_AOBackground.cpp
     asset/test_AssetCache.cpp
+    asset/test_ApngDecoder.cpp
     event/test_EventChannel.cpp
+    event/test_BackgroundEvent.cpp
     game/test_ServerList.cpp
+    render/test_AnimationPlayer.cpp
+    render/test_Layer.cpp
     utils/test_Base64.cpp
     utils/test_JsonValidation.cpp
 )

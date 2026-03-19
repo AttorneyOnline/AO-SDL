@@ -1,41 +1,40 @@
 /**
  * @file Layer.h
- * @brief Layer (Image + z-index) and LayerGroup (ordered collection of Layers).
+ * @brief Layer (asset reference + frame index + z-index) and LayerGroup.
  */
 #pragma once
 
-#include "Image.h"
+#include "asset/ImageAsset.h"
 
 #include <cstdint>
 #include <map>
+#include <memory>
 
 /**
- * @brief A renderable layer consisting of an Image and a z-index for draw ordering.
+ * @brief A renderable layer referencing an ImageAsset and a specific frame.
+ *
+ * The layer does not hold raw pixel data. It holds a shared_ptr to the
+ * decoded asset (keeping it alive) and a frame index. The renderer uploads
+ * all frames to the GPU once as a texture array, then selects the frame
+ * via shader uniform each draw call.
  */
 class Layer {
   public:
     /**
-     * @brief Construct a Layer.
-     * @param image   The image data for this layer.
-     * @param z_index Draw order index; lower values are drawn first (behind higher values).
+     * @param asset       The image asset (may be single-frame or animated).
+     * @param frame_index Which frame of the asset to display.
+     * @param z_index     Draw order; lower values drawn first (behind higher).
      */
-    Layer(Image image, uint16_t z_index);
+    Layer(std::shared_ptr<ImageAsset> asset, int frame_index, uint16_t z_index);
 
-    /**
-     * @brief Get the image associated with this layer.
-     * @return A copy of the layer's Image.
-     */
-    Image get_image();
-
-    /**
-     * @brief Get the z-index of this layer.
-     * @return The draw order index.
-     */
-    uint16_t get_z_index();
+    const std::shared_ptr<ImageAsset>& get_asset() const { return asset; }
+    int get_frame_index() const { return frame_index; }
+    uint16_t get_z_index() const { return z_index; }
 
   private:
-    Image image;       ///< The image data for this layer.
-    uint32_t z_index;  ///< Draw order index.
+    std::shared_ptr<ImageAsset> asset;
+    int frame_index;
+    uint16_t z_index;
 };
 
 /**
@@ -43,29 +42,11 @@ class Layer {
  */
 class LayerGroup {
   public:
-    /** @brief Default-construct an empty LayerGroup. */
     LayerGroup();
 
-    /**
-     * @brief Add or replace a layer in this group.
-     * @param id    Unique identifier for the layer within this group.
-     * @param layer The Layer to insert.
-     */
-    void add_layer(const int id, Layer layer);
-
-    /**
-     * @brief Retrieve a layer by its identifier.
-     * @param id Identifier of the requested layer.
-     * @return A copy of the Layer associated with @p id.
-     */
-    const Layer get_layer(const int id);
-
-    /**
-     * @brief Get all layers in this group.
-     * @return A const copy of the internal map of Layers keyed by id.
-     */
-    const std::map<const int, Layer> get_layers() const;
+    void add_layer(int id, Layer layer);
+    const std::map<int, Layer>& get_layers() const { return layers; }
 
   private:
-    std::map<const int, Layer> layers; ///< All layers in this group.
+    std::map<int, Layer> layers;
 };

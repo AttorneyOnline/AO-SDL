@@ -7,45 +7,42 @@
 #include <iostream>
 #include <sstream>
 
+static GLuint compile_shader(GLenum type, const std::string& source) {
+    const char* source_cstr = source.c_str();
+    GLuint shader = glCreateShader(type);
+
+    glShaderSource(shader, 1, &source_cstr, NULL);
+    glCompileShader(shader);
+
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        // Print log and return 0
+        if (glIsShader(shader)) {
+            int max_len;
+            glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_len);
+            std::string log(max_len, '\0');
+            glGetShaderInfoLog(shader, max_len, nullptr, log.data());
+            std::cerr << "Shader compile error: " << log << std::endl;
+        }
+        return 0;
+    }
+    return shader;
+}
+
 GLShader::GLShader(ShaderType type, const std::string& path) : shader_type(type) {
     std::ifstream file(path);
     std::stringstream buf;
     buf << file.rdbuf();
+    id = compile_shader(shader_type, buf.str());
+}
 
-    std::string source_string = buf.str();
-    const char* source_cstr = source_string.c_str();
-
-    GLuint shader = glCreateShader(shader_type);
-    GLint shader_compiled = GL_FALSE;
-
-    glShaderSource(shader, 1, &source_cstr, NULL);
-
-    glCompileShader(shader);
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &shader_compiled);
-    if (shader_compiled != GL_TRUE) {
-        print_log(shader);
-        id = 0;
-    }
-    else {
-        id = shader;
-    }
+GLShader::GLShader(ShaderType type, const std::string& source, bool /*from_source*/) : shader_type(type) {
+    id = compile_shader(shader_type, source);
 }
 
 GLShader::~GLShader() {
     glDeleteShader(id);
-}
-
-void GLShader::print_log(GLuint shader) {
-    if (glIsShader(shader)) {
-        int info_log_len, max_len;
-
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_len);
-        char* info_log = (char*)malloc(max_len);
-
-        glGetShaderInfoLog(shader, max_len, &info_log_len, info_log);
-
-        free(info_log);
-    }
 }
 
 GLuint GLShader::get_id() {
