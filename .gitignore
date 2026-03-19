@@ -401,3 +401,9 @@ FodyWeavers.xsd
 out/
 assets/
 CMakeFiles/
+
+# Generated documentation
+docs/
+
+# Claude Code context
+CLAUDE.md

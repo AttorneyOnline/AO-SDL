@@ -1,0 +1,66 @@
+#include "AOClient.h"
+
+#include "ao/net/PacketTypes.h"
+#include "event/EventManager.h"
+#include "event/CharSelectRequestEvent.h"
+#include "event/OutgoingChatEvent.h"
+#include "utils/Log.h"
+
+AOClient::AOClient() : conn_state(NOT_CONNECTED), incomplete_buf("") {
+}
+
+void AOClient::on_connect() {
+    conn_state = CONNECTED;
+}
+
+void AOClient::on_message(const std::string& message) {
+    incomplete_buf.insert(incomplete_buf.end(), message.begin(), message.end());
+
+    size_t delimiter_pos;
+    while ((delimiter_pos = incomplete_buf.find(AOPacket::DELIMITER)) != std::string::npos) {
+        std::string complete_msg = incomplete_buf.substr(0, delimiter_pos + std::strlen(AOPacket::DELIMITER));
+        incomplete_buf.erase(0, delimiter_pos + std::strlen(AOPacket::DELIMITER));
+
+        try {
+            std::unique_ptr<AOPacket> packet = AOPacket::deserialize(complete_msg);
+            if (packet->is_valid()) {
+                packet->handle(*this);
+            }
+            else {
+                Log::log_print(ERR, "Failed to parse AOPacket from message: %s", complete_msg.c_str());
+            }
+        }
+        catch (const std::exception& e) {
+            Log::log_print(ERR, "Exception while handling message: %s, Error: %s", complete_msg.c_str(), e.what());
+        }
+    }
+}
+
+void AOClient::on_disconnect() {
+    conn_state = NOT_CONNECTED;
+}
+
+std::vector<std::string> AOClient::flush_outgoing() {
+    // Drain any outgoing events before returning buffered protocol messages.
+    auto& chat_ev_channel = EventManager::instance().get_channel<OutgoingChatEvent>();
+    while (auto optev = chat_ev_channel.get_event()) {
+        AOPacketCT chat_packet(optev->get_sender_name(), optev->get_message(), false);
+        add_message(chat_packet);
+    }
+
+    auto& char_select_channel = EventManager::instance().get_channel<CharSelectRequestEvent>();
+    while (auto optev = char_select_channel.get_event()) {
+        AOPacketPW pw("");
+        add_message(pw);
+        AOPacketCC cc(player_number, optev->get_char_id(), "bullshit hdid changeme");
+        add_message(cc);
+    }
+
+    std::vector<std::string> out = std::move(buffered_messages);
+    buffered_messages.clear();
+    return out;
+}
+
+void AOClient::add_message(const AOPacket& packet) {
+    buffered_messages.push_back(packet.serialize());
+}

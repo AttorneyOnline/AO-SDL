@@ -1,0 +1,39 @@
+#include "ui/screens/ServerListScreen.h"
+
+#include "ui/screens/CharSelectScreen.h"
+#include "event/EventManager.h"
+#include "event/ServerConnectEvent.h"
+#include "event/ServerListEvent.h"
+
+void ServerListScreen::enter(ScreenController& ctrl) {
+    controller = &ctrl;
+}
+
+void ServerListScreen::exit() {
+    controller = nullptr;
+}
+
+void ServerListScreen::handle_events() {
+    auto& list_channel = EventManager::instance().get_channel<ServerListEvent>();
+    while (auto optev = list_channel.get_event()) {
+        servers = optev->get_server_list().get_servers();
+    }
+
+    if (pending_connect) {
+        pending_connect = false;
+        controller->push_screen(std::make_unique<CharSelectScreen>());
+    }
+}
+
+void ServerListScreen::select_server(int index) {
+    if (index < 0 || index >= (int)servers.size()) return;
+
+    const auto& s = servers[index];
+    std::optional<uint16_t> port = s.ws_port.has_value() ? s.ws_port : s.wss_port;
+    if (!port.has_value()) return;
+
+    selected = index;
+    pending_connect = true;
+    EventManager::instance().get_channel<ServerConnectEvent>().publish(
+        ServerConnectEvent(s.hostname, *port));
+}

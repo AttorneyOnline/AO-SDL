@@ -1,0 +1,71 @@
+# Doxyfile for AO-SDL Engine API Documentation
+
+PROJECT_NAME           = "AO-SDL Engine"
+PROJECT_BRIEF          = "Attorney Online 2 client engine — public API reference"
+PROJECT_NUMBER         =
+
+OUTPUT_DIRECTORY       = docs
+
+# Only document the public API headers
+INPUT                  = include
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h
+
+# Use include/ as the strip prefix so paths look clean in the docs
+STRIP_FROM_PATH        = include
+STRIP_FROM_INC_PATH    = include
+
+# Extraction settings
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+
+# Don't document implementation details
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+HIDE_IN_BODY_DOCS      = YES
+
+# Source browsing — show annotated source
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# HTML output
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_COLORSTYLE        = LIGHT
+HTML_DYNAMIC_SECTIONS  = YES
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+
+# Disable LaTeX/RTF/XML/man
+GENERATE_LATEX         = NO
+GENERATE_RTF           = NO
+GENERATE_XML           = NO
+GENERATE_MAN           = NO
+
+# Diagrams
+HAVE_DOT               = NO
+CLASS_DIAGRAMS         = YES
+
+# Preprocessor — let Doxygen resolve includes
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+SEARCH_INCLUDES        = YES
+INCLUDE_PATH           = include
+
+# Warnings
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+
+# Sorting
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = YES
+SORT_GROUP_NAMES       = YES
+
+# Quiet build
+QUIET                  = YES
+WARNINGS               = YES

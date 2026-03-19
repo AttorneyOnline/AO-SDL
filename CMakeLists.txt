@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.14)
 project(aosdl LANGUAGES CXX C)
 
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
@@ -6,119 +6,20 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Source files
-set(SRC_FILES
-    src/main.cpp
-    src/ao/net/AOClient.cpp
-    src/ao/net/AOPacket.cpp
-    src/ao/net/PacketTypes.cpp
-    src/ao/net/PacketBehavior.cpp
-    src/event/Event.cpp
-    src/event/ChatEvent.cpp
-    src/event/OutgoingChatEvent.cpp
-    src/event/UIEvent.cpp
-    src/event/ServerListEvent.cpp
-    src/event/CharacterListEvent.cpp
-    src/event/CharsCheckEvent.cpp
-    src/event/CharSelectRequestEvent.cpp
-    src/event/ServerConnectEvent.cpp
-    src/utils/Log.cpp
-    src/utils/Base64.cpp
-    src/utils/JsonValidation.cpp
-    src/video/sdl/SDLGameWindow.cpp
-    src/game/GameThread.cpp
-    src/game/CourtroomPresenter.cpp
-    src/game/ServerList.cpp
-    src/render/Transform.cpp
-    src/render/Texture.cpp
-    src/render/gl/Shader.cpp
-    src/render/gl/GLTexture.cpp
-    src/render/gl/GLMesh.cpp
-    src/render/gl/GLSprite.cpp
-    src/render/gl/GLRenderer.cpp
-    src/render/StateBuffer.cpp
-    src/render/RenderState.cpp
-    src/render/RenderManager.cpp
-    src/render/Image.cpp
-    src/render/Layer.cpp
-    src/asset/AssetLibrary.cpp
-    src/asset/Asset.cpp
-    src/asset/AssetCache.cpp
-    src/asset/MediaManager.cpp
-    src/asset/MountManager.cpp
-    src/asset/MountArchive.cpp
-    src/asset/MountDirectory.cpp
-    src/asset/ImageAsset.cpp
-    src/asset/stb_image_impl.cpp
-    src/net/WebSocket.cpp
-    src/net/KissnetTcpSocket.cpp
-    src/net/NetworkThread.cpp
-    src/ui/UIManager.cpp
-    src/ui/ChatWidget.cpp
-    src/ui/screens/ServerListScreen.cpp
-    src/ui/screens/CharSelectScreen.cpp
-    src/ui/screens/CourtroomScreen.cpp)
+# =============================================================================
+# Third-party dependencies
+# =============================================================================
 
-# Include directories
-set(INCLUDE_DIRS
-    src
-    third-party/header-libs
-    third-party/stb
-    third-party/glm
-    third-party/SDL/include
-    third-party/bit7z
-)
-
-# Add executable
-add_executable(${CMAKE_PROJECT_NAME} ${SRC_FILES})
-
-# Specify C++ standard
-set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CXX_STANDARD 20)
-
-# Include directories for the project
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${INCLUDE_DIRS})
-
-# SDL2
 add_subdirectory(third-party/SDL)
-if(TARGET SDL2::SDL2main)
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE SDL2::SDL2main)
-endif()
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE SDL2::SDL2)
 
-# OpenGL
+set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
+add_subdirectory(third-party/bit7z)
+
 find_package(OpenGL REQUIRED)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
 
-# GLEW (Windows-specific setup)
-if(WIN32)
-    # GLEW settings
-    target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE third-party/glew/include)
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/glew/lib/Release/x64/glew32.lib)
-
-    # Copy DLLs to binary directory
-    add_custom_command(
-        TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/third-party/glew/bin/Release/x64/glew32.dll
-            "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>"
-        VERBATIM
-    )
-    add_custom_command(
-        TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "$<TARGET_FILE:SDL2::SDL2>"
-            "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>"
-        VERBATIM
-    )
-else()
-    find_package(GLEW REQUIRED)
-    include_directories(${GLEW_INCLUDE_DIRS})
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${GLEW_LIBRARIES})
-endif()
-
-# ImGui setup
+# ImGui (static lib — SDL + GL specific)
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
-set(IMGUI_FILES
+add_library(imgui STATIC
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
@@ -126,38 +27,176 @@ set(IMGUI_FILES
     ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
-
-add_library(imgui STATIC ${IMGUI_FILES})
 target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
-    ${INCLUDE_DIRS}
 )
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui)
+target_link_libraries(imgui PRIVATE SDL2::SDL2 ${OPENGL_LIBRARIES})
+if(WIN32)
+    target_include_directories(imgui PRIVATE third-party/glew/include)
+endif()
 
-# Kissnet
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/kissnet)
+# =============================================================================
+# aoengine — core engine library (no GL, no SDL)
+#
+# Public include root: engine/
+#   #include "aoengine.h"          — umbrella header
+#   #include "net/ProtocolHandler.h" — protocol plugin interface
+#   #include "render/IRenderer.h"    — render backend interface
+#   #include "ui/IUIRenderer.h"      — UI backend interface
+# =============================================================================
 
-#bit7z
-set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
-add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/bit7z)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE bit7z)
+add_library(aoengine STATIC
+    engine/event/Event.cpp
+    engine/event/ChatEvent.cpp
+    engine/event/OutgoingChatEvent.cpp
+    engine/event/UIEvent.cpp
+    engine/event/ServerListEvent.cpp
+    engine/event/CharacterListEvent.cpp
+    engine/event/CharsCheckEvent.cpp
+    engine/event/CharSelectRequestEvent.cpp
+    engine/event/ServerConnectEvent.cpp
 
+    engine/utils/Log.cpp
+    engine/utils/Base64.cpp
+    engine/utils/JsonValidation.cpp
+
+    engine/game/GameThread.cpp
+    engine/game/CourtroomPresenter.cpp
+    engine/game/ServerList.cpp
+
+    engine/asset/AssetLibrary.cpp
+    engine/asset/Asset.cpp
+    engine/asset/AssetCache.cpp
+    engine/asset/MediaManager.cpp
+    engine/asset/MountManager.cpp
+    engine/asset/MountArchive.cpp
+    engine/asset/MountDirectory.cpp
+    engine/asset/ImageAsset.cpp
+    engine/asset/stb_image_impl.cpp
+
+    engine/net/WebSocket.cpp
+    engine/net/KissnetTcpSocket.cpp
+    engine/net/NetworkThread.cpp
+
+    engine/ui/UIManager.cpp
+    engine/ui/ChatWidget.cpp
+    engine/ui/screens/ServerListScreen.cpp
+    engine/ui/screens/CharSelectScreen.cpp
+    engine/ui/screens/CourtroomScreen.cpp
+
+    engine/render/Transform.cpp
+    engine/render/StateBuffer.cpp
+    engine/render/RenderState.cpp
+    engine/render/RenderManager.cpp
+    engine/render/Image.cpp
+    engine/render/Layer.cpp
+)
+set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
+
+target_include_directories(aoengine
+    PUBLIC  include
+            third-party/header-libs
+            third-party/glm
+    PRIVATE engine
+            third-party/stb
+            third-party/kissnet
+            third-party/bit7z
+)
+
+target_link_libraries(aoengine PUBLIC bit7z)
+
+# =============================================================================
+# Plugins
+# =============================================================================
+
+# --- aorender_gl — OpenGL renderer backend -----------------------------------
+
+add_library(aorender_gl STATIC
+    plugins/render/gl/Texture.cpp
+    plugins/render/gl/Shader.cpp
+    plugins/render/gl/GLTexture.cpp
+    plugins/render/gl/GLMesh.cpp
+    plugins/render/gl/GLSprite.cpp
+    plugins/render/gl/GLRenderer.cpp
+)
+set_property(TARGET aorender_gl PROPERTY CXX_STANDARD 20)
+
+target_include_directories(aorender_gl
+    PUBLIC  plugins
+    PRIVATE plugins/render/gl
+)
+target_link_libraries(aorender_gl PUBLIC aoengine ${OPENGL_LIBRARIES})
+
+if(WIN32)
+    target_include_directories(aorender_gl PUBLIC third-party/glew/include)
+    target_link_libraries(aorender_gl PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/glew/lib/Release/x64/glew32.lib)
+else()
+    find_package(GLEW REQUIRED)
+    target_include_directories(aorender_gl PUBLIC ${GLEW_INCLUDE_DIRS})
+    target_link_libraries(aorender_gl PUBLIC ${GLEW_LIBRARIES})
+endif()
+
+# --- ao_protocol — AO2 protocol plugin ---------------------------------------
+
+add_library(ao_protocol STATIC
+    plugins/ao/ao_plugin.cpp
+    plugins/ao/net/AOClient.cpp
+    plugins/ao/net/AOPacket.cpp
+    plugins/ao/net/PacketTypes.cpp
+    plugins/ao/net/PacketBehavior.cpp
+)
+set_property(TARGET ao_protocol PROPERTY CXX_STANDARD 20)
+
+target_include_directories(ao_protocol PUBLIC plugins)
+target_link_libraries(ao_protocol PUBLIC aoengine)
+
+# =============================================================================
+# Applications — one per backend
+# =============================================================================
+
+add_subdirectory(apps/sdl)
+# add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+
+# =============================================================================
+# Tests
+# =============================================================================
 
 enable_testing()
 add_subdirectory(tests)
 
-find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+# =============================================================================
+# API Documentation (Doxygen)
+# =============================================================================
 
-# todo: make this work on windows
+find_package(Doxygen QUIET)
+
+if(DOXYGEN_FOUND)
+    message(STATUS "Found Doxygen: ${DOXYGEN_EXECUTABLE}")
+
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_SOURCE_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating API documentation with Doxygen → docs/html/index.html"
+        VERBATIM
+    )
+else()
+    message(STATUS "Doxygen not found — the 'docs' target will not be available.")
+endif()
+
+# =============================================================================
+# clang-tidy
+# =============================================================================
+
+find_program(CLANG_TIDY_EXE NAMES clang-tidy)
 
 if(CLANG_TIDY_EXE)
     message(STATUS "Found clang-tidy: ${CLANG_TIDY_EXE}")
 
     add_custom_target(run-clang-tidy
         COMMAND ${CMAKE_COMMAND} -E echo "Running clang-tidy..."
-        # The easiest way is to run a shell command that pipes find -> xargs
-       COMMAND /bin/sh -c "find ${CMAKE_SOURCE_DIR} -path '${CMAKE_SOURCE_DIR}/third-party' -prune -o -name '*.cpp' -print0 | xargs -0 ${CLANG_TIDY_EXE} -header-filter='.*[/\\]src[/\\].*' -p ${CMAKE_BINARY_DIR}"
+        COMMAND /bin/sh -c "find ${CMAKE_SOURCE_DIR} -path '${CMAKE_SOURCE_DIR}/third-party' -prune -o -name '*.cpp' -print0 | xargs -0 ${CLANG_TIDY_EXE} -header-filter='.*[/\\](engine|plugins|apps)[/\\].*' -p ${CMAKE_BINARY_DIR}"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Running clang-tidy on the project sources using compile_commands.json"
         VERBATIM
