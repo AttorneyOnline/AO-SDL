@@ -12,6 +12,15 @@
 #include <format>
 #include <functional>
 
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <winsock2.h>
+#else
+#  include <arpa/inet.h>
+#endif
+
 // todo: support closing, ping to server, and continuation frames
 
 HTTPResponse::HTTPResponse(StatusLine status_line, HTTPHeaders headers) : status_line(status_line), headers(headers) {
