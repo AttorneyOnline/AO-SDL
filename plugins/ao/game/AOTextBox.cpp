@@ -143,7 +143,8 @@ void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
         TextColor color = {colors[current_color_idx].r, colors[current_color_idx].g, colors[current_color_idx].b};
 
         if (!current_showname.empty()) {
-            text_renderer.render(current_showname, (int)current_showname.size(), color,
+            TextColor showname_color = {255, 255, 255};
+            text_renderer.render(current_showname, (int)current_showname.size(), showname_color,
                                  chatbox_rect.x + showname_rect.x, chatbox_rect.y + showname_rect.y, viewport_w,
                                  viewport_h, showname_rect.w, 0, pixels);
         }

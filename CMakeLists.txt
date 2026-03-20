@@ -104,6 +104,7 @@ add_library(aoengine STATIC
     engine/net/KissnetTcpSocket.cpp
     engine/net/NetworkThread.cpp
 
+    engine/event/DisconnectEvent.cpp
     engine/ui/UIManager.cpp
 
     engine/render/Transform.cpp

@@ -50,9 +50,10 @@ TEST_F(AOEmotePlayerTest, InitialAssetIsNull) {
 // start() with EmoteMod::IDLE — goes directly to IDLE
 // ---------------------------------------------------------------------------
 
-TEST_F(AOEmotePlayerTest, StartIdleSetsStateToIdle) {
+TEST_F(AOEmotePlayerTest, StartIdleModSetsStateToTalking) {
+    // EmoteMod::IDLE (0) means "skip preanim" — starts in TALKING, not IDLE
     player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
-    EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
+    EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 TEST_F(AOEmotePlayerTest, StartIdleWithNoAssetsHasNoFrame) {
@@ -114,10 +115,10 @@ TEST_F(AOEmotePlayerTest, TickInNoneStateDoesNotCrash) {
     EXPECT_EQ(player.state(), AOEmotePlayer::State::NONE);
 }
 
-TEST_F(AOEmotePlayerTest, TickInIdleStateDoesNotCrash) {
+TEST_F(AOEmotePlayerTest, TickInTalkingFromIdleModDoesNotCrash) {
     player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     player.tick(16);
-    EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
+    EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 TEST_F(AOEmotePlayerTest, TickInTalkingStateDoesNotCrash) {
@@ -126,12 +127,12 @@ TEST_F(AOEmotePlayerTest, TickInTalkingStateDoesNotCrash) {
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
-TEST_F(AOEmotePlayerTest, MultipleTicksInIdleDoNotCrash) {
+TEST_F(AOEmotePlayerTest, MultipleTicksInTalkingFromIdleModDoNotCrash) {
     player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
     for (int i = 0; i < 100; ++i) {
         player.tick(16);
     }
-    EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
+    EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,18 +163,16 @@ TEST_F(AOEmotePlayerTest, CurrentFrameIndexZeroInIdle) {
 // Restarting: start() can be called multiple times
 // ---------------------------------------------------------------------------
 
-TEST_F(AOEmotePlayerTest, RestartFromIdleToTalking) {
+TEST_F(AOEmotePlayerTest, IdleModStartsTalking) {
+    // EmoteMod::IDLE means "skip preanim, go to talking" — not idle animation
     player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::IDLE);
-    EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
-
-    player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }
 
-TEST_F(AOEmotePlayerTest, RestartFromTalkingToIdle) {
+TEST_F(AOEmotePlayerTest, RestartBetweenCharacters) {
     player.start(ao_assets, "Phoenix", "normal", "-", EmoteMod::ZOOM);
     EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 
     player.start(ao_assets, "Edgeworth", "normal", "-", EmoteMod::IDLE);
-    EXPECT_EQ(player.state(), AOEmotePlayer::State::IDLE);
+    EXPECT_EQ(player.state(), AOEmotePlayer::State::TALKING);
 }

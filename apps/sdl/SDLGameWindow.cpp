@@ -53,6 +53,12 @@ void SDLGameWindow::start_loop(RenderManager& render, IUIRenderer& ui_renderer) 
             ui_renderer.end_frame();
         }
 
+        auto nav = ui_renderer.pending_nav_action();
+        if (nav == IUIRenderer::NavAction::POP_TO_ROOT)
+            ui_manager.pop_to_root();
+        else if (nav == IUIRenderer::NavAction::POP_SCREEN)
+            ui_manager.pop_screen();
+
         gpu->present();
     }
 }

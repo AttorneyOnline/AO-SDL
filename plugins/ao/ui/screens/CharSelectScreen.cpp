@@ -16,7 +16,6 @@ void CharSelectScreen::enter(ScreenController& ctrl) {
 }
 
 void CharSelectScreen::exit() {
-    chars.clear();
     controller = nullptr;
 }
 

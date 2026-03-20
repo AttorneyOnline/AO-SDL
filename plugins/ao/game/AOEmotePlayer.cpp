@@ -34,11 +34,9 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
         }
         break;
     case EmoteMod::ZOOM:
-        current_state = State::TALKING;
-        break;
     case EmoteMod::IDLE:
     default:
-        current_state = State::IDLE;
+        current_state = State::TALKING;
         break;
     }
 

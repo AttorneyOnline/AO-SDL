@@ -11,6 +11,7 @@ set(SDL_APP_SOURCES
     ui/widgets/InterjectionWidget.cpp
     ui/widgets/SideSelectWidget.cpp
     ui/widgets/MessageOptionsWidget.cpp
+    ui/widgets/DisconnectModalWidget.cpp
 )
 
 if(APPLE)

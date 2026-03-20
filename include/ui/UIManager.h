@@ -53,6 +53,9 @@ class UIManager : public ScreenController {
      */
     Screen* active_screen() const;
 
+    /// Pop all screens except the bottom one (the initial screen).
+    void pop_to_root();
+
   private:
     std::vector<std::unique_ptr<Screen>> stack; ///< Screen stack; back() is the active screen.
 };

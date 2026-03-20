@@ -4,6 +4,7 @@
 #include "ui/widgets/CharSelectWidget.h"
 #include "ui/widgets/ChatWidget.h"
 #include "ui/widgets/CourtroomWidget.h"
+#include "ui/widgets/DisconnectModalWidget.h"
 #include "ui/widgets/EmoteSelectorWidget.h"
 #include "ui/widgets/ICChatWidget.h"
 #include "ui/widgets/ICMessageState.h"
@@ -21,11 +22,15 @@ class ImGuiUIRenderer : public IUIRenderer {
     void render_screen(Screen& screen, RenderManager& render) override;
     void end_frame() override;
 
+    NavAction pending_nav_action() override;
+
   private:
     void bind_screen(Screen& screen, RenderManager& render);
 
     ChatWidget chat_;
     ICMessageState ic_state_;
+    DisconnectModalWidget disconnect_modal_;
+    NavAction nav_action_ = NavAction::NONE;
 
     std::string active_screen_id_;
     std::unique_ptr<ServerListWidget> server_list_;

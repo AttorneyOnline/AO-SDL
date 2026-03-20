@@ -43,4 +43,10 @@ class IUIRenderer {
      * Called once at the end of each frame after render_screen().
      */
     virtual void end_frame() = 0;
+
+    enum class NavAction { NONE, POP_SCREEN, POP_TO_ROOT };
+
+    virtual NavAction pending_nav_action() {
+        return NavAction::NONE;
+    }
 };

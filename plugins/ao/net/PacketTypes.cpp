@@ -1,5 +1,48 @@
 #include "PacketTypes.h"
 
+#include <algorithm>
+
+// AO protocol encoding: special characters must be escaped in field values.
+static std::string ao_encode(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        switch (c) {
+        case '#':
+            out += "<pound>";
+            break;
+        case '%':
+            out += "<percent>";
+            break;
+        case '&':
+            out += "<and>";
+            break;
+        case '$':
+            out += "<dollar>";
+            break;
+        default:
+            out += c;
+        }
+    }
+    return out;
+}
+
+static std::string ao_decode(const std::string& s) {
+    std::string out = s;
+    auto replace_all = [&](const std::string& from, const std::string& to) {
+        size_t pos = 0;
+        while ((pos = out.find(from, pos)) != std::string::npos) {
+            out.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+    };
+    replace_all("<pound>", "#");
+    replace_all("<percent>", "%");
+    replace_all("<and>", "&");
+    replace_all("<dollar>", "$");
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // AOPacketDecryptor
 // ---------------------------------------------------------------------------
@@ -192,24 +235,26 @@ PacketRegistrar AOPacketMS::registrar("MS", [](const auto& f) { return std::make
 
 AOPacketMS::AOPacketMS(const ICMessageData& d)
     : AOPacket("MS",
-               {std::to_string(d.desk_mod), d.pre_emote, d.character, d.emote, d.message, d.side, d.sfx_name,
-                std::to_string(d.emote_mod), std::to_string(d.char_id), std::to_string(d.sfx_delay),
-                std::to_string(d.objection_mod), std::to_string(d.evidence_id), std::to_string(d.flip),
-                std::to_string(d.realization), std::to_string(d.text_color), d.showname,
-                std::to_string(d.other_charid), d.other_name, d.other_emote, d.self_offset, d.other_offset,
-                std::to_string(d.other_flip), std::to_string(d.immediate), std::to_string(d.looping_sfx),
-                std::to_string(d.screenshake), d.frame_screenshake, d.frame_realization, d.frame_sfx,
-                std::to_string(d.additive), d.effects, d.blipname, d.slide}) {
+               {std::to_string(d.desk_mod), ao_encode(d.pre_emote), ao_encode(d.character), ao_encode(d.emote),
+                ao_encode(d.message), ao_encode(d.side), ao_encode(d.sfx_name), std::to_string(d.emote_mod),
+                std::to_string(d.char_id), std::to_string(d.sfx_delay), std::to_string(d.objection_mod),
+                std::to_string(d.evidence_id), std::to_string(d.flip), std::to_string(d.realization),
+                std::to_string(d.text_color), ao_encode(d.showname), std::to_string(d.other_charid),
+                ao_encode(d.other_name), ao_encode(d.other_emote), ao_encode(d.self_offset),
+                ao_encode(d.other_offset), std::to_string(d.other_flip), std::to_string(d.immediate),
+                std::to_string(d.looping_sfx), std::to_string(d.screenshake), ao_encode(d.frame_screenshake),
+                ao_encode(d.frame_realization), ao_encode(d.frame_sfx), std::to_string(d.additive),
+                ao_encode(d.effects), ao_encode(d.blipname), std::to_string(d.slide.empty() ? 0 : std::stoi(d.slide))}) {
 }
 
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {
     if (fields.size() >= MIN_FIELDS) {
         desk_mod = std::stoi(fields[0]);
-        pre_emote = fields[1];
-        character = fields[2];
-        emote = fields[3];
-        message = fields[4];
-        side = fields[5];
+        pre_emote = ao_decode(fields[1]);
+        character = ao_decode(fields[2]);
+        emote = ao_decode(fields[3]);
+        message = ao_decode(fields[4]);
+        side = ao_decode(fields[5]);
         // fields[6] = sfx_name (skipped for now)
         emote_mod = std::stoi(fields[7]);
         char_id = std::stoi(fields[8]);
@@ -221,7 +266,7 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         text_color = std::stoi(fields[14]);
 
         // Showname (optional field 15)
-        showname = fields.size() > 15 ? fields[15] : character;
+        showname = fields.size() > 15 ? ao_decode(fields[15]) : character;
 
         // Legacy emote_mod remapping
         if (emote_mod == 4)
@@ -266,14 +311,14 @@ AOPacketPV::AOPacketPV(const std::vector<std::string>& fields) : AOPacket("PV", 
 PacketRegistrar AOPacketCT::registrar("CT", [](const auto& f) { return std::make_unique<AOPacketCT>(f); });
 
 AOPacketCT::AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message)
-    : AOPacket("CT", {sender_name, message, system_message ? "1" : "0"}), sender_name(sender_name), message(message),
-      system_message(system_message) {
+    : AOPacket("CT", {ao_encode(sender_name), ao_encode(message), system_message ? "1" : "0"}),
+      sender_name(sender_name), message(message), system_message(system_message) {
 }
 
 AOPacketCT::AOPacketCT(const std::vector<std::string>& fields) : AOPacket("CT", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        sender_name = fields[0];
-        message = fields[1];
+        sender_name = ao_decode(fields[0]);
+        message = ao_decode(fields[1]);
         system_message = fields.size() > 2 && fields[2] == "1";
     }
 }

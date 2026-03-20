@@ -13,8 +13,24 @@ void ImGuiUIRenderer::begin_frame() {
     ImGui::NewFrame();
 }
 
+IUIRenderer::NavAction ImGuiUIRenderer::pending_nav_action() {
+    if (disconnect_modal_.should_return_to_server_list()) {
+        disconnect_modal_.clear_flag();
+        active_screen_id_.clear();
+        return NavAction::POP_TO_ROOT;
+    }
+    NavAction action = nav_action_;
+    nav_action_ = NavAction::NONE;
+    if (action != NavAction::NONE)
+        active_screen_id_.clear();
+    return action;
+}
+
 void ImGuiUIRenderer::render_screen(Screen& screen, RenderManager& render) {
     bind_screen(screen, render);
+
+    disconnect_modal_.handle_events();
+    disconnect_modal_.render();
 
     const auto& id = screen.screen_id();
 
@@ -25,6 +41,11 @@ void ImGuiUIRenderer::render_screen(Screen& screen, RenderManager& render) {
         char_select_->render();
         chat_.handle_events();
         chat_.render();
+
+        ImGui::Begin("Connection");
+        if (ImGui::Button("Disconnect"))
+            nav_action_ = NavAction::POP_TO_ROOT;
+        ImGui::End();
     }
     else if (id == CourtroomScreen::ID) {
         courtroom_->render();
@@ -35,6 +56,14 @@ void ImGuiUIRenderer::render_screen(Screen& screen, RenderManager& render) {
         side_select_->render();
         message_options_->render();
         ic_chat_->render();
+
+        ImGui::Begin("Connection");
+        if (ImGui::Button("Change Character"))
+            nav_action_ = NavAction::POP_SCREEN;
+        ImGui::SameLine();
+        if (ImGui::Button("Disconnect"))
+            nav_action_ = NavAction::POP_TO_ROOT;
+        ImGui::End();
     }
 }
 
