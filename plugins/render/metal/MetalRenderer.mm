@@ -66,6 +66,7 @@ struct MetalRendererImpl {
     struct TextureCacheEntry {
         std::weak_ptr<ImageAsset> asset;
         id<MTLTexture> texture;
+        uint64_t generation = 0;
     };
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
 
@@ -287,9 +288,35 @@ struct MetalRendererImpl {
 
     // --- texture cache -------------------------------------------------------
 
+    void upload_texture_data(id<MTLTexture> tex, const std::shared_ptr<ImageAsset>& asset) {
+        int w = asset->width();
+        int h = asset->height();
+        int count = asset->frame_count();
+        for (int i = 0; i < count; i++) {
+            const auto& frame = asset->frame(i);
+            int fw = std::min(frame.width, w);
+            int fh = std::min(frame.height, h);
+            MTLRegion region = MTLRegionMake2D(0, 0, fw, fh);
+            [tex replaceRegion:region
+                   mipmapLevel:0
+                         slice:i
+                     withBytes:frame.pixels.data()
+                   bytesPerRow:fw * 4
+                 bytesPerImage:fw * fh * 4];
+        }
+    }
+
     id<MTLTexture> get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
         auto it = texture_cache.find(asset.get());
-        if (it != texture_cache.end()) return it->second.texture;
+        if (it != texture_cache.end()) {
+            if (it->second.generation == asset->generation())
+                return it->second.texture;
+
+            // Same texture, new pixel data — update in place
+            upload_texture_data(it->second.texture, asset);
+            it->second.generation = asset->generation();
+            return it->second.texture;
+        }
 
         int w     = asset->width();
         int h     = asset->height();
@@ -306,24 +333,12 @@ struct MetalRendererImpl {
         td.storageMode = MTLStorageModeShared;
 
         id<MTLTexture> tex = [device newTextureWithDescriptor:td];
-
-        for (int i = 0; i < count; i++) {
-            const auto& frame = asset->frame(i);
-            int fw = std::min(frame.width, w);
-            int fh = std::min(frame.height, h);
-            MTLRegion region = MTLRegionMake2D(0, 0, fw, fh);
-            [tex replaceRegion:region
-                   mipmapLevel:0
-                         slice:i
-                     withBytes:frame.pixels.data()
-                   bytesPerRow:fw * 4
-                 bytesPerImage:fw * fh * 4];
-        }
+        upload_texture_data(tex, asset);
 
         Log::log_print(DEBUG, "MetalRenderer: uploaded %dx%d x %d frames for %s",
                        w, h, count, asset->path().c_str());
 
-        texture_cache[asset.get()] = {asset, tex};
+        texture_cache[asset.get()] = {asset, tex, asset->generation()};
         return tex;
     }
 

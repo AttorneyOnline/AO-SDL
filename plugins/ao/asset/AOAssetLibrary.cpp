@@ -103,6 +103,15 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::character_icon(const std::string& ch
     return assets.image("characters/" + character + "/char_icon");
 }
 
+std::shared_ptr<ImageAsset> AOAssetLibrary::emote_icon(const std::string& character, int emote_index) {
+    std::string path = "characters/" + character + "/emotions/button" + std::to_string(emote_index + 1) + "_off";
+    return assets.image(path);
+}
+
+std::optional<AOCharacterSheet> AOAssetLibrary::character_sheet(const std::string& character) {
+    return AOCharacterSheet::load(assets, character);
+}
+
 // ---- Background ------------------------------------------------------------
 
 std::shared_ptr<ImageAsset> AOAssetLibrary::background(const std::string& name, const std::string& position) {

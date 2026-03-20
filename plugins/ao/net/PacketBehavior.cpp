@@ -126,7 +126,11 @@ void AOPacketBN::handle(AOClient& cli) {
 }
 
 void AOPacketPV::handle(AOClient& cli) {
-    EventManager::instance().get_channel<UIEvent>().publish(UIEvent(UIEventType::ENTERED_COURTROOM));
+    std::string character_name;
+    if (char_id >= 0 && char_id < (int)cli.character_list.size())
+        character_name = cli.character_list[char_id];
+    EventManager::instance().get_channel<UIEvent>().publish(
+        UIEvent(UIEventType::ENTERED_COURTROOM, character_name, char_id));
 }
 
 void AOPacketCT::handle(AOClient& cli) {

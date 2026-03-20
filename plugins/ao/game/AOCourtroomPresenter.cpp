@@ -76,14 +76,18 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         std::vector<uint8_t> pixels(VIEWPORT_W * VIEWPORT_H * 4, 0);
         textbox.render(VIEWPORT_W, VIEWPORT_H, pixels.data());
 
-        ImageFrame frame;
-        frame.width = VIEWPORT_W;
-        frame.height = VIEWPORT_H;
-        frame.duration_ms = 0;
-        frame.pixels = std::move(pixels);
-
-        textbox_overlay =
-            std::make_shared<ImageAsset>("_textbox_overlay", "raw", std::vector<ImageFrame>{std::move(frame)});
+        if (!textbox_overlay) {
+            ImageFrame frame;
+            frame.width = VIEWPORT_W;
+            frame.height = VIEWPORT_H;
+            frame.duration_ms = 0;
+            frame.pixels = std::move(pixels);
+            textbox_overlay =
+                std::make_shared<ImageAsset>("_textbox_overlay", "raw", std::vector<ImageFrame>{std::move(frame)});
+        }
+        else {
+            textbox_overlay->update_frame(0, std::move(pixels));
+        }
         textbox_dirty = false;
     }
 

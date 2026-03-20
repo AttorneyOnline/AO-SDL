@@ -186,7 +186,21 @@ AOPacketCC::AOPacketCC(int player_num, int char_id, const std::string& hdid)
 // AOPacketMS
 // ---------------------------------------------------------------------------
 
+#include "ao/event/OutgoingICMessageEvent.h"
+
 PacketRegistrar AOPacketMS::registrar("MS", [](const auto& f) { return std::make_unique<AOPacketMS>(f); });
+
+AOPacketMS::AOPacketMS(const ICMessageData& d)
+    : AOPacket("MS",
+               {std::to_string(d.desk_mod), d.pre_emote, d.character, d.emote, d.message, d.side, d.sfx_name,
+                std::to_string(d.emote_mod), std::to_string(d.char_id), std::to_string(d.sfx_delay),
+                std::to_string(d.objection_mod), std::to_string(d.evidence_id), std::to_string(d.flip),
+                std::to_string(d.realization), std::to_string(d.text_color), d.showname,
+                std::to_string(d.other_charid), d.other_name, d.other_emote, d.self_offset, d.other_offset,
+                std::to_string(d.other_flip), std::to_string(d.immediate), std::to_string(d.looping_sfx),
+                std::to_string(d.screenshake), d.frame_screenshake, d.frame_realization, d.frame_sfx,
+                std::to_string(d.additive), d.effects, d.blipname, d.slide}) {
+}
 
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {
     if (fields.size() >= MIN_FIELDS) {

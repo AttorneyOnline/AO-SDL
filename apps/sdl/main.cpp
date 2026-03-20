@@ -67,5 +67,7 @@ int main(int argc, char* argv[]) {
     net_thread.stop();
     game_logic.stop();
 
+    MediaManager::instance().shutdown();
+
     return 0;
 }

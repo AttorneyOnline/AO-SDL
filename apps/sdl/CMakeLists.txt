@@ -6,6 +6,11 @@ set(SDL_APP_SOURCES
     ui/widgets/ServerListWidget.cpp
     ui/widgets/CharSelectWidget.cpp
     ui/widgets/CourtroomWidget.cpp
+    ui/widgets/ICChatWidget.cpp
+    ui/widgets/EmoteSelectorWidget.cpp
+    ui/widgets/InterjectionWidget.cpp
+    ui/widgets/SideSelectWidget.cpp
+    ui/widgets/MessageOptionsWidget.cpp
 )
 
 if(APPLE)

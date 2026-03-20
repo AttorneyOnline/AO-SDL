@@ -1,5 +1,6 @@
 #include "AOClient.h"
 
+#include "ao/event/OutgoingICMessageEvent.h"
 #include "ao/net/PacketTypes.h"
 #include "event/CharSelectRequestEvent.h"
 #include "event/EventManager.h"
@@ -46,6 +47,12 @@ std::vector<std::string> AOClient::flush_outgoing() {
     while (auto optev = chat_ev_channel.get_event()) {
         AOPacketCT chat_packet(optev->get_sender_name(), optev->get_message(), false);
         add_message(chat_packet);
+    }
+
+    auto& ic_channel = EventManager::instance().get_channel<OutgoingICMessageEvent>();
+    while (auto optev = ic_channel.get_event()) {
+        AOPacketMS ms_packet(optev->data());
+        add_message(ms_packet);
     }
 
     auto& char_select_channel = EventManager::instance().get_channel<CharSelectRequestEvent>();

@@ -20,3 +20,8 @@ void MediaManager::init(const std::filesystem::path& base_path) {
 AssetLibrary& MediaManager::assets() {
     return *library;
 }
+
+void MediaManager::shutdown() {
+    library.reset();
+    mounts.reset();
+}

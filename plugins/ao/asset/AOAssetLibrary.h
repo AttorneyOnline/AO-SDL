@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ao/asset/AOCharacterSheet.h"
 #include "asset/AssetLibrary.h"
 #include "asset/ImageAsset.h"
 
@@ -53,6 +54,12 @@ class AOAssetLibrary {
                                                 const std::string& prefix);
 
     std::shared_ptr<ImageAsset> character_icon(const std::string& character);
+
+    /// Load an emote button icon (emotions/button{N}_off).
+    std::shared_ptr<ImageAsset> emote_icon(const std::string& character, int emote_index);
+
+    /// Parse char.ini and return the character sheet.
+    std::optional<AOCharacterSheet> character_sheet(const std::string& character);
 
     // -------------------------------------------------------------------------
     // Background

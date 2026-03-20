@@ -39,6 +39,20 @@ GLRenderer::~GLRenderer() {
 GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
     auto it = texture_cache.find(asset.get());
     if (it != texture_cache.end()) {
+        if (it->second.generation == asset->generation())
+            return it->second.texture;
+
+        // Same texture, new pixel data — update in place
+        glBindTexture(GL_TEXTURE_2D_ARRAY, it->second.texture);
+        int count = asset->frame_count();
+        for (int i = 0; i < count; i++) {
+            const auto& frame = asset->frame(i);
+            int fw = std::min(frame.width, asset->width());
+            int fh = std::min(frame.height, asset->height());
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                            frame.pixels.data());
+        }
+        it->second.generation = asset->generation();
         return it->second.texture;
     }
 
@@ -68,7 +82,7 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
 
     Log::log_print(DEBUG, "GLRenderer: uploaded %dx%d x %d frames for %s", w, h, count, asset->path().c_str());
 
-    texture_cache[asset.get()] = {asset, tex};
+    texture_cache[asset.get()] = {asset, tex, asset->generation()};
     return tex;
 }
 

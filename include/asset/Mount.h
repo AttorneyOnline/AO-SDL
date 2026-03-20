@@ -24,6 +24,7 @@ class Mount {
      * @param target_path Path to the directory or archive this mount represents.
      */
     Mount(const std::filesystem::path& target_path) : path{target_path} {};
+    virtual ~Mount() = default;
 
     /**
      * @brief Get the filesystem path this mount was constructed with.

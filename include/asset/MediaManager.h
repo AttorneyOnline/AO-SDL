@@ -52,6 +52,14 @@ class MediaManager {
      */
     AssetLibrary& assets();
 
+    /**
+     * @brief Tear down the asset system before static destruction.
+     *
+     * Call this before main() returns to avoid crashes from static
+     * destruction order (e.g. bit7z internals destroyed before MountArchive).
+     */
+    void shutdown();
+
   private:
     /** @brief Private constructor (singleton pattern). */
     MediaManager();

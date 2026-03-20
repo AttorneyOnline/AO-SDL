@@ -189,7 +189,9 @@ endif()
 add_library(ao_protocol STATIC
     plugins/ao/ao_plugin.cpp
     plugins/ao/event/ICMessageEvent.cpp
+    plugins/ao/event/OutgoingICMessageEvent.cpp
     plugins/ao/asset/AOAssetLibrary.cpp
+    plugins/ao/asset/AOCharacterSheet.cpp
     plugins/ao/game/AOCourtroomPresenter.cpp
     plugins/ao/game/AOBackground.cpp
     plugins/ao/game/AOEmotePlayer.cpp

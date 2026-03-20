@@ -45,6 +45,7 @@ class GLRenderer : public IRenderer {
     struct TextureCacheEntry {
         std::weak_ptr<ImageAsset> asset;
         GLuint texture;
+        uint64_t generation = 0;
     };
 
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;

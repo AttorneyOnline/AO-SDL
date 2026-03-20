@@ -44,7 +44,8 @@ void CharSelectScreen::handle_events() {
     auto& ui_channel = EventManager::instance().get_channel<UIEvent>();
     while (auto optev = ui_channel.get_event()) {
         if (optev->get_type() == UIEventType::ENTERED_COURTROOM) {
-            controller->push_screen(std::make_unique<CourtroomScreen>());
+            controller->push_screen(
+                std::make_unique<CourtroomScreen>(optev->get_character_name(), optev->get_char_id()));
         }
     }
 

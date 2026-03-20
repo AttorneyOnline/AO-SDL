@@ -1,48 +1,32 @@
-/**
- * @file UIEvent.h
- * @brief Event signalling a UI screen transition.
- * @ingroup events
- */
 #pragma once
 
 #include "Event.h"
 
-/**
- * @brief Enumeration of UI transition signals.
- * @ingroup events
- */
+#include <string>
+
 enum UIEventType {
-    CHAR_LOADING_DONE, /**< Character loading has finished. */
-    ENTERED_COURTROOM  /**< The player has entered the courtroom screen. */
+    CHAR_LOADING_DONE,
+    ENTERED_COURTROOM
 };
 
-/**
- * @brief Signals a UI screen transition.
- * @ingroup events
- *
- * Published when the application transitions between major screens
- * (e.g., character loading completes or the courtroom is entered).
- */
 class UIEvent : public Event {
   public:
-    /**
-     * @brief Constructs a UIEvent.
-     * @param type The transition type that occurred.
-     */
     UIEvent(UIEventType type);
+    UIEvent(UIEventType type, std::string character_name, int char_id);
 
-    /**
-     * @brief Returns a human-readable representation of the UI event.
-     * @return String describing the transition type.
-     */
     std::string to_string() const override;
 
-    /**
-     * @brief Gets the UI transition type.
-     * @return The UIEventType value.
-     */
     UIEventType get_type();
 
+    const std::string& get_character_name() const {
+        return character_name;
+    }
+    int get_char_id() const {
+        return char_id;
+    }
+
   private:
-    UIEventType type; /**< The transition type. */
+    UIEventType type;
+    std::string character_name;
+    int char_id = -1;
 };

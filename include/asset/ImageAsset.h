@@ -57,6 +57,15 @@ class ImageAsset : public Asset {
         return frames.empty() ? 0 : frames[0].height;
     }
 
+    void update_frame(int index, std::vector<uint8_t> pixels) {
+        frames.at(index).pixels = std::move(pixels);
+        generation_++;
+    }
+
+    uint64_t generation() const {
+        return generation_;
+    }
+
     size_t memory_size() const override {
         size_t total = 0;
         for (const auto& f : frames) {
@@ -67,4 +76,5 @@ class ImageAsset : public Asset {
 
   private:
     std::vector<ImageFrame> frames;
+    uint64_t generation_ = 0;
 };

@@ -213,8 +213,11 @@ class AOPacketPV : public AOPacket {
     static constexpr int MIN_FIELDS = 3;
 };
 
+struct ICMessageData;
+
 class AOPacketMS : public AOPacket {
   public:
+    explicit AOPacketMS(const ICMessageData& data);
     AOPacketMS(const std::vector<std::string>& fields);
 
     virtual void handle(AOClient& cli) override;
