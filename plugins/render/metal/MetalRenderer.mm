@@ -9,9 +9,6 @@
 #include "asset/ImageAsset.h"
 #include "utils/Log.h"
 
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
 #include <algorithm>
 #include <unordered_map>
 
@@ -28,7 +25,7 @@ struct FragmentUniforms {
 
 // ---- helpers ----------------------------------------------------------------
 
-static simd_float4x4 glm_to_simd(const glm::mat4& m) {
+static simd_float4x4 mat4_to_simd(const Mat4& m) {
     simd_float4x4 s;
     for (int c = 0; c < 4; c++)
         for (int r = 0; r < 4; r++)
@@ -395,7 +392,7 @@ struct MetalRendererImpl {
                         t.zindex(layer.get_z_index() + 1);
 
                         VertexUniforms vu;
-                        vu.local  = glm_to_simd(t.get_local_transform());
+                        vu.local  = mat4_to_simd(t.get_local_transform());
                         vu.aspect = Transform::get_aspect_ratio();
 
                         FragmentUniforms fu;

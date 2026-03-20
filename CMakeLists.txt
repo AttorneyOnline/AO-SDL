@@ -121,7 +121,6 @@ set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 target_include_directories(aoengine
     PUBLIC  include
             third-party/header-libs
-            third-party/glm
     PRIVATE engine
             third-party/stb
             third-party/kissnet

@@ -1,13 +1,11 @@
 #include "render/Transform.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-
 float Transform::aspect_ratio = 1.0f;
 
-Transform::Transform() : transform(1.0f), rotation(0.0f), scaling(1.0f), translation(0.0f) {
+Transform::Transform() : transform(Mat4::identity()), rotation(0.0f), scaling(1.0f), translation(0.0f) {
 }
 
-glm::mat4 Transform::get_local_transform() {
+Mat4 Transform::get_local_transform() {
     return transform;
 }
 
@@ -16,13 +14,13 @@ void Transform::rotate(float degrees) {
     recalculate();
 }
 
-void Transform::scale(glm::vec2 scale) {
-    scaling = glm::vec3(scale.x, scale.y, 1.0f);
+void Transform::scale(Vec2 s) {
+    scaling = Vec3(s.x, s.y, 1.0f);
     recalculate();
 }
 
-void Transform::translate(glm::vec2 offset) {
-    translation = glm::vec3(offset.x, offset.y, 0.0f);
+void Transform::translate(Vec2 offset) {
+    translation = Vec3(offset.x, offset.y, 0.0f);
     recalculate();
 }
 
@@ -40,15 +38,15 @@ void Transform::set_aspect_ratio(float aspect) {
 }
 
 void Transform::recalculate() {
-    glm::mat4 basis(1.0f);
+    Mat4 basis = Mat4::identity();
 
-    basis = glm::translate(basis, translation);
+    basis = ::translate(basis, translation);
 
-    basis = glm::scale(basis, {1.0f / aspect_ratio, 1.0f, 1.0f});
-    basis = glm::rotate(basis, glm::radians(rotation), glm::vec3(0, 0, 1));
-    basis = glm::scale(basis, {aspect_ratio, 1.0f, 1.0f});
+    basis = ::scale(basis, Vec3(1.0f / aspect_ratio, 1.0f, 1.0f));
+    basis = ::rotate(basis, radians(rotation), Vec3(0, 0, 1));
+    basis = ::scale(basis, Vec3(aspect_ratio, 1.0f, 1.0f));
 
-    basis = glm::scale(basis, scaling);
+    basis = ::scale(basis, scaling);
 
     transform = basis;
 }

@@ -1,13 +1,14 @@
 #pragma once
 
+#include "render/Math.h"
+
 #include <GL/glew.h>
-#include <glm/glm.hpp>
 
 #include <vector>
 
 struct VertexData {
-    glm::vec2 position;
-    glm::vec2 texcoord;
+    Vec2 position;
+    Vec2 texcoord;
 };
 
 class GLMesh {

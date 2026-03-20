@@ -1,7 +1,8 @@
 #pragma once
 
+#include "render/Math.h"
+
 #include <GL/glew.h>
-#include <glm/glm.hpp>
 
 #include <string>
 #include <vector>
@@ -36,7 +37,7 @@ class GLProgram {
 
     void uniform(const std::string& name, GLint value);
     void uniform(const std::string& name, GLfloat value);
-    void uniform(const std::string& name, glm::mat4 value);
+    void uniform(const std::string& name, Mat4 value);
 
     GLuint get_id();
 
