@@ -18,8 +18,7 @@ jobs:
         clang-format-version: '14'
         check-path: './src/'
         
-  build-linux:
-#    needs: formatting-check
+  test-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,9 +32,13 @@ jobs:
           packages: libsdl2-dev libglew-dev
           version: 1.0
 
-      - name: Build with cmake
+      - name: Build with tests
         run: |
           mkdir build
           cd build
-          cmake ..
+          cmake .. aosdl_tests
           make
+          
+      - name: Run tests
+        working-dir: build/tests
+        run: ./aosdl_tests
