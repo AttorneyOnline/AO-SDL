@@ -13,6 +13,8 @@
 
 #include <filesystem>
 #include <shared_mutex>
+#include <optional>
+#include <mutex>
 #include <vector>
 
 #include "Mount.h"

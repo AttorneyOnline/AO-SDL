@@ -9,6 +9,7 @@
 #pragma once
 
 #include <filesystem>
+#include <vector>
 
 /**
  * @brief Abstract base for virtual filesystem mount backends.

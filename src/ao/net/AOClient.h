@@ -4,6 +4,7 @@
 #include "net/ProtocolHandler.h"
 
 #include <string>
+#include <cstring>
 #include <vector>
 
 enum AOConnectionState { NOT_CONNECTED, CONNECTED, JOINED };
