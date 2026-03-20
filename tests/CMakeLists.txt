@@ -39,7 +39,7 @@ target_include_directories(aosdl_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine      # Access to engine internals (WebSocket.h, etc.)
 )
 
-target_link_libraries(aosdl_tests PRIVATE aoengine ao_protocol GTest::gtest_main)
+target_link_libraries(aosdl_tests PRIVATE ao_protocol GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(aosdl_tests)

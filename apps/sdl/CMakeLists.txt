@@ -12,6 +12,9 @@ set(SDL_APP_SOURCES
     ui/widgets/SideSelectWidget.cpp
     ui/widgets/MessageOptionsWidget.cpp
     ui/widgets/DisconnectModalWidget.cpp
+    ui/controllers/ServerListController.cpp
+    ui/controllers/CharSelectController.cpp
+    ui/controllers/CourtroomController.cpp
 )
 
 if(APPLE)
@@ -25,7 +28,6 @@ set_property(TARGET aosdl PROPERTY CXX_STANDARD 20)
 target_include_directories(aosdl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(aosdl PRIVATE
-    aoengine
     ao_protocol
     imgui
     SDL2::SDL2
