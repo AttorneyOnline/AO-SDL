@@ -62,12 +62,12 @@ class Image {
     virtual void prepare();
 
   protected:
-    int width;                ///< Width in pixels.
-    int height;               ///< Height in pixels.
-    int num_channels;         ///< Number of color channels.
-    const uint8_t* pixels;    ///< Raw pixel data (not owned).
+    int width;             ///< Width in pixels.
+    int height;            ///< Height in pixels.
+    int num_channels;      ///< Number of color channels.
+    const uint8_t* pixels; ///< Raw pixel data (not owned).
 
-    uint64_t id;              ///< Unique image identifier.
+    uint64_t id; ///< Unique image identifier.
 };
 
 /**

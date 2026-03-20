@@ -2,8 +2,8 @@
 
 GLMesh* GLSprite::quad_mesh = nullptr;
 
-GLSprite::GLSprite(GLuint texture_array, int frame_index)
-    : texture_array(texture_array), frame_index(frame_index) {}
+GLSprite::GLSprite(GLuint texture_array, int frame_index) : texture_array(texture_array), frame_index(frame_index) {
+}
 
 void GLSprite::draw(GLProgram& shader) {
     shader.use();

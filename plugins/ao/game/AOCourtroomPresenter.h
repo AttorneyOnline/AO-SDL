@@ -7,8 +7,8 @@
 #include "AOEmotePlayer.h"
 #include "AOTextBox.h"
 #include "ao/asset/AOAssetLibrary.h"
-#include "game/IScenePresenter.h"
 #include "asset/ImageAsset.h"
+#include "game/IScenePresenter.h"
 
 #include <memory>
 

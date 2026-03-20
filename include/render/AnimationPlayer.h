@@ -40,19 +40,25 @@ class AnimationPlayer {
     void tick(int delta_ms);
 
     /** @brief Whether the animation has finished (one-shot only). Always false for looping. */
-    bool finished() const { return done; }
+    bool finished() const {
+        return done;
+    }
 
     /** @brief Whether the player has a loaded asset with at least one frame. */
     bool has_frame() const;
 
     /** @brief Get the current frame index. */
-    int current_frame_index() const { return frame_index; }
+    int current_frame_index() const {
+        return frame_index;
+    }
 
     /** @brief Get the current frame's pixel data. Null if nothing loaded. */
     const ImageFrame* current_frame() const;
 
     /** @brief Get the underlying asset (for lifetime management and GPU upload). */
-    const std::shared_ptr<ImageAsset>& asset() const { return current_asset; }
+    const std::shared_ptr<ImageAsset>& asset() const {
+        return current_asset;
+    }
 
   private:
     std::shared_ptr<ImageAsset> current_asset;

@@ -19,8 +19,10 @@ struct TextRenderer::Impl {
     int line_h = 0;
 
     ~Impl() {
-        if (face) FT_Done_Face(face);
-        if (library) FT_Done_FreeType(library);
+        if (face)
+            FT_Done_Face(face);
+        if (library)
+            FT_Done_FreeType(library);
     }
 };
 
@@ -34,8 +36,12 @@ TextRenderer::TextRenderer() : impl(std::make_unique<Impl>()) {
 TextRenderer::~TextRenderer() = default;
 
 bool TextRenderer::load_font(const std::string& path, int size_px) {
-    if (!impl->library) return false;
-    if (impl->face) { FT_Done_Face(impl->face); impl->face = nullptr; }
+    if (!impl->library)
+        return false;
+    if (impl->face) {
+        FT_Done_Face(impl->face);
+        impl->face = nullptr;
+    }
 
     if (FT_New_Face(impl->library, path.c_str(), 0, &impl->face)) {
         Log::log_print(ERR, "TextRenderer: failed to load font %s", path.c_str());
@@ -52,8 +58,12 @@ bool TextRenderer::load_font(const std::string& path, int size_px) {
 }
 
 bool TextRenderer::load_font_memory(const uint8_t* data, size_t data_size, int size_px) {
-    if (!impl->library) return false;
-    if (impl->face) { FT_Done_Face(impl->face); impl->face = nullptr; }
+    if (!impl->library)
+        return false;
+    if (impl->face) {
+        FT_Done_Face(impl->face);
+        impl->face = nullptr;
+    }
 
     if (FT_New_Memory_Face(impl->library, data, (FT_Long)data_size, 0, &impl->face)) {
         Log::log_print(ERR, "TextRenderer: failed to load font from memory");
@@ -136,7 +146,8 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
             while (pos < text.size() && text[pos] != ' ' && text[pos] != '\n') {
                 size_t saved = pos;
                 uint32_t cp = UTF8::decode(text, pos);
-                if (cp == 0) break;
+                if (cp == 0)
+                    break;
 
                 if (!FT_Load_Char(face, cp, FT_LOAD_DEFAULT)) {
                     w.pixel_width += face->glyph->advance.x >> 6;
@@ -173,7 +184,8 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
         size_t pos = word.byte_start;
         for (int i = 0; i < word.char_count; i++) {
             uint32_t cp = UTF8::decode(text, pos);
-            if (cp == 0) break;
+            if (cp == 0)
+                break;
 
             if (!FT_Load_Char(face, cp, FT_LOAD_DEFAULT)) {
                 int advance = face->glyph->advance.x >> 6;
@@ -200,12 +212,14 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
 }
 
 int TextRenderer::compute_scroll_offset(const std::vector<GlyphLayout>& layout, int char_count, int max_height) {
-    if (max_height <= 0 || layout.empty()) return 0;
+    if (max_height <= 0 || layout.empty())
+        return 0;
 
     // Find the pen_y of the last glyph within char_count
     int last_line_y = 0;
     for (auto& gl : layout) {
-        if (gl.char_index >= char_count) break;
+        if (gl.char_index >= char_count)
+            break;
         last_line_y = gl.pen_y;
     }
     // The bottom of the last line is at last_line_y + line_height
@@ -216,17 +230,19 @@ int TextRenderer::compute_scroll_offset(const std::vector<GlyphLayout>& layout, 
     return 0;
 }
 
-void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_count, TextColor color,
-                                int x, int y, int scroll_y, int max_height,
-                                int buf_width, int buf_height, uint8_t* pixels) {
+void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_count, TextColor color, int x, int y,
+                               int scroll_y, int max_height, int buf_width, int buf_height, uint8_t* pixels) {
     FT_Face face = impl->face;
     FT_Int32 render_flags = FT_LOAD_RENDER;
-    if (impl->sharp) render_flags |= FT_LOAD_TARGET_MONO;
+    if (impl->sharp)
+        render_flags |= FT_LOAD_TARGET_MONO;
 
     for (auto& gl : layout) {
-        if (gl.char_index >= char_count) break;
+        if (gl.char_index >= char_count)
+            break;
 
-        if (FT_Load_Char(face, gl.codepoint, render_flags)) continue;
+        if (FT_Load_Char(face, gl.codepoint, render_flags))
+            continue;
 
         FT_GlyphSlot g = face->glyph;
         int gx = x + gl.pen_x + g->bitmap_left;
@@ -238,22 +254,26 @@ void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_
 
         for (unsigned int row = 0; row < g->bitmap.rows; row++) {
             int dy = gy + (int)row;
-            if (dy < clip_top || dy >= clip_bottom || dy >= buf_height) continue;
+            if (dy < clip_top || dy >= clip_bottom || dy >= buf_height)
+                continue;
 
             for (unsigned int col = 0; col < g->bitmap.width; col++) {
                 int dx = gx + (int)col;
-                if (dx < 0 || dx >= buf_width) continue;
+                if (dx < 0 || dx >= buf_width)
+                    continue;
 
                 uint8_t alpha;
                 if (g->bitmap.pixel_mode == FT_PIXEL_MODE_MONO) {
                     int byte_idx = col / 8;
                     int bit_idx = 7 - (col % 8);
                     alpha = (g->bitmap.buffer[row * g->bitmap.pitch + byte_idx] >> bit_idx) & 1 ? 255 : 0;
-                } else {
+                }
+                else {
                     alpha = g->bitmap.buffer[row * g->bitmap.pitch + col];
                 }
 
-                if (alpha == 0) continue;
+                if (alpha == 0)
+                    continue;
 
                 size_t idx = ((size_t)dy * buf_width + dx) * 4;
                 BlendOps::blend_color(pixels + idx, color.r, color.g, color.b, alpha);
@@ -262,11 +282,10 @@ void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_
     }
 }
 
-void TextRenderer::render(const std::string& text, int char_count, TextColor color,
-                          int x, int y, int buf_width, int buf_height,
-                          int wrap_width, int max_height,
-                          uint8_t* pixels) {
-    if (!impl->ready || text.empty() || char_count <= 0) return;
+void TextRenderer::render(const std::string& text, int char_count, TextColor color, int x, int y, int buf_width,
+                          int buf_height, int wrap_width, int max_height, uint8_t* pixels) {
+    if (!impl->ready || text.empty() || char_count <= 0)
+        return;
 
     auto layout = compute_layout(text, wrap_width > 0 ? wrap_width : buf_width);
     int scroll_y = compute_scroll_offset(layout, char_count, max_height);

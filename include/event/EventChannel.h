@@ -7,9 +7,9 @@
 
 #include "Event.h"
 
+#include <deque>
 #include <mutex>
 #include <optional>
-#include <deque>
 #include <type_traits>
 #include <utility>
 
@@ -75,7 +75,8 @@ class EventChannel {
      */
     std::optional<T> get_event() {
         const std::lock_guard<std::mutex> lock(event_queue_mutex);
-        if (event_queue.empty()) return std::nullopt;
+        if (event_queue.empty())
+            return std::nullopt;
         T ev = std::move(event_queue.front());
         event_queue.pop_front();
         return ev;

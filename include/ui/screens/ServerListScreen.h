@@ -4,8 +4,8 @@
  */
 #pragma once
 
-#include "ui/Screen.h"
 #include "game/ServerList.h"
+#include "ui/Screen.h"
 
 #include <vector>
 
@@ -45,19 +45,25 @@ class ServerListScreen : public Screen {
      * @brief Get the screen identifier.
      * @return Reference to the static ID string "server_list".
      */
-    const std::string& screen_id() const override { return ID; }
+    const std::string& screen_id() const override {
+        return ID;
+    }
 
     /**
      * @brief Get the list of servers.
      * @return Const reference to the vector of ServerEntry items.
      */
-    const std::vector<ServerEntry>& get_servers() const { return servers; }
+    const std::vector<ServerEntry>& get_servers() const {
+        return servers;
+    }
 
     /**
      * @brief Get the index of the currently selected server.
      * @return Selected server index, or -1 if none is selected.
      */
-    int get_selected() const { return selected; }
+    int get_selected() const {
+        return selected;
+    }
 
     /**
      * @brief Select a server and initiate connection.
@@ -70,8 +76,8 @@ class ServerListScreen : public Screen {
     void select_server(int index);
 
   private:
-    ScreenController* controller = nullptr;    ///< Stored controller for stack navigation.
-    std::vector<ServerEntry> servers;          ///< Cached list of available servers.
-    int selected = -1;                         ///< Currently selected server index (-1 = none).
-    bool pending_connect = false;              ///< True when a connection should be initiated next frame.
+    ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
+    std::vector<ServerEntry> servers;       ///< Cached list of available servers.
+    int selected = -1;                      ///< Currently selected server index (-1 = none).
+    bool pending_connect = false;           ///< True when a connection should be initiated next frame.
 };

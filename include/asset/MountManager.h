@@ -57,6 +57,6 @@ class MountManager {
     std::optional<std::vector<uint8_t>> fetch_data(const std::string& relative_path);
 
   private:
-    std::shared_mutex lock;                        /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */
+    std::shared_mutex lock; /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */
     std::vector<std::unique_ptr<Mount>> loaded_mounts; /**< Ordered list of active mount backends. */
 };

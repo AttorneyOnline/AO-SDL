@@ -1,7 +1,7 @@
 #include "utils/Base64.h"
 
-#include <gtest/gtest.h>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
@@ -47,8 +47,7 @@ TEST(Base64Encode, AllZeroBytes) {
 
 TEST(Base64Encode, LongerString) {
     // "Many hands make light work." → known RFC 4648 value
-    EXPECT_EQ(Base64::encode(as_bytes("Many hands make light work.")),
-              "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu");
+    EXPECT_EQ(Base64::encode(as_bytes("Many hands make light work.")), "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu");
 }
 
 TEST(Base64Encode, OutputLengthIsMultipleOfFour) {
@@ -68,7 +67,7 @@ TEST(Base64Encode, OutputLengthIsMultipleOfFour) {
 // contract for *invalid* input, which throws before any result is returned.
 
 TEST(Base64Decode, ThrowsOnNonMultipleOfFourLength) {
-    std::string bad = "abc";   // length 3, not a multiple of 4
+    std::string bad = "abc"; // length 3, not a multiple of 4
     EXPECT_THROW(Base64::decode(bad), std::invalid_argument);
 }
 

@@ -6,43 +6,62 @@
 #include <cctype>
 #include <cstdio>
 
-AOAssetLibrary::AOAssetLibrary(AssetLibrary& assets, const std::string& theme)
-    : assets(assets), active_theme(theme) {}
+AOAssetLibrary::AOAssetLibrary(AssetLibrary& assets, const std::string& theme) : assets(assets), active_theme(theme) {
+}
 
 // ---- Static helpers --------------------------------------------------------
 
 std::string AOAssetLibrary::bg_filename(const std::string& pos) {
-    if (pos == "def") return "defenseempty";
-    if (pos == "pro") return "prosecutorempty";
-    if (pos == "wit") return "witnessempty";
-    if (pos == "jud") return "judgestand";
-    if (pos == "hld") return "helperstand";
-    if (pos == "hlp") return "prohelperstand";
-    if (pos == "jur") return "jurystand";
-    if (pos == "sea") return "seancestand";
+    if (pos == "def")
+        return "defenseempty";
+    if (pos == "pro")
+        return "prosecutorempty";
+    if (pos == "wit")
+        return "witnessempty";
+    if (pos == "jud")
+        return "judgestand";
+    if (pos == "hld")
+        return "helperstand";
+    if (pos == "hlp")
+        return "prohelperstand";
+    if (pos == "jur")
+        return "jurystand";
+    if (pos == "sea")
+        return "seancestand";
     return pos;
 }
 
 std::string AOAssetLibrary::desk_filename(const std::string& pos) {
-    if (pos == "def") return "defensedesk";
-    if (pos == "pro") return "prosecutiondesk";
-    if (pos == "wit") return "stand";
-    if (pos == "jud") return "judgedesk";
-    if (pos == "hld") return "helperdesk";
-    if (pos == "hlp") return "prohelperdesk";
-    if (pos == "jur") return "jurydesk";
-    if (pos == "sea") return "seancedesk";
+    if (pos == "def")
+        return "defensedesk";
+    if (pos == "pro")
+        return "prosecutiondesk";
+    if (pos == "wit")
+        return "stand";
+    if (pos == "jud")
+        return "judgedesk";
+    if (pos == "hld")
+        return "helperdesk";
+    if (pos == "hlp")
+        return "prohelperdesk";
+    if (pos == "jur")
+        return "jurydesk";
+    if (pos == "sea")
+        return "seancedesk";
     return pos + "_overlay";
 }
 
 std::string AOAssetLibrary::normalize_font_name(const std::string& name) {
     std::string out = name;
     // Trim
-    while (!out.empty() && std::isspace((unsigned char)out.back())) out.pop_back();
-    while (!out.empty() && std::isspace((unsigned char)out.front())) out.erase(out.begin());
+    while (!out.empty() && std::isspace((unsigned char)out.back()))
+        out.pop_back();
+    while (!out.empty() && std::isspace((unsigned char)out.front()))
+        out.erase(out.begin());
     // Lowercase + spaces→hyphens
     for (auto& c : out) {
-        if (c == ' ') c = '-';
+        if (c == ' ')
+            c = '-';
         c = (char)std::tolower((unsigned char)c);
     }
     return out;
@@ -51,23 +70,27 @@ std::string AOAssetLibrary::normalize_font_name(const std::string& name) {
 // ---- Config caching --------------------------------------------------------
 
 void AOAssetLibrary::ensure_configs() {
-    if (configs_loaded) return;
+    if (configs_loaded)
+        return;
     configs_loaded = true;
 
     cached_design = assets.config("themes/" + active_theme + "/courtroom_design.ini");
-    if (!cached_design) cached_design = assets.config("themes/default/courtroom_design.ini");
+    if (!cached_design)
+        cached_design = assets.config("themes/default/courtroom_design.ini");
 
     cached_fonts = assets.config("themes/" + active_theme + "/courtroom_fonts.ini");
-    if (!cached_fonts) cached_fonts = assets.config("themes/default/courtroom_fonts.ini");
+    if (!cached_fonts)
+        cached_fonts = assets.config("themes/default/courtroom_fonts.ini");
 
     cached_chat_config = assets.config("themes/" + active_theme + "/chat_config.ini");
-    if (!cached_chat_config) cached_chat_config = assets.config("themes/default/chat_config.ini");
+    if (!cached_chat_config)
+        cached_chat_config = assets.config("themes/default/chat_config.ini");
 }
 
 // ---- Character sprites -----------------------------------------------------
 
-std::shared_ptr<ImageAsset> AOAssetLibrary::character_emote(
-    const std::string& character, const std::string& emote, const std::string& prefix) {
+std::shared_ptr<ImageAsset> AOAssetLibrary::character_emote(const std::string& character, const std::string& emote,
+                                                            const std::string& prefix) {
     std::string base = "characters/" + character + "/";
     auto result = assets.image(base + prefix + emote);
     if (!result && !prefix.empty()) {
@@ -82,8 +105,7 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::character_icon(const std::string& ch
 
 // ---- Background ------------------------------------------------------------
 
-std::shared_ptr<ImageAsset> AOAssetLibrary::background(
-    const std::string& name, const std::string& position) {
+std::shared_ptr<ImageAsset> AOAssetLibrary::background(const std::string& name, const std::string& position) {
     std::string legacy = bg_filename(position);
     auto result = assets.image("background/" + name + "/" + legacy);
     // Modern naming fallback
@@ -97,8 +119,7 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::background(
     return result;
 }
 
-std::shared_ptr<ImageAsset> AOAssetLibrary::desk_overlay(
-    const std::string& name, const std::string& position) {
+std::shared_ptr<ImageAsset> AOAssetLibrary::desk_overlay(const std::string& name, const std::string& position) {
     std::string filename = desk_filename(position);
     auto result = assets.image("background/" + name + "/" + filename);
     if (!result && name != "default") {
@@ -157,7 +178,8 @@ AOFontSpec AOAssetLibrary::message_font_spec() {
             auto fs = it->second.find("message");
             if (fs != it->second.end()) {
                 spec.size_pt = std::atoi(fs->second.c_str());
-                if (spec.size_pt <= 0) spec.size_pt = 10;
+                if (spec.size_pt <= 0)
+                    spec.size_pt = 10;
             }
             auto sh = it->second.find("message_sharp");
             if (sh != it->second.end()) {
@@ -217,14 +239,19 @@ std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string&
     auto result = assets.raw("themes/" + active_theme + "/" + filename);
     if (!result && active_theme != "default")
         result = assets.raw("themes/default/" + filename);
-    if (!result) result = assets.raw("themes/AceAttorney DS/" + filename);
-    if (!result) result = assets.raw("themes/AceAttorney2x/" + filename);
-    if (!result) result = assets.raw("themes/AceAttorney 2x/" + filename);
-    if (!result) result = assets.raw("fonts/" + filename);
+    if (!result)
+        result = assets.raw("themes/AceAttorney DS/" + filename);
+    if (!result)
+        result = assets.raw("themes/AceAttorney2x/" + filename);
+    if (!result)
+        result = assets.raw("themes/AceAttorney 2x/" + filename);
+    if (!result)
+        result = assets.raw("fonts/" + filename);
 
     if (result) {
         Log::log_print(DEBUG, "AOAssetLibrary: found font '%s'", filename.c_str());
-    } else {
+    }
+    else {
         Log::log_print(WARNING, "AOAssetLibrary: font '%s' not found", filename.c_str());
     }
 

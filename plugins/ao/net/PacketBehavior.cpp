@@ -1,13 +1,13 @@
 #include "PacketTypes.h"
 
 #include "AOClient.h"
-#include "event/EventManager.h"
-#include "event/BackgroundEvent.h"
 #include "ao/event/ICMessageEvent.h"
-#include "event/UIEvent.h"
-#include "event/ChatEvent.h"
+#include "event/BackgroundEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
+#include "event/ChatEvent.h"
+#include "event/EventManager.h"
+#include "event/UIEvent.h"
 
 // Keeping the actual handler functions in a separate file here just for clarity
 
@@ -83,8 +83,7 @@ void AOPacketSC::handle(AOClient& cli) {
         folder_names.push_back(entry.substr(0, entry.find('&')));
     }
 
-    EventManager::instance().get_channel<CharacterListEvent>().publish(
-        CharacterListEvent(std::move(folder_names)));
+    EventManager::instance().get_channel<CharacterListEvent>().publish(CharacterListEvent(std::move(folder_names)));
 
     AOPacketRM ask_for_music;
     cli.add_message(ask_for_music);
@@ -118,15 +117,12 @@ void AOPacketCharsCheck::handle(AOClient& cli) {
 
 void AOPacketMS::handle(AOClient& cli) {
     EventManager::instance().get_channel<ICMessageEvent>().publish(
-        ICMessageEvent(character, emote, pre_emote, message, showname, side,
-                       static_cast<EmoteMod>(emote_mod),
-                       static_cast<DeskMod>(desk_mod),
-                       flip, char_id, text_color));
+        ICMessageEvent(character, emote, pre_emote, message, showname, side, static_cast<EmoteMod>(emote_mod),
+                       static_cast<DeskMod>(desk_mod), flip, char_id, text_color));
 }
 
 void AOPacketBN::handle(AOClient& cli) {
-    EventManager::instance().get_channel<BackgroundEvent>().publish(
-        BackgroundEvent(background, position));
+    EventManager::instance().get_channel<BackgroundEvent>().publish(BackgroundEvent(background, position));
 }
 
 void AOPacketPV::handle(AOClient& cli) {

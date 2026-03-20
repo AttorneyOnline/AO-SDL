@@ -1,8 +1,7 @@
 #include "game/GameThread.h"
 
 GameThread::GameThread(StateBuffer& render_buffer, IScenePresenter& presenter)
-    : running(true), render_buffer(render_buffer), presenter(presenter),
-      tick_thread(&GameThread::game_loop, this) {
+    : running(true), render_buffer(render_buffer), presenter(presenter), tick_thread(&GameThread::game_loop, this) {
 }
 
 void GameThread::stop() {

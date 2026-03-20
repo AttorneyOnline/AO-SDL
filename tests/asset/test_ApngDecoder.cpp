@@ -1,7 +1,7 @@
 #include "asset/ApngDecoder.h"
 
-#include <gtest/gtest.h>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <vector>
 
 // A minimal valid 1x1 red pixel PNG (non-APNG), hand-constructed.
@@ -14,16 +14,15 @@ static std::vector<uint8_t> make_1x1_png() {
 
     // IHDR: 1x1, 8-bit RGBA (color type 6)
     uint8_t ihdr[] = {
-        0x00, 0x00, 0x00, 0x0D, // length = 13
-        'I', 'H', 'D', 'R',
-        0x00, 0x00, 0x00, 0x01, // width = 1
-        0x00, 0x00, 0x00, 0x01, // height = 1
-        0x08,                   // bit depth = 8
-        0x06,                   // color type = 6 (RGBA)
-        0x00,                   // compression = 0
-        0x00,                   // filter = 0
-        0x00,                   // interlace = 0
-        0x00, 0x00, 0x00, 0x00, // CRC (ignored by stbi)
+        0x00, 0x00, 0x00, 0x0D,                         // length = 13
+        'I',  'H',  'D',  'R',  0x00, 0x00, 0x00, 0x01, // width = 1
+        0x00, 0x00, 0x00, 0x01,                         // height = 1
+        0x08,                                           // bit depth = 8
+        0x06,                                           // color type = 6 (RGBA)
+        0x00,                                           // compression = 0
+        0x00,                                           // filter = 0
+        0x00,                                           // interlace = 0
+        0x00, 0x00, 0x00, 0x00,                         // CRC (ignored by stbi)
     };
     png.insert(png.end(), ihdr, ihdr + sizeof(ihdr));
 
@@ -31,17 +30,17 @@ static std::vector<uint8_t> make_1x1_png() {
     // Raw data: [0x00, 0xFF, 0x00, 0x00, 0xFF] (filter=none, red pixel)
     // zlib: deflate with no compression (stored block)
     uint8_t idat_data[] = {
-        0x78, 0x01, // zlib header (deflate, no dict)
-        0x01,       // BFINAL=1, BTYPE=00 (no compression)
-        0x05, 0x00, // LEN = 5
-        0xFA, 0xFF, // NLEN = ~5
-        0x00,       // filter byte = none
+        0x78, 0x01,             // zlib header (deflate, no dict)
+        0x01,                   // BFINAL=1, BTYPE=00 (no compression)
+        0x05, 0x00,             // LEN = 5
+        0xFA, 0xFF,             // NLEN = ~5
+        0x00,                   // filter byte = none
         0xFF, 0x00, 0x00, 0xFF, // RGBA red pixel
         0x00, 0x86, 0x00, 0xA5, // Adler-32 checksum
     };
     uint8_t idat_header[] = {
         0x00, 0x00, 0x00, (uint8_t)sizeof(idat_data), // length
-        'I', 'D', 'A', 'T',
+        'I',  'D',  'A',  'T',
     };
     png.insert(png.end(), idat_header, idat_header + sizeof(idat_header));
     png.insert(png.end(), idat_data, idat_data + sizeof(idat_data));

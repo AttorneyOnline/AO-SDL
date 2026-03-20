@@ -1,11 +1,11 @@
 #include "ImGuiUIRenderer.h"
 
-#include "ui/Screen.h"
+#include "render/RenderManager.h"
 #include "ui/ChatWidget.h"
-#include "ui/screens/ServerListScreen.h"
+#include "ui/Screen.h"
 #include "ui/screens/CharSelectScreen.h"
 #include "ui/screens/CourtroomScreen.h"
-#include "render/RenderManager.h"
+#include "ui/screens/ServerListScreen.h"
 
 #include <imgui.h>
 
@@ -45,11 +45,11 @@ void ImGuiUIRenderer::render_server_list(ServerListScreen& screen, RenderManager
     }
     else {
         if (ImGui::BeginTable("servers", 3,
-                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp)) {
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupScrollFreeze(0, 1);
-            ImGui::TableSetupColumn("Name",        ImGuiTableColumnFlags_WidthStretch, 2.0f);
-            ImGui::TableSetupColumn("Players",     ImGuiTableColumnFlags_WidthFixed,   60.0f);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+            ImGui::TableSetupColumn("Players", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 3.0f);
             ImGui::TableHeadersRow();
 
@@ -62,8 +62,7 @@ void ImGuiUIRenderer::render_server_list(ServerListScreen& screen, RenderManager
                 ImGui::TableSetColumnIndex(0);
                 bool is_selected = (screen.get_selected() == i);
                 ImGui::PushID(i);
-                if (ImGui::Selectable(s.name.c_str(), is_selected,
-                                      ImGuiSelectableFlags_SpanAllColumns)) {
+                if (ImGui::Selectable(s.name.c_str(), is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
                     if (port.has_value()) {
                         screen.select_server(i);
                     }
@@ -127,8 +126,10 @@ void ImGuiUIRenderer::render_char_select(CharSelectScreen& screen, RenderManager
                 clicked = ImGui::Button(entry.folder.c_str(), ImVec2(icon_size, icon_size));
             }
 
-            if (is_selected)  ImGui::PopStyleColor();
-            if (entry.taken)  ImGui::PopStyleColor();
+            if (is_selected)
+                ImGui::PopStyleColor();
+            if (entry.taken)
+                ImGui::PopStyleColor();
 
             if (clicked) {
                 screen.select_character(i);
@@ -154,12 +155,17 @@ void ImGuiUIRenderer::render_char_select(CharSelectScreen& screen, RenderManager
 // --- Courtroom ---
 
 void ImGuiUIRenderer::render_courtroom(CourtroomScreen& screen, RenderManager& render) {
-    uint32_t render_texture = render.render_frame();
-
+    render.render_frame();
     render.begin_frame();
 
+    IRenderer& renderer = render.get_renderer();
+    ImVec2 uv0 = renderer.uv_flipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+    ImVec2 uv1 = renderer.uv_flipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+
     ImGui::Begin("Courtroom");
-    ImGui::Image(render_texture, ImGui::GetContentRegionAvail(), {0, 1}, {1, 0});
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    ImTextureID tex = (ImTextureID)renderer.get_display_texture_id((int)avail.x, (int)avail.y);
+    ImGui::Image(tex, avail, uv0, uv1);
     ImGui::End();
 
     render_chat(screen.get_chat());

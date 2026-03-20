@@ -4,9 +4,9 @@
  */
 #pragma once
 
-#include "ui/Screen.h"
-#include "ui/ChatWidget.h"
 #include "render/Texture.h"
+#include "ui/ChatWidget.h"
+#include "ui/Screen.h"
 
 #include <optional>
 #include <string>
@@ -32,9 +32,9 @@ class CharSelectScreen : public Screen {
      * @brief A single entry in the character roster.
      */
     struct CharEntry {
-        std::string folder;              ///< Character asset folder name.
-        std::optional<Texture2D> icon;   ///< Character icon texture (absent if not yet loaded).
-        bool taken = false;              ///< True if another player has claimed this character.
+        std::string folder;            ///< Character asset folder name.
+        std::optional<Texture2D> icon; ///< Character icon texture (absent if not yet loaded).
+        bool taken = false;            ///< True if another player has claimed this character.
     };
 
     /**
@@ -61,31 +61,41 @@ class CharSelectScreen : public Screen {
      * @brief Get the screen identifier.
      * @return Reference to the static ID string "char_select".
      */
-    const std::string& screen_id() const override { return ID; }
+    const std::string& screen_id() const override {
+        return ID;
+    }
 
     /**
      * @brief Get the character roster.
      * @return Const reference to the vector of CharEntry items.
      */
-    const std::vector<CharEntry>& get_chars() const { return chars; }
+    const std::vector<CharEntry>& get_chars() const {
+        return chars;
+    }
 
     /**
      * @brief Get the index of the currently selected character.
      * @return Selected character index, or -1 if none is selected.
      */
-    int get_selected() const { return selected; }
+    int get_selected() const {
+        return selected;
+    }
 
     /**
      * @brief Get the embedded chat widget (mutable).
      * @return Mutable reference to the ChatWidget.
      */
-    ChatWidget& get_chat() { return chat; }
+    ChatWidget& get_chat() {
+        return chat;
+    }
 
     /**
      * @brief Get the embedded chat widget (const).
      * @return Const reference to the ChatWidget.
      */
-    const ChatWidget& get_chat() const { return chat; }
+    const ChatWidget& get_chat() const {
+        return chat;
+    }
 
     /**
      * @brief Select a character and request it from the server.
@@ -102,9 +112,9 @@ class CharSelectScreen : public Screen {
      */
     void load_icons();
 
-    ScreenController* controller = nullptr;   ///< Stored controller for stack navigation.
-    std::vector<CharEntry> chars;             ///< Character roster entries.
-    int selected = -1;                        ///< Currently selected character index (-1 = none).
+    ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
+    std::vector<CharEntry> chars;           ///< Character roster entries.
+    int selected = -1;                      ///< Currently selected character index (-1 = none).
 
-    ChatWidget chat;                          ///< Embedded chat widget for lobby chat.
+    ChatWidget chat; ///< Embedded chat widget for lobby chat.
 };

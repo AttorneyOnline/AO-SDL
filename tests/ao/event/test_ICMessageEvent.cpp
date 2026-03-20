@@ -8,8 +8,8 @@
 // ---------------------------------------------------------------------------
 
 TEST(ICMessageEvent, ConstructorStoresAllFields) {
-    ICMessageEvent ev("Phoenix", "normal", "objecting", "Hello!", "Phoenix", "def",
-                      EmoteMod::PREANIM, DeskMod::SHOW, true, 42, 0);
+    ICMessageEvent ev("Phoenix", "normal", "objecting", "Hello!", "Phoenix", "def", EmoteMod::PREANIM, DeskMod::SHOW,
+                      true, 42, 0);
 
     EXPECT_EQ(ev.get_character(), "Phoenix");
     EXPECT_EQ(ev.get_emote(), "normal");
@@ -22,14 +22,12 @@ TEST(ICMessageEvent, ConstructorStoresAllFields) {
 }
 
 TEST(ICMessageEvent, FlipFalse) {
-    ICMessageEvent ev("Edgeworth", "thinking", "", "", "Edgeworth", "pro",
-                      EmoteMod::IDLE, DeskMod::HIDE, false, 7, 0);
+    ICMessageEvent ev("Edgeworth", "thinking", "", "", "Edgeworth", "pro", EmoteMod::IDLE, DeskMod::HIDE, false, 7, 0);
     EXPECT_FALSE(ev.get_flip());
 }
 
 TEST(ICMessageEvent, EmptyStrings) {
-    ICMessageEvent ev("", "", "", "", "", "",
-                      EmoteMod::IDLE, DeskMod::HIDE, false, 0, 0);
+    ICMessageEvent ev("", "", "", "", "", "", EmoteMod::IDLE, DeskMod::HIDE, false, 0, 0);
     EXPECT_EQ(ev.get_character(), "");
     EXPECT_EQ(ev.get_emote(), "");
     EXPECT_EQ(ev.get_pre_emote(), "");
@@ -61,8 +59,8 @@ TEST(DeskMod, ExpectedIntValues) {
 // ---------------------------------------------------------------------------
 
 TEST(ICMessageEvent, ToStringContainsFields) {
-    ICMessageEvent ev("Phoenix", "pointing", "objecting", "Test!", "Phoenix", "def",
-                      EmoteMod::PREANIM, DeskMod::SHOW, false, 1, 0);
+    ICMessageEvent ev("Phoenix", "pointing", "objecting", "Test!", "Phoenix", "def", EmoteMod::PREANIM, DeskMod::SHOW,
+                      false, 1, 0);
     std::string s = ev.to_string();
     EXPECT_NE(s.find("Phoenix"), std::string::npos);
     EXPECT_NE(s.find("pointing"), std::string::npos);

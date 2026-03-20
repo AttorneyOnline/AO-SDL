@@ -4,8 +4,8 @@
  */
 #pragma once
 
-#include "ui/Screen.h"
 #include "ui/ChatWidget.h"
+#include "ui/Screen.h"
 
 /**
  * @brief Courtroom screen where gameplay takes place.
@@ -38,19 +38,25 @@ class CourtroomScreen : public Screen {
      * @brief Get the screen identifier.
      * @return Reference to the static ID string "courtroom".
      */
-    const std::string& screen_id() const override { return ID; }
+    const std::string& screen_id() const override {
+        return ID;
+    }
 
     /**
      * @brief Get the embedded chat widget (mutable).
      * @return Mutable reference to the ChatWidget.
      */
-    ChatWidget& get_chat() { return chat; }
+    ChatWidget& get_chat() {
+        return chat;
+    }
 
     /**
      * @brief Get the embedded chat widget (const).
      * @return Const reference to the ChatWidget.
      */
-    const ChatWidget& get_chat() const { return chat; }
+    const ChatWidget& get_chat() const {
+        return chat;
+    }
 
   private:
     ChatWidget chat; ///< Embedded chat widget for courtroom messaging.

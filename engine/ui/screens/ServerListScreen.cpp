@@ -1,9 +1,9 @@
 #include "ui/screens/ServerListScreen.h"
 
-#include "ui/screens/CharSelectScreen.h"
 #include "event/EventManager.h"
 #include "event/ServerConnectEvent.h"
 #include "event/ServerListEvent.h"
+#include "ui/screens/CharSelectScreen.h"
 
 void ServerListScreen::enter(ScreenController& ctrl) {
     controller = &ctrl;
@@ -26,14 +26,15 @@ void ServerListScreen::handle_events() {
 }
 
 void ServerListScreen::select_server(int index) {
-    if (index < 0 || index >= (int)servers.size()) return;
+    if (index < 0 || index >= (int)servers.size())
+        return;
 
     const auto& s = servers[index];
     std::optional<uint16_t> port = s.ws_port.has_value() ? s.ws_port : s.wss_port;
-    if (!port.has_value()) return;
+    if (!port.has_value())
+        return;
 
     selected = index;
     pending_connect = true;
-    EventManager::instance().get_channel<ServerConnectEvent>().publish(
-        ServerConnectEvent(s.hostname, *port));
+    EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(s.hostname, *port));
 }

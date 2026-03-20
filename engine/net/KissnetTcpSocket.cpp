@@ -5,8 +5,8 @@
 #include <algorithm>
 #include <iterator>
 
-KissnetTcpSocket::KissnetTcpSocket(const std::string& host, uint16_t port)
-    : sock(kissnet::endpoint(host, port)) {}
+KissnetTcpSocket::KissnetTcpSocket(const std::string& host, uint16_t port) : sock(kissnet::endpoint(host, port)) {
+}
 
 void KissnetTcpSocket::connect() {
     sock.connect();

@@ -23,7 +23,9 @@ class Asset {
      *
      * @return Const reference to the asset's virtual path string.
      */
-    const std::string& path() const { return path_; }
+    const std::string& path() const {
+        return path_;
+    }
 
     /**
      * @brief Get the resolved format extension (no leading dot).
@@ -33,7 +35,9 @@ class Asset {
      *
      * @return Const reference to the format string.
      */
-    const std::string& format() const { return format_; }
+    const std::string& format() const {
+        return format_;
+    }
 
     /**
      * @brief Get the approximate size of this asset's decoded data in bytes.
@@ -52,8 +56,8 @@ class Asset {
      * @param path Virtual path (no extension).
      * @param format Resolved format extension (no dot).
      */
-    Asset(std::string path, std::string format)
-        : path_(std::move(path)), format_(std::move(format)) {}
+    Asset(std::string path, std::string format) : path_(std::move(path)), format_(std::move(format)) {
+    }
 
   private:
     std::string path_;   /**< Virtual lookup path. */

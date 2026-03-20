@@ -1,12 +1,12 @@
 #include "ui/screens/CharSelectScreen.h"
 
-#include "ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
-#include "event/CharacterListEvent.h"
 #include "event/CharSelectRequestEvent.h"
+#include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
+#include "ui/screens/CourtroomScreen.h"
 #include "utils/Log.h"
 
 #include <format>
@@ -52,12 +52,13 @@ void CharSelectScreen::handle_events() {
 }
 
 void CharSelectScreen::select_character(int index) {
-    if (index < 0 || index >= (int)chars.size()) return;
-    if (chars[index].taken) return;
+    if (index < 0 || index >= (int)chars.size())
+        return;
+    if (chars[index].taken)
+        return;
 
     selected = index;
-    EventManager::instance().get_channel<CharSelectRequestEvent>().publish(
-        CharSelectRequestEvent(index));
+    EventManager::instance().get_channel<CharSelectRequestEvent>().publish(CharSelectRequestEvent(index));
 }
 
 void CharSelectScreen::load_icons() {

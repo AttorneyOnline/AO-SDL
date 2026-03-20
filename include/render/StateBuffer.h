@@ -75,10 +75,10 @@ class StateBuffer {
     void update();
 
   private:
-    RenderState* presenting;   ///< Buffer currently being read by the render thread.
-    RenderState* ready;        ///< Buffer holding the most recently published state.
-    RenderState* preparing;    ///< Buffer currently being written by the game thread.
+    RenderState* presenting; ///< Buffer currently being read by the render thread.
+    RenderState* ready;      ///< Buffer holding the most recently published state.
+    RenderState* preparing;  ///< Buffer currently being written by the game thread.
 
-    std::atomic<bool> stale;   ///< True when the game thread has published new data.
-    std::mutex swap_mutex;     ///< Guards swaps between ready and presenting/preparing.
+    std::atomic<bool> stale; ///< True when the game thread has published new data.
+    std::mutex swap_mutex;   ///< Guards swaps between ready and presenting/preparing.
 };

@@ -36,15 +36,26 @@ struct ImageFrame {
 class ImageAsset : public Asset {
   public:
     ImageAsset(std::string path, std::string format, std::vector<ImageFrame> frames)
-        : Asset(std::move(path), std::move(format)), frames(std::move(frames)) {}
+        : Asset(std::move(path), std::move(format)), frames(std::move(frames)) {
+    }
 
-    bool is_animated() const { return frames.size() > 1; }
-    int frame_count() const { return static_cast<int>(frames.size()); }
+    bool is_animated() const {
+        return frames.size() > 1;
+    }
+    int frame_count() const {
+        return static_cast<int>(frames.size());
+    }
 
-    const ImageFrame& frame(int index) const { return frames.at(index); }
+    const ImageFrame& frame(int index) const {
+        return frames.at(index);
+    }
 
-    int width() const { return frames.empty() ? 0 : frames[0].width; }
-    int height() const { return frames.empty() ? 0 : frames[0].height; }
+    int width() const {
+        return frames.empty() ? 0 : frames[0].width;
+    }
+    int height() const {
+        return frames.empty() ? 0 : frames[0].height;
+    }
 
     size_t memory_size() const override {
         size_t total = 0;

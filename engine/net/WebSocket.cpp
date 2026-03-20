@@ -3,12 +3,12 @@
 // Platform network byte-order functions (htonl/htons/ntohs) must come before
 // any header that uses them (e.g. sha1.h).
 #ifdef _WIN32
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include <winsock2.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
 #else
-#  include <arpa/inet.h>
+#include <arpa/inet.h>
 #endif
 
 #include "net/KissnetTcpSocket.h"
@@ -44,7 +44,8 @@ std::string HTTPResponse::get_header(std::string header) const {
 }
 
 WebSocket::WebSocket(const std::string& host, uint16_t port)
-    : WebSocket(host, port, std::make_unique<KissnetTcpSocket>(host, port)) {}
+    : WebSocket(host, port, std::make_unique<KissnetTcpSocket>(host, port)) {
+}
 
 WebSocket::WebSocket(const std::string& host, uint16_t port, std::unique_ptr<ITcpSocket> socket)
     : socket(std::move(socket)), ready(false), connecting(false) {
@@ -162,7 +163,7 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
 
             uint64_t pl_len_netorder;
             std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint16_t));
-            pl_len = WebSocket::ntohll(pl_len_netorder);
+            pl_len = WebSocket::net_to_host_64(pl_len_netorder);
             bytes_needed += pl_len;
         }
 
@@ -533,7 +534,7 @@ std::vector<uint8_t> WebSocket::WebSocketFrame::serialize() {
         std::memcpy(lenbuf.data(), &net_order, sizeof(net_order));
     }
     else if (len_code == 127) {
-        uint64_t net_order = WebSocket::htonll(len);
+        uint64_t net_order = WebSocket::host_to_net_64(len);
         lenbuf.resize(8);
         std::memcpy(lenbuf.data(), &net_order, sizeof(net_order));
     }
@@ -565,7 +566,7 @@ std::vector<uint8_t> WebSocket::WebSocketFrame::serialize() {
     return out_buf;
 }
 
-inline uint64_t WebSocket::ntohll(uint64_t net_value) {
+inline uint64_t WebSocket::net_to_host_64(uint64_t net_value) {
     if constexpr (std::endian::native == std::endian::big) {
         return net_value;
     }
@@ -578,7 +579,7 @@ inline uint64_t WebSocket::ntohll(uint64_t net_value) {
     }
 }
 
-inline uint64_t WebSocket::htonll(uint64_t host_value) {
+inline uint64_t WebSocket::host_to_net_64(uint64_t host_value) {
     if constexpr (std::endian::native == std::endian::big) {
         return host_value;
     }

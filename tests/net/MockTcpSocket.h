@@ -25,7 +25,9 @@ class MockTcpSocket : public ITcpSocket {
     }
 
     // All bytes passed to send(), concatenated in order.
-    const std::vector<uint8_t>& sent() const { return sent_bytes; }
+    const std::vector<uint8_t>& sent() const {
+        return sent_bytes;
+    }
 
     // Optional callback fired on every send() call.
     // Receives the full cumulative sent buffer so far.
@@ -33,8 +35,10 @@ class MockTcpSocket : public ITcpSocket {
     std::function<void(const std::vector<uint8_t>&)> on_send;
 
     // ITcpSocket interface ------------------------------------------------
-    void connect() override {}
-    void set_non_blocking(bool) override {}
+    void connect() override {
+    }
+    void set_non_blocking(bool) override {
+    }
 
     void send(const uint8_t* data, size_t size) override {
         sent_bytes.insert(sent_bytes.end(), data, data + size);

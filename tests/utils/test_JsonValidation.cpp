@@ -26,7 +26,7 @@ TEST(JsonValidation, ThrowsOnMissingKey) {
 }
 
 TEST(JsonValidation, ThrowsOnTypeMismatch) {
-    json j = {{"name", 42}};   // integer, not string
+    json j = {{"name", 42}}; // integer, not string
     ValidationSettings settings = {{"name", ValueType::string}};
     EXPECT_THROW(containsKeys(j, settings), std::runtime_error);
 }

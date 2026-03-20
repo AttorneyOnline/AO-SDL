@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ao/asset/AOAssetLibrary.h"
-#include "ao/event/ICMessageEvent.h"  // EmoteMod
+#include "ao/event/ICMessageEvent.h" // EmoteMod
 #include "asset/ImageAsset.h"
 #include "render/AnimationPlayer.h"
 
@@ -16,20 +16,23 @@ class AOEmotePlayer {
   public:
     enum class State { NONE, PREANIM, TALKING, IDLE };
 
-    void start(AOAssetLibrary& ao_assets, const std::string& character,
-               const std::string& emote, const std::string& pre_emote,
-               EmoteMod emote_mod);
+    void start(AOAssetLibrary& ao_assets, const std::string& character, const std::string& emote,
+               const std::string& pre_emote, EmoteMod emote_mod);
 
     void tick(int delta_ms);
 
     /// Transition from TALKING to IDLE (called when text finishes scrolling).
     void transition_to_idle();
 
-    State state() const { return current_state; }
+    State state() const {
+        return current_state;
+    }
     const ImageFrame* current_frame() const;
     int current_frame_index() const;
     const std::shared_ptr<ImageAsset>& asset() const;
-    bool has_frame() const { return current_frame() != nullptr; }
+    bool has_frame() const {
+        return current_frame() != nullptr;
+    }
 
   private:
     State current_state = State::NONE;

@@ -1,5 +1,5 @@
-#include "asset/AssetCache.h"
 #include "asset/Asset.h"
+#include "asset/AssetCache.h"
 
 #include <gtest/gtest.h>
 #include <memory>
@@ -7,9 +7,11 @@
 
 // Minimal concrete Asset for testing.
 struct FakeAsset : public Asset {
-    FakeAsset(std::string path, size_t size)
-        : Asset(std::move(path), "fake"), size(size) {}
-    size_t memory_size() const override { return size; }
+    FakeAsset(std::string path, size_t size) : Asset(std::move(path), "fake"), size(size) {
+    }
+    size_t memory_size() const override {
+        return size;
+    }
     size_t size;
 };
 
@@ -74,7 +76,7 @@ TEST(AssetCache, EvictsLruWhenOverLimit) {
     // "a" is now LRU. Inserting "c" (100) pushes total to 300 → evict "a".
     cache.insert(make_asset("c", 100));
 
-    EXPECT_EQ(cache.get("a"), nullptr);   // evicted
+    EXPECT_EQ(cache.get("a"), nullptr); // evicted
     EXPECT_NE(cache.get("b"), nullptr);
     EXPECT_NE(cache.get("c"), nullptr);
     EXPECT_LE(cache.used_bytes(), 200u);
@@ -96,8 +98,8 @@ TEST(AssetCache, GetPromotesToMru) {
     cache.insert(make_asset("a", 100));
     cache.insert(make_asset("b", 100));
     cache.insert(make_asset("c", 100));
-    cache.get("a");                      // promote "a" to MRU
-    cache.insert(make_asset("d", 100));  // pushes to 400 → evict LRU="b"
+    cache.get("a");                     // promote "a" to MRU
+    cache.insert(make_asset("d", 100)); // pushes to 400 → evict LRU="b"
 
     EXPECT_EQ(cache.get("b"), nullptr);
     EXPECT_NE(cache.get("a"), nullptr);

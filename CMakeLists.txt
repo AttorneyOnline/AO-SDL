@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(aosdl LANGUAGES CXX C)
 
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+if(MSVC)
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -21,25 +23,41 @@ set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
 add_subdirectory(third-party/freetype)
 
-find_package(OpenGL REQUIRED)
-
-# ImGui (static lib — SDL + GL specific)
+# ImGui (static lib — backend-specific sources selected below)
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
-add_library(imgui STATIC
+set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
+
+if(APPLE)
+    list(APPEND IMGUI_SOURCES ${IMGUI_DIR}/backends/imgui_impl_metal.mm)
+else()
+    find_package(OpenGL REQUIRED)
+    list(APPEND IMGUI_SOURCES ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
+endif()
+
+add_library(imgui STATIC ${IMGUI_SOURCES})
 target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
 )
-target_link_libraries(imgui PRIVATE SDL2::SDL2 ${OPENGL_LIBRARIES})
-if(WIN32)
-    target_include_directories(imgui PRIVATE third-party/glew/include)
+target_link_libraries(imgui PRIVATE SDL2::SDL2)
+
+if(APPLE)
+    target_link_libraries(imgui PRIVATE
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+    )
+else()
+    target_link_libraries(imgui PRIVATE ${OPENGL_LIBRARIES})
+    if(WIN32)
+        target_include_directories(imgui PRIVATE third-party/glew/include)
+    endif()
 endif()
 
 # =============================================================================
@@ -119,32 +137,55 @@ target_link_libraries(aoengine PUBLIC bit7z freetype)
 # Plugins
 # =============================================================================
 
-# --- aorender_gl — OpenGL renderer backend -----------------------------------
+if(APPLE)
+    # --- aorender_metal — Metal renderer backend (macOS / iOS) ----------------
 
-add_library(aorender_gl STATIC
-    plugins/render/gl/Texture.cpp
-    plugins/render/gl/Shader.cpp
-    plugins/render/gl/GLTexture.cpp
-    plugins/render/gl/GLMesh.cpp
-    plugins/render/gl/GLSprite.cpp
-    plugins/render/gl/GLRenderer.cpp
-)
-set_property(TARGET aorender_gl PROPERTY CXX_STANDARD 20)
+    add_library(aorender_metal STATIC
+        plugins/render/metal/MetalRenderer.mm
+        plugins/render/metal/MetalTexture.mm
+        plugins/render/metal/Texture.mm
+    )
+    set_property(TARGET aorender_metal PROPERTY CXX_STANDARD 20)
 
-target_include_directories(aorender_gl
-    PUBLIC  plugins
-    PRIVATE plugins/render/gl
-)
-target_link_libraries(aorender_gl PUBLIC aoengine ${OPENGL_LIBRARIES})
+    target_include_directories(aorender_metal
+        PUBLIC  plugins
+        PRIVATE plugins/render/metal
+    )
+    target_link_libraries(aorender_metal PUBLIC aoengine
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+        "-framework Foundation"
+    )
 
-if(WIN32)
-    target_include_directories(aorender_gl PUBLIC third-party/glew/include)
-    target_link_libraries(aorender_gl PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/glew/lib/Release/x64/glew32.lib)
 else()
-    find_package(GLEW REQUIRED)
-    target_include_directories(aorender_gl PUBLIC ${GLEW_INCLUDE_DIRS})
-    target_link_libraries(aorender_gl PUBLIC ${GLEW_LIBRARIES})
+    # --- aorender_gl — OpenGL renderer backend --------------------------------
+
+    add_library(aorender_gl STATIC
+        plugins/render/gl/Texture.cpp
+        plugins/render/gl/Shader.cpp
+        plugins/render/gl/GLTexture.cpp
+        plugins/render/gl/GLMesh.cpp
+        plugins/render/gl/GLSprite.cpp
+        plugins/render/gl/GLRenderer.cpp
+    )
+    set_property(TARGET aorender_gl PROPERTY CXX_STANDARD 20)
+
+    target_include_directories(aorender_gl
+        PUBLIC  plugins
+        PRIVATE plugins/render/gl
+    )
+    target_link_libraries(aorender_gl PUBLIC aoengine ${OPENGL_LIBRARIES})
+
+    if(WIN32)
+        target_include_directories(aorender_gl PUBLIC third-party/glew/include)
+        target_link_libraries(aorender_gl PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/third-party/glew/lib/Release/x64/glew32.lib)
+    else()
+        find_package(GLEW REQUIRED)
+        target_include_directories(aorender_gl PUBLIC ${GLEW_INCLUDE_DIRS})
+        target_link_libraries(aorender_gl PUBLIC ${GLEW_LIBRARIES})
+    endif()
 endif()
 
 # --- ao_protocol — AO2 protocol plugin ---------------------------------------

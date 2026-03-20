@@ -1,5 +1,5 @@
-#include "ao/game/AOBackground.h"
 #include "ao/asset/AOAssetLibrary.h"
+#include "ao/game/AOBackground.h"
 
 #include "asset/AssetLibrary.h"
 #include "asset/MountManager.h"
@@ -154,9 +154,7 @@ TEST_F(AOBackgroundTest, SetAfterReloadMarksDirtyAgain) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOBackgroundTest, AllStandardPositionsAccepted) {
-    const std::vector<std::string> positions = {
-        "def", "pro", "wit", "jud", "hld", "hlp", "jur", "sea"
-    };
+    const std::vector<std::string> positions = {"def", "pro", "wit", "jud", "hld", "hlp", "jur", "sea"};
 
     for (const auto& pos : positions) {
         bg.set("default", pos);

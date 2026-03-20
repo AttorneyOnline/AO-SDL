@@ -1,20 +1,20 @@
-#include "net/WebSocket.h"
 #include "MockTcpSocket.h"
+#include "net/WebSocket.h"
 #include "utils/Base64.h"
 
 #ifdef _WIN32
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include <winsock2.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
 #else
-#  include <arpa/inet.h>
+#include <arpa/inet.h>
 #endif
 
 #include <sha1.h>
 
-#include <gtest/gtest.h>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -23,21 +23,19 @@
 // Helpers
 // ---------------------------------------------------------------------------
 
-static WebSocket::WebSocketFrame make_frame(bool fin, uint8_t rsv,
-                                            WebSocket::Opcode opcode,
-                                            bool mask, uint32_t mask_key,
-                                            uint8_t len_code, uint64_t len,
+static WebSocket::WebSocketFrame make_frame(bool fin, uint8_t rsv, WebSocket::Opcode opcode, bool mask,
+                                            uint32_t mask_key, uint8_t len_code, uint64_t len,
                                             std::vector<uint8_t> data) {
     WebSocket::WebSocketFrame f;
-    f.complete  = true;
-    f.fin       = fin;
-    f.rsv       = rsv;
-    f.opcode    = opcode;
-    f.mask      = mask;
-    f.mask_key  = mask_key;
-    f.len_code  = len_code;
-    f.len       = len;
-    f.data      = std::move(data);
+    f.complete = true;
+    f.fin = fin;
+    f.rsv = rsv;
+    f.opcode = opcode;
+    f.mask = mask;
+    f.mask_key = mask_key;
+    f.len_code = len_code;
+    f.len = len;
+    f.data = std::move(data);
     return f;
 }
 
@@ -55,9 +53,10 @@ static std::string compute_ws_accept(const std::string& ws_key) {
 static std::string extract_header(const std::string& request, const std::string& name) {
     std::string needle = name + ": ";
     auto pos = request.find(needle);
-    if (pos == std::string::npos) return {};
+    if (pos == std::string::npos)
+        return {};
     auto start = pos + needle.size();
-    auto end   = request.find("\r\n", start);
+    auto end = request.find("\r\n", start);
     return request.substr(start, end - start);
 }
 
@@ -76,7 +75,7 @@ TEST(WebSocketFrameSerialize, FirstByteFinAndTextOpcode) {
     auto f = make_frame(true, 0, WebSocket::TEXT, false, 0, 1, 1, {0x41});
     auto bytes = f.serialize();
     ASSERT_GE(bytes.size(), 1u);
-    EXPECT_EQ(bytes[0], 0x81u);  // FIN=1, opcode=TEXT(0x01)
+    EXPECT_EQ(bytes[0], 0x81u); // FIN=1, opcode=TEXT(0x01)
 }
 
 TEST(WebSocketFrameSerialize, FinFalseGivesZeroHighBit) {
@@ -111,10 +110,9 @@ TEST(WebSocketFrameSerialize, CloseOpcodeEncoded) {
 // ---------------------------------------------------------------------------
 
 TEST(WebSocketFrameSerialize, SmallUnmaskedLengthInByte1) {
-    auto f = make_frame(true, 0, WebSocket::TEXT, false, 0, 5, 5,
-                        std::vector<uint8_t>(5, 0x00));
+    auto f = make_frame(true, 0, WebSocket::TEXT, false, 0, 5, 5, std::vector<uint8_t>(5, 0x00));
     auto bytes = f.serialize();
-    EXPECT_EQ(bytes[1] & 0x80u, 0x00u);  // MASK bit clear
+    EXPECT_EQ(bytes[1] & 0x80u, 0x00u); // MASK bit clear
     EXPECT_EQ(bytes[1] & 0x7Fu, 5u);
 }
 
@@ -135,19 +133,17 @@ TEST(WebSocketFrameSerialize, MaxSmallLength125) {
 
 TEST(WebSocketFrameSerialize, MediumLengthLen126Field) {
     constexpr uint64_t PAYLOAD = 300;
-    auto f = make_frame(true, 0, WebSocket::BINARY, false, 0, 126, PAYLOAD,
-                        std::vector<uint8_t>(PAYLOAD, 0x00));
+    auto f = make_frame(true, 0, WebSocket::BINARY, false, 0, 126, PAYLOAD, std::vector<uint8_t>(PAYLOAD, 0x00));
     auto bytes = f.serialize();
     EXPECT_EQ(bytes[1] & 0x7Fu, 126u);
-    EXPECT_EQ(bytes[2], 0x01u);  // big-endian 300 = 0x012C
+    EXPECT_EQ(bytes[2], 0x01u); // big-endian 300 = 0x012C
     EXPECT_EQ(bytes[3], 0x2Cu);
     EXPECT_EQ(bytes.size(), 2u + 2u + PAYLOAD);
 }
 
 TEST(WebSocketFrameSerialize, LargeLengthLen127Field) {
-    constexpr uint64_t PAYLOAD = 70000;  // 0x00000000_00011170
-    auto f = make_frame(true, 0, WebSocket::BINARY, false, 0, 127, PAYLOAD,
-                        std::vector<uint8_t>(PAYLOAD, 0x00));
+    constexpr uint64_t PAYLOAD = 70000; // 0x00000000_00011170
+    auto f = make_frame(true, 0, WebSocket::BINARY, false, 0, 127, PAYLOAD, std::vector<uint8_t>(PAYLOAD, 0x00));
     auto bytes = f.serialize();
     EXPECT_EQ(bytes[1] & 0x7Fu, 127u);
     EXPECT_EQ(bytes[7], 0x01u);
@@ -195,15 +191,14 @@ TEST(WebSocketFrameSerialize, PayloadXoredWithMaskKey) {
 }
 
 TEST(WebSocketFrameSerialize, MaskWrapsEveryFourBytes) {
-    auto f = make_frame(true, 0, WebSocket::TEXT, true, 0x01020304u, 5, 5,
-                        {0x00, 0x00, 0x00, 0x00, 0x00});
+    auto f = make_frame(true, 0, WebSocket::TEXT, true, 0x01020304u, 5, 5, {0x00, 0x00, 0x00, 0x00, 0x00});
     auto bytes = f.serialize();
     ASSERT_EQ(bytes.size(), 2u + 4u + 5u);
-    EXPECT_EQ(bytes[6],  0x01u);
-    EXPECT_EQ(bytes[7],  0x02u);
-    EXPECT_EQ(bytes[8],  0x03u);
-    EXPECT_EQ(bytes[9],  0x04u);
-    EXPECT_EQ(bytes[10], 0x01u);  // wraps back to byte 0 of mask
+    EXPECT_EQ(bytes[6], 0x01u);
+    EXPECT_EQ(bytes[7], 0x02u);
+    EXPECT_EQ(bytes[8], 0x03u);
+    EXPECT_EQ(bytes[9], 0x04u);
+    EXPECT_EQ(bytes[10], 0x01u); // wraps back to byte 0 of mask
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +251,7 @@ TEST(WebSocketRead, ReturnsEmptyWhenNoData) {
 
 TEST(WebSocketRead, ParsesSmallTextFrame) {
     auto [ws, mock] = make_ws();
-    mock->feed({0x81, 0x02, 'h', 'i'});  // FIN+TEXT, len=2
+    mock->feed({0x81, 0x02, 'h', 'i'}); // FIN+TEXT, len=2
 
     auto frames = ws.read();
     ASSERT_EQ(frames.size(), 1u);
@@ -269,7 +264,7 @@ TEST(WebSocketRead, ParsesSmallTextFrame) {
 
 TEST(WebSocketRead, ParsesBinaryFrame) {
     auto [ws, mock] = make_ws();
-    mock->feed({0x82, 0x03, 0x01, 0x02, 0x03});  // FIN+BINARY, len=3
+    mock->feed({0x82, 0x03, 0x01, 0x02, 0x03}); // FIN+BINARY, len=3
 
     auto frames = ws.read();
     ASSERT_EQ(frames.size(), 1u);
@@ -326,7 +321,7 @@ TEST(WebSocketRead, ThrowsOnServerMaskedFrame) {
 
 TEST(WebSocketRead, PingFrameAutoRepliesWithPong) {
     auto [ws, mock] = make_ws();
-    mock->feed({0x89, 0x00});  // FIN+PING, empty payload
+    mock->feed({0x89, 0x00}); // FIN+PING, empty payload
 
     auto frames = ws.read();
     // PING is consumed internally; no user-visible frame.
@@ -334,8 +329,8 @@ TEST(WebSocketRead, PingFrameAutoRepliesWithPong) {
     // A PONG should have been sent.
     const auto& sent = mock->sent();
     ASSERT_GE(sent.size(), 2u);
-    EXPECT_EQ(sent[0] & 0x0Fu, 0x0Au);  // opcode = PONG
-    EXPECT_NE(sent[1] & 0x80u, 0u);     // MASK bit set (client always masks)
+    EXPECT_EQ(sent[0] & 0x0Fu, 0x0Au); // opcode = PONG
+    EXPECT_NE(sent[1] & 0x80u, 0u);    // MASK bit set (client always masks)
 }
 
 // ---------------------------------------------------------------------------
@@ -345,28 +340,25 @@ TEST(WebSocketRead, PingFrameAutoRepliesWithPong) {
 TEST(WebSocketWrite, SendsTextFrameWithCorrectFirstByte) {
     auto [ws, mock] = make_ws();
     std::string payload = "hello";
-    ws.write(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
+    ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
     const auto& sent = mock->sent();
     ASSERT_GE(sent.size(), 2u);
-    EXPECT_EQ(sent[0], 0x81u);  // FIN + TEXT
+    EXPECT_EQ(sent[0], 0x81u); // FIN + TEXT
 }
 
 TEST(WebSocketWrite, SentFrameHasMaskBitSet) {
     auto [ws, mock] = make_ws();
     std::string payload = "hi";
-    ws.write(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
+    ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
     EXPECT_NE(mock->sent()[1] & 0x80u, 0u);
 }
 
 TEST(WebSocketWrite, SentFramePayloadLengthIsCorrect) {
     auto [ws, mock] = make_ws();
-    std::string payload = "hello";  // 5 bytes
-    ws.write(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
+    std::string payload = "hello"; // 5 bytes
+    ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
     EXPECT_EQ(mock->sent()[1] & 0x7Fu, 5u);
 }
@@ -376,8 +368,7 @@ TEST(WebSocketWrite, MaskedPayloadDecodesBack) {
     // We can recover the original by XOR-ing with the key bytes from the wire frame.
     auto [ws, mock] = make_ws();
     std::string payload = "AO2";
-    ws.write(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
+    ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
     const auto& sent = mock->sent();
     // Layout: [0]=hdr, [1]=mask+len, [2..5]=mask key, [6..8]=masked payload
@@ -402,13 +393,15 @@ static std::string make_101_response(const std::vector<uint8_t>& request_bytes) 
     return "HTTP/1.1 101 Switching Protocols\r\n"
            "Upgrade: websocket\r\n"
            "Connection: Upgrade\r\n"
-           "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
+           "Sec-WebSocket-Accept: " +
+           accept + "\r\n\r\n";
 }
 
 TEST(WebSocketConnect, ValidHandshakeCompletesWithoutException) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>& sent) {
-        if (mock->bytes_available()) return;  // feed only once
+        if (mock->bytes_available())
+            return; // feed only once
         auto resp = make_101_response(sent);
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };
@@ -419,7 +412,8 @@ TEST(WebSocketConnect, ValidHandshakeCompletesWithoutException) {
 TEST(WebSocketConnect, IsConnectedTrueAfterValidHandshake) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>& sent) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         auto resp = make_101_response(sent);
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };
@@ -430,7 +424,8 @@ TEST(WebSocketConnect, IsConnectedTrueAfterValidHandshake) {
 TEST(WebSocketConnect, ThrowsOnNon101StatusCode) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>&) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         std::string resp = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };
@@ -440,12 +435,14 @@ TEST(WebSocketConnect, ThrowsOnNon101StatusCode) {
 TEST(WebSocketConnect, ThrowsOnMissingUpgradeHeader) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>& sent) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         std::string request(sent.begin(), sent.end());
         std::string accept = compute_ws_accept(extract_header(request, "Sec-WebSocket-Key"));
         std::string resp = "HTTP/1.1 101 Switching Protocols\r\n"
                            "Connection: Upgrade\r\n"
-                           "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
+                           "Sec-WebSocket-Accept: " +
+                           accept + "\r\n\r\n";
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };
     EXPECT_THROW(ws.connect(), WebSocketException);
@@ -454,12 +451,14 @@ TEST(WebSocketConnect, ThrowsOnMissingUpgradeHeader) {
 TEST(WebSocketConnect, ThrowsOnMissingConnectionHeader) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>& sent) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         std::string request(sent.begin(), sent.end());
         std::string accept = compute_ws_accept(extract_header(request, "Sec-WebSocket-Key"));
         std::string resp = "HTTP/1.1 101 Switching Protocols\r\n"
                            "Upgrade: websocket\r\n"
-                           "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
+                           "Sec-WebSocket-Accept: " +
+                           accept + "\r\n\r\n";
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };
     EXPECT_THROW(ws.connect(), WebSocketException);
@@ -468,7 +467,8 @@ TEST(WebSocketConnect, ThrowsOnMissingConnectionHeader) {
 TEST(WebSocketConnect, ThrowsOnWrongSecWebSocketAccept) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>&) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         std::string resp = "HTTP/1.1 101 Switching Protocols\r\n"
                            "Upgrade: websocket\r\n"
                            "Connection: Upgrade\r\n"
@@ -481,13 +481,16 @@ TEST(WebSocketConnect, ThrowsOnWrongSecWebSocketAccept) {
 TEST(WebSocketConnect, ThrowsOnUnwantedExtensionsHeader) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>& sent) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         std::string request(sent.begin(), sent.end());
         std::string accept = compute_ws_accept(extract_header(request, "Sec-WebSocket-Key"));
         std::string resp = "HTTP/1.1 101 Switching Protocols\r\n"
                            "Upgrade: websocket\r\n"
                            "Connection: Upgrade\r\n"
-                           "Sec-WebSocket-Accept: " + accept + "\r\n"
+                           "Sec-WebSocket-Accept: " +
+                           accept +
+                           "\r\n"
                            "Sec-WebSocket-Extensions: permessage-deflate\r\n\r\n";
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };
@@ -497,7 +500,8 @@ TEST(WebSocketConnect, ThrowsOnUnwantedExtensionsHeader) {
 TEST(WebSocketConnect, ThrowsIfAlreadyConnected) {
     auto [ws, mock] = make_ws();
     mock->on_send = [mock](const std::vector<uint8_t>& sent) {
-        if (mock->bytes_available()) return;
+        if (mock->bytes_available())
+            return;
         auto resp = make_101_response(sent);
         mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
     };

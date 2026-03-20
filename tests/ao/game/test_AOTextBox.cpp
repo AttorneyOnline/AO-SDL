@@ -1,5 +1,5 @@
-#include "ao/game/AOTextBox.h"
 #include "ao/asset/AOAssetLibrary.h"
+#include "ao/game/AOTextBox.h"
 
 #include "asset/AssetLibrary.h"
 #include "asset/MountManager.h"

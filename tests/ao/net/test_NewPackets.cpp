@@ -1,9 +1,9 @@
-#include "ao/net/AOPacket.h"
-#include "ao/net/AOClient.h"
-#include "ao/net/PacketTypes.h"
-#include "event/EventManager.h"
-#include "event/BackgroundEvent.h"
 #include "ao/event/ICMessageEvent.h"
+#include "ao/net/AOClient.h"
+#include "ao/net/AOPacket.h"
+#include "ao/net/PacketTypes.h"
+#include "event/BackgroundEvent.h"
+#include "event/EventManager.h"
 
 #include <gtest/gtest.h>
 #include <optional>
@@ -13,33 +13,24 @@
 // Drain an event channel so test isolation is maintained.
 template <typename T>
 static void drain(EventChannel<T>& ch) {
-    while (ch.get_event()) {}
+    while (ch.get_event()) {
+    }
 }
 
 // Helper: build a minimal 15-field MS packet vector.
 // Fields: 0=desk_mod, 1=pre_emote, 2=character, 3=emote, 4=message,
 //         5=side, 6=sfx_name, 7=emote_mod, 8=char_id, 9=sfx_delay,
 //         10=objection_mod, 11=evidence_id, 12=flip, 13=realization, 14=text_color
-static std::vector<std::string> make_ms_fields(
-    const std::string& desk_mod    = "1",
-    const std::string& pre_emote   = "objecting",
-    const std::string& character   = "Phoenix",
-    const std::string& emote       = "normal",
-    const std::string& message     = "Objection!",
-    const std::string& side        = "def",
-    const std::string& sfx_name    = "sfx-objection",
-    const std::string& emote_mod   = "1",
-    const std::string& char_id     = "42",
-    const std::string& sfx_delay   = "0",
-    const std::string& obj_mod     = "0",
-    const std::string& evidence_id = "0",
-    const std::string& flip        = "0",
-    const std::string& realization = "0",
-    const std::string& text_color  = "0")
-{
-    return {desk_mod, pre_emote, character, emote, message,
-            side, sfx_name, emote_mod, char_id, sfx_delay,
-            obj_mod, evidence_id, flip, realization, text_color};
+static std::vector<std::string>
+make_ms_fields(const std::string& desk_mod = "1", const std::string& pre_emote = "objecting",
+               const std::string& character = "Phoenix", const std::string& emote = "normal",
+               const std::string& message = "Objection!", const std::string& side = "def",
+               const std::string& sfx_name = "sfx-objection", const std::string& emote_mod = "1",
+               const std::string& char_id = "42", const std::string& sfx_delay = "0", const std::string& obj_mod = "0",
+               const std::string& evidence_id = "0", const std::string& flip = "0",
+               const std::string& realization = "0", const std::string& text_color = "0") {
+    return {desk_mod, pre_emote, character, emote,       message, side,        sfx_name,  emote_mod,
+            char_id,  sfx_delay, obj_mod,   evidence_id, flip,    realization, text_color};
 }
 
 // ===========================================================================
@@ -101,13 +92,11 @@ TEST(AOPacketBN, DeserializeRoundTrip) {
 // ===========================================================================
 
 TEST(AOPacketMS, ParsesCoreFields) {
-    auto fields = make_ms_fields("1", "objecting", "Phoenix", "normal",
-                                 "Hello", "def", "sfx", "1", "42",
-                                 "0", "0", "0", "1", "0", "0");
+    auto fields = make_ms_fields("1", "objecting", "Phoenix", "normal", "Hello", "def", "sfx", "1", "42", "0", "0", "0",
+                                 "1", "0", "0");
     AOPacketMS ms(fields);
     // Verify round-trip serialization preserves all 15 fields.
-    EXPECT_EQ(ms.serialize(),
-              "MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#1#0#0#%");
+    EXPECT_EQ(ms.serialize(), "MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#1#0#0#%");
 }
 
 // ---------------------------------------------------------------------------
@@ -121,9 +110,7 @@ TEST(AOPacketMS, LegacyEmoteMod4RemapsTo6) {
     AOClient cli;
     cli.conn_state = CONNECTED;
 
-    auto fields = make_ms_fields("0", "pre", "Char", "em", "msg",
-                                 "def", "sfx", "4", "1",
-                                 "0", "0", "0", "0", "0", "0");
+    auto fields = make_ms_fields("0", "pre", "Char", "em", "msg", "def", "sfx", "4", "1", "0", "0", "0", "0", "0", "0");
     AOPacketMS ms(fields);
     ms.handle(cli);
 
@@ -140,9 +127,7 @@ TEST(AOPacketMS, LegacyEmoteMod2RemapsTo1) {
     AOClient cli;
     cli.conn_state = CONNECTED;
 
-    auto fields = make_ms_fields("0", "pre", "Char", "em", "msg",
-                                 "def", "sfx", "2", "1",
-                                 "0", "0", "0", "0", "0", "0");
+    auto fields = make_ms_fields("0", "pre", "Char", "em", "msg", "def", "sfx", "2", "1", "0", "0", "0", "0", "0", "0");
     AOPacketMS ms(fields);
     ms.handle(cli);
 
@@ -159,9 +144,8 @@ TEST(AOPacketMS, InvalidEmoteModDefaultsToIdle) {
     AOClient cli;
     cli.conn_state = CONNECTED;
 
-    auto fields = make_ms_fields("0", "pre", "Char", "em", "msg",
-                                 "def", "sfx", "99", "1",
-                                 "0", "0", "0", "0", "0", "0");
+    auto fields =
+        make_ms_fields("0", "pre", "Char", "em", "msg", "def", "sfx", "99", "1", "0", "0", "0", "0", "0", "0");
     AOPacketMS ms(fields);
     ms.handle(cli);
 
@@ -182,9 +166,8 @@ TEST(AOPacketMS, HandlePublishesICMessageEvent) {
     AOClient cli;
     cli.conn_state = CONNECTED;
 
-    auto fields = make_ms_fields("1", "objecting", "Phoenix", "pointing",
-                                 "Take that!", "def", "sfx-objection", "1", "42",
-                                 "0", "0", "0", "1", "0", "0");
+    auto fields = make_ms_fields("1", "objecting", "Phoenix", "pointing", "Take that!", "def", "sfx-objection", "1",
+                                 "42", "0", "0", "0", "1", "0", "0");
     AOPacketMS ms(fields);
     ms.handle(cli);
 
@@ -208,9 +191,8 @@ TEST(AOPacketMS, HandleFlipFalseWhenFieldIsZero) {
     AOClient cli;
     cli.conn_state = CONNECTED;
 
-    auto fields = make_ms_fields("0", "pre", "Edgeworth", "thinking",
-                                 "...", "pro", "sfx", "0", "7",
-                                 "0", "0", "0", "0", "0", "0");
+    auto fields = make_ms_fields("0", "pre", "Edgeworth", "thinking", "...", "pro", "sfx", "0", "7", "0", "0", "0", "0",
+                                 "0", "0");
     AOPacketMS ms(fields);
     ms.handle(cli);
 
@@ -223,9 +205,7 @@ TEST(AOPacketMS, HandleFlipFalseWhenFieldIsZero) {
 }
 
 TEST(AOPacketMS, DeserializeRoundTrip) {
-    auto pkt = AOPacket::deserialize(
-        "MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#0#0#0#%");
+    auto pkt = AOPacket::deserialize("MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#0#0#0#%");
     ASSERT_NE(pkt, nullptr);
-    EXPECT_EQ(pkt->serialize(),
-              "MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#0#0#0#%");
+    EXPECT_EQ(pkt->serialize(), "MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#0#0#0#%");
 }

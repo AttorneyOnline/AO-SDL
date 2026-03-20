@@ -63,11 +63,11 @@ class Transform {
     static void set_aspect_ratio(float aspect);
 
   protected:
-    glm::mat4 transform;       ///< The composed transformation matrix.
+    glm::mat4 transform; ///< The composed transformation matrix.
 
-    float rotation;            ///< Rotation angle in degrees.
-    glm::vec3 scaling;         ///< Scale factors (x, y, z).
-    glm::vec3 translation;     ///< Translation offset (x, y, z).
+    float rotation;        ///< Rotation angle in degrees.
+    glm::vec3 scaling;     ///< Scale factors (x, y, z).
+    glm::vec3 translation; ///< Translation offset (x, y, z).
 
     static float aspect_ratio; ///< Global aspect ratio shared across all instances.
 

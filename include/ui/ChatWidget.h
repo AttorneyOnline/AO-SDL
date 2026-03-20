@@ -29,19 +29,25 @@ class ChatWidget {
      * @brief Get the accumulated chat log.
      * @return Const reference to the chat log string.
      */
-    const std::string& get_buffer() const { return m_buffer; }
+    const std::string& get_buffer() const {
+        return m_buffer;
+    }
 
     /**
      * @brief Get the current display name.
      * @return Null-terminated C string containing the name.
      */
-    const char* get_name() const { return m_name; }
+    const char* get_name() const {
+        return m_name;
+    }
 
     /**
      * @brief Get the current message text.
      * @return Null-terminated C string containing the message.
      */
-    const char* get_message() const { return m_message; }
+    const char* get_message() const {
+        return m_message;
+    }
 
     /**
      * @brief Get a mutable pointer to the name input buffer.
@@ -51,13 +57,17 @@ class ChatWidget {
      *
      * @return Mutable pointer to the name buffer.
      */
-    char* name_buf() { return m_name; }
+    char* name_buf() {
+        return m_name;
+    }
 
     /**
      * @brief Get the size of the name input buffer.
      * @return Size in bytes of the name buffer (including null terminator space).
      */
-    size_t name_buf_size() const { return sizeof(m_name); }
+    size_t name_buf_size() const {
+        return sizeof(m_name);
+    }
 
     /**
      * @brief Get a mutable pointer to the message input buffer.
@@ -66,13 +76,17 @@ class ChatWidget {
      *
      * @return Mutable pointer to the message buffer.
      */
-    char* message_buf() { return m_message; }
+    char* message_buf() {
+        return m_message;
+    }
 
     /**
      * @brief Get the size of the message input buffer.
      * @return Size in bytes of the message buffer (including null terminator space).
      */
-    size_t message_buf_size() const { return sizeof(m_message); }
+    size_t message_buf_size() const {
+        return sizeof(m_message);
+    }
 
     /**
      * @brief Send the current message.
@@ -83,7 +97,7 @@ class ChatWidget {
     void send_message();
 
   private:
-    std::string m_buffer;        ///< Accumulated chat log.
-    char m_name[32] = "";        ///< User name input buffer.
-    char m_message[1024] = "";   ///< Message input buffer.
+    std::string m_buffer;      ///< Accumulated chat log.
+    char m_name[32] = "";      ///< User name input buffer.
+    char m_message[1024] = ""; ///< Message input buffer.
 };

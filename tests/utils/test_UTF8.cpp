@@ -1,7 +1,7 @@
 #include "utils/UTF8.h"
 
-#include <gtest/gtest.h>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <string>
 
 // ---------------------------------------------------------------------------

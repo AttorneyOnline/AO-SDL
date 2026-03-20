@@ -1,8 +1,8 @@
 #include "AOClient.h"
 
 #include "ao/net/PacketTypes.h"
-#include "event/EventManager.h"
 #include "event/CharSelectRequestEvent.h"
+#include "event/EventManager.h"
 #include "event/OutgoingChatEvent.h"
 #include "utils/Log.h"
 

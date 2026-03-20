@@ -12,8 +12,8 @@
  * @ingroup events
  */
 enum UIEventType {
-    CHAR_LOADING_DONE,  /**< Character loading has finished. */
-    ENTERED_COURTROOM   /**< The player has entered the courtroom screen. */
+    CHAR_LOADING_DONE, /**< Character loading has finished. */
+    ENTERED_COURTROOM  /**< The player has entered the courtroom screen. */
 };
 
 /**

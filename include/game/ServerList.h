@@ -15,10 +15,10 @@
  * @brief Describes a single game server entry from the master server list.
  */
 struct ServerEntry {
-    std::string hostname;                        /**< Server hostname or IP address. */
-    std::optional<uint16_t> tcp_port = std::nullopt;  /**< TCP port, if available. */
-    std::optional<uint16_t> ws_port = std::nullopt;   /**< WebSocket port, if available. */
-    std::optional<uint16_t> wss_port = std::nullopt;  /**< Secure WebSocket port, if available. */
+    std::string hostname;                            /**< Server hostname or IP address. */
+    std::optional<uint16_t> tcp_port = std::nullopt; /**< TCP port, if available. */
+    std::optional<uint16_t> ws_port = std::nullopt;  /**< WebSocket port, if available. */
+    std::optional<uint16_t> wss_port = std::nullopt; /**< Secure WebSocket port, if available. */
 
     std::string name;        /**< Human-readable server name. */
     std::string description; /**< Server description text. */

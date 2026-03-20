@@ -13,8 +13,7 @@ void GLRenderer::init_gl() {
     }
 }
 
-GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& fragment_source,
-                       int width, int height)
+GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& fragment_source, int width, int height)
     : fb_width(width), fb_height(height) {
     GLShader vert(ShaderType::Vertex, vertex_source, true);
     GLShader frag(ShaderType::Fragment, fragment_source, true);
@@ -46,21 +45,20 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
     int w = asset->width();
     int h = asset->height();
     int count = asset->frame_count();
-    if (w == 0 || h == 0 || count == 0) return 0;
+    if (w == 0 || h == 0 || count == 0)
+        return 0;
 
     GLuint tex;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
 
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, w, h, count,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, w, h, count, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     for (int i = 0; i < count; i++) {
         const auto& frame = asset->frame(i);
         int fw = std::min(frame.width, w);
         int fh = std::min(frame.height, h);
-        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
-                        fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
     }
 
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -68,8 +66,7 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    Log::log_print(DEBUG, "GLRenderer: uploaded %dx%d x %d frames for %s",
-                   w, h, count, asset->path().c_str());
+    Log::log_print(DEBUG, "GLRenderer: uploaded %dx%d x %d frames for %s", w, h, count, asset->path().c_str());
 
     texture_cache[asset.get()] = {asset, tex};
     return tex;
@@ -81,13 +78,14 @@ void GLRenderer::evict_expired_textures() {
             Log::log_print(DEBUG, "GLRenderer: evicting expired texture %u", it->second.texture);
             glDeleteTextures(1, &it->second.texture);
             it = texture_cache.erase(it);
-        } else {
+        }
+        else {
             ++it;
         }
     }
 }
 
-GLuint GLRenderer::draw(const RenderState* state) {
+void GLRenderer::draw(const RenderState* state) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
     glViewport(0, 0, fb_width, fb_height);
 
@@ -101,10 +99,12 @@ GLuint GLRenderer::draw(const RenderState* state) {
     for (const auto& [_, group] : state->get_layer_groups()) {
         for (const auto& [__, layer] : group.get_layers()) {
             const auto& asset = layer.get_asset();
-            if (!asset || asset->frame_count() == 0) continue;
+            if (!asset || asset->frame_count() == 0)
+                continue;
 
             GLuint tex_array = get_texture_array(asset);
-            if (tex_array == 0) continue;
+            if (tex_array == 0)
+                continue;
 
             int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
@@ -113,8 +113,10 @@ GLuint GLRenderer::draw(const RenderState* state) {
             sprite.draw(program);
         }
     }
+}
 
-    return render_texture;
+uintptr_t GLRenderer::get_render_texture_id() const {
+    return static_cast<uintptr_t>(render_texture);
 }
 
 void GLRenderer::bind_default_framebuffer() {
@@ -125,11 +127,49 @@ void GLRenderer::clear() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-std::unique_ptr<IRenderer> create_gl_renderer(const std::string& vertex_source,
-                                               const std::string& fragment_source,
-                                               int width, int height) {
+std::unique_ptr<IRenderer> create_gl_renderer(const std::string& vertex_source, const std::string& fragment_source,
+                                              int width, int height) {
     GLRenderer::init_gl();
     return std::make_unique<GLRenderer>(vertex_source, fragment_source, width, height);
+}
+
+// Embedded shaders for the common factory signature
+static const char* embedded_vertex_glsl = R"glsl(
+#version 450
+layout (location = 0) in vec2 vertex_pos;
+layout (location = 1) in vec2 vertex_tex_coord;
+
+out vec2 vert_texcoord;
+
+uniform mat4 local;
+uniform float aspect;
+
+void main() {
+    gl_Position = local * vec4(vertex_pos.x, vertex_pos.y, 0.0f, 1.0f);
+    vert_texcoord = vertex_tex_coord;
+}
+)glsl";
+
+static const char* embedded_fragment_glsl = R"glsl(
+#version 450
+layout (location = 0) out vec4 frag_color;
+
+in vec2 vert_texcoord;
+
+uniform sampler2DArray texture_sample;
+uniform int frame_index;
+
+void main() {
+    vec4 tex_color = texture(texture_sample, vec3(vert_texcoord, float(frame_index)));
+    if (tex_color.a < 0.001f) {
+        discard;
+    }
+    frag_color = tex_color;
+}
+)glsl";
+
+std::unique_ptr<IRenderer> create_renderer(int width, int height) {
+    return create_gl_renderer(embedded_vertex_glsl, embedded_fragment_glsl, width, height);
 }
 
 std::tuple<GLuint, GLuint> GLRenderer::setup_render_texture() {

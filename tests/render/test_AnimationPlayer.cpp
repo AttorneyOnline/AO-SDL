@@ -1,5 +1,5 @@
-#include "render/AnimationPlayer.h"
 #include "asset/ImageAsset.h"
+#include "render/AnimationPlayer.h"
 
 #include <gtest/gtest.h>
 #include <memory>

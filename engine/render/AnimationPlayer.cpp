@@ -10,11 +10,10 @@ void AnimationPlayer::load(std::shared_ptr<ImageAsset> asset, bool loop) {
     done = false;
 
     if (current_asset) {
-        Log::log_print(DEBUG, "AnimPlayer: loaded %d frames, loop=%d, path=%s",
-                       current_asset->frame_count(), loop, current_asset->path().c_str());
+        Log::log_print(DEBUG, "AnimPlayer: loaded %d frames, loop=%d, path=%s", current_asset->frame_count(), loop,
+                       current_asset->path().c_str());
         if (current_asset->frame_count() > 0) {
-            Log::log_print(DEBUG, "AnimPlayer: frame0 duration=%dms, size=%dx%d",
-                           current_asset->frame(0).duration_ms,
+            Log::log_print(DEBUG, "AnimPlayer: frame0 duration=%dms, size=%dx%d", current_asset->frame(0).duration_ms,
                            current_asset->frame(0).width, current_asset->frame(0).height);
         }
     }
@@ -38,7 +37,8 @@ void AnimationPlayer::tick(int delta_ms) {
         if (!looping) {
             elapsed_ms += delta_ms;
             int duration = current_asset->frame(0).duration_ms;
-            if (duration <= 0) duration = 100;
+            if (duration <= 0)
+                duration = 100;
             if (elapsed_ms >= duration) {
                 done = true;
             }
@@ -59,9 +59,10 @@ void AnimationPlayer::tick(int delta_ms) {
         if (frame_index >= current_asset->frame_count()) {
             if (looping) {
                 frame_index = 0;
-                Log::log_print(VERBOSE, "AnimPlayer: looped back to frame 0 (was %d/%d) path=%s",
-                               old_frame, current_asset->frame_count(), current_asset->path().c_str());
-            } else {
+                Log::log_print(VERBOSE, "AnimPlayer: looped back to frame 0 (was %d/%d) path=%s", old_frame,
+                               current_asset->frame_count(), current_asset->path().c_str());
+            }
+            else {
                 frame_index = current_asset->frame_count() - 1;
                 done = true;
                 Log::log_print(DEBUG, "AnimPlayer: finished one-shot at frame %d", frame_index);
@@ -70,7 +71,8 @@ void AnimationPlayer::tick(int delta_ms) {
         }
 
         duration = current_asset->frame(frame_index).duration_ms;
-        if (duration <= 0) duration = 100;
+        if (duration <= 0)
+            duration = 100;
     }
 }
 

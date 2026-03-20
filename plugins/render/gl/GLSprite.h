@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Shader.h"
 #include "GLMesh.h"
+#include "Shader.h"
 #include "render/Transform.h"
 
 #include <GL/glew.h>

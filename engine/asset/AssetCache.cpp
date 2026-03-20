@@ -1,10 +1,12 @@
 #include "asset/AssetCache.h"
 
-AssetCache::AssetCache(size_t max_bytes) : max_bytes_(max_bytes) {}
+AssetCache::AssetCache(size_t max_bytes) : max_bytes_(max_bytes) {
+}
 
 std::shared_ptr<Asset> AssetCache::get(const std::string& path) {
     auto it = entries.find(path);
-    if (it == entries.end()) return nullptr;
+    if (it == entries.end())
+        return nullptr;
 
     // Promote to front of LRU list.
     lru.splice(lru.begin(), lru, it->second.lru_pos);

@@ -7,8 +7,12 @@ namespace BlendOps {
 /// Alpha-composite src RGBA pixel over dst RGBA pixel (Porter-Duff "over").
 inline void blend_over(uint8_t* dst, const uint8_t* src) {
     uint8_t sa = src[3];
-    if (sa == 0) return;
-    if (sa == 255) { std::memcpy(dst, src, 4); return; }
+    if (sa == 0)
+        return;
+    if (sa == 255) {
+        std::memcpy(dst, src, 4);
+        return;
+    }
     float a = sa / 255.0f;
     float inv = 1.0f - a;
     float da = dst[3] / 255.0f;
@@ -23,8 +27,15 @@ inline void blend_over(uint8_t* dst, const uint8_t* src) {
 
 /// Composite a colored pixel with a given alpha over dst RGBA pixel.
 inline void blend_color(uint8_t* dst, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha) {
-    if (alpha == 0) return;
-    if (alpha == 255) { dst[0] = r; dst[1] = g; dst[2] = b; dst[3] = 255; return; }
+    if (alpha == 0)
+        return;
+    if (alpha == 255) {
+        dst[0] = r;
+        dst[1] = g;
+        dst[2] = b;
+        dst[3] = 255;
+        return;
+    }
     float a = alpha / 255.0f;
     float inv = 1.0f - a;
     float da = dst[3] / 255.0f;

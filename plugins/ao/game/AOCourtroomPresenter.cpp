@@ -13,8 +13,10 @@
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
     // t is real elapsed time in ms from the game thread
     int delta_ms = static_cast<int>(t);
-    if (delta_ms <= 0) delta_ms = 16;
-    if (delta_ms > 200) delta_ms = 200; // clamp to avoid huge jumps
+    if (delta_ms <= 0)
+        delta_ms = 16;
+    if (delta_ms > 200)
+        delta_ms = 200; // clamp to avoid huge jumps
 
     // Initialize AOAssetLibrary on first tick
     if (!initialized) {
@@ -36,8 +38,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     // ---- Drain background events ----
     auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
     while (auto ev = bg_ch.get_event()) {
-        background.set(ev->get_background(),
-                       ev->get_position().empty() ? background.position() : ev->get_position());
+        background.set(ev->get_background(), ev->get_position().empty() ? background.position() : ev->get_position());
     }
 
     // ---- Drain IC message events ----
@@ -51,8 +52,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         show_desk = (dm == DeskMod::SHOW || dm == DeskMod::EMOTE_ONLY || dm == DeskMod::EMOTE_ONLY_EX);
         current_flip = ev->get_flip();
 
-        emote_player.start(*ao_assets, ev->get_character(), ev->get_emote(),
-                           ev->get_pre_emote(), ev->get_emote_mod());
+        emote_player.start(*ao_assets, ev->get_character(), ev->get_emote(), ev->get_pre_emote(), ev->get_emote_mod());
 
         textbox.start_message(ev->get_showname(), ev->get_message(), ev->get_text_color());
         textbox_dirty = true;
@@ -67,8 +67,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     }
 
     // Text finished scrolling → transition character to idle animation
-    if (textbox.text_state() == AOTextBox::TextState::DONE &&
-        emote_player.state() == AOEmotePlayer::State::TALKING) {
+    if (textbox.text_state() == AOTextBox::TextState::DONE && emote_player.state() == AOEmotePlayer::State::TALKING) {
         emote_player.transition_to_idle();
     }
 
@@ -83,8 +82,8 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         frame.duration_ms = 0;
         frame.pixels = std::move(pixels);
 
-        textbox_overlay = std::make_shared<ImageAsset>(
-            "_textbox_overlay", "raw", std::vector<ImageFrame>{std::move(frame)});
+        textbox_overlay =
+            std::make_shared<ImageAsset>("_textbox_overlay", "raw", std::vector<ImageFrame>{std::move(frame)});
         textbox_dirty = false;
     }
 

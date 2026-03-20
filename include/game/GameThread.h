@@ -46,8 +46,8 @@ class GameThread {
      */
     void game_loop();
 
-    std::atomic<bool> running;      /**< Flag to signal the loop to exit. */
-    StateBuffer& render_buffer;     /**< Shared render state output buffer. */
-    IScenePresenter& presenter;     /**< Scene presenter driven each tick. */
-    std::thread tick_thread;        /**< The background game thread. */
+    std::atomic<bool> running;  /**< Flag to signal the loop to exit. */
+    StateBuffer& render_buffer; /**< Shared render state output buffer. */
+    IScenePresenter& presenter; /**< Scene presenter driven each tick. */
+    std::thread tick_thread;    /**< The background game thread. */
 };

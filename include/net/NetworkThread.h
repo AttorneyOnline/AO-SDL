@@ -10,6 +10,7 @@
 
 #include "ProtocolHandler.h"
 
+#include <atomic>
 #include <thread>
 
 /**
@@ -38,15 +39,15 @@ class NetworkThread {
      */
     explicit NetworkThread(ProtocolHandler& handler);
 
-  private:
     /**
-     * @brief Main loop executed on the network thread.
-     *
-     * Waits for a ServerConnectEvent, connects the WebSocket, then polls for
-     * incoming/outgoing messages until the connection is lost.
+     * @brief Signal the network loop to stop and join the thread.
      */
+    void stop();
+
+  private:
     void net_loop();
 
-    ProtocolHandler& handler; /**< Protocol handler driven by this thread. */
-    std::thread net_thread;   /**< The background network thread. */
+    std::atomic<bool> running;
+    ProtocolHandler& handler;
+    std::thread net_thread;
 };

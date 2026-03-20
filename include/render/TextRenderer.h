@@ -77,10 +77,8 @@ class TextRenderer {
      *                   stays at the bottom. 0 = no scroll limit.
      * @param pixels    Output RGBA pixel buffer (buf_width * buf_height * 4 bytes).
      */
-    void render(const std::string& text, int char_count, TextColor color,
-                int x, int y, int buf_width, int buf_height,
-                int wrap_width, int max_height,
-                uint8_t* pixels);
+    void render(const std::string& text, int char_count, TextColor color, int x, int y, int buf_width, int buf_height,
+                int wrap_width, int max_height, uint8_t* pixels);
 
     /** @brief Line height in pixels for the current font. */
     int line_height() const;
@@ -94,9 +92,8 @@ class TextRenderer {
   private:
     std::vector<GlyphLayout> compute_layout(const std::string& text, int wrap_width);
     int compute_scroll_offset(const std::vector<GlyphLayout>& layout, int char_count, int max_height);
-    void blit_glyphs(const std::vector<GlyphLayout>& layout, int char_count, TextColor color,
-                     int x, int y, int scroll_y, int max_height,
-                     int buf_width, int buf_height, uint8_t* pixels);
+    void blit_glyphs(const std::vector<GlyphLayout>& layout, int char_count, TextColor color, int x, int y,
+                     int scroll_y, int max_height, int buf_width, int buf_height, uint8_t* pixels);
 
     struct Impl;
     std::unique_ptr<Impl> impl;

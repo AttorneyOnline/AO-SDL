@@ -11,18 +11,25 @@
 #include "ui/UIManager.h"
 #include "utils/Log.h"
 
-// Plugins
+// Plugins — create_renderer() is defined in whichever render plugin is linked.
 #include "ao/ao_plugin.h"
-#include "render/gl/GLRenderer.h"
+#include "render/IRenderer.h"
 
-// App
+// App — create_gpu_backend() is defined in whichever backend source is linked.
+#include "IGPUBackend.h"
 #include "ImGuiUIRenderer.h"
 #include "SDLGameWindow.h"
 
 #include "httplib.h"
 
+#include <cstdlib>
+#include <filesystem>
+
+// Provided by the linked render plugin (aorender_gl or aorender_metal).
+std::unique_ptr<IRenderer> create_renderer(int width, int height);
+
 int main(int argc, char* argv[]) {
-    MediaManager::instance().init("G:/AO2/base");
+    MediaManager::instance().init(std::filesystem::path(std::getenv("HOME")) / "Documents" / "AO2" / "base");
 
     // todo: kick off another thread to do this
     httplib::Client cli("http://servers.aceattorneyonline.com");
@@ -33,31 +40,19 @@ int main(int argc, char* argv[]) {
     }
 
     UIManager ui_mgr;
-    SDLGameWindow game_window(ui_mgr);
+    SDLGameWindow game_window(ui_mgr, create_gpu_backend());
 
     // Workaround for Qt Creator
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    // Initialize StateBuffer
     StateBuffer buffer;
 
     // Protocol plugin — swap this line to change protocols
     auto protocol = ao::create_protocol();
     NetworkThread net_thread(*protocol);
 
-    // Load shaders from the asset system
-    auto& assets = MediaManager::instance().assets();
-    auto vert_data = assets.raw("shaders/vertex.glsl");
-    auto frag_data = assets.raw("shaders/fragment.glsl");
-    if (!vert_data || !frag_data) {
-        Log::log_print(FATAL, "Failed to load shaders from asset system");
-        return 1;
-    }
-    std::string vert_source(vert_data->begin(), vert_data->end());
-    std::string frag_source(frag_data->begin(), frag_data->end());
-
     // Render backend — AO2 viewport is 256x192
-    RenderManager renderer(buffer, create_gl_renderer(vert_source, frag_source, 256, 192));
+    RenderManager renderer(buffer, create_renderer(256, 192));
 
     // Scene presenter — swap this to change game logic
     auto presenter = ao::create_presenter();
@@ -67,7 +62,7 @@ int main(int argc, char* argv[]) {
     ImGuiUIRenderer ui_renderer;
     game_window.start_loop(renderer, ui_renderer);
 
-    // todo: cleanup memory
+    net_thread.stop();
     game_logic.stop();
 
     return 0;

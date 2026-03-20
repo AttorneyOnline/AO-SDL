@@ -19,34 +19,20 @@
  */
 class RenderManager {
   public:
-    /**
-     * @brief Construct a RenderManager.
-     *
-     * @param buf Reference to the triple-buffered StateBuffer shared with the game thread.
-     * @param renderer Unique pointer to the renderer backend. Ownership is transferred
-     *                 to RenderManager; the caller must not use the pointer after this call.
-     */
     RenderManager(StateBuffer& buf, std::unique_ptr<IRenderer> renderer);
 
-    /**
-     * @brief Render the current frame.
-     *
-     * Fetches the latest consumer state from the StateBuffer, passes it to the
-     * owned IRenderer, and returns the resulting opaque texture handle.
-     *
-     * @return Opaque GPU texture handle for the rendered frame.
-     */
-    uint32_t render_frame();
+    /// Draw the current game state to the offscreen render target.
+    void render_frame();
 
-    /**
-     * @brief Prepare for a new frame.
-     *
-     * Binds the default framebuffer and clears it, readying the display for
-     * the next composited output.
-     */
+    /// Bind the default framebuffer and clear it.
     void begin_frame();
 
+    /// Access the underlying renderer.
+    IRenderer& get_renderer() {
+        return *renderer;
+    }
+
   private:
-    StateBuffer& state_buf;                ///< Shared triple-buffer for game-to-render communication.
-    std::unique_ptr<IRenderer> renderer;   ///< Owned renderer backend.
+    StateBuffer& state_buf;
+    std::unique_ptr<IRenderer> renderer;
 };

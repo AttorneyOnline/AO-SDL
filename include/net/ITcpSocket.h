@@ -22,7 +22,8 @@ class WebSocketException : public std::runtime_error {
      * @brief Construct a WebSocketException with a descriptive message.
      * @param message Human-readable description of the error.
      */
-    explicit WebSocketException(const std::string& message) : std::runtime_error(message) {}
+    explicit WebSocketException(const std::string& message) : std::runtime_error(message) {
+    }
 };
 
 /**

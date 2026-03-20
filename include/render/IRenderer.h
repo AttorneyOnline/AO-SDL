@@ -11,7 +11,7 @@ class RenderState;
 /**
  * @brief Backend-agnostic renderer interface.
  *
- * Implementations (GL, Vulkan, software, etc.) draw a RenderState to an
+ * Implementations (GL, Metal, Vulkan, software, etc.) draw a RenderState to an
  * offscreen target and return an opaque texture handle. Each backend
  * provides its own concrete subclass.
  */
@@ -21,15 +21,11 @@ class IRenderer {
     virtual ~IRenderer() = default;
 
     /**
-     * @brief Draw the given render state and return an opaque texture handle.
-     *
-     * Renders all layer groups in @p state to an offscreen framebuffer and
-     * returns a handle suitable for compositing (e.g. a GLuint cast to uint32_t).
+     * @brief Draw the given render state to the offscreen target.
      *
      * @param state Pointer to the RenderState describing what to draw. May be null.
-     * @return Opaque GPU texture handle representing the rendered frame.
      */
-    virtual uint32_t draw(const RenderState* state) = 0;
+    virtual void draw(const RenderState* state) = 0;
 
     /**
      * @brief Bind the default framebuffer (the screen).
@@ -43,4 +39,55 @@ class IRenderer {
      * @brief Clear the currently bound framebuffer.
      */
     virtual void clear() = 0;
+
+    /**
+     * @brief Get the offscreen render texture as an opaque ID suitable for
+     *        toolkit compositing (e.g. ImGui::Image).
+     *
+     * On GL this is a GLuint cast to uintptr_t.
+     * On Metal this is an id<MTLTexture> bridged to uintptr_t.
+     */
+    virtual uintptr_t get_render_texture_id() const = 0;
+
+    /**
+     * @brief Get a texture suitable for on-screen display at the given size.
+     *
+     * Returns a texture that has been upscaled from the offscreen render target
+     * using nearest-neighbor filtering. Backends where the toolkit already
+     * samples with nearest filtering (e.g. GL) may simply return the render
+     * texture unchanged.
+     *
+     * @param display_w Desired display width in pixels.
+     * @param display_h Desired display height in pixels.
+     */
+    virtual uintptr_t get_display_texture_id(int display_w, int display_h) {
+        (void)display_w;
+        (void)display_h;
+        return get_render_texture_id();
+    }
+
+    /**
+     * @brief Whether texture V=0 is at the bottom (true for GL, false for Metal).
+     *
+     * Toolkits that display the render texture need to know the UV convention
+     * so they can flip if necessary.
+     */
+    virtual bool uv_flipped() const = 0;
+
+    /**
+     * @brief Get an opaque pointer to the GPU device handle, or nullptr.
+     *
+     * Used during backend initialisation (e.g. to set up ImGui for Metal).
+     * Returns nullptr on backends that don't need it (GL).
+     */
+    virtual void* get_device_ptr() const {
+        return nullptr;
+    }
+
+    /**
+     * @brief Get an opaque pointer to the command queue, or nullptr.
+     */
+    virtual void* get_command_queue_ptr() const {
+        return nullptr;
+    }
 };

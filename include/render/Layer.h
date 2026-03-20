@@ -27,9 +27,15 @@ class Layer {
      */
     Layer(std::shared_ptr<ImageAsset> asset, int frame_index, uint16_t z_index);
 
-    const std::shared_ptr<ImageAsset>& get_asset() const { return asset; }
-    int get_frame_index() const { return frame_index; }
-    uint16_t get_z_index() const { return z_index; }
+    const std::shared_ptr<ImageAsset>& get_asset() const {
+        return asset;
+    }
+    int get_frame_index() const {
+        return frame_index;
+    }
+    uint16_t get_z_index() const {
+        return z_index;
+    }
 
   private:
     std::shared_ptr<ImageAsset> asset;
@@ -45,7 +51,9 @@ class LayerGroup {
     LayerGroup();
 
     void add_layer(int id, Layer layer);
-    const std::map<int, Layer>& get_layers() const { return layers; }
+    const std::map<int, Layer>& get_layers() const {
+        return layers;
+    }
 
   private:
     std::map<int, Layer> layers;

@@ -2,8 +2,7 @@
 
 #include <format>
 
-CharacterListEvent::CharacterListEvent(std::vector<std::string> characters)
-    : characters(std::move(characters)) {
+CharacterListEvent::CharacterListEvent(std::vector<std::string> characters) : characters(std::move(characters)) {
 }
 
 const std::vector<std::string>& CharacterListEvent::get_characters() const {

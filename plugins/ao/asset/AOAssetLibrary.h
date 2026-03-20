@@ -16,10 +16,10 @@ struct AORect {
 
 /// Font settings from courtroom_fonts.ini.
 struct AOFontSpec {
-    std::string name;   ///< Normalized filename stem (e.g. "igiari-cyrillic").
-    int size_pt = 10;   ///< Point size from config.
-    int size_px = 13;   ///< Pixel size (pt * 4/3, rounded).
-    bool sharp = true;  ///< No anti-aliasing (message_sharp=1).
+    std::string name;  ///< Normalized filename stem (e.g. "igiari-cyrillic").
+    int size_pt = 10;  ///< Point size from config.
+    int size_px = 13;  ///< Pixel size (pt * 4/3, rounded).
+    bool sharp = true; ///< No anti-aliasing (message_sharp=1).
 };
 
 /// Text color from chat_config.ini.
@@ -40,16 +40,17 @@ class AOAssetLibrary {
   public:
     explicit AOAssetLibrary(AssetLibrary& assets, const std::string& theme = "default");
 
-    const std::string& theme() const { return active_theme; }
+    const std::string& theme() const {
+        return active_theme;
+    }
 
     // -------------------------------------------------------------------------
     // Character sprites
     // -------------------------------------------------------------------------
 
     /// Load a character emote with a prefix: "(a)", "(b)", or "" for preanim.
-    std::shared_ptr<ImageAsset> character_emote(
-        const std::string& character, const std::string& emote,
-        const std::string& prefix);
+    std::shared_ptr<ImageAsset> character_emote(const std::string& character, const std::string& emote,
+                                                const std::string& prefix);
 
     std::shared_ptr<ImageAsset> character_icon(const std::string& character);
 
@@ -85,7 +86,9 @@ class AOAssetLibrary {
     /// Find a font file by normalized name. Searches all theme dirs + fonts/.
     std::optional<std::vector<uint8_t>> find_font(const std::string& normalized_name);
 
-    AssetLibrary& engine_assets() { return assets; }
+    AssetLibrary& engine_assets() {
+        return assets;
+    }
 
   private:
     AssetLibrary& assets;

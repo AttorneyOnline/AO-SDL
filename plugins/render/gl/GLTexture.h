@@ -35,7 +35,9 @@ class GLTexture2D : public GLTexture {
 
     int get_width();
     int get_height();
-    GLuint get_id() const { return texture; }
+    GLuint get_id() const {
+        return texture;
+    }
 
   private:
     int width;

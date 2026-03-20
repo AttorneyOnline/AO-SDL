@@ -1,11 +1,11 @@
-#include "ao/net/AOPacket.h"
 #include "ao/net/AOClient.h"
+#include "ao/net/AOPacket.h"
 #include "ao/net/PacketTypes.h"
+#include "event/CharacterListEvent.h"
+#include "event/CharsCheckEvent.h"
+#include "event/ChatEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
-#include "event/ChatEvent.h"
-#include "event/CharsCheckEvent.h"
-#include "event/CharacterListEvent.h"
 
 #include <gtest/gtest.h>
 #include <optional>
@@ -15,7 +15,8 @@
 // Drain an event channel so test isolation is maintained.
 template <typename T>
 static void drain(EventChannel<T>& ch) {
-    while (ch.get_event()) {}
+    while (ch.get_event()) {
+    }
 }
 
 // ---------------------------------------------------------------------------

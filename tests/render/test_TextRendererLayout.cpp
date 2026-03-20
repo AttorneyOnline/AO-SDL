@@ -1,7 +1,7 @@
 #include "render/TextRenderer.h"
 
-#include <gtest/gtest.h>
 #include <cstdint>
+#include <gtest/gtest.h>
 
 // ---------------------------------------------------------------------------
 // Construction and no-font state

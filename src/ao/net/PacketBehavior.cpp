@@ -1,11 +1,11 @@
 #include "PacketTypes.h"
 
 #include "AOClient.h"
-#include "event/EventManager.h"
-#include "event/UIEvent.h"
-#include "event/ChatEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
+#include "event/ChatEvent.h"
+#include "event/EventManager.h"
+#include "event/UIEvent.h"
 
 // Keeping the actual handler functions in a separate file here just for clarity
 
@@ -81,8 +81,7 @@ void AOPacketSC::handle(AOClient& cli) {
         folder_names.push_back(entry.substr(0, entry.find('&')));
     }
 
-    EventManager::instance().get_channel<CharacterListEvent>().publish(
-        CharacterListEvent(std::move(folder_names)));
+    EventManager::instance().get_channel<CharacterListEvent>().publish(CharacterListEvent(std::move(folder_names)));
 
     AOPacketRM ask_for_music;
     cli.add_message(ask_for_music);

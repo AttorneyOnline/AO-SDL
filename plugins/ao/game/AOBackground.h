@@ -14,11 +14,19 @@ class AOBackground {
     void set_position(const std::string& position);
     void reload_if_needed(AOAssetLibrary& ao_assets);
 
-    const std::string& background() const { return bg_name; }
-    const std::string& position() const { return pos; }
+    const std::string& background() const {
+        return bg_name;
+    }
+    const std::string& position() const {
+        return pos;
+    }
 
-    const std::shared_ptr<ImageAsset>& bg_asset() const { return bg; }
-    const std::shared_ptr<ImageAsset>& desk_asset() const { return desk; }
+    const std::shared_ptr<ImageAsset>& bg_asset() const {
+        return bg;
+    }
+    const std::shared_ptr<ImageAsset>& desk_asset() const {
+        return desk;
+    }
 
   private:
     std::string bg_name;

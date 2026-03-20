@@ -61,8 +61,8 @@ class HTTPResponse {
   public:
     /** @brief Parsed HTTP status line components. */
     struct StatusLine {
-        std::string http_version; /**< HTTP version string (e.g. "HTTP/1.1"). */
-        int status_code;          /**< Numeric status code (e.g. 101). */
+        std::string http_version;  /**< HTTP version string (e.g. "HTTP/1.1"). */
+        int status_code;           /**< Numeric status code (e.g. 101). */
         std::string status_reason; /**< Reason phrase (e.g. "Switching Protocols"). */
     };
 
@@ -110,18 +110,18 @@ class WebSocket {
      * @brief A single WebSocket frame (possibly partial during parsing).
      */
     struct WebSocketFrame {
-        bool complete;             /**< True if the frame has been fully received. */
+        bool complete;              /**< True if the frame has been fully received. */
         std::vector<uint8_t> bytes; /**< Raw bytes of the frame as received. */
 
-        bool fin;       /**< FIN bit: true if this is the final fragment. */
-        uint8_t rsv;    /**< RSV bits (reserved, should be 0). */
-        Opcode opcode;  /**< Frame opcode. */
+        bool fin;      /**< FIN bit: true if this is the final fragment. */
+        uint8_t rsv;   /**< RSV bits (reserved, should be 0). */
+        Opcode opcode; /**< Frame opcode. */
 
-        bool mask;          /**< True if the payload is masked. */
-        uint8_t len_code;   /**< Raw length code from the frame header. */
-        uint64_t len;       /**< Actual payload length after decoding. */
+        bool mask;        /**< True if the payload is masked. */
+        uint8_t len_code; /**< Raw length code from the frame header. */
+        uint64_t len;     /**< Actual payload length after decoding. */
 
-        uint32_t mask_key;  /**< Masking key (only valid if mask is true). */
+        uint32_t mask_key; /**< Masking key (only valid if mask is true). */
 
         std::vector<uint8_t> data; /**< Unmasked payload data. */
 
@@ -215,8 +215,8 @@ class WebSocket {
 
     bool case_insensitive_equal(const std::string& a, const std::string& b);
 
-    static inline uint64_t ntohll(uint64_t net_value);
-    static inline uint64_t htonll(uint64_t host_value);
+    static inline uint64_t net_to_host_64(uint64_t net_value);
+    static inline uint64_t host_to_net_64(uint64_t host_value);
 
     std::unique_ptr<ITcpSocket> socket; /**< Underlying TCP transport. */
 

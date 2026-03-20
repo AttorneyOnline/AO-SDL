@@ -62,13 +62,17 @@ class AssetCache {
      * @brief Get the current total memory usage of cached assets.
      * @return Sum of memory_size() for all cached assets, in bytes.
      */
-    size_t used_bytes() const { return used_bytes_; }
+    size_t used_bytes() const {
+        return used_bytes_;
+    }
 
     /**
      * @brief Get the configured soft memory limit.
      * @return The maximum byte budget configured at construction.
      */
-    size_t max_bytes() const { return max_bytes_; }
+    size_t max_bytes() const {
+        return max_bytes_;
+    }
 
   private:
     /**

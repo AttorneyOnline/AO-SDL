@@ -15,7 +15,8 @@ void UIManager::push_screen(std::unique_ptr<Screen> screen) {
 }
 
 void UIManager::pop_screen() {
-    if (stack.empty()) return;
+    if (stack.empty())
+        return;
     stack.back()->exit();
     stack.pop_back();
     if (!stack.empty()) {
@@ -28,5 +29,6 @@ Screen* UIManager::active_screen() const {
 }
 
 void UIManager::handle_events() {
-    if (auto* s = active_screen()) s->handle_events();
+    if (auto* s = active_screen())
+        s->handle_events();
 }

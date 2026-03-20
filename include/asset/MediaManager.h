@@ -59,6 +59,6 @@ class MediaManager {
     MediaManager(MediaManager&) = delete;
     void operator=(MediaManager const&) = delete;
 
-    std::unique_ptr<MountManager> mounts; /**< Virtual filesystem mount manager. */
+    std::unique_ptr<MountManager> mounts;  /**< Virtual filesystem mount manager. */
     std::unique_ptr<AssetLibrary> library; /**< Cached asset loader. */
 };

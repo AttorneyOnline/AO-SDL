@@ -25,7 +25,9 @@ class AOTextBox {
     void start_message(const std::string& showname, const std::string& message, int color_idx);
     bool tick(int delta_ms);
 
-    TextState text_state() const { return state; }
+    TextState text_state() const {
+        return state;
+    }
     bool is_talking() const;
 
     /// Render chatbox into a viewport-sized RGBA pixel buffer (pre-cleared).

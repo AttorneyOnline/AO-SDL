@@ -1,17 +1,35 @@
-add_executable(aosdl
+set(SDL_APP_SOURCES
     main.cpp
     SDLGameWindow.cpp
     ImGuiUIRenderer.cpp
 )
+
+if(APPLE)
+    list(APPEND SDL_APP_SOURCES MetalBackend.mm)
+else()
+    list(APPEND SDL_APP_SOURCES GLBackend.cpp)
+endif()
+
+add_executable(aosdl ${SDL_APP_SOURCES})
 set_property(TARGET aosdl PROPERTY CXX_STANDARD 20)
 
 target_link_libraries(aosdl PRIVATE
     aoengine
-    aorender_gl
     ao_protocol
     imgui
     SDL2::SDL2
 )
+
+if(APPLE)
+    target_link_libraries(aosdl PRIVATE aorender_metal
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+    )
+else()
+    target_link_libraries(aosdl PRIVATE aorender_gl)
+endif()
+
 if(TARGET SDL2::SDL2main)
     target_link_libraries(aosdl PRIVATE SDL2::SDL2main)
 endif()

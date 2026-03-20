@@ -1,8 +1,8 @@
 #include "net/NetworkThread.h"
 
-#include "net/WebSocket.h"
 #include "event/EventManager.h"
 #include "event/ServerConnectEvent.h"
+#include "net/WebSocket.h"
 #include "utils/Log.h"
 
 #include <chrono>
@@ -10,13 +10,20 @@
 #include <thread>
 
 NetworkThread::NetworkThread(ProtocolHandler& handler)
-    : handler(handler), net_thread(&NetworkThread::net_loop, this) {
+    : running(true), handler(handler), net_thread(&NetworkThread::net_loop, this) {
+}
+
+void NetworkThread::stop() {
+    running = false;
+    if (net_thread.joinable()) {
+        net_thread.join();
+    }
 }
 
 void NetworkThread::net_loop() {
     // Wait for the user to select a server before connecting.
     std::optional<WebSocket> sock;
-    while (!sock.has_value()) {
+    while (running && !sock.has_value()) {
         if (auto ev = EventManager::instance().get_channel<ServerConnectEvent>().get_event()) {
             sock.emplace(ev->get_host(), ev->get_port());
         }
@@ -24,6 +31,9 @@ void NetworkThread::net_loop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
+
+    if (!running)
+        return;
 
     // todo: sock.connect() is blocking — implement a timeout
     if (!sock->is_connected()) {
@@ -34,7 +44,7 @@ void NetworkThread::net_loop() {
 
     std::vector<WebSocket::WebSocketFrame> msgs;
 
-    while (true) {
+    while (running) {
         // todo: cleanly handle and stitch continuation frames
         msgs = sock->read();
 

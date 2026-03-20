@@ -11,6 +11,8 @@ class MountDirectory : public Mount {
     std::vector<uint8_t> fetch_data(const std::string& path) override;
 
   private:
-    void load_cache() override {}
-    void save_cache() override {}
+    void load_cache() override {
+    }
+    void save_cache() override {
+    }
 };

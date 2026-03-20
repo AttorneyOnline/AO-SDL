@@ -29,10 +29,14 @@ class BackgroundEvent : public Event {
     std::string to_string() const override;
 
     /** @brief Background folder name. */
-    const std::string& get_background() const { return background; }
+    const std::string& get_background() const {
+        return background;
+    }
 
     /** @brief Courtroom position (may be empty). */
-    const std::string& get_position() const { return position; }
+    const std::string& get_position() const {
+        return position;
+    }
 
   private:
     std::string background;

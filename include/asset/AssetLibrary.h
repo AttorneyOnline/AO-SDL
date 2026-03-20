@@ -113,7 +113,9 @@ class AssetLibrary {
      * @brief Get a const reference to the internal AssetCache.
      * @return The underlying AssetCache.
      */
-    const AssetCache& cache() const { return cache_; }
+    const AssetCache& cache() const {
+        return cache_;
+    }
 
   private:
     /**
@@ -122,9 +124,9 @@ class AssetLibrary {
      * @param extensions List of extensions to try, in priority order.
      * @return A pair of (resolved path with extension, raw bytes), or std::nullopt.
      */
-    std::optional<std::pair<std::string, std::vector<uint8_t>>>
-    probe(const std::string& path, const std::vector<std::string>& extensions);
+    std::optional<std::pair<std::string, std::vector<uint8_t>>> probe(const std::string& path,
+                                                                      const std::vector<std::string>& extensions);
 
     MountManager& mounts; /**< Filesystem mount manager. */
-    AssetCache cache_;     /**< Internal LRU asset cache. */
+    AssetCache cache_;    /**< Internal LRU asset cache. */
 };
