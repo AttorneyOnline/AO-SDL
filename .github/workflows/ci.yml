@@ -40,5 +40,5 @@ jobs:
           make
           
       - name: Run tests
-        working-dir: build/tests
+        working-directory: build/tests
         run: ./aosdl_tests
