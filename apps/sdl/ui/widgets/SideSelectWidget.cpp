@@ -11,7 +11,5 @@ void SideSelectWidget::handle_events() {
 }
 
 void SideSelectWidget::render() {
-    ImGui::Begin("Position");
     ImGui::Combo("Side", &state_->side_index, SIDE_LABELS, SIDE_COUNT);
-    ImGui::End();
 }

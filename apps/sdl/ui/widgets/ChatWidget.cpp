@@ -16,14 +16,29 @@ void ChatWidget::handle_events() {
 }
 
 void ChatWidget::render() {
-    ImGui::Begin("Chat");
-    ImGui::Text("%s", m_buffer.c_str());
-    ImGui::InputText("name", m_name, sizeof(m_name));
-    ImGui::InputText("message", m_message, sizeof(m_message));
+    float input_height = ImGui::GetFrameHeightWithSpacing() * 3 + ImGui::GetStyle().ItemSpacing.y;
+    float log_height = ImGui::GetContentRegionAvail().y - input_height;
+
+    if (log_height > 0) {
+        ImGui::BeginChild("##chat_log", ImVec2(0, log_height), ImGuiChildFlags_None);
+        ImGui::TextUnformatted(m_buffer.c_str());
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f)
+            ImGui::SetScrollHereY(1.0f);
+        ImGui::EndChild();
+    }
+
+    ImGui::InputText("Name", m_name, sizeof(m_name));
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x -
+                            ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().ItemSpacing.x);
+    if (ImGui::InputText("##ooc_msg", m_message, sizeof(m_message), ImGuiInputTextFlags_EnterReturnsTrue)) {
+        EventManager::instance().get_channel<OutgoingChatEvent>().publish(
+            OutgoingChatEvent(std::string(m_name), std::string(m_message)));
+        m_message[0] = '\0';
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Send")) {
         EventManager::instance().get_channel<OutgoingChatEvent>().publish(
             OutgoingChatEvent(std::string(m_name), std::string(m_message)));
         m_message[0] = '\0';
     }
-    ImGui::End();
 }

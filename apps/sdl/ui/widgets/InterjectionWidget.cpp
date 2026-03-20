@@ -17,8 +17,6 @@ static bool toggle_button(const char* label, bool active) {
 }
 
 void InterjectionWidget::render() {
-    ImGui::Begin("Interjections");
-
     if (toggle_button("Hold It!", state_->objection_mod == 1))
         state_->objection_mod = (state_->objection_mod == 1) ? 0 : 1;
 
@@ -29,6 +27,4 @@ void InterjectionWidget::render() {
     ImGui::SameLine();
     if (toggle_button("Take That!", state_->objection_mod == 3))
         state_->objection_mod = (state_->objection_mod == 3) ? 0 : 3;
-
-    ImGui::End();
 }

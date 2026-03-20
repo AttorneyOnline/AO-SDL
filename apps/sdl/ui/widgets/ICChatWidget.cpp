@@ -48,11 +48,11 @@ void ICChatWidget::send() {
 }
 
 void ICChatWidget::render() {
-    ImGui::Begin("IC Chat");
-
     ImGui::InputText("Showname", state_->showname, sizeof(state_->showname));
 
-    if (ImGui::InputText("Message", state_->message, sizeof(state_->message),
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x -
+                            ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().ItemSpacing.x);
+    if (ImGui::InputText("##ic_msg", state_->message, sizeof(state_->message),
                          ImGuiInputTextFlags_EnterReturnsTrue)) {
         send();
     }
@@ -61,6 +61,4 @@ void ICChatWidget::render() {
     if (ImGui::Button("Send")) {
         send();
     }
-
-    ImGui::End();
 }

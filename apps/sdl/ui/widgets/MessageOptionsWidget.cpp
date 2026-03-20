@@ -11,8 +11,6 @@ void MessageOptionsWidget::handle_events() {
 }
 
 void MessageOptionsWidget::render() {
-    ImGui::Begin("Message Options");
-
     ImGui::Checkbox("Flip", &state_->flip);
     ImGui::SameLine();
     ImGui::Checkbox("Realization", &state_->realization);
@@ -20,6 +18,4 @@ void MessageOptionsWidget::render() {
     ImGui::Checkbox("Screenshake", &state_->screenshake);
 
     ImGui::Combo("Text Color", &state_->text_color, COLOR_LABELS, COLOR_COUNT);
-
-    ImGui::End();
 }

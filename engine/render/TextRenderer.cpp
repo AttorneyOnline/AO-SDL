@@ -180,6 +180,10 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
             pen_y += impl->line_h;
         }
 
+        // Skip leading whitespace at the start of a wrapped line
+        if (pen_x == 0 && word.char_count == 1 && word.byte_start < text.size() && text[word.byte_start] == ' ')
+            continue;
+
         // If a single word is wider than the line, we need to character-break it.
         size_t pos = word.byte_start;
         for (int i = 0; i < word.char_count; i++) {
