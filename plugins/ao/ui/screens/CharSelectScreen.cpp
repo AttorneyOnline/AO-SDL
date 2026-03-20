@@ -1,4 +1,4 @@
-#include "ui/screens/CharSelectScreen.h"
+#include "ao/ui/screens/CharSelectScreen.h"
 
 #include "asset/MediaManager.h"
 #include "event/CharSelectRequestEvent.h"
@@ -6,7 +6,7 @@
 #include "event/CharsCheckEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
-#include "ui/screens/CourtroomScreen.h"
+#include "ao/ui/screens/CourtroomScreen.h"
 #include "utils/Log.h"
 
 #include <format>
@@ -48,7 +48,6 @@ void CharSelectScreen::handle_events() {
         }
     }
 
-    chat.handle_events();
 }
 
 void CharSelectScreen::select_character(int index) {

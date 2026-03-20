@@ -1,9 +1,6 @@
 #include "ui/UIManager.h"
 
-#include "ui/screens/ServerListScreen.h"
-
 UIManager::UIManager() {
-    push_screen(std::make_unique<ServerListScreen>());
 }
 
 void UIManager::push_screen(std::unique_ptr<Screen> screen) {

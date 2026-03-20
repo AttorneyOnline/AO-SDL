@@ -13,11 +13,12 @@
 
 // Plugins — create_renderer() is defined in whichever render plugin is linked.
 #include "ao/ao_plugin.h"
+#include "ao/ui/screens/ServerListScreen.h"
 #include "render/IRenderer.h"
 
 // App — create_gpu_backend() is defined in whichever backend source is linked.
-#include "IGPUBackend.h"
-#include "ImGuiUIRenderer.h"
+#include "render/IGPUBackend.h"
+#include "ui/ImGuiUIRenderer.h"
 #include "SDLGameWindow.h"
 
 #include "httplib.h"
@@ -40,6 +41,7 @@ int main(int argc, char* argv[]) {
     }
 
     UIManager ui_mgr;
+    ui_mgr.push_screen(std::make_unique<ServerListScreen>());
     SDLGameWindow game_window(ui_mgr, create_gpu_backend());
 
     // Workaround for Qt Creator

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IGPUBackend.h"
+#include "render/IGPUBackend.h"
 #include "render/RenderManager.h"
 #include "ui/IUIRenderer.h"
 #include "ui/UIManager.h"

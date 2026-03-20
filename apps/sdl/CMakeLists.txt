@@ -1,17 +1,22 @@
 set(SDL_APP_SOURCES
     main.cpp
     SDLGameWindow.cpp
-    ImGuiUIRenderer.cpp
+    ui/ImGuiUIRenderer.cpp
+    ui/widgets/ChatWidget.cpp
+    ui/widgets/ServerListWidget.cpp
+    ui/widgets/CharSelectWidget.cpp
+    ui/widgets/CourtroomWidget.cpp
 )
 
 if(APPLE)
-    list(APPEND SDL_APP_SOURCES MetalBackend.mm)
+    list(APPEND SDL_APP_SOURCES render/MetalBackend.mm)
 else()
-    list(APPEND SDL_APP_SOURCES GLBackend.cpp)
+    list(APPEND SDL_APP_SOURCES render/GLBackend.cpp)
 endif()
 
 add_executable(aosdl ${SDL_APP_SOURCES})
 set_property(TARGET aosdl PROPERTY CXX_STANDARD 20)
+target_include_directories(aosdl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(aosdl PRIVATE
     aoengine

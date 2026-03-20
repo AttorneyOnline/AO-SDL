@@ -105,10 +105,6 @@ add_library(aoengine STATIC
     engine/net/NetworkThread.cpp
 
     engine/ui/UIManager.cpp
-    engine/ui/ChatWidget.cpp
-    engine/ui/screens/ServerListScreen.cpp
-    engine/ui/screens/CharSelectScreen.cpp
-    engine/ui/screens/CourtroomScreen.cpp
 
     engine/render/Transform.cpp
     engine/render/StateBuffer.cpp
@@ -202,6 +198,9 @@ add_library(ao_protocol STATIC
     plugins/ao/net/AOPacket.cpp
     plugins/ao/net/PacketTypes.cpp
     plugins/ao/net/PacketBehavior.cpp
+    plugins/ao/ui/screens/ServerListScreen.cpp
+    plugins/ao/ui/screens/CharSelectScreen.cpp
+    plugins/ao/ui/screens/CourtroomScreen.cpp
 )
 set_property(TARGET ao_protocol PROPERTY CXX_STANDARD 20)
 

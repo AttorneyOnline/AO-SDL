@@ -5,7 +5,6 @@
 #pragma once
 
 #include "render/Texture.h"
-#include "ui/ChatWidget.h"
 #include "ui/Screen.h"
 
 #include <optional>
@@ -82,22 +81,6 @@ class CharSelectScreen : public Screen {
     }
 
     /**
-     * @brief Get the embedded chat widget (mutable).
-     * @return Mutable reference to the ChatWidget.
-     */
-    ChatWidget& get_chat() {
-        return chat;
-    }
-
-    /**
-     * @brief Get the embedded chat widget (const).
-     * @return Const reference to the ChatWidget.
-     */
-    const ChatWidget& get_chat() const {
-        return chat;
-    }
-
-    /**
      * @brief Select a character and request it from the server.
      *
      * Records the selection and publishes a CharSelectRequestEvent.
@@ -115,6 +98,4 @@ class CharSelectScreen : public Screen {
     ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
     std::vector<CharEntry> chars;           ///< Character roster entries.
     int selected = -1;                      ///< Currently selected character index (-1 = none).
-
-    ChatWidget chat; ///< Embedded chat widget for lobby chat.
 };
