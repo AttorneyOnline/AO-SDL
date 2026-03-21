@@ -15,6 +15,12 @@ StateBuffer::StateBuffer(RenderState initial_buf) : stale(false) {
     preparing = new RenderState(initial_buf);
 }
 
+StateBuffer::~StateBuffer() {
+    delete presenting;
+    delete ready;
+    delete preparing;
+}
+
 const RenderState* StateBuffer::get_consumer_buf() {
     return presenting;
 }

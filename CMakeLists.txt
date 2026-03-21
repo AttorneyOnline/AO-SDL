@@ -137,6 +137,7 @@ add_library(aoengine STATIC
     engine/net/KissnetTcpSocket.cpp
     engine/net/NetworkThread.cpp
 
+    engine/event/OutgoingICMessageEvent.cpp
     engine/event/DisconnectEvent.cpp
     engine/ui/UIManager.cpp
 
@@ -223,7 +224,6 @@ endif()
 add_library(ao_protocol STATIC
     plugins/ao/ao_plugin.cpp
     plugins/ao/event/ICMessageEvent.cpp
-    plugins/ao/event/OutgoingICMessageEvent.cpp
     plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/asset/AOCharacterSheet.cpp
     plugins/ao/game/AOCourtroomPresenter.cpp

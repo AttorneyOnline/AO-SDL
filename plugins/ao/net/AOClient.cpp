@@ -7,8 +7,7 @@
 #include "event/OutgoingChatEvent.h"
 #include "utils/Log.h"
 
-AOClient::AOClient() : conn_state(NOT_CONNECTED), incomplete_buf("") {
-}
+AOClient::AOClient() = default;
 
 void AOClient::on_connect() {
     conn_state = CONNECTED;

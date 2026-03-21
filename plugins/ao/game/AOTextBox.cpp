@@ -206,13 +206,17 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
     if (current_showname.empty() || !showname_font_loaded || !engine_assets_)
         return nullptr;
 
-    std::string cache_path = "_nameplate/" + current_showname;
+    // Fast path: same name as last time, return local cached ptr (no mutex)
+    if (current_showname == cached_nameplate_name_ && cached_nameplate_)
+        return cached_nameplate_;
 
-    // Check the global asset cache first
-    if (current_showname == cached_nameplate_name_) {
-        auto cached = std::dynamic_pointer_cast<ImageAsset>(engine_assets_->get_cached(cache_path));
-        if (cached)
-            return cached;
+    // Check the global asset cache (locks mutex)
+    std::string cache_path = "_nameplate/" + current_showname;
+    auto cached = std::dynamic_pointer_cast<ImageAsset>(engine_assets_->get_cached(cache_path));
+    if (cached) {
+        cached_nameplate_ = cached;
+        cached_nameplate_name_ = current_showname;
+        return cached;
     }
 
     // Render text and compute layout (only when cache miss)
@@ -245,6 +249,7 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
 
     auto nameplate = std::make_shared<ImageAsset>(cache_path, "gpu", std::vector<ImageFrame>{std::move(frame)});
     engine_assets_->register_asset(nameplate);
+    cached_nameplate_ = nameplate;
     cached_nameplate_name_ = current_showname;
 
     // Cache the layout alongside the texture

@@ -1,6 +1,6 @@
 #include "ui/widgets/ICLogWidget.h"
 
-#include "ao/event/ICLogEvent.h"
+#include "event/ICLogEvent.h"
 #include "event/EventManager.h"
 
 #include <imgui.h>

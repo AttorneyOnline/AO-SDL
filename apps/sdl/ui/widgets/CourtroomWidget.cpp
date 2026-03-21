@@ -2,6 +2,7 @@
 
 #include "render/IRenderer.h"
 #include "render/RenderManager.h"
+#include "ui/DebugContext.h"
 
 #include <imgui.h>
 
@@ -9,6 +10,12 @@ void CourtroomWidget::handle_events() {
 }
 
 void CourtroomWidget::render() {
+    // Poll for resolution scale changes (set by debug widget on UI thread)
+    int scale = DebugContext::instance().internal_scale.load();
+    int target_w = DebugContext::BASE_W * scale;
+    int target_h = DebugContext::BASE_H * scale;
+    render_.get_renderer().resize(target_w, target_h);
+
     render_.render_frame();
     render_.begin_frame();
 

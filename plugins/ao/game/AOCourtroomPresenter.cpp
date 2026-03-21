@@ -19,11 +19,6 @@ static int us_since(Clock::time_point start) {
 }
 
 AOCourtroomPresenter::AOCourtroomPresenter() {
-    effects_.push_back(&screenshake_);
-    effects_.push_back(&flash_);
-    effects_.push_back(&rainbow_);
-    effects_.push_back(&shatter_);
-    effects_.push_back(&cube_);
 
     // Prefetch assets for queued messages so they're cache-warm when played
     message_queue_.set_prefetch([this](const ICMessage& msg) {
@@ -51,8 +46,7 @@ void AOCourtroomPresenter::init() {
 
 void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     // Stop all active effects before starting a new message
-    for (auto* effect : effects_)
-        effect->stop();
+    for_each_effect([](auto& e) { e.stop(); });
 
     if (!msg.side.empty())
         background.set_position(msg.side);
@@ -174,8 +168,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     // ---- Effects ----
     auto effects_start = Clock::now();
 
-    for (auto* effect : effects_)
-        effect->tick(delta_ms);
+    for_each_effect([&](auto& e) { e.tick(delta_ms); });
 
     profile_.effects_us.store(us_since(effects_start), std::memory_order_relaxed);
 
@@ -223,10 +216,10 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         scene.add_layer(25, std::move(nameplate_layer));
     }
 
-    for (auto* effect : effects_) {
-        if (effect->is_active())
-            effect->apply(scene);
-    }
+    for_each_effect([&](auto& e) {
+        if (e.is_active())
+            e.apply(scene);
+    });
 
     state.add_layer_group(0, scene);
 

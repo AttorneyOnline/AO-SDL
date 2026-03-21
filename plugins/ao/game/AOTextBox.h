@@ -82,9 +82,11 @@ class AOTextBox {
     bool is_punctuation(char c) const;
     int current_tick_delay() const;
 
-    // Nameplate: stored in the engine asset cache under "_nameplate/<showname>"
+    // Nameplate: stored in the engine asset cache under "_nameplate/<showname>".
+    // Local shared_ptr avoids hitting the cache mutex on every tick.
     AssetLibrary* engine_assets_ = nullptr;
     std::string cached_nameplate_name_;
+    std::shared_ptr<ImageAsset> cached_nameplate_;
     NameplateLayout cached_nameplate_layout_{};
 
     // Persistent font data (TextRenderer needs the buffer alive)

@@ -8,6 +8,7 @@
 
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -64,6 +65,7 @@ class AssetCache {
      * @return Sum of memory_size() for all cached assets, in bytes.
      */
     size_t used_bytes() const {
+        std::lock_guard lock(mutex_);
         return used_bytes_;
     }
 
@@ -76,6 +78,7 @@ class AssetCache {
     }
 
     size_t entry_count() const {
+        std::lock_guard lock(mutex_);
         return entries.size();
     }
 
@@ -87,6 +90,7 @@ class AssetCache {
     };
 
     std::vector<CacheEntry> snapshot() const {
+        std::lock_guard lock(mutex_);
         std::vector<CacheEntry> result;
         result.reserve(entries.size());
         for (const auto& [path, entry] : entries) {
@@ -97,6 +101,8 @@ class AssetCache {
 
   private:
 
+    void evict_locked();        /**< evict() without locking (caller holds mutex_). */
+    mutable std::mutex mutex_;  /**< Guards all mutable state below. */
     size_t max_bytes_;
     size_t used_bytes_ = 0;
 

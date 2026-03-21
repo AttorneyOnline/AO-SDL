@@ -4,6 +4,7 @@ AssetCache::AssetCache(size_t max_bytes) : max_bytes_(max_bytes) {
 }
 
 std::shared_ptr<Asset> AssetCache::get(const std::string& path) {
+    std::lock_guard lock(mutex_);
     auto it = entries.find(path);
     if (it == entries.end())
         return nullptr;
@@ -15,6 +16,7 @@ std::shared_ptr<Asset> AssetCache::get(const std::string& path) {
 }
 
 void AssetCache::insert(std::shared_ptr<Asset> asset) {
+    std::lock_guard lock(mutex_);
     const std::string& path = asset->path();
 
     // If already cached, remove the old entry's accounting first.
@@ -29,10 +31,15 @@ void AssetCache::insert(std::shared_ptr<Asset> asset) {
     lru.push_front(path);
     entries[path] = {asset, lru.begin()};
 
-    evict();
+    evict_locked();
 }
 
 void AssetCache::evict() {
+    std::lock_guard lock(mutex_);
+    evict_locked();
+}
+
+void AssetCache::evict_locked() {
     // Walk LRU from back (least recently used), evicting only unpinned entries.
     auto it = lru.end();
     while (used_bytes_ > max_bytes_ && it != lru.begin()) {

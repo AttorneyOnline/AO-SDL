@@ -1,8 +1,9 @@
 #pragma once
 
-#include "ao/asset/AOCharacterSheet.h"
+#include "game/ICharacterSheet.h"
 #include "render/Texture.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -16,7 +17,7 @@ struct ICMessageState {
     // Character info (populated when entering courtroom)
     std::string character;
     int char_id = -1;
-    std::optional<AOCharacterSheet> char_sheet;
+    std::shared_ptr<const ICharacterSheet> char_sheet;
     std::vector<EmoteIcon> emote_icons;
 
     // ICChatWidget

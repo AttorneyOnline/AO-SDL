@@ -1,6 +1,5 @@
 #include "ui/widgets/DebugOverlayWidget.h"
 
-#include "render/RenderManager.h"
 #include "ui/DebugContext.h"
 
 #include <imgui.h>
@@ -133,22 +132,14 @@ void DebugOverlayWidget::render() {
     ImGui::Text("Backend: %s", s.gpu_backend);
 
     auto& ctx = DebugContext::instance();
-    int scale = ctx.internal_scale;
+    int scale = ctx.internal_scale.load();
     ImGui::SetNextItemWidth(80);
     if (ImGui::InputInt("Scale", &scale)) {
         scale = std::clamp(scale, 1, 16);
-        if (scale != ctx.internal_scale) {
-            ctx.internal_scale = scale;
-            if (ctx.render_manager) {
-                int w = DebugContext::BASE_W * scale;
-                int h = DebugContext::BASE_H * scale;
-                ctx.render_manager->get_renderer().resize(w, h);
-            }
-        }
+        ctx.internal_scale.store(scale);
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("(%dx%d)", DebugContext::BASE_W * ctx.internal_scale,
-                        DebugContext::BASE_H * ctx.internal_scale);
+    ImGui::TextDisabled("(%dx%d)", DebugContext::BASE_W * scale, DebugContext::BASE_H * scale);
 
     // --- Connection ---
     ImGui::SeparatorText("Connection");

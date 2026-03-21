@@ -65,7 +65,10 @@ class AOCourtroomPresenter : public IScenePresenter {
     ShaderEffect rainbow_{"shaders/rainbow", 5.0f, 5};
     ShaderEffect shatter_{"shaders/shatter", 4.0f, 5};
     ShaderEffect cube_{"shaders/cube", 0, 5};
-    std::vector<ISceneEffect*> effects_;
+
+    template <typename F> void for_each_effect(F&& fn) {
+        fn(screenshake_); fn(flash_); fn(rainbow_); fn(shatter_); fn(cube_);
+    }
 
     TickProfile profile_;
 

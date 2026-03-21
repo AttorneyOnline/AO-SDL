@@ -37,6 +37,8 @@ class MetalBackend : public IGPUBackend {
     }
 
     void begin_frame() override {
+        pool_ = [[NSAutoreleasePool alloc] init];
+
         int w, h;
         SDL_Metal_GetDrawableSize(window_, &w, &h);
         layer_.drawableSize = CGSizeMake(w, h);
@@ -65,6 +67,9 @@ class MetalBackend : public IGPUBackend {
 
         drawable_ = nil;
         rpd_ = nil;
+
+        [pool_ drain];
+        pool_ = nil;
     }
 
   private:
@@ -75,6 +80,7 @@ class MetalBackend : public IGPUBackend {
     CAMetalLayer*        layer_      = nil;
     id<CAMetalDrawable>  drawable_   = nil;
     MTLRenderPassDescriptor* rpd_    = nil;
+    NSAutoreleasePool*   pool_      = nil;
 };
 
 std::unique_ptr<IGPUBackend> create_gpu_backend() {

@@ -2,6 +2,7 @@
 
 #include "AOClient.h"
 #include "ao/event/ICMessageEvent.h"
+#include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
 #include "utils/Version.h"
 #include "event/BackgroundEvent.h"
@@ -30,8 +31,6 @@ void AOPacketIDClient::handle(AOClient& cli) {
     }
 
     cli.player_number = player_number;
-    cli.server_software = server_software;
-    cli.server_version = server_version;
 
     EventManager::instance().get_channel<ServerInfoEvent>().publish(
         ServerInfoEvent(server_software, server_version, player_number));
@@ -45,9 +44,8 @@ void AOPacketPN::handle(AOClient& cli) {
         throw ProtocolStateException("Received PN when client is not in CONNECTED state");
     }
 
-    cli.current_players = current_players;
-    cli.max_players = max_players;
-    cli.server_description = server_description;
+    EventManager::instance().get_channel<PlayerCountEvent>().publish(
+        PlayerCountEvent(current_players, max_players, server_description));
 
     AOPacketAskChaa ask_chars;
     cli.add_message(ask_chars);

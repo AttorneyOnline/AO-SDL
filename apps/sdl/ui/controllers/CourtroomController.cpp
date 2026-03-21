@@ -1,10 +1,10 @@
 #include "ui/controllers/CourtroomController.h"
 
-#include "ao/asset/AOAssetLibrary.h"
 #include "ao/ui/screens/CourtroomScreen.h"
-#include "ao/event/ServerInfoEvent.h"
 #include "asset/MediaManager.h"
 #include "event/EventManager.h"
+#include "event/PlayerCountEvent.h"
+#include "event/ServerInfoEvent.h"
 #include "game/GameThread.h"
 #include "game/IScenePresenter.h"
 #include "render/RenderManager.h"
@@ -27,23 +27,24 @@ CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager&
     ic_state_.character = screen.get_character_name();
     ic_state_.char_id = screen.get_char_id();
 
-    AOAssetLibrary ao_assets(MediaManager::instance().assets());
-    ic_state_.char_sheet = ao_assets.character_sheet(ic_state_.character);
-
-    if (ic_state_.char_sheet) {
-        ic_state_.side_index = side_to_index(ic_state_.char_sheet->side());
-        std::strncpy(ic_state_.showname, ic_state_.char_sheet->showname().c_str(),
+    const ICharacterSheet* sheet = screen.get_character_sheet();
+    if (sheet) {
+        // Share ownership with the screen — the sheet outlives the controller
+        ic_state_.char_sheet = std::shared_ptr<const ICharacterSheet>(
+            std::shared_ptr<const ICharacterSheet>{}, sheet);
+        ic_state_.side_index = side_to_index(sheet->side());
+        std::strncpy(ic_state_.showname, sheet->showname().c_str(),
                      sizeof(ic_state_.showname) - 1);
     }
 
-    int emote_count = ic_state_.char_sheet ? ic_state_.char_sheet->emote_count() : 0;
+    const auto& icons = screen.get_emote_icons();
+    int emote_count = sheet ? sheet->emote_count() : 0;
     for (int i = 0; i < emote_count; i++) {
         EmoteIcon icon;
-        icon.comment = ic_state_.char_sheet->emote(i).comment;
+        icon.comment = sheet->emote(i).comment;
 
-        auto img = ao_assets.emote_icon(ic_state_.character, i);
-        if (img && img->frame_count() > 0) {
-            const ImageFrame& frame = img->frame(0);
+        if (i < (int)icons.size() && icons[i] && icons[i]->frame_count() > 0) {
+            const ImageFrame& frame = icons[i]->frame(0);
             icon.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
         }
 
@@ -89,11 +90,20 @@ void CourtroomController::update_debug_stats() {
         s.cache_entries.push_back({e.path, e.format, e.bytes, e.use_count});
     }
 
+    // If we're in the courtroom, we're joined
+    if (s.conn_state < 2)
+        s.conn_state = 2;
+
     auto& server_ch = EventManager::instance().get_channel<ServerInfoEvent>();
     while (auto ev = server_ch.get_event()) {
         s.server_software = ev->get_software();
         s.server_version = ev->get_version();
-        s.conn_state = 1;
+    }
+
+    auto& player_ch = EventManager::instance().get_channel<PlayerCountEvent>();
+    while (auto ev = player_ch.get_event()) {
+        s.current_players = ev->get_current();
+        s.max_players = ev->get_max();
     }
 }
 

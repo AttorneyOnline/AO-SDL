@@ -80,12 +80,14 @@ struct MetalRendererImpl {
         device = MTLCreateSystemDefaultDevice();
         command_queue = [device newCommandQueue];
 
-        build_pipeline();
-        build_blit_pipeline();
-        build_depth_state();
-        build_sampler();
-        build_quad();
-        build_render_targets();
+        @autoreleasepool {
+            build_pipeline();
+            build_blit_pipeline();
+            build_depth_state();
+            build_sampler();
+            build_quad();
+            build_render_targets();
+        }
     }
 
     void build_pipeline() {
@@ -530,7 +532,9 @@ void MetalRenderer::resize(int width, int height) {
         return;
     impl->fb_width = width;
     impl->fb_height = height;
-    impl->build_render_targets();
+    @autoreleasepool {
+        impl->build_render_targets();
+    }
     // Invalidate display texture so it gets recreated at next blit
     impl->display_texture = nil;
     impl->display_width = 0;

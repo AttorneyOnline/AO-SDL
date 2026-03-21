@@ -56,8 +56,8 @@ int main(int argc, char* argv[]) {
 
     // Render backend — scaled internal resolution (256x192 base, 4:3 aspect)
     auto& debug_ctx = DebugContext::instance();
-    int render_w = DebugContext::BASE_W * debug_ctx.internal_scale;
-    int render_h = DebugContext::BASE_H * debug_ctx.internal_scale;
+    int render_w = DebugContext::BASE_W * debug_ctx.internal_scale.load();
+    int render_h = DebugContext::BASE_H * debug_ctx.internal_scale.load();
     RenderManager renderer(buffer, create_renderer(render_w, render_h));
     MediaManager::instance().assets().set_shader_backend(renderer.get_renderer().backend_name());
 
@@ -67,7 +67,6 @@ int main(int argc, char* argv[]) {
 
     debug_ctx.game_thread = &game_logic;
     debug_ctx.presenter = presenter.get();
-    debug_ctx.render_manager = &renderer;
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;

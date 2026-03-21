@@ -1,6 +1,6 @@
 /**
  * @file NetworkThread.h
- * @brief Spawns a detached network thread that polls a ProtocolHandler each tick.
+ * @brief Spawns a joinable network thread that polls a ProtocolHandler each tick.
  *
  * The constructor launches a background thread that blocks on a
  * ServerConnectEvent before establishing the connection, then enters a
@@ -16,14 +16,14 @@
 /**
  * @brief Manages a dedicated network I/O thread for a ProtocolHandler.
  *
- * On construction, a std::thread is spawned (and detached) running net_loop().
- * The thread first waits for a ServerConnectEvent to determine which server
- * to connect to, then opens a WebSocket connection and enters the main poll
- * loop. Each iteration drains ProtocolHandler::flush_outgoing() and delivers
- * received messages via ProtocolHandler::on_message().
+ * On construction, a std::thread is spawned running net_loop(). The thread
+ * first waits for a ServerConnectEvent to determine which server to connect
+ * to, then opens a WebSocket connection and enters the main poll loop. Each
+ * iteration drains ProtocolHandler::flush_outgoing() and delivers received
+ * messages via ProtocolHandler::on_message().
  *
- * @note The spawned thread is detached -- there is no join or explicit
- *       shutdown mechanism exposed by this class.
+ * Call stop() to signal the thread to exit and join it. The ProtocolHandler
+ * must outlive the NetworkThread.
  */
 class NetworkThread {
   public:

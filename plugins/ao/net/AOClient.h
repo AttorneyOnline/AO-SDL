@@ -19,26 +19,21 @@ class AOClient : public ProtocolHandler {
     void on_disconnect() override;
     std::vector<std::string> flush_outgoing() override;
 
-    // Used by packet handlers in PacketBehavior.cpp to queue outgoing packets.
+    /// Queue an outgoing packet (used by packet handlers).
     void add_message(const AOPacket& packet);
 
-    AOConnectionState conn_state;
+    // --- Protocol state (written by packet handlers, internal to network thread) ---
+
+    AOConnectionState conn_state = NOT_CONNECTED;
 
     std::string decryptor;
-    int player_number;
-    std::string server_software;
-    std::string server_version;
-
-    // todo: most of this state should move to events once the event system is more complete.
-    int current_players;
-    int max_players;
-    std::string server_description;
+    int player_number = 0;
 
     std::string asset_url;
 
-    int character_count;
-    int evidence_count;
-    int music_count;
+    int character_count = 0;
+    int evidence_count = 0;
+    int music_count = 0;
 
     std::vector<std::string> character_list;
     std::vector<std::string> music_list;

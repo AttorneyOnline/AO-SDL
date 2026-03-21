@@ -2,7 +2,7 @@
 
 #include "ui/widgets/ICMessageState.h"
 
-#include "ao/event/OutgoingICMessageEvent.h"
+#include "event/OutgoingICMessageEvent.h"
 #include "event/EventManager.h"
 
 #include <imgui.h>

@@ -98,7 +98,7 @@ int TextRenderer::descender() const {
     return impl->ready ? impl->descender : 0;
 }
 
-int TextRenderer::measure_width(const std::string& text) {
+int TextRenderer::measure_width(const std::string& text) const {
     auto layout = compute_layout(text, 0); // no wrapping
     int max_x = 0;
     for (const auto& g : layout) {
@@ -108,7 +108,7 @@ int TextRenderer::measure_width(const std::string& text) {
     return max_x;
 }
 
-std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::string& text, int wrap_width) {
+std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::string& text, int wrap_width) const {
     FT_Face face = impl->face;
 
     struct WordInfo {

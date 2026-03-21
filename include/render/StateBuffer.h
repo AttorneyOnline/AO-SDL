@@ -27,6 +27,7 @@ class StateBuffer {
   public:
     /** @brief Default-construct with default-initialized RenderState buffers. */
     StateBuffer();
+    ~StateBuffer();
 
     /**
      * @brief Construct with an initial RenderState copied into each buffer slot.
