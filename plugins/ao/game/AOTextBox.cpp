@@ -213,46 +213,50 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
     // Check the global asset cache (locks mutex)
     std::string cache_path = "_nameplate/" + current_showname;
     auto cached = std::dynamic_pointer_cast<ImageAsset>(engine_assets_->get_cached(cache_path));
+
+    std::shared_ptr<ImageAsset> nameplate;
+
     if (cached) {
-        cached_nameplate_ = cached;
-        cached_nameplate_name_ = current_showname;
-        return cached;
+        nameplate = cached;
+    } else {
+        // Render text
+        int text_w = showname_renderer.measure_width(current_showname);
+        int text_h = showname_renderer.line_height();
+        if (text_w <= 0 || text_h <= 0)
+            return nullptr;
+
+        std::vector<uint8_t> pixels(text_w * text_h * 4, 0);
+        TextColor white = {255, 255, 255};
+        showname_renderer.render(current_showname, (int)current_showname.size(), white, 0, 0, text_w, text_h, 0, 0,
+                                 pixels.data());
+
+        // Flip vertically for GL
+        size_t row_bytes = (size_t)text_w * 4;
+        std::vector<uint8_t> row_tmp(row_bytes);
+        for (int y = 0; y < text_h / 2; y++) {
+            uint8_t* top = pixels.data() + y * row_bytes;
+            uint8_t* bot = pixels.data() + (text_h - 1 - y) * row_bytes;
+            std::memcpy(row_tmp.data(), top, row_bytes);
+            std::memcpy(top, bot, row_bytes);
+            std::memcpy(bot, row_tmp.data(), row_bytes);
+        }
+
+        ImageFrame frame;
+        frame.width = text_w;
+        frame.height = text_h;
+        frame.duration_ms = 0;
+        frame.pixels = std::move(pixels);
+
+        nameplate = std::make_shared<ImageAsset>(cache_path, "gpu", std::vector<ImageFrame>{std::move(frame)});
+        engine_assets_->register_asset(nameplate);
     }
 
-    // Render text and compute layout (only when cache miss)
-    int text_w = showname_renderer.measure_width(current_showname);
-    int text_h = showname_renderer.line_height();
-    if (text_w <= 0 || text_h <= 0)
-        return nullptr;
-
-    std::vector<uint8_t> pixels(text_w * text_h * 4, 0);
-    TextColor white = {255, 255, 255};
-    showname_renderer.render(current_showname, (int)current_showname.size(), white, 0, 0, text_w, text_h, 0, 0,
-                             pixels.data());
-
-    // Flip vertically for GL
-    size_t row_bytes = (size_t)text_w * 4;
-    std::vector<uint8_t> row_tmp(row_bytes);
-    for (int y = 0; y < text_h / 2; y++) {
-        uint8_t* top = pixels.data() + y * row_bytes;
-        uint8_t* bot = pixels.data() + (text_h - 1 - y) * row_bytes;
-        std::memcpy(row_tmp.data(), top, row_bytes);
-        std::memcpy(top, bot, row_bytes);
-        std::memcpy(bot, row_tmp.data(), row_bytes);
-    }
-
-    ImageFrame frame;
-    frame.width = text_w;
-    frame.height = text_h;
-    frame.duration_ms = 0;
-    frame.pixels = std::move(pixels);
-
-    auto nameplate = std::make_shared<ImageAsset>(cache_path, "gpu", std::vector<ImageFrame>{std::move(frame)});
-    engine_assets_->register_asset(nameplate);
     cached_nameplate_ = nameplate;
     cached_nameplate_name_ = current_showname;
 
-    // Cache the layout alongside the texture
+    // Compute layout (always, since it depends on the name's width)
+    int text_w = nameplate->width();
+    int text_h = nameplate->height();
     NameplateLayout nl;
     nl.w = showname_rect.w;
     nl.h = showname_rect.h > 0 ? showname_rect.h : text_h;

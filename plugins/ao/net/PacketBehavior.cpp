@@ -5,7 +5,10 @@
 #include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
 #include "utils/Version.h"
+#include "event/AreaUpdateEvent.h"
 #include "event/BackgroundEvent.h"
+#include "event/MusicChangeEvent.h"
+#include "event/MusicListEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
 #include "event/ChatEvent.h"
@@ -92,12 +95,45 @@ void AOPacketSC::handle(AOClient& cli) {
     cli.add_message(ask_for_music);
 }
 
+static bool has_audio_extension(const std::string& name) {
+    static const std::string exts[] = {".wav", ".mp3", ".mp4", ".ogg", ".opus"};
+    for (const auto& ext : exts) {
+        if (name.size() >= ext.size() &&
+            name.compare(name.size() - ext.size(), ext.size(), ext) == 0)
+            return true;
+    }
+    return false;
+}
+
 void AOPacketSM::handle(AOClient& cli) {
     if (cli.conn_state != CONNECTED) {
         throw ProtocolStateException("Received SM when client is not in CONNECTED state");
     }
 
-    cli.music_list = music_list;
+    // Split the combined list: areas first, then music tracks.
+    // The boundary is the first entry with an audio file extension.
+    std::vector<std::string> areas;
+    std::vector<std::string> tracks;
+    bool in_music = false;
+
+    for (const auto& entry : music_list) {
+        if (in_music) {
+            tracks.push_back(entry);
+        } else if (has_audio_extension(entry)) {
+            // The previous "area" was actually a category header for music
+            if (!areas.empty()) {
+                tracks.push_back(areas.back());
+                areas.pop_back();
+            }
+            tracks.push_back(entry);
+            in_music = true;
+        } else {
+            areas.push_back(entry);
+        }
+    }
+
+    EventManager::instance().get_channel<MusicListEvent>().publish(
+        MusicListEvent(std::move(areas), std::move(tracks)));
 
     AOPacketRD signal_done;
     cli.add_message(signal_done);
@@ -127,6 +163,18 @@ void AOPacketMS::handle(AOClient& cli) {
 
 void AOPacketBN::handle(AOClient& cli) {
     EventManager::instance().get_channel<BackgroundEvent>().publish(BackgroundEvent(background, position));
+}
+
+void AOPacketMC::handle(AOClient& cli) {
+    EventManager::instance().get_channel<MusicChangeEvent>().publish(
+        MusicChangeEvent(name, char_id, showname));
+}
+
+void AOPacketARUP::handle(AOClient& cli) {
+    if (arup_type < 0 || arup_type > 3)
+        return;
+    EventManager::instance().get_channel<AreaUpdateEvent>().publish(
+        AreaUpdateEvent(static_cast<AreaUpdateEvent::Type>(arup_type), values));
 }
 
 void AOPacketPV::handle(AOClient& cli) {

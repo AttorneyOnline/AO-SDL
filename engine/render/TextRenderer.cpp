@@ -1,5 +1,6 @@
 #include "render/TextRenderer.h"
 
+#include "platform/SystemFonts.h"
 #include "utils/BlendOps.h"
 #include "utils/Log.h"
 #include "utils/UTF8.h"
@@ -13,6 +14,7 @@
 struct TextRenderer::Impl {
     FT_Library library = nullptr;
     FT_Face face = nullptr;
+    std::vector<FT_Face> fallbacks;
     bool ready = false;
     bool sharp = false;
     int ascender = 0;
@@ -20,10 +22,45 @@ struct TextRenderer::Impl {
     int line_h = 0;
 
     ~Impl() {
+        for (auto fb : fallbacks)
+            FT_Done_Face(fb);
         if (face)
             FT_Done_Face(face);
         if (library)
             FT_Done_FreeType(library);
+    }
+
+    /// Try primary face, then each fallback in order. Returns the face
+    /// that has the glyph, or falls back to .notdef on primary as last resort.
+    FT_Face load_char(uint32_t codepoint, FT_Int32 flags) const {
+        if (FT_Get_Char_Index(face, codepoint) != 0 && !FT_Load_Char(face, codepoint, flags))
+            return face;
+        for (auto fb : fallbacks) {
+            if (FT_Get_Char_Index(fb, codepoint) != 0 && !FT_Load_Char(fb, codepoint, flags))
+                return fb;
+        }
+        // Last resort: .notdef from primary
+        if (!FT_Load_Char(face, codepoint, flags))
+            return face;
+        return nullptr;
+    }
+
+    void load_fallbacks(int size_px) {
+        for (auto fb : fallbacks)
+            FT_Done_Face(fb);
+        fallbacks.clear();
+
+        auto paths = platform::fallback_font_paths();
+        for (const auto& path : paths) {
+            FT_Face fb = nullptr;
+            if (!FT_New_Face(library, path.c_str(), 0, &fb)) {
+                FT_Set_Pixel_Sizes(fb, 0, size_px);
+                fallbacks.push_back(fb);
+                Log::log_print(DEBUG, "TextRenderer: fallback [%zu] %s", fallbacks.size(), path.c_str());
+            }
+        }
+        if (fallbacks.empty())
+            Log::log_print(DEBUG, "TextRenderer: no fallback fonts found");
     }
 };
 
@@ -56,6 +93,7 @@ bool TextRenderer::load_font(const std::string& path, int size_px) {
     impl->descender = -(impl->face->size->metrics.descender >> 6); // FT descender is negative
     impl->line_h = impl->face->size->metrics.height >> 6;
     impl->ready = true;
+    impl->load_fallbacks(size_px);
     return true;
 }
 
@@ -79,6 +117,7 @@ bool TextRenderer::load_font_memory(const uint8_t* data, size_t data_size, int s
     impl->descender = -(impl->face->size->metrics.descender >> 6);
     impl->line_h = impl->face->size->metrics.height >> 6;
     impl->ready = true;
+    impl->load_fallbacks(size_px);
     return true;
 }
 
@@ -99,33 +138,30 @@ int TextRenderer::descender() const {
 }
 
 int TextRenderer::measure_width(const std::string& text) const {
-    auto layout = compute_layout(text, 0); // no wrapping
+    auto layout = compute_layout(text, 0);
     int max_x = 0;
     for (const auto& g : layout) {
-        if (!FT_Load_Char(impl->face, g.codepoint, FT_LOAD_DEFAULT))
-            max_x = std::max(max_x, g.pen_x + (int)(impl->face->glyph->advance.x >> 6));
+        FT_Face f = impl->load_char(g.codepoint, FT_LOAD_DEFAULT);
+        if (f)
+            max_x = std::max(max_x, g.pen_x + (int)(f->glyph->advance.x >> 6));
     }
     return max_x;
 }
 
 std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::string& text, int wrap_width) const {
-    FT_Face face = impl->face;
-
     struct WordInfo {
-        size_t byte_start;    // byte offset in text
-        int char_start;       // character index
-        int char_count;       // number of characters in this word
-        int pixel_width;      // total advance width in pixels
-        bool ends_with_break; // followed by newline or end-of-string
+        size_t byte_start;
+        int char_start;
+        int char_count;
+        int pixel_width;
+        bool ends_with_break;
     };
 
-    // Split into words (break on spaces and newlines)
     std::vector<WordInfo> words;
     {
         size_t pos = 0;
         int char_idx = 0;
         while (pos < text.size()) {
-            // Skip spaces (each space is its own "word" for layout purposes)
             if (text[pos] == ' ') {
                 WordInfo w;
                 w.byte_start = pos;
@@ -133,12 +169,11 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
                 w.char_count = 1;
                 w.ends_with_break = false;
 
-                size_t saved = pos;
                 UTF8::decode(text, pos);
                 char_idx++;
 
-                FT_Load_Char(face, ' ', FT_LOAD_DEFAULT);
-                w.pixel_width = face->glyph->advance.x >> 6;
+                FT_Face f = impl->load_char(' ', FT_LOAD_DEFAULT);
+                w.pixel_width = f ? (f->glyph->advance.x >> 6) : 0;
                 words.push_back(w);
                 continue;
             }
@@ -156,7 +191,6 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
                 continue;
             }
 
-            // Non-space word
             WordInfo w;
             w.byte_start = pos;
             w.char_start = char_idx;
@@ -165,14 +199,13 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
             w.ends_with_break = false;
 
             while (pos < text.size() && text[pos] != ' ' && text[pos] != '\n') {
-                size_t saved = pos;
                 uint32_t cp = UTF8::decode(text, pos);
                 if (cp == 0)
                     break;
 
-                if (!FT_Load_Char(face, cp, FT_LOAD_DEFAULT)) {
-                    w.pixel_width += face->glyph->advance.x >> 6;
-                }
+                FT_Face f = impl->load_char(cp, FT_LOAD_DEFAULT);
+                if (f)
+                    w.pixel_width += f->glyph->advance.x >> 6;
                 w.char_count++;
                 char_idx++;
             }
@@ -181,7 +214,6 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
         }
     }
 
-    // Lay out words into lines
     std::vector<GlyphLayout> layout;
     int pen_x = 0;
     int pen_y = 0;
@@ -194,28 +226,24 @@ std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::s
             continue;
         }
 
-        // Word wrap: if word doesn't fit on this line, move to next
-        // (but don't wrap if we're at the start of a line)
         if (pen_x > 0 && pen_x + word.pixel_width > max_width) {
             pen_x = 0;
             pen_y += impl->line_h;
         }
 
-        // Skip leading whitespace at the start of a wrapped line
         if (pen_x == 0 && word.char_count == 1 && word.byte_start < text.size() && text[word.byte_start] == ' ')
             continue;
 
-        // If a single word is wider than the line, we need to character-break it.
         size_t pos = word.byte_start;
         for (int i = 0; i < word.char_count; i++) {
             uint32_t cp = UTF8::decode(text, pos);
             if (cp == 0)
                 break;
 
-            if (!FT_Load_Char(face, cp, FT_LOAD_DEFAULT)) {
-                int advance = face->glyph->advance.x >> 6;
+            FT_Face f = impl->load_char(cp, FT_LOAD_DEFAULT);
+            if (f) {
+                int advance = f->glyph->advance.x >> 6;
 
-                // Character-level break for words wider than the line
                 if (pen_x > 0 && pen_x + advance > max_width) {
                     pen_x = 0;
                     pen_y += impl->line_h;
@@ -257,7 +285,6 @@ int TextRenderer::compute_scroll_offset(const std::vector<GlyphLayout>& layout, 
 
 void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_count, TextColor color, int x, int y,
                                int scroll_y, int max_height, int buf_width, int buf_height, uint8_t* pixels) {
-    FT_Face face = impl->face;
     FT_Int32 render_flags = FT_LOAD_RENDER;
     if (impl->sharp)
         render_flags |= FT_LOAD_TARGET_MONO;
@@ -266,7 +293,8 @@ void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_
         if (gl.char_index >= char_count)
             break;
 
-        if (FT_Load_Char(face, gl.codepoint, render_flags))
+        FT_Face face = impl->load_char(gl.codepoint, render_flags);
+        if (!face)
             continue;
 
         FT_GlyphSlot g = face->glyph;

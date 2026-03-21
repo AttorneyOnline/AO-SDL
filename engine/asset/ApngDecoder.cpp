@@ -177,10 +177,10 @@ static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx
 
     auto png_data = build_png(ihdr_body, ihdr_len, fctl.width, fctl.height, ancillary, fi.data);
 
-    stbi_set_flip_vertically_on_load(flip_y);
+    // Decode sub-frame WITHOUT flip — compositing is done in top-down canvas
+    // coordinates. The final canvas is flipped once after compositing.
     int w, h, ch;
     uint8_t* pixels = stbi_load_from_memory(png_data.data(), (int)png_data.size(), &w, &h, &ch, 4);
-    stbi_set_flip_vertically_on_load(false);
 
     if (!pixels) {
         const char* reason = stbi_failure_reason();
@@ -194,19 +194,16 @@ static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx
         prev_canvas = canvas;
     }
 
-    // Composite onto canvas
+    // Composite onto canvas (top-down coordinates, no flip)
     uint32_t fx = fctl.x_offset;
     uint32_t fy = fctl.y_offset;
     uint32_t fw = (uint32_t)w;
     uint32_t fh = (uint32_t)h;
 
     for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
-        uint32_t src_row = flip_y ? (fh - 1 - row) : row;
-        uint32_t dst_row = flip_y ? (canvas_h - 1 - (fy + row)) : (fy + row);
-
         for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
-            size_t src_idx = (src_row * fw + col) * 4;
-            size_t dst_idx = (dst_row * canvas_w + (fx + col)) * 4;
+            size_t src_idx = (row * fw + col) * 4;
+            size_t dst_idx = ((fy + row) * canvas_w + (fx + col)) * 4;
 
             if (fctl.blend_op == BLEND_OVER) {
                 BlendOps::blend_over(&canvas[dst_idx], &pixels[src_idx]);
@@ -219,18 +216,28 @@ static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx
 
     stbi_image_free(pixels);
 
+    // Snapshot canvas, then flip vertically for GL if requested
     ImageFrame frame;
     frame.width = (int)canvas_w;
     frame.height = (int)canvas_h;
     frame.duration_ms = duration_ms > 0 ? duration_ms : 100;
-    frame.pixels = canvas;
 
-    // Dispose
+    if (flip_y) {
+        frame.pixels.resize(canvas.size());
+        size_t row_bytes = canvas_w * 4;
+        for (uint32_t row = 0; row < canvas_h; row++) {
+            std::memcpy(&frame.pixels[row * row_bytes],
+                        &canvas[(canvas_h - 1 - row) * row_bytes], row_bytes);
+        }
+    } else {
+        frame.pixels = canvas;
+    }
+
+    // Dispose (operates on the top-down canvas, not the flipped frame)
     if (fctl.dispose_op == DISPOSE_BACKGROUND) {
         for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
-            uint32_t dst_row = flip_y ? (canvas_h - 1 - (fy + row)) : (fy + row);
             for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
-                size_t dst_idx = (dst_row * canvas_w + (fx + col)) * 4;
+                size_t dst_idx = ((fy + row) * canvas_w + (fx + col)) * 4;
                 std::memset(&canvas[dst_idx], 0, 4);
             }
         }

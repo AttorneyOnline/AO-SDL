@@ -57,6 +57,7 @@ CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager&
     interjection_ = std::make_unique<InterjectionWidget>(&ic_state_);
     side_select_ = std::make_unique<SideSelectWidget>(&ic_state_);
     message_options_ = std::make_unique<MessageOptionsWidget>(&ic_state_);
+    music_area_ = std::make_unique<MusicAreaWidget>(&ic_state_);
 }
 
 void CourtroomController::update_debug_stats() {
@@ -129,9 +130,19 @@ void CourtroomController::render() {
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("##emotes", ImVec2(right_width, top_height), ImGuiChildFlags_Borders);
-    ImGui::SeparatorText("Emotes");
-    emote_selector_->render();
+    ImGui::BeginChild("##right_panel", ImVec2(right_width, top_height), ImGuiChildFlags_Borders);
+    if (ImGui::BeginTabBar("##right_tabs")) {
+        if (ImGui::BeginTabItem("Emotes")) {
+            emote_selector_->render();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Music")) {
+            music_area_->handle_events();
+            music_area_->render();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
     ImGui::EndChild();
 
     // === Bottom row ===

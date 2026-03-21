@@ -258,6 +258,40 @@ class AOPacketBN : public AOPacket {
     static constexpr int MIN_FIELDS = 1;
 };
 
+/// Music/area change. Sent by client to request a change, received from server
+/// to broadcast that someone changed the music or switched areas.
+class AOPacketMC : public AOPacket {
+  public:
+    /// Outgoing: client requests music/area change.
+    AOPacketMC(const std::string& name, int char_id, const std::string& showname = "");
+    /// Incoming: server broadcasts music/area change.
+    AOPacketMC(const std::vector<std::string>& fields);
+
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    std::string name;
+    int char_id = -1;
+    std::string showname;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 2;
+};
+
+/// Area update packet. Sent by server to update one metadata field for all areas.
+class AOPacketARUP : public AOPacket {
+  public:
+    AOPacketARUP(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+
+  private:
+    int arup_type = 0;
+    std::vector<std::string> values;
+
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 2;
+};
+
 class AOPacketCT : public AOPacket {
   public:
     AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message);

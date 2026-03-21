@@ -150,6 +150,16 @@ add_library(aoengine STATIC
     engine/render/AnimationPlayer.cpp
     engine/render/TextRenderer.cpp
 )
+
+# Platform-specific font discovery (selected at build time)
+if(APPLE)
+    target_sources(aoengine PRIVATE platform/macos/SystemFonts.mm)
+elseif(WIN32)
+    target_sources(aoengine PRIVATE platform/windows/SystemFonts.cpp)
+else()
+    target_sources(aoengine PRIVATE platform/linux/SystemFonts.cpp)
+endif()
+
 set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
 target_include_directories(aoengine
@@ -163,6 +173,13 @@ target_include_directories(aoengine
 )
 
 target_link_libraries(aoengine PUBLIC bit7z freetype)
+
+if(APPLE)
+    target_link_libraries(aoengine PRIVATE
+        "-framework CoreText"
+        "-framework Foundation"
+    )
+endif()
 
 # =============================================================================
 # Plugins

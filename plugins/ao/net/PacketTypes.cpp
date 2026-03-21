@@ -288,6 +288,41 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
 }
 
 // ---------------------------------------------------------------------------
+// AOPacketMC
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketMC::registrar("MC", [](const auto& f) { return std::make_unique<AOPacketMC>(f); });
+
+AOPacketMC::AOPacketMC(const std::string& name, int char_id, const std::string& showname)
+    : AOPacket("MC", showname.empty()
+                         ? std::vector<std::string>{ao_encode(name), std::to_string(char_id)}
+                         : std::vector<std::string>{ao_encode(name), std::to_string(char_id), ao_encode(showname)}),
+      name(name), char_id(char_id), showname(showname) {
+}
+
+AOPacketMC::AOPacketMC(const std::vector<std::string>& fields) : AOPacket("MC", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        name = ao_decode(fields[0]);
+        char_id = std::stoi(fields[1]);
+        if (fields.size() > 2)
+            showname = ao_decode(fields[2]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketARUP
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketARUP::registrar("ARUP", [](const auto& f) { return std::make_unique<AOPacketARUP>(f); });
+
+AOPacketARUP::AOPacketARUP(const std::vector<std::string>& fields) : AOPacket("ARUP", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        arup_type = std::stoi(fields[0]);
+        values.assign(fields.begin() + 1, fields.end());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AOPacketBN
 // ---------------------------------------------------------------------------
 

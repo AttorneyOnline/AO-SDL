@@ -5,6 +5,7 @@
 #include "event/CharSelectRequestEvent.h"
 #include "event/EventManager.h"
 #include "event/OutgoingChatEvent.h"
+#include "event/OutgoingMusicEvent.h"
 #include "utils/Log.h"
 
 AOClient::AOClient() = default;
@@ -52,6 +53,12 @@ std::vector<std::string> AOClient::flush_outgoing() {
     while (auto optev = ic_channel.get_event()) {
         AOPacketMS ms_packet(optev->data());
         add_message(ms_packet);
+    }
+
+    auto& music_channel = EventManager::instance().get_channel<OutgoingMusicEvent>();
+    while (auto optev = music_channel.get_event()) {
+        AOPacketMC mc(optev->name(), player_number, optev->showname());
+        add_message(mc);
     }
 
     auto& char_select_channel = EventManager::instance().get_channel<CharSelectRequestEvent>();

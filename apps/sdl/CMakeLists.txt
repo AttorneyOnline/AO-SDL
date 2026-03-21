@@ -14,6 +14,7 @@ set(SDL_APP_SOURCES
     ui/widgets/DisconnectModalWidget.cpp
     ui/widgets/DebugOverlayWidget.cpp
     ui/widgets/ICLogWidget.cpp
+    ui/widgets/MusicAreaWidget.cpp
     ui/controllers/ServerListController.cpp
     ui/controllers/CharSelectController.cpp
     ui/controllers/CourtroomController.cpp

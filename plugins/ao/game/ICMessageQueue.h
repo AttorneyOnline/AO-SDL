@@ -67,6 +67,9 @@ class ICMessageQueue {
     /// Number of messages waiting in the queue.
     size_t pending() const { return queue_.size(); }
 
+    /// Discard all queued messages and reset playback state.
+    void clear() { queue_.clear(); playing_ = false; ready_ = false; linger_ms_ = 0; }
+
   private:
     std::deque<ICMessage> queue_;
     std::function<void(const ICMessage&)> prefetch_;

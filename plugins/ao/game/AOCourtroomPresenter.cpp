@@ -103,6 +103,14 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
     while (auto ev = bg_ch.get_event()) {
         background.set(ev->get_background(), ev->get_position().empty() ? background.position() : ev->get_position());
+
+        // Area change: clear IC state so only the background shows
+        textbox.start_message("", "", 0);
+        textbox_dirty = true;
+        textbox_overlay.reset();
+        message_queue_.clear();
+        emote_player.stop();
+        for_each_effect([](auto& e) { e.stop(); });
     }
 
     auto& ic_ch = EventManager::instance().get_channel<ICMessageEvent>();
