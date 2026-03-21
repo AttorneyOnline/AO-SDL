@@ -259,7 +259,7 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         emote_mod = std::stoi(fields[7]);
         char_id = std::stoi(fields[8]);
         // fields[9] = sfx_delay (skipped)
-        // fields[10] = objection_mod (skipped)
+        objection_mod = std::stoi(fields[10]);
         // fields[11] = evidence_id (skipped)
         flip = fields[12] == "1";
         realization = fields[13] == "1";

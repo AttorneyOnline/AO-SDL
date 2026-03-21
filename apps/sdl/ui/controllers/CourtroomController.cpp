@@ -146,10 +146,20 @@ void CourtroomController::render() {
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("##ooc_chat", ImVec2(ooc_width, bottom_height), ImGuiChildFlags_Borders);
-    ImGui::SeparatorText("OOC Chat");
-    chat_.handle_events();
-    chat_.render();
+    ImGui::BeginChild("##chat_panel", ImVec2(ooc_width, bottom_height), ImGuiChildFlags_Borders);
+    if (ImGui::BeginTabBar("##chat_tabs")) {
+        if (ImGui::BeginTabItem("IC Log")) {
+            ic_log_.handle_events();
+            ic_log_.render();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("OOC Chat")) {
+            chat_.handle_events();
+            chat_.render();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
     ImGui::EndChild();
 
     ImGui::SameLine();

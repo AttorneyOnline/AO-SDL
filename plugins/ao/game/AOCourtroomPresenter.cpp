@@ -1,5 +1,6 @@
 #include "ao/game/AOCourtroomPresenter.h"
 
+#include "ao/event/ICLogEvent.h"
 #include "ao/event/ICMessageEvent.h"
 #include "asset/MediaManager.h"
 #include "event/BackgroundEvent.h"
@@ -20,6 +21,38 @@ static int us_since(Clock::time_point start) {
 AOCourtroomPresenter::AOCourtroomPresenter() {
     effects_.push_back(&screenshake_);
     effects_.push_back(&flash_);
+
+    // Prefetch assets for queued messages so they're cache-warm when played
+    message_queue_.set_prefetch([this](const ICMessage& msg) {
+        if (!ao_assets) return;
+        // Touch emote assets to pull them into the cache
+        ao_assets->character_emote(msg.character, msg.emote, "(a)");
+        ao_assets->character_emote(msg.character, msg.emote, "(b)");
+        if (!msg.pre_emote.empty())
+            ao_assets->character_emote(msg.character, msg.pre_emote, "");
+    });
+}
+
+void AOCourtroomPresenter::play_message(const ICMessage& msg) {
+    if (!msg.side.empty())
+        background.set_position(msg.side);
+
+    show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
+                 msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
+    current_flip = msg.flip;
+
+    emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
+
+    textbox.start_message(msg.showname, msg.message, msg.text_color, msg.additive);
+    textbox_dirty = true;
+
+    if (msg.screenshake)
+        screenshake_.trigger();
+    if (msg.realization)
+        flash_.trigger();
+
+    EventManager::instance().get_channel<ICLogEvent>().publish(
+        ICLogEvent(msg.showname, msg.message, msg.text_color));
 }
 
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
@@ -46,7 +79,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         Log::log_print(DEBUG, "AOCourtroomPresenter: using theme '%s'", theme.c_str());
     }
 
-    // ---- Drain events ----
+    // ---- Drain events into queue ----
     auto events_start = Clock::now();
 
     auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
@@ -56,23 +89,16 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
     auto& ic_ch = EventManager::instance().get_channel<ICMessageEvent>();
     while (auto ev = ic_ch.get_event()) {
-        if (!ev->get_side().empty()) {
-            background.set_position(ev->get_side());
-        }
+        message_queue_.enqueue(ICMessage::from_event(*ev));
+    }
 
-        DeskMod dm = ev->get_desk_mod();
-        show_desk = (dm == DeskMod::SHOW || dm == DeskMod::EMOTE_ONLY || dm == DeskMod::EMOTE_ONLY_EX);
-        current_flip = ev->get_flip();
+    // Advance queue — dequeue next message when current one finishes
+    bool text_done = textbox.text_state() == AOTextBox::TextState::DONE ||
+                     textbox.text_state() == AOTextBox::TextState::INACTIVE;
+    message_queue_.tick(delta_ms, text_done);
 
-        emote_player.start(*ao_assets, ev->get_character(), ev->get_emote(), ev->get_pre_emote(), ev->get_emote_mod());
-
-        textbox.start_message(ev->get_showname(), ev->get_message(), ev->get_text_color(), ev->get_additive());
-        textbox_dirty = true;
-
-        if (ev->get_screenshake())
-            screenshake_.trigger();
-        if (ev->get_realization())
-            flash_.trigger();
+    if (auto msg = message_queue_.next()) {
+        play_message(*msg);
     }
 
     profile_.events_us.store(us_since(events_start), std::memory_order_relaxed);
@@ -128,7 +154,6 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     // ---- Compose RenderState ----
     auto compose_start = Clock::now();
 
-    // Periodic cache eviction
     evict_timer_ms += delta_ms;
     if (evict_timer_ms >= 30000) {
         evict_timer_ms = 0;

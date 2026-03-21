@@ -4,6 +4,7 @@
 #include "ui/widgets/ChatWidget.h"
 #include "ui/widgets/CourtroomWidget.h"
 #include "ui/widgets/DebugOverlayWidget.h"
+#include "ui/widgets/ICLogWidget.h"
 #include "ui/widgets/EmoteSelectorWidget.h"
 #include "ui/widgets/ICChatWidget.h"
 #include "ui/widgets/ICMessageState.h"
@@ -35,6 +36,7 @@ class CourtroomController : public IScreenController {
     std::unique_ptr<InterjectionWidget> interjection_;
     std::unique_ptr<SideSelectWidget> side_select_;
     std::unique_ptr<MessageOptionsWidget> message_options_;
+    ICLogWidget ic_log_;
     DebugOverlayWidget debug_;
     RenderManager* render_ = nullptr;
     bool debug_floating_ = false;

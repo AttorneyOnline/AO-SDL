@@ -3,6 +3,7 @@
 #include "AOBackground.h"
 #include "AOEmotePlayer.h"
 #include "AOTextBox.h"
+#include "ICMessageQueue.h"
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/ImageAsset.h"
 #include "ao/game/effects/FlashEffect.h"
@@ -40,10 +41,13 @@ class AOCourtroomPresenter : public IScenePresenter {
     }
 
   private:
+    void play_message(const ICMessage& msg);
+
     std::unique_ptr<AOAssetLibrary> ao_assets;
     AOBackground background;
     AOEmotePlayer emote_player;
     AOTextBox textbox;
+    ICMessageQueue message_queue_;
 
     bool show_desk = true;
     bool current_flip = false;

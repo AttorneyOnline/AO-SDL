@@ -234,6 +234,7 @@ class AOPacketMS : public AOPacket {
     int char_id;
     bool flip;
     int text_color;
+    int objection_mod = 0;
     bool screenshake = false;
     bool realization = false;
     bool additive = false;

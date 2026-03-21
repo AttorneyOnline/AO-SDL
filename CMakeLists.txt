@@ -191,6 +191,7 @@ add_library(ao_protocol STATIC
     plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/asset/AOCharacterSheet.cpp
     plugins/ao/game/AOCourtroomPresenter.cpp
+    plugins/ao/game/ICMessageQueue.cpp
     plugins/ao/game/AOBackground.cpp
     plugins/ao/game/AOEmotePlayer.cpp
     plugins/ao/game/AOTextBox.cpp
