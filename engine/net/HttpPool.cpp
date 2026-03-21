@@ -39,18 +39,30 @@ void HttpPool::get(const std::string& host, const std::string& path, HttpCallbac
 }
 
 void HttpPool::drop_below(HttpPriority threshold) {
-    std::lock_guard lock(work_mutex_);
-    int dropped = 0;
-    auto it = work_queue_.begin();
-    while (it != work_queue_.end()) {
-        if (it->priority < threshold) {
-            it = work_queue_.erase(it);
-            pending_.fetch_sub(1, std::memory_order_relaxed);
-            dropped++;
-        } else {
-            ++it;
+    std::deque<Request> dropped_requests;
+    {
+        std::lock_guard lock(work_mutex_);
+        auto it = work_queue_.begin();
+        while (it != work_queue_.end()) {
+            if (it->priority < threshold) {
+                dropped_requests.push_back(std::move(*it));
+                it = work_queue_.erase(it);
+                pending_.fetch_sub(1, std::memory_order_relaxed);
+            } else {
+                ++it;
+            }
         }
     }
+    // Fire callbacks with empty response so callers can clean up (e.g. MountHttp::pending_)
+    for (auto& req : dropped_requests) {
+        if (req.callback) {
+            HttpResponse resp;
+            resp.status = 0;
+            resp.error = "dropped";
+            req.callback(std::move(resp));
+        }
+    }
+    int dropped = (int)dropped_requests.size();
     if (dropped > 0)
         Log::log_print(DEBUG, "HttpPool: dropped %d low-priority requests", dropped);
 }

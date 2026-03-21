@@ -1,5 +1,8 @@
 #include "ao/asset/AOAssetLibrary.h"
 
+#include "asset/ImageDecoder.h"
+#include "asset/MediaManager.h"
+#include "asset/MountManager.h"
 #include "utils/Log.h"
 
 #include <algorithm>
@@ -93,6 +96,13 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::character_emote(const std::string& c
                                                             const std::string& prefix) {
     std::string base = "characters/" + character + "/";
     auto result = assets.image(base + prefix + emote);
+    if (result && !prefix.empty()) {
+        // Prefixed version found — release the bare name variant from HTTP cache
+        // since it was also prefetched but won't be decoded.
+        auto& mm = MediaManager::instance().mounts_ref();
+        for (const auto& ext : supported_image_extensions())
+            mm.release_http(base + emote + "." + ext);
+    }
     if (!result && !prefix.empty()) {
         result = assets.image(base + emote);
     }

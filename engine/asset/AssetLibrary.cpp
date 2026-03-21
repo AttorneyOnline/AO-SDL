@@ -2,6 +2,7 @@
 
 #include "asset/ImageDecoder.h"
 #include "asset/MountManager.h"
+#include "asset/RawAsset.h"
 #include "utils/Log.h"
 
 AssetLibrary::AssetLibrary(MountManager& mounts, size_t cache_max_bytes) : mounts(mounts), cache_(cache_max_bytes) {
@@ -45,6 +46,10 @@ decoded:
 
     auto asset = std::make_shared<ImageAsset>(path, format, std::move(frames));
     cache_.insert(asset);
+    // Release raw bytes from HTTP cache — decoded data is now in AssetCache.
+    // Release all extension variants since prefetch may have downloaded multiple.
+    for (const auto& ext : supported_image_extensions())
+        mounts.release_http(path + "." + ext);
     return asset;
 }
 
@@ -59,9 +64,25 @@ std::shared_ptr<Asset> AssetLibrary::audio(const std::string& path) {
 }
 
 std::optional<IniDocument> AssetLibrary::config(const std::string& path) {
-    auto data = mounts.fetch_data(path);
+    // Check if we already have the raw bytes cached
+    auto cached = cache_.peek(path);
+    std::optional<std::vector<uint8_t>> data;
+    if (cached) {
+        auto raw = std::dynamic_pointer_cast<RawAsset>(cached);
+        if (raw)
+            data = raw->data();
+    }
+    if (!data)
+        data = mounts.fetch_data(path);
     if (!data)
         return std::nullopt;
+
+    // Cache the raw bytes so configs show up in the asset cache viewer
+    if (!cached) {
+        auto raw = std::make_shared<RawAsset>(path, "ini", *data);
+        cache_.insert(raw);
+        mounts.release_http(path);
+    }
 
     IniDocument doc;
     std::string current_section;
@@ -141,7 +162,20 @@ std::shared_ptr<Asset> AssetLibrary::font(const std::string& path) {
 }
 
 std::optional<std::vector<uint8_t>> AssetLibrary::raw(const std::string& path) {
-    return mounts.fetch_data(path);
+    // Check cache first
+    auto cached = cache_.peek(path);
+    if (cached) {
+        auto raw = std::dynamic_pointer_cast<RawAsset>(cached);
+        if (raw)
+            return raw->data();
+    }
+    auto data = mounts.fetch_data(path);
+    if (!data)
+        return std::nullopt;
+    // Cache for visibility in debug viewer
+    cache_.insert(std::make_shared<RawAsset>(path, "raw", *data));
+    mounts.release_http(path);
+    return data;
 }
 
 std::vector<std::string> AssetLibrary::list(const std::string& directory) {

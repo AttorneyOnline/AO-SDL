@@ -158,11 +158,14 @@ std::vector<uint8_t> MountHttp::fetch_sync(const std::string& path) {
         Log::log_print(VERBOSE, "MountHttp: sync downloaded %s (%zu bytes)", path.c_str(), data.size());
         std::lock_guard lock(mutex_);
         cache_[path] = data;
+        // Remove from pending so any async request in-flight won't re-store
+        pending_.erase(path);
         return data;
     }
 
     std::lock_guard lock(mutex_);
     failed_.insert(path);
+    pending_.erase(path);
     return {};
 }
 
@@ -180,12 +183,18 @@ void MountHttp::request(const std::string& path, HttpPriority priority) {
 
     pool_.get(host_, http_path, [this, captured_path](HttpResponse resp) {
         std::lock_guard lock(mutex_);
+
+        // If not in pending_, fetch_sync already handled this path — skip
+        if (!pending_.count(captured_path))
+            return;
         pending_.erase(captured_path);
 
         if (resp.status == 200 && !resp.body.empty()) {
             cache_[captured_path] = std::vector<uint8_t>(resp.body.begin(), resp.body.end());
             Log::log_print(VERBOSE, "MountHttp: downloaded %s (%zu bytes)",
                            captured_path.c_str(), resp.body.size());
+        } else if (resp.error == "dropped") {
+            // Request was dropped by priority — don't mark as failed so it can be re-requested
         } else {
             failed_.insert(captured_path);
             Log::log_print(VERBOSE, "MountHttp: failed %s (status=%d err=%s)",
@@ -208,3 +217,31 @@ int MountHttp::failed_count() const {
     std::lock_guard lock(mutex_);
     return (int)failed_.size();
 }
+
+void MountHttp::release(const std::string& path) {
+    std::lock_guard lock(mutex_);
+    cache_.erase(path);
+}
+
+void MountHttp::release_all() {
+    std::lock_guard lock(mutex_);
+    cache_.clear();
+}
+
+std::vector<MountHttp::CacheEntry> MountHttp::cache_snapshot() const {
+    std::lock_guard lock(mutex_);
+    std::vector<CacheEntry> result;
+    result.reserve(cache_.size());
+    for (const auto& [path, data] : cache_)
+        result.push_back({path, data.size()});
+    return result;
+}
+
+size_t MountHttp::cached_bytes() const {
+    std::lock_guard lock(mutex_);
+    size_t total = 0;
+    for (const auto& [_, data] : cache_)
+        total += data.size();
+    return total;
+}
+

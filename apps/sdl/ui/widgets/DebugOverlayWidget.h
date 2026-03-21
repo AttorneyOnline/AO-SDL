@@ -52,6 +52,13 @@ struct DebugStats {
     int http_cached = 0;
     int http_failed = 0;
     int http_pool_pending = 0;
+    size_t http_cached_bytes = 0;
+
+    struct HttpCacheEntry {
+        std::string path;
+        size_t bytes;
+    };
+    std::vector<HttpCacheEntry> http_cache_entries;
 };
 
 class DebugOverlayWidget : public IWidget {
@@ -118,6 +125,9 @@ class DebugOverlayWidget : public IWidget {
     std::deque<LogBuffer::Entry> log_local_;
     size_t log_gen_ = 0;
 
-    // Asset preview
+    // Asset cache viewer
     int selected_cache_entry_ = -1;
+    std::string selected_cache_path_;
+    enum CacheSortMode { SORT_NAME, SORT_LRU, SORT_REFS, SORT_SIZE };
+    CacheSortMode cache_sort_ = SORT_NAME;
 };

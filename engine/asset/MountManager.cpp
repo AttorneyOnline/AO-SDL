@@ -89,10 +89,42 @@ MountManager::HttpStats MountManager::http_stats() const {
             stats.pending += http->pending_count();
             stats.cached += http->cached_count();
             stats.failed += http->failed_count();
+            stats.cached_bytes += http->cached_bytes();
             stats.pool_pending = http->pool().pending();
         }
     }
     return stats;
+}
+
+std::vector<MountManager::HttpCacheEntry> MountManager::http_cache_snapshot() const {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    std::vector<HttpCacheEntry> result;
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http) {
+            for (const auto& e : http->cache_snapshot())
+                result.push_back({e.path, e.bytes});
+        }
+    }
+    return result;
+}
+
+void MountManager::release_all_http() {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http)
+            http->release_all();
+    }
+}
+
+void MountManager::release_http(const std::string& relative_path) {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http)
+            http->release(relative_path);
+    }
 }
 
 std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& relative_path) {

@@ -41,6 +41,23 @@ class MountHttp : public Mount {
     int cached_count() const;
     /// Number of paths that returned 404 or error.
     int failed_count() const;
+    /// Total bytes stored in the raw download cache.
+    size_t cached_bytes() const;
+
+    /// Remove a file from the raw byte cache (called after decode/cache).
+    void release(const std::string& path);
+
+    /// Release all raw bytes from the cache. Files that have been decoded
+    /// into AssetCache don't need the raw bytes anymore. Files that haven't
+    /// been decoded will be re-downloaded on next access.
+    void release_all();
+
+    struct CacheEntry {
+        std::string path;
+        size_t bytes;
+    };
+    /// Snapshot of the raw byte cache for debug display.
+    std::vector<CacheEntry> cache_snapshot() const;
 
     /// Asset type categories for extension lookup.
     enum class AssetType { CHARICON, EMOTE, EMOTIONS, BACKGROUND };

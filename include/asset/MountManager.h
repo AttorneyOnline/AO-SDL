@@ -82,6 +82,13 @@ class MountManager {
      */
     void prefetch(const std::string& relative_path, int priority = 1);
 
+    /// Release raw bytes from HTTP mount caches after the data has been
+    /// decoded and stored in AssetCache. Frees the duplicate memory.
+    void release_http(const std::string& relative_path);
+
+    /// Release all raw bytes from HTTP mount caches.
+    void release_all_http();
+
     /// Drop all queued HTTP requests below the given priority level.
     void drop_http_below(int priority);
 
@@ -91,8 +98,15 @@ class MountManager {
         int cached = 0;
         int failed = 0;
         int pool_pending = 0;
+        size_t cached_bytes = 0;
     };
     HttpStats http_stats() const;
+
+    struct HttpCacheEntry {
+        std::string path;
+        size_t bytes;
+    };
+    std::vector<HttpCacheEntry> http_cache_snapshot() const;
 
   private:
     mutable std::shared_mutex lock; /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */

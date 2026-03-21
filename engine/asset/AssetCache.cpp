@@ -15,6 +15,14 @@ std::shared_ptr<Asset> AssetCache::get(const std::string& path) {
     return it->second.asset;
 }
 
+std::shared_ptr<Asset> AssetCache::peek(const std::string& path) const {
+    std::lock_guard lock(mutex_);
+    auto it = entries.find(path);
+    if (it == entries.end())
+        return nullptr;
+    return it->second.asset;
+}
+
 void AssetCache::insert(std::shared_ptr<Asset> asset) {
     std::lock_guard lock(mutex_);
     const std::string& path = asset->path();

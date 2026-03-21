@@ -43,6 +43,9 @@ class AssetCache {
      */
     std::shared_ptr<Asset> get(const std::string& path);
 
+    /// Look up without promoting in the LRU list (read-only peek).
+    std::shared_ptr<Asset> peek(const std::string& path) const;
+
     /**
      * @brief Insert a newly loaded asset into the cache.
      *
@@ -89,12 +92,26 @@ class AssetCache {
         long use_count;
     };
 
+    /// Snapshot in insertion order (unordered).
     std::vector<CacheEntry> snapshot() const {
         std::lock_guard lock(mutex_);
         std::vector<CacheEntry> result;
         result.reserve(entries.size());
         for (const auto& [path, entry] : entries) {
             result.push_back({path, entry.asset->format(), entry.asset->memory_size(), entry.asset.use_count()});
+        }
+        return result;
+    }
+
+    /// Snapshot in LRU order (front = most recently used).
+    std::vector<CacheEntry> snapshot_lru() const {
+        std::lock_guard lock(mutex_);
+        std::vector<CacheEntry> result;
+        result.reserve(lru.size());
+        for (const auto& path : lru) {
+            auto it = entries.find(path);
+            if (it != entries.end())
+                result.push_back({path, it->second.asset->format(), it->second.asset->memory_size(), it->second.asset.use_count()});
         }
         return result;
     }

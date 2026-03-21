@@ -17,6 +17,7 @@
 #include "ui/widgets/SideSelectWidget.h"
 #include "ui/widgets/TimerWidget.h"
 
+#include <chrono>
 #include <memory>
 
 class CourtroomScreen;
@@ -50,5 +51,6 @@ class CourtroomController : public IScreenController {
     PlayerListWidget player_list_;
     DebugOverlayWidget debug_;
     RenderManager* render_ = nullptr;
+    std::chrono::steady_clock::time_point cache_sample_time_{};
     bool debug_open_ = false; // toggled by /debug in OOC chat
 };

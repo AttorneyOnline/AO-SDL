@@ -5,6 +5,7 @@
 
 #include <imgui.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -169,8 +170,10 @@ void DebugOverlayWidget::render() {
     // --- HTTP Streaming ---
     if (s.http_cached > 0 || s.http_pending > 0 || s.http_pool_pending > 0) {
         ImGui::SeparatorText("HTTP Streaming");
-        ImGui::Text("Pool: %d queued | Downloading: %d", s.http_pool_pending, s.http_pending);
-        ImGui::Text("Cached: %d | Failed: %d", s.http_cached, s.http_failed);
+        char hbuf[64];
+        ImGui::Text("Queue: %d | In-flight: %d | Failed: %d", s.http_pool_pending, s.http_pending, s.http_failed);
+        ImGui::Text("Raw cache: %d files, %s", s.http_cached,
+                    format_bytes(s.http_cached_bytes, hbuf, sizeof(hbuf)));
     }
 
     // --- Asset Cache ---
@@ -179,6 +182,64 @@ void DebugOverlayWidget::render() {
                 format_bytes(s.cache_used_bytes, buf, sizeof(buf)),
                 format_bytes(s.cache_max_bytes, buf2, sizeof(buf2)));
 
+    // Sort buttons
+    auto sort_btn = [&](const char* label, CacheSortMode mode) {
+        bool active = (cache_sort_ == mode);
+        if (active)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+        if (ImGui::SmallButton(label))
+            cache_sort_ = mode;
+        if (active)
+            ImGui::PopStyleColor();
+    };
+    ImGui::SameLine();
+    sort_btn("Name", SORT_NAME);
+    ImGui::SameLine();
+    sort_btn("LRU", SORT_LRU);
+    ImGui::SameLine();
+    sort_btn("Refs", SORT_REFS);
+    ImGui::SameLine();
+    sort_btn("Size", SORT_SIZE);
+
+    // Sort entries (cache_entries arrives in LRU order from snapshot_lru)
+    auto& entries = s.cache_entries;
+    switch (cache_sort_) {
+    case SORT_NAME:
+        std::sort(entries.begin(), entries.end(),
+                  [](const auto& a, const auto& b) { return a.path < b.path; });
+        break;
+    case SORT_LRU:
+        // Already in LRU order from snapshot_lru; alphabetical tiebreaker
+        // isn't possible here since LRU position is the primary key.
+        // Just keep the snapshot order.
+        break;
+    case SORT_REFS:
+        std::sort(entries.begin(), entries.end(),
+                  [](const auto& a, const auto& b) {
+                      if (a.use_count != b.use_count) return a.use_count > b.use_count;
+                      return a.path < b.path;
+                  });
+        break;
+    case SORT_SIZE:
+        std::sort(entries.begin(), entries.end(),
+                  [](const auto& a, const auto& b) {
+                      if (a.bytes != b.bytes) return a.bytes > b.bytes;
+                      return a.path < b.path;
+                  });
+        break;
+    }
+
+    // Resolve path-based selection to current index
+    selected_cache_entry_ = -1;
+    if (!selected_cache_path_.empty()) {
+        for (int i = 0; i < (int)entries.size(); i++) {
+            if (entries[i].path == selected_cache_path_) {
+                selected_cache_entry_ = i;
+                break;
+            }
+        }
+    }
+
     // Two-column layout: list on left, preview on right
     float avail_w = ImGui::GetContentRegionAvail().x;
     float preview_w = 140.0f;
@@ -186,14 +247,16 @@ void DebugOverlayWidget::render() {
     float section_h = 200.0f;
 
     ImGui::BeginChild("##cache_list", ImVec2(list_w, section_h), ImGuiChildFlags_Borders);
-    for (int i = 0; i < (int)s.cache_entries.size(); i++) {
-        const auto& e = s.cache_entries[i];
+    for (int i = 0; i < (int)entries.size(); i++) {
+        const auto& e = entries[i];
         char label[256];
         char size_buf2[64];
         format_bytes(e.bytes, size_buf2, sizeof(size_buf2));
-        std::snprintf(label, sizeof(label), "%s [%s] %s", e.path.c_str(), e.format.c_str(), size_buf2);
-        if (ImGui::Selectable(label, selected_cache_entry_ == i))
+        std::snprintf(label, sizeof(label), "%s [%s] %s (refs:%ld)", e.path.c_str(), e.format.c_str(), size_buf2, e.use_count);
+        if (ImGui::Selectable(label, selected_cache_entry_ == i)) {
             selected_cache_entry_ = i;
+            selected_cache_path_ = e.path;
+        }
     }
     ImGui::EndChild();
 
@@ -241,6 +304,17 @@ void DebugOverlayWidget::render() {
         ImGui::TextDisabled("Select an entry");
     }
     ImGui::EndChild();
+
+    if (!s.http_cache_entries.empty() && ImGui::TreeNode("HTTP Raw Cache")) {
+        ImGui::BeginChild("##http_cache_list", ImVec2(0, 150), ImGuiChildFlags_Borders);
+        for (const auto& e : s.http_cache_entries) {
+            char sb[64];
+            format_bytes(e.bytes, sb, sizeof(sb));
+            ImGui::Text("%s  %s", sb, e.path.c_str());
+        }
+        ImGui::EndChild();
+        ImGui::TreePop();
+    }
 
     // --- Log ---
     ImGui::SeparatorText("Log");

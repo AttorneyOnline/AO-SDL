@@ -3,6 +3,7 @@
 #include "ao/event/ICLogEvent.h"
 #include "ao/event/ICMessageEvent.h"
 #include "asset/MediaManager.h"
+#include "asset/MountManager.h"
 #include "asset/ShaderAsset.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
@@ -183,6 +184,9 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     if (evict_timer_ms >= 30000) {
         evict_timer_ms = 0;
         ao_assets->engine_assets().evict();
+        // Flush raw HTTP bytes — anything decoded is in AssetCache,
+        // anything still raw after 30s is probably not needed.
+        MediaManager::instance().mounts_ref().release_all_http();
     }
 
     RenderState state;

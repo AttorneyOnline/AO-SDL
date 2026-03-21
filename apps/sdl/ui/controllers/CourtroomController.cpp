@@ -89,19 +89,26 @@ void CourtroomController::update_debug_stats() {
     const auto& cache = assets.cache();
     s.cache_used_bytes = cache.used_bytes();
     s.cache_max_bytes = cache.max_bytes();
-    s.cache_entries.clear();
-    for (const auto& e : cache.snapshot()) {
-        DebugStats::CacheEntry entry{e.path, e.format, e.bytes, e.use_count};
-        auto cached = assets.get_cached(e.path);
-        auto img = std::dynamic_pointer_cast<ImageAsset>(cached);
-        if (img) {
-            entry.width = img->width();
-            entry.height = img->height();
-            entry.frame_count = img->frame_count();
-            entry.image = img;
-            entry.texture_id = render_->get_renderer().get_texture_id(img);
+
+    // Only resample the full cache entry list every 2 seconds to avoid flicker
+    auto now = std::chrono::steady_clock::now();
+    if (s.cache_entries.empty() ||
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - cache_sample_time_).count() >= 2000) {
+        cache_sample_time_ = now;
+        s.cache_entries.clear();
+        for (const auto& e : cache.snapshot_lru()) {
+            DebugStats::CacheEntry entry{e.path, e.format, e.bytes, e.use_count};
+            auto cached = cache.peek(e.path);
+            auto img = std::dynamic_pointer_cast<ImageAsset>(cached);
+            if (img) {
+                entry.width = img->width();
+                entry.height = img->height();
+                entry.frame_count = img->frame_count();
+                entry.image = img;
+                entry.texture_id = render_->get_renderer().get_texture_id(img);
+            }
+            s.cache_entries.push_back(std::move(entry));
         }
-        s.cache_entries.push_back(std::move(entry));
     }
 
     // If we're in the courtroom, we're joined
@@ -125,6 +132,16 @@ void CourtroomController::update_debug_stats() {
     s.http_cached = http.cached;
     s.http_failed = http.failed;
     s.http_pool_pending = http.pool_pending;
+    s.http_cached_bytes = http.cached_bytes;
+
+    // Sample HTTP raw cache at the same interval as asset cache
+    if (s.cache_entries.empty() ||
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - cache_sample_time_).count() < 100) {
+        // Reuse the sample timing — http entries update alongside asset cache
+        s.http_cache_entries.clear();
+        for (const auto& e : MediaManager::instance().mounts_ref().http_cache_snapshot())
+            s.http_cache_entries.push_back({e.path, e.bytes});
+    }
 }
 
 void CourtroomController::retry_emote_icons() {
