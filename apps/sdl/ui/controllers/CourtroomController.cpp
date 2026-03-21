@@ -142,6 +142,13 @@ void CourtroomController::update_debug_stats() {
         for (const auto& e : MediaManager::instance().mounts_ref().http_cache_snapshot())
             s.http_cache_entries.push_back({e.path, e.bytes});
     }
+
+    // Event channel stats
+    auto channel_stats = EventManager::instance().snapshot_channel_stats();
+    s.event_stats.clear();
+    s.event_stats.reserve(channel_stats.size());
+    for (const auto& cs : channel_stats)
+        s.event_stats.push_back({cs.raw_name, cs.count});
 }
 
 void CourtroomController::retry_emote_icons() {

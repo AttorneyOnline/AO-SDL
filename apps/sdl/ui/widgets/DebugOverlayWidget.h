@@ -59,6 +59,13 @@ struct DebugStats {
         size_t bytes;
     };
     std::vector<HttpCacheEntry> http_cache_entries;
+
+    // Event stats
+    struct EventStat {
+        std::string name;
+        uint64_t count;
+    };
+    std::vector<EventStat> event_stats;
 };
 
 class DebugOverlayWidget : public IWidget {

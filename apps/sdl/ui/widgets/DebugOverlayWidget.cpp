@@ -9,6 +9,24 @@
 #include <cmath>
 #include <cstdio>
 
+#ifdef __GNUC__
+#include <cxxabi.h>
+#endif
+
+/// Demangle a typeid().name() result into a readable class name.
+static std::string demangle(const char* mangled) {
+#ifdef __GNUC__
+    int status = 0;
+    char* demangled = abi::__cxa_demangle(mangled, nullptr, nullptr, &status);
+    if (status == 0 && demangled) {
+        std::string result(demangled);
+        std::free(demangled);
+        return result;
+    }
+#endif
+    return mangled;
+}
+
 void DebugOverlayWidget::handle_events() {
 }
 
@@ -174,6 +192,22 @@ void DebugOverlayWidget::render() {
         ImGui::Text("Queue: %d | In-flight: %d | Failed: %d", s.http_pool_pending, s.http_pending, s.http_failed);
         ImGui::Text("Raw cache: %d files, %s", s.http_cached,
                     format_bytes(s.http_cached_bytes, hbuf, sizeof(hbuf)));
+    }
+
+    // --- Event Stats ---
+    if (!s.event_stats.empty()) {
+        ImGui::SeparatorText("Event Stats");
+        uint64_t total = 0;
+        for (const auto& es : s.event_stats)
+            total += es.count;
+        ImGui::Text("Total: %llu across %zu channels", (unsigned long long)total, s.event_stats.size());
+
+        ImGui::BeginChild("##event_stats", ImVec2(0, 150), ImGuiChildFlags_Borders);
+        for (const auto& es : s.event_stats) {
+            if (es.count == 0) continue;
+            ImGui::Text("%6llu  %s", (unsigned long long)es.count, demangle(es.name.c_str()).c_str());
+        }
+        ImGui::EndChild();
     }
 
     // --- Asset Cache ---

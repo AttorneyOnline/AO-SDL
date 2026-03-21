@@ -8,12 +8,15 @@
 #include "Event.h"
 #include "EventChannel.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
+#include <vector>
 
 /**
  * @brief Type-erased base for storing heterogeneous EventChannel instances.
@@ -23,6 +26,12 @@ class BaseEventChannel {
   public:
     /** @brief Virtual destructor for safe polymorphic deletion. */
     virtual ~BaseEventChannel() = default;
+
+    /** @brief Returns the total number of events published to this channel. */
+    virtual uint64_t publish_count() const = 0;
+
+    /** @brief Returns the (mangled) type name of the event this channel carries. */
+    virtual const char* raw_type_name() const = 0;
 };
 
 /**
@@ -38,6 +47,9 @@ class EventChannelWrapper : public BaseEventChannel {
     EventChannelWrapper() : channel(std::make_unique<EventChannel<T>>()) {
     }
     std::unique_ptr<EventChannel<T>> channel; /**< Owned EventChannel instance. */
+
+    uint64_t publish_count() const override { return channel->publish_count(); }
+    const char* raw_type_name() const override { return typeid(T).name(); }
 };
 
 /**
@@ -110,6 +122,28 @@ class EventManager {
             }
             return *(wrapper->channel);
         }
+    }
+
+    /** @brief A snapshot of one channel's stats. */
+    struct ChannelStats {
+        const char* raw_name; /**< Mangled type name (from typeid). */
+        uint64_t count;       /**< Total events published. */
+    };
+
+    /**
+     * @brief Returns a snapshot of publish counts for all active channels.
+     *
+     * Thread-safe. The returned vector is sorted by count (descending).
+     */
+    std::vector<ChannelStats> snapshot_channel_stats() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<ChannelStats> out;
+        out.reserve(channels_.size());
+        for (const auto& [idx, ch] : channels_)
+            out.push_back({ch->raw_type_name(), ch->publish_count()});
+        std::sort(out.begin(), out.end(),
+                  [](const auto& a, const auto& b) { return a.count > b.count; });
+        return out;
     }
 
   private:
