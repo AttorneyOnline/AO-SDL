@@ -273,7 +273,7 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
         }
     }
 
-    Log::log_print(DEBUG, "APNG: canvas=%ux%u is_apng=%d num_frames=%u chunks=%zu", canvas_w, canvas_h, is_apng,
+    Log::log_print(VERBOSE, "APNG: canvas=%ux%u is_apng=%d num_frames=%u chunks=%zu", canvas_w, canvas_h, is_apng,
                    num_frames, chunks.size());
 
     // Plain PNG
