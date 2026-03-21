@@ -11,6 +11,8 @@ void GameThread::stop() {
 }
 
 void GameThread::game_loop() {
+    presenter.init();
+
     auto last = std::chrono::steady_clock::now();
     int tick_count = 0;
     auto rate_start = std::chrono::steady_clock::now();

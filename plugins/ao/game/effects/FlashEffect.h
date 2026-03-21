@@ -12,6 +12,7 @@ class FlashEffect : public ISceneEffect {
     FlashEffect(int viewport_w, int viewport_h);
 
     void trigger() override;
+    void stop() override { active_ = false; }
     void tick(int delta_ms) override;
     void apply(LayerGroup& scene) override;
     bool is_active() const override;

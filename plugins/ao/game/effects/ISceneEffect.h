@@ -13,6 +13,9 @@ class ISceneEffect {
     /// Start or restart the effect.
     virtual void trigger() = 0;
 
+    /// Stop the effect immediately.
+    virtual void stop() = 0;
+
     /// Advance the effect by delta_ms. Called every frame.
     virtual void tick(int delta_ms) = 0;
 

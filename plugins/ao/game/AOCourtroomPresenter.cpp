@@ -36,7 +36,24 @@ AOCourtroomPresenter::AOCourtroomPresenter() {
     });
 }
 
+void AOCourtroomPresenter::init() {
+    auto& engine = MediaManager::instance().assets();
+
+    std::string theme = "default";
+    if (engine.config("themes/AceAttorney DS/courtroom_fonts.ini")) {
+        theme = "AceAttorney DS";
+    }
+
+    ao_assets = std::make_unique<AOAssetLibrary>(engine, theme);
+    textbox.load(*ao_assets);
+    Log::log_print(DEBUG, "AOCourtroomPresenter: using theme '%s'", theme.c_str());
+}
+
 void AOCourtroomPresenter::play_message(const ICMessage& msg) {
+    // Stop all active effects before starting a new message
+    for (auto* effect : effects_)
+        effect->stop();
+
     if (!msg.side.empty())
         background.set_position(msg.side);
 
@@ -72,21 +89,6 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         delta_ms = 16;
     if (delta_ms > 200)
         delta_ms = 200;
-
-    // Initialize AOAssetLibrary on first tick
-    if (!initialized) {
-        auto& engine = MediaManager::instance().assets();
-
-        std::string theme = "default";
-        if (engine.config("themes/AceAttorney DS/courtroom_fonts.ini")) {
-            theme = "AceAttorney DS";
-        }
-
-        ao_assets = std::make_unique<AOAssetLibrary>(engine, theme);
-        textbox.load(*ao_assets);
-        initialized = true;
-        Log::log_print(DEBUG, "AOCourtroomPresenter: using theme '%s'", theme.c_str());
-    }
 
     // ---- Drain events into queue ----
     auto events_start = Clock::now();

@@ -26,6 +26,11 @@ void ScreenshakeEffect::trigger() {
     anim_.play();
 }
 
+void ScreenshakeEffect::stop() {
+    anim_.stop();
+    anim_.reset();
+}
+
 void ScreenshakeEffect::tick(int delta_ms) {
     anim_.tick(delta_ms);
 }

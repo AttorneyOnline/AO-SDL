@@ -6,6 +6,7 @@
 class ScreenshakeEffect : public ISceneEffect {
   public:
     void trigger() override;
+    void stop() override;
     void tick(int delta_ms) override;
     void apply(LayerGroup& scene) override;
     bool is_active() const override;

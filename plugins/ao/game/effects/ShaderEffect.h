@@ -15,9 +15,10 @@ class ShaderEffect : public ISceneEffect {
     /// @param shader_path  Asset path (e.g. "shaders/rainbow").
     /// @param duration_s   How long the effect plays (0 = infinite).
     /// @param layer_id     Which layer to apply to, or -1 for the whole group.
-    ShaderEffect(std::string shader_path, float duration_s, int layer_id = 5);
+    ShaderEffect(std::string shader_path, float duration_s, int layer_id = -1);
 
     void trigger() override;
+    void stop() override { active_ = false; }
     void tick(int delta_ms) override;
     void apply(LayerGroup& scene) override;
     bool is_active() const override;

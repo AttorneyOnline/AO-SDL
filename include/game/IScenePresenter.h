@@ -22,6 +22,9 @@ class IScenePresenter {
   public:
     virtual ~IScenePresenter() = default;
 
+    /// Called once on the game thread before the first tick.
+    virtual void init() {}
+
     /**
      * @brief Advance the scene and produce a render snapshot.
      * @param delta_ms Milliseconds elapsed since the last tick.

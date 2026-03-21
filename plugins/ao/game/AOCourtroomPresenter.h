@@ -29,6 +29,7 @@ struct TickProfile {
 class AOCourtroomPresenter : public IScenePresenter {
   public:
     AOCourtroomPresenter();
+    void init() override;
     RenderState tick(uint64_t t) override;
 
     std::vector<ProfileEntry> tick_profile() const override {
@@ -52,7 +53,6 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     bool show_desk = true;
     bool current_flip = false;
-    bool initialized = false;
 
     std::shared_ptr<ImageAsset> textbox_overlay;
     bool textbox_dirty = false;
