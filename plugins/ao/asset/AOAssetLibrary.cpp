@@ -331,7 +331,8 @@ void AOAssetLibrary::prefetch_character(const std::string& character, const std:
     std::string base = "characters/" + character + "/";
     assets.prefetch_image(base + "(a)" + emote, 1, priority);
     assets.prefetch_image(base + "(b)" + emote, 1, priority);
-    if (!pre_emote.empty())
+    assets.prefetch_image(base + emote, 1, priority); // bare name fallback
+    if (!pre_emote.empty() && pre_emote != "-")
         assets.prefetch_image(base + pre_emote, 1, priority);
     assets.prefetch_config(base + "char.ini");
 }
@@ -352,6 +353,7 @@ void AOAssetLibrary::prefetch_own_character(const std::string& character) {
         const auto& emo = sheet->emote(i);
         assets.prefetch_image(base + "(a)" + emo.anim_name, 1, 2);
         assets.prefetch_image(base + "(b)" + emo.anim_name, 1, 2);
+        assets.prefetch_image(base + emo.anim_name, 1, 2); // bare name fallback
         if (!emo.pre_anim.empty() && emo.pre_anim != "-")
             assets.prefetch_image(base + emo.pre_anim, 1, 2);
     }
