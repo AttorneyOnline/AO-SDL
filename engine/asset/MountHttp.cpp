@@ -2,6 +2,25 @@
 
 #include "utils/Log.h"
 
+#include <iomanip>
+#include <sstream>
+
+/// Percent-encode a URL path component (spaces, parens, unicode, etc.).
+static std::string url_encode_path(const std::string& path) {
+    std::ostringstream out;
+    out.fill('0');
+    out << std::hex;
+    for (unsigned char c : path) {
+        // Unreserved characters per RFC 3986 + '/' for path separators
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == '/' || c == '(' || c == ')') {
+            out << c;
+        } else {
+            out << '%' << std::uppercase << std::setw(2) << (int)c;
+        }
+    }
+    return out.str();
+}
+
 /// Split a URL like "https://host.com/path/prefix" into host and path parts.
 static void split_url(const std::string& url, std::string& host, std::string& path_prefix) {
     // Find the scheme + authority boundary (after "://")
@@ -61,7 +80,7 @@ void MountHttp::request(const std::string& path) {
         pending_.insert(path);
     }
 
-    std::string http_path = path_prefix_ + "/" + path;
+    std::string http_path = url_encode_path(path_prefix_ + "/" + path);
     std::string captured_path = path;
 
     pool_.get(host_, http_path, [this, captured_path](HttpResponse resp) {
