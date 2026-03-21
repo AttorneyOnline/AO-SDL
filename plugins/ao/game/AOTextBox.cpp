@@ -1,6 +1,7 @@
 #include "ao/game/AOTextBox.h"
 
 #include "utils/BlendOps.h"
+#include "utils/ImageOps.h"
 #include "utils/Log.h"
 #include "utils/UTF8.h"
 
@@ -190,16 +191,7 @@ void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
                              pixels);
     }
 
-    // Flip vertically for GL (Y=0 at bottom)
-    size_t row_bytes = (size_t)viewport_w * 4;
-    std::vector<uint8_t> row_tmp(row_bytes);
-    for (int y = 0; y < viewport_h / 2; y++) {
-        uint8_t* top = pixels + y * row_bytes;
-        uint8_t* bot = pixels + (viewport_h - 1 - y) * row_bytes;
-        std::memcpy(row_tmp.data(), top, row_bytes);
-        std::memcpy(top, bot, row_bytes);
-        std::memcpy(bot, row_tmp.data(), row_bytes);
-    }
+    flip_vertical_rgba(pixels, viewport_w, viewport_h);
 }
 
 std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
@@ -230,16 +222,7 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
         showname_renderer.render(current_showname, (int)current_showname.size(), white, 0, 0, text_w, text_h, 0, 0,
                                  pixels.data());
 
-        // Flip vertically for GL
-        size_t row_bytes = (size_t)text_w * 4;
-        std::vector<uint8_t> row_tmp(row_bytes);
-        for (int y = 0; y < text_h / 2; y++) {
-            uint8_t* top = pixels.data() + y * row_bytes;
-            uint8_t* bot = pixels.data() + (text_h - 1 - y) * row_bytes;
-            std::memcpy(row_tmp.data(), top, row_bytes);
-            std::memcpy(top, bot, row_bytes);
-            std::memcpy(bot, row_tmp.data(), row_bytes);
-        }
+        flip_vertical_rgba(pixels.data(), text_w, text_h);
 
         ImageFrame frame;
         frame.width = text_w;

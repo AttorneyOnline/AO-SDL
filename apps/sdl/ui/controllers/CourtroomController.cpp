@@ -27,11 +27,9 @@ CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager&
     ic_state_.character = screen.get_character_name();
     ic_state_.char_id = screen.get_char_id();
 
-    const ICharacterSheet* sheet = screen.get_character_sheet();
+    auto sheet = screen.get_character_sheet();
     if (sheet) {
-        // Share ownership with the screen — the sheet outlives the controller
-        ic_state_.char_sheet = std::shared_ptr<const ICharacterSheet>(
-            std::shared_ptr<const ICharacterSheet>{}, sheet);
+        ic_state_.char_sheet = sheet;
         ic_state_.side_index = side_to_index(sheet->side());
         std::strncpy(ic_state_.showname, sheet->showname().c_str(),
                      sizeof(ic_state_.showname) - 1);

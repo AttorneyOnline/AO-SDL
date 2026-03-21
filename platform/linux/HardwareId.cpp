@@ -9,12 +9,6 @@
 
 // Minimal SHA-256 (no OpenSSL dependency). Uses /usr/bin/sha256sum as fallback.
 static std::string sha256_hex(const std::string& input) {
-    // Try piping through sha256sum (available on virtually all Linux systems)
-    FILE* pipe = popen("sha256sum", "w");
-    if (!pipe)
-        return "";
-
-    // Use a temp approach: write to sha256sum via echo | sha256sum
     std::string cmd = "echo -n '" + input + "' | sha256sum 2>/dev/null";
     std::unique_ptr<FILE, decltype(&pclose)> proc(popen(cmd.c_str(), "r"), pclose);
     if (!proc)

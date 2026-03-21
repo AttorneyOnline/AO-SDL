@@ -22,16 +22,26 @@ class LogBuffer {
         return buf;
     }
 
-    /// Thread-safe snapshot of all entries.
-    std::deque<Entry> entries() const {
+    /// Copy only entries newer than the given generation into `out`.
+    /// Returns the new generation watermark to pass next time.
+    size_t poll(size_t since_gen, std::deque<Entry>& out) const {
         std::lock_guard lock(mutex_);
-        return entries_;
+        if (generation_ > since_gen) {
+            size_t new_entries = std::min(generation_ - since_gen, entries_.size());
+            auto start = entries_.end() - (std::ptrdiff_t)new_entries;
+            out.insert(out.end(), start, entries_.end());
+            // Keep output bounded
+            while (out.size() > MAX_ENTRIES)
+                out.pop_front();
+        }
+        return generation_;
     }
 
     /// Clear all entries.
     void clear() {
         std::lock_guard lock(mutex_);
         entries_.clear();
+        generation_ = 0;
     }
 
   private:
@@ -39,12 +49,14 @@ class LogBuffer {
         Log::set_sink([this](LogLevel level, const std::string& ts, const std::string& msg) {
             std::lock_guard lock(mutex_);
             entries_.push_back({level, ts, msg});
-            if ((int)entries_.size() > MAX_ENTRIES)
+            generation_++;
+            if (entries_.size() > MAX_ENTRIES)
                 entries_.pop_front();
         });
     }
 
-    static constexpr int MAX_ENTRIES = 5000;
+    static constexpr size_t MAX_ENTRIES = 5000;
     mutable std::mutex mutex_;
     std::deque<Entry> entries_;
+    size_t generation_ = 0;
 };

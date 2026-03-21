@@ -30,8 +30,8 @@ class CourtroomScreen : public Screen {
     }
 
     /// Character sheet loaded from the protocol plugin. May be null.
-    const ICharacterSheet* get_character_sheet() const {
-        return char_sheet_.get();
+    const std::shared_ptr<ICharacterSheet>& get_character_sheet() const {
+        return char_sheet_;
     }
 
     /// Emote button icons loaded from the protocol plugin.

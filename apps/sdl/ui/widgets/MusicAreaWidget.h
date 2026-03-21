@@ -22,6 +22,7 @@ class MusicAreaWidget : public IWidget {
 
     std::vector<std::string> areas_;
     std::vector<std::string> tracks_;
+    std::vector<std::string> tracks_lower_; // pre-lowercased for filtering
     std::string now_playing_;
     char search_buf_[128] = "";
     int selected_area_ = -1;

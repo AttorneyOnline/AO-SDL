@@ -287,32 +287,34 @@ void DebugOverlayWidget::draw_log() {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     ImGui::InputTextWithHint("##log_search", "Search...", log_search_, sizeof(log_search_));
 
-    auto snapshot = LogBuffer::instance().entries();
-
-    // Build filtered text for the copy button
-    std::string filtered_text;
+    // Poll only new entries since last frame
+    log_gen_ = LogBuffer::instance().poll(log_gen_, log_local_);
 
     if (ImGui::SmallButton("Copy")) {
-        for (const auto& entry : snapshot) {
+        std::string text;
+        for (const auto& entry : log_local_) {
             if (!log_filter_[entry.level]) continue;
             if (log_search_[0] != '\0' && entry.message.find(log_search_) == std::string::npos) continue;
-            filtered_text += '[';
-            filtered_text += entry.timestamp;
-            filtered_text += "][";
-            filtered_text += log_level_name(entry.level);
-            filtered_text += "] ";
-            filtered_text += entry.message;
-            filtered_text += '\n';
+            text += '[';
+            text += entry.timestamp;
+            text += "][";
+            text += log_level_name(entry.level);
+            text += "] ";
+            text += entry.message;
+            text += '\n';
         }
-        ImGui::SetClipboardText(filtered_text.c_str());
+        ImGui::SetClipboardText(text.c_str());
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton("Clear")) {
         LogBuffer::instance().clear();
+        log_local_.clear();
+        log_gen_ = 0;
+    }
 
     ImGui::BeginChild("##log_scroll", ImVec2(0, 0), ImGuiChildFlags_None);
 
-    for (const auto& entry : snapshot) {
+    for (const auto& entry : log_local_) {
         if (!log_filter_[entry.level])
             continue;
         if (log_search_[0] != '\0' && entry.message.find(log_search_) == std::string::npos)
@@ -324,7 +326,7 @@ void DebugOverlayWidget::draw_log() {
         ImGui::PopStyleColor();
     }
 
-    if (log_auto_scroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10.0f)
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10.0f)
         ImGui::SetScrollHereY(1.0f);
 
     ImGui::EndChild();

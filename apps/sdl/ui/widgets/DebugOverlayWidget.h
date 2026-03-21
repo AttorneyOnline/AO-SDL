@@ -1,9 +1,11 @@
 #pragma once
 
 #include "ui/IWidget.h"
+#include "ui/LogBuffer.h"
 #include "utils/Log.h"
 
 #include <array>
+#include <deque>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -101,5 +103,6 @@ class DebugOverlayWidget : public IWidget {
 
     bool log_filter_[LogLevel::COUNT] = {false, false, true, true, true, true, true};
     char log_search_[128] = "";
-    bool log_auto_scroll_ = true;
+    std::deque<LogBuffer::Entry> log_local_;
+    size_t log_gen_ = 0;
 };

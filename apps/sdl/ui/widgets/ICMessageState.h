@@ -17,7 +17,7 @@ struct ICMessageState {
     // Character info (populated when entering courtroom)
     std::string character;
     int char_id = -1;
-    std::shared_ptr<const ICharacterSheet> char_sheet;
+    std::shared_ptr<ICharacterSheet> char_sheet;
     std::vector<EmoteIcon> emote_icons;
 
     // ICChatWidget

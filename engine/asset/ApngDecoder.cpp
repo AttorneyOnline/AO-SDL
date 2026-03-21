@@ -1,6 +1,7 @@
 #include "asset/ApngDecoder.h"
 
 #include "utils/BlendOps.h"
+#include "utils/ImageOps.h"
 #include "utils/Log.h"
 
 #include "stb_image.h"
@@ -222,16 +223,9 @@ static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx
     frame.height = (int)canvas_h;
     frame.duration_ms = duration_ms > 0 ? duration_ms : 100;
 
-    if (flip_y) {
-        frame.pixels.resize(canvas.size());
-        size_t row_bytes = canvas_w * 4;
-        for (uint32_t row = 0; row < canvas_h; row++) {
-            std::memcpy(&frame.pixels[row * row_bytes],
-                        &canvas[(canvas_h - 1 - row) * row_bytes], row_bytes);
-        }
-    } else {
-        frame.pixels = canvas;
-    }
+    frame.pixels = canvas;
+    if (flip_y)
+        flip_vertical_rgba(frame.pixels.data(), (int)canvas_w, (int)canvas_h);
 
     // Dispose (operates on the top-down canvas, not the flipped frame)
     if (fctl.dispose_op == DISPOSE_BACKGROUND) {

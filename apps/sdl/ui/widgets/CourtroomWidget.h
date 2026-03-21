@@ -13,4 +13,5 @@ class CourtroomWidget : public IWidget {
 
   private:
     RenderManager& render_;
+    int last_scale_ = 0;
 };

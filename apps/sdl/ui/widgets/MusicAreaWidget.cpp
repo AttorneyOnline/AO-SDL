@@ -17,6 +17,13 @@ void MusicAreaWidget::handle_events() {
     while (auto ev = list_ch.get_event()) {
         areas_ = ev->areas();
         tracks_ = ev->tracks();
+        // Pre-lowercase track names for filtering
+        tracks_lower_.resize(tracks_.size());
+        for (size_t i = 0; i < tracks_.size(); i++) {
+            tracks_lower_[i] = tracks_[i];
+            std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(),
+                           tracks_lower_[i].begin(), [](unsigned char c) { return std::tolower(c); });
+        }
         // Reset ARUP data to match new area count
         size_t n = areas_.size();
         area_players_.assign(n, -1);
@@ -55,15 +62,9 @@ void MusicAreaWidget::handle_events() {
     }
 }
 
-static bool matches_filter(const std::string& name, const char* filter) {
-    if (filter[0] == '\0')
+static bool matches_filter(const std::string& lower_name, const std::string& lower_filter) {
+    if (lower_filter.empty())
         return true;
-    std::string lower_name = name;
-    std::string lower_filter = filter;
-    std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    std::transform(lower_filter.begin(), lower_filter.end(), lower_filter.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
     return lower_name.find(lower_filter) != std::string::npos;
 }
 
@@ -86,11 +87,16 @@ void MusicAreaWidget::render() {
                 ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", now_playing_.c_str());
             }
 
+            // Lowercase the filter once per frame
+            std::string lower_filter(search_buf_);
+            std::transform(lower_filter.begin(), lower_filter.end(), lower_filter.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+
             ImGui::BeginChild("##music_list", ImVec2(0, 0), ImGuiChildFlags_None);
 
             for (int i = 0; i < (int)tracks_.size(); i++) {
                 const auto& track = tracks_[i];
-                if (!matches_filter(track, search_buf_))
+                if (i < (int)tracks_lower_.size() && !matches_filter(tracks_lower_[i], lower_filter))
                     continue;
 
                 bool is_category = !track.empty() && track.find('.') == std::string::npos;
