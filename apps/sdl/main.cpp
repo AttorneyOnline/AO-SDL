@@ -21,6 +21,7 @@
 #include "ui/DebugContext.h"
 #include "ui/ImGuiUIRenderer.h"
 #include "SDLGameWindow.h"
+#include "ui/LogBuffer.h"
 
 #include "httplib.h"
 
@@ -39,6 +40,7 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);
 #endif
+    LogBuffer::instance(); // Install log sink before anything logs
     MediaManager::instance().init(std::filesystem::path(std::getenv("HOME")) / "Documents" / "AO2" / "base");
 
     // todo: kick off another thread to do this

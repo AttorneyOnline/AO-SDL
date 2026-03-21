@@ -1,6 +1,7 @@
 #include "ui/widgets/DebugOverlayWidget.h"
 
 #include "ui/DebugContext.h"
+#include "ui/LogBuffer.h"
 
 #include <imgui.h>
 
@@ -57,11 +58,6 @@ void DebugOverlayWidget::draw_pie(const std::vector<std::pair<const char*, float
     float angle = -PI / 2.0f; // start at top
     for (int i = 0; i < (int)slices.size(); i++) {
         float frac = slices[i].second / total;
-        if (frac < 0.005f) {
-            angle += frac * PI2;
-            continue;
-        }
-
         float next_angle = angle + frac * PI2;
         int arc_segments = std::max(3, (int)(frac * segments));
 
@@ -86,7 +82,6 @@ void DebugOverlayWidget::draw_pie(const std::vector<std::pair<const char*, float
 
     for (int i = 0; i < (int)slices.size(); i++) {
         float pct = slices[i].second / total * 100.0f;
-        if (pct < 0.5f) continue;
 
         ImU32 col = SLICE_COLORS[i % NUM_COLORS];
 
@@ -104,12 +99,15 @@ void DebugOverlayWidget::draw_pie(const std::vector<std::pair<const char*, float
 }
 
 void DebugOverlayWidget::render() {
+
     auto& s = stats_;
     char buf[64], buf2[64];
 
     // Push samples into averaging buffers
-    for (const auto& sec : s.tick_sections)
+    for (const auto& sec : s.tick_sections) {
         tick_avg_[sec.name].push(sec.us);
+        tick_history_[sec.name].push(sec.us);
+    }
     frame_count_++;
 
     // --- Performance ---
@@ -118,13 +116,23 @@ void DebugOverlayWidget::render() {
     ImGui::Text("Game tick: %.3f ms @ %.0f Hz", s.game_tick_ms, s.tick_rate_hz);
     ImGui::Text("Draw calls: %d", s.draw_calls);
 
-    // --- Game tick breakdown pie ---
+    // --- Game tick breakdown ---
     if (!s.tick_sections.empty() && frame_count_ >= 5) {
         ImGui::SeparatorText("Tick Breakdown");
-        std::vector<std::pair<const char*, float>> slices;
-        for (const auto& sec : s.tick_sections)
-            slices.push_back({sec.name, tick_avg_[sec.name].average()});
-        draw_pie(slices);
+        if (ImGui::BeginTabBar("##tick_tabs")) {
+            if (ImGui::BeginTabItem("Pie")) {
+                std::vector<std::pair<const char*, float>> slices;
+                for (const auto& sec : s.tick_sections)
+                    slices.push_back({sec.name, tick_avg_[sec.name].average()});
+                draw_pie(slices);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("History")) {
+                draw_history();
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
     }
 
     // --- Renderer ---
@@ -168,4 +176,156 @@ void DebugOverlayWidget::render() {
         }
         ImGui::TreePop();
     }
+
+    // --- Log ---
+    ImGui::SeparatorText("Log");
+    draw_log();
+}
+
+void DebugOverlayWidget::draw_history() {
+    auto& s = stats_;
+    if (s.tick_sections.empty())
+        return;
+
+    // Low-pass filter coefficient (0 = no filtering, 1 = infinite smoothing)
+    static constexpr float LPF_ALPHA = 0.85f;
+
+    // Find smoothed max across all sections for a stable Y scale
+    float max_us = 1.0f;
+    for (const auto& sec : s.tick_sections) {
+        auto it = tick_history_.find(sec.name);
+        if (it == tick_history_.end()) continue;
+        const auto& ring = it->second;
+        float smoothed = 0;
+        for (int i = 0; i < ring.count; i++) {
+            smoothed = LPF_ALPHA * smoothed + (1.0f - LPF_ALPHA) * ring.at(i);
+            max_us = std::max(max_us, smoothed);
+        }
+    }
+    max_us = std::ceil(max_us / 100.0f) * 100.0f;
+
+    // Fixed legend at the top
+    int color_idx = 0;
+    for (const auto& sec : s.tick_sections) {
+        ImU32 col = SLICE_COLORS[color_idx % NUM_COLORS];
+        if (color_idx > 0) ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, col);
+        float avg = tick_avg_.count(sec.name) ? tick_avg_[sec.name].average() : 0;
+        ImGui::Text("%s: %.0f us", sec.name, avg);
+        ImGui::PopStyleColor();
+        color_idx++;
+    }
+
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    float graph_h = std::max(avail.y - 4.0f, 60.0f);
+
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##history_area", ImVec2(avail.x, graph_h));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    dl->AddRectFilled(origin, {origin.x + avail.x, origin.y + graph_h}, IM_COL32(30, 30, 30, 200));
+
+    for (int g = 1; g <= 3; g++) {
+        float y = origin.y + graph_h * (1.0f - (float)g / 4.0f);
+        dl->AddLine({origin.x, y}, {origin.x + avail.x, y}, IM_COL32(60, 60, 60, 255));
+        char label[32];
+        std::snprintf(label, sizeof(label), "%.0f us", max_us * (float)g / 4.0f);
+        dl->AddText({origin.x + 2, y - 12}, IM_COL32(120, 120, 120, 255), label);
+    }
+
+    // Draw each section as a smoothed line
+    color_idx = 0;
+    for (const auto& sec : s.tick_sections) {
+        auto it = tick_history_.find(sec.name);
+        if (it == tick_history_.end()) continue;
+        const auto& ring = it->second;
+        if (ring.count < 2) { color_idx++; continue; }
+
+        ImU32 col = SLICE_COLORS[color_idx % NUM_COLORS];
+        color_idx++;
+
+        int n = ring.count;
+        float x_step = avail.x / (float)(HISTORY_SIZE - 1);
+        float x_offset = (HISTORY_SIZE - n) * x_step;
+
+        float smoothed = ring.at(0);
+        ImVec2 prev = {origin.x + x_offset, origin.y + graph_h * (1.0f - smoothed / max_us)};
+        for (int i = 1; i < n; i++) {
+            smoothed = LPF_ALPHA * smoothed + (1.0f - LPF_ALPHA) * ring.at(i);
+            float x = origin.x + x_offset + i * x_step;
+            float y = origin.y + graph_h * (1.0f - smoothed / max_us);
+            ImVec2 pt = {x, y};
+            dl->AddLine(prev, pt, col, 1.0f);
+            prev = pt;
+        }
+    }
+}
+
+static ImVec4 log_level_color(LogLevel level) {
+    switch (level) {
+    case VERBOSE: return {0.5f, 0.5f, 0.5f, 1.0f};
+    case DEBUG:   return {0.6f, 0.6f, 0.6f, 1.0f};
+    case INFO:    return {0.8f, 0.8f, 0.8f, 1.0f};
+    case WARNING: return {1.0f, 0.8f, 0.2f, 1.0f};
+    case ERR:     return {1.0f, 0.3f, 0.3f, 1.0f};
+    case FATAL:   return {1.0f, 0.0f, 0.0f, 1.0f};
+    default:      return {1.0f, 1.0f, 1.0f, 1.0f};
+    }
+}
+
+void DebugOverlayWidget::draw_log() {
+    // Level filter buttons
+    static const char* filter_names[] = {"", "VRB", "DBG", "INF", "WRN", "ERR", "FTL"};
+    for (int i = VERBOSE; i < COUNT; i++) {
+        if (i > VERBOSE) ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, log_level_color((LogLevel)i));
+        ImGui::Checkbox(filter_names[i], &log_filter_[i]);
+        ImGui::PopStyleColor();
+    }
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    ImGui::InputTextWithHint("##log_search", "Search...", log_search_, sizeof(log_search_));
+
+    auto snapshot = LogBuffer::instance().entries();
+
+    // Build filtered text for the copy button
+    std::string filtered_text;
+
+    if (ImGui::SmallButton("Copy")) {
+        for (const auto& entry : snapshot) {
+            if (!log_filter_[entry.level]) continue;
+            if (log_search_[0] != '\0' && entry.message.find(log_search_) == std::string::npos) continue;
+            filtered_text += '[';
+            filtered_text += entry.timestamp;
+            filtered_text += "][";
+            filtered_text += log_level_name(entry.level);
+            filtered_text += "] ";
+            filtered_text += entry.message;
+            filtered_text += '\n';
+        }
+        ImGui::SetClipboardText(filtered_text.c_str());
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear"))
+        LogBuffer::instance().clear();
+
+    ImGui::BeginChild("##log_scroll", ImVec2(0, 0), ImGuiChildFlags_None);
+
+    for (const auto& entry : snapshot) {
+        if (!log_filter_[entry.level])
+            continue;
+        if (log_search_[0] != '\0' && entry.message.find(log_search_) == std::string::npos)
+            continue;
+
+        ImGui::PushStyleColor(ImGuiCol_Text, log_level_color(entry.level));
+        ImGui::TextWrapped("[%s][%s] %s", entry.timestamp.c_str(),
+                          log_level_name(entry.level), entry.message.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    if (log_auto_scroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10.0f)
+        ImGui::SetScrollHereY(1.0f);
+
+    ImGui::EndChild();
 }

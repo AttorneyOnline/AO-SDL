@@ -41,6 +41,5 @@ class CourtroomController : public IScreenController {
     std::unique_ptr<MusicAreaWidget> music_area_;
     DebugOverlayWidget debug_;
     RenderManager* render_ = nullptr;
-    bool debug_floating_ = false;
-    bool debug_open_ = true;
+    bool debug_open_ = false; // toggled by /debug in OOC chat
 };

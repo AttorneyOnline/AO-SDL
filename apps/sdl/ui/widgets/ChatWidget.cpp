@@ -20,25 +20,32 @@ void ChatWidget::render() {
     float log_height = ImGui::GetContentRegionAvail().y - input_height;
 
     if (log_height > 0) {
-        ImGui::BeginChild("##chat_log", ImVec2(0, log_height), ImGuiChildFlags_None);
-        ImGui::TextUnformatted(m_buffer.c_str());
-        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f)
-            ImGui::SetScrollHereY(1.0f);
-        ImGui::EndChild();
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
+        ImGui::InputTextMultiline("##chat_log", const_cast<char*>(m_buffer.c_str()), m_buffer.size() + 1,
+                                  ImVec2(-1, log_height), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
+        ImGui::PopStyleColor(3);
     }
 
     ImGui::InputText("Name", m_name, sizeof(m_name));
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x -
                             ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().ItemSpacing.x);
-    if (ImGui::InputText("##ooc_msg", m_message, sizeof(m_message), ImGuiInputTextFlags_EnterReturnsTrue)) {
-        EventManager::instance().get_channel<OutgoingChatEvent>().publish(
-            OutgoingChatEvent(std::string(m_name), std::string(m_message)));
+
+    auto send = [this]() {
+        std::string msg(m_message);
         m_message[0] = '\0';
-    }
+        if (msg == "/debug") {
+            debug_toggled_ = true;
+            return;
+        }
+        EventManager::instance().get_channel<OutgoingChatEvent>().publish(
+            OutgoingChatEvent(std::string(m_name), std::move(msg)));
+    };
+
+    if (ImGui::InputText("##ooc_msg", m_message, sizeof(m_message), ImGuiInputTextFlags_EnterReturnsTrue))
+        send();
     ImGui::SameLine();
-    if (ImGui::Button("Send")) {
-        EventManager::instance().get_channel<OutgoingChatEvent>().publish(
-            OutgoingChatEvent(std::string(m_name), std::string(m_message)));
-        m_message[0] = '\0';
-    }
+    if (ImGui::Button("Send"))
+        send();
 }

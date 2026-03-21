@@ -17,9 +17,10 @@ void ICLogWidget::handle_events() {
 }
 
 void ICLogWidget::render() {
-    ImGui::BeginChild("##ic_log", ImVec2(0, 0), ImGuiChildFlags_None);
-    ImGui::TextUnformatted(buffer_.c_str());
-    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f)
-        ImGui::SetScrollHereY(1.0f);
-    ImGui::EndChild();
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
+    ImGui::InputTextMultiline("##ic_log", const_cast<char*>(buffer_.c_str()), buffer_.size() + 1,
+                              ImVec2(-1, -1), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
+    ImGui::PopStyleColor(3);
 }

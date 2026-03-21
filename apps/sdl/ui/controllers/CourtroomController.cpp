@@ -176,7 +176,8 @@ void CourtroomController::render() {
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("##chat_panel", ImVec2(ooc_width, bottom_height), ImGuiChildFlags_Borders);
+    float remaining_width = avail.x - ic_controls_width - ImGui::GetStyle().ItemSpacing.x;
+    ImGui::BeginChild("##chat_panel", ImVec2(remaining_width, bottom_height), ImGuiChildFlags_Borders);
     if (ImGui::BeginTabBar("##chat_tabs")) {
         if (ImGui::BeginTabItem("IC Log")) {
             ic_log_.handle_events();
@@ -192,39 +193,19 @@ void CourtroomController::render() {
     }
     ImGui::EndChild();
 
-    ImGui::SameLine();
-
-    // Bottom-right: debug panel (docked) or toggle button
-    if (!debug_floating_) {
-        ImGui::BeginChild("##debug", ImVec2(right_width, bottom_height), ImGuiChildFlags_Borders);
-        if (ImGui::SmallButton("Pop Out")) debug_floating_ = true;
-        ImGui::SameLine();
-        ImGui::SeparatorText("Debug");
-        update_debug_stats();
-        debug_.render();
-        ImGui::EndChild();
-    } else {
-        ImGui::BeginChild("##debug_placeholder", ImVec2(right_width, bottom_height), ImGuiChildFlags_Borders);
-        if (ImGui::Button("Show Debug Panel"))
-            debug_floating_ = false;
-        ImGui::EndChild();
-    }
+    // Toggle debug window via /debug in OOC chat
+    if (chat_.consume_debug_toggle())
+        debug_open_ = !debug_open_;
 
     ImGui::End();
 
-    // Floating debug window
-    if (debug_floating_ && debug_open_) {
-        ImGui::SetNextWindowSize(ImVec2(320, 500), ImGuiCond_FirstUseEver);
+    // Floating debug window (toggled by /debug)
+    if (debug_open_) {
+        ImGui::SetNextWindowSize(ImVec2(420, 600), ImGuiCond_FirstUseEver);
         ImGui::Begin("Debug", &debug_open_);
-        if (ImGui::SmallButton("Dock")) debug_floating_ = false;
         update_debug_stats();
         debug_.render();
         ImGui::End();
-
-        if (!debug_open_) {
-            debug_open_ = true;
-            debug_floating_ = false;
-        }
     }
 }
 

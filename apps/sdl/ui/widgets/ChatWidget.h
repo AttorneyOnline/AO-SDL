@@ -9,8 +9,16 @@ class ChatWidget : public IWidget {
     void handle_events() override;
     void render() override;
 
+    /// Consume the debug toggle flag (set when user types /debug).
+    bool consume_debug_toggle() {
+        bool v = debug_toggled_;
+        debug_toggled_ = false;
+        return v;
+    }
+
   private:
     std::string m_buffer;
     char m_name[32] = "";
     char m_message[1024] = "";
+    bool debug_toggled_ = false;
 };
