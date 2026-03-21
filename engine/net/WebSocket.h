@@ -193,6 +193,18 @@ class WebSocket {
     void write(std::span<const uint8_t> data_bytes);
 
     /**
+     * @brief Initiate a graceful close with status code 1000 (Normal Closure).
+     */
+    void close();
+
+    /**
+     * @brief Initiate a graceful close with a specific status code and reason.
+     * @param code   The close status code (RFC 6455 §7.4).
+     * @param reason Optional human-readable reason (UTF-8, max 123 bytes).
+     */
+    void close(uint16_t code, const std::string& reason = "");
+
+    /**
      * @brief Check whether the WebSocket connection is established and ready.
      * @return True if the handshake completed successfully and the connection
      *         has not been closed.
@@ -200,6 +212,7 @@ class WebSocket {
     bool is_connected();
 
   private:
+    void send_close(uint16_t code, const std::string& reason);
     std::vector<uint8_t> read_raw();
     void write_raw(std::span<const uint8_t> data_bytes);
 
@@ -226,4 +239,9 @@ class WebSocket {
 
     bool ready;      /**< True after a successful handshake. */
     bool connecting; /**< True while the handshake is in progress. */
+
+    // Continuation frame accumulation (RFC 6455 §5.4)
+    std::vector<uint8_t> fragment_buf_;  /**< Accumulated payload across fragments. */
+    Opcode fragment_opcode_ = TEXT;      /**< Opcode from the first fragment. */
+    bool in_fragment_ = false;           /**< True while accumulating fragments. */
 };

@@ -2,7 +2,9 @@
 
 #include "ao/asset/AOAssetLibrary.h"
 #include "ao/ui/screens/CourtroomScreen.h"
+#include "ao/event/ServerInfoEvent.h"
 #include "asset/MediaManager.h"
+#include "event/EventManager.h"
 #include "game/GameThread.h"
 #include "game/IScenePresenter.h"
 #include "render/RenderManager.h"
@@ -85,6 +87,13 @@ void CourtroomController::update_debug_stats() {
     s.cache_entries.clear();
     for (const auto& e : cache.snapshot()) {
         s.cache_entries.push_back({e.path, e.format, e.bytes, e.use_count});
+    }
+
+    auto& server_ch = EventManager::instance().get_channel<ServerInfoEvent>();
+    while (auto ev = server_ch.get_event()) {
+        s.server_software = ev->get_software();
+        s.server_version = ev->get_version();
+        s.conn_state = 1;
     }
 }
 

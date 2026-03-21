@@ -13,6 +13,7 @@
 
 #include "net/KissnetTcpSocket.h"
 #include "utils/Base64.h"
+#include "utils/Version.h"
 
 #include <sha1.h>
 
@@ -23,7 +24,6 @@
 #include <format>
 #include <functional>
 
-// todo: support closing, ping to server, and continuation frames
 
 HTTPResponse::HTTPResponse(StatusLine status_line, HTTPHeaders headers) : status_line(status_line), headers(headers) {
 }
@@ -53,8 +53,7 @@ WebSocket::WebSocket(const std::string& host, uint16_t port, std::unique_ptr<ITc
     set_header("Upgrade", "websocket");
     set_header("Connection", "Upgrade");
     set_header("Sec-WebSocket-Version", "13");
-    // todo: better versioning
-    set_header("User-Agent", "tsurushiage/indev");
+    set_header("User-Agent", std::string("AO-SDL/") + ao_sdl_version());
 }
 
 void WebSocket::set_header(const std::string& header, const std::string& value) {
@@ -162,7 +161,7 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
             }
 
             uint64_t pl_len_netorder;
-            std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint16_t));
+            std::memcpy(&pl_len_netorder, &bytes[2], sizeof(uint64_t));
             pl_len = WebSocket::net_to_host_64(pl_len_netorder);
             bytes_needed += pl_len;
         }
@@ -198,26 +197,83 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
         extra_data.clear();
         extra_data.insert(extra_data.end(), bytes.begin() + bytes_needed, bytes.end());
 
-        if (frame.opcode == PING) {
+        // --- Control frames (CLOSE, PING, PONG) ---
+        // Control frames may appear between fragments (RFC 6455 §5.5).
+        if (frame.opcode == CLOSE) {
+            // Echo the close frame back if we haven't already sent one
+            if (ready) {
+                uint16_t code = 1000;
+                if (frame.data.size() >= 2) {
+                    uint16_t net_code;
+                    std::memcpy(&net_code, frame.data.data(), 2);
+                    code = ntohs(net_code);
+                }
+                send_close(code, "");
+                ready = false;
+            }
+            // Deliver the close frame so callers can see the disconnect
+            messages.push_back(frame);
+            return messages;
+        }
+        else if (frame.opcode == PING) {
             WebSocketFrame pong;
-
             pong.fin = true;
             pong.rsv = 0;
             pong.opcode = PONG;
-
             pong.mask = true;
             pong.len = frame.len;
+            pong.len_code = frame.len <= 125 ? (uint8_t)frame.len : 126;
 
             std::vector<uint8_t> randbuf(4);
             std::generate(randbuf.begin(), randbuf.end(), []() { return std::rand() % 256; });
             pong.mask_key = *reinterpret_cast<const uint32_t*>(randbuf.data());
 
-            pong.data.insert(pong.data.begin(), frame.data.begin(), frame.data.end());
-            std::vector<uint8_t> pongwire = pong.serialize();
-            write_raw(pongwire);
+            pong.data = frame.data;
+            write_raw(pong.serialize());
+        }
+        else if (frame.opcode == PONG) {
+            // Unsolicited pong — ignore per RFC 6455 §5.5.3
+        }
+        // --- Data frames (TEXT, BINARY, CONTINUATION) ---
+        else if (frame.opcode == CONTINUATION) {
+            if (!in_fragment_) {
+                throw WebSocketException("Received continuation frame without an initial fragment");
+            }
+            fragment_buf_.insert(fragment_buf_.end(), frame.data.begin(), frame.data.end());
+            if (frame.fin) {
+                // Reassemble the complete message
+                WebSocketFrame assembled;
+                assembled.complete = true;
+                assembled.fin = true;
+                assembled.rsv = 0;
+                assembled.opcode = fragment_opcode_;
+                assembled.mask = false;
+                assembled.len = fragment_buf_.size();
+                assembled.len_code = 0;
+                assembled.mask_key = 0;
+                assembled.data = std::move(fragment_buf_);
+                fragment_buf_.clear();
+                in_fragment_ = false;
+                messages.push_back(std::move(assembled));
+            }
         }
         else {
-            messages.push_back(frame);
+            // TEXT or BINARY
+            if (frame.fin) {
+                // Unfragmented message — deliver directly
+                if (in_fragment_) {
+                    throw WebSocketException("Received new data frame while still accumulating fragments");
+                }
+                messages.push_back(frame);
+            } else {
+                // First fragment of a fragmented message
+                if (in_fragment_) {
+                    throw WebSocketException("Received new fragmented data frame while still accumulating fragments");
+                }
+                in_fragment_ = true;
+                fragment_opcode_ = frame.opcode;
+                fragment_buf_ = std::move(frame.data);
+            }
         }
     } while (extra_data.size() != 0);
 
@@ -256,6 +312,43 @@ void WebSocket::write(std::span<const uint8_t> data_bytes) {
 
 bool WebSocket::is_connected() {
     return ready || connecting;
+}
+
+void WebSocket::close() {
+    close(1000);
+}
+
+void WebSocket::close(uint16_t code, const std::string& reason) {
+    if (!ready)
+        return;
+    send_close(code, reason);
+    ready = false;
+}
+
+void WebSocket::send_close(uint16_t code, const std::string& reason) {
+    WebSocketFrame frame;
+    frame.fin = true;
+    frame.rsv = 0;
+    frame.opcode = CLOSE;
+    frame.mask = true;
+
+    // Close payload: 2-byte status code + optional reason string
+    uint16_t net_code = htons(code);
+    frame.data.resize(2);
+    std::memcpy(frame.data.data(), &net_code, 2);
+    if (!reason.empty()) {
+        size_t reason_len = std::min(reason.size(), (size_t)123); // max 125 - 2 for code
+        frame.data.insert(frame.data.end(), reason.begin(), reason.begin() + reason_len);
+    }
+
+    frame.len = frame.data.size();
+    frame.len_code = (uint8_t)frame.len;
+
+    std::vector<uint8_t> randbuf(4);
+    std::generate(randbuf.begin(), randbuf.end(), []() { return std::rand() % 256; });
+    frame.mask_key = *reinterpret_cast<const uint32_t*>(randbuf.data());
+
+    write_raw(frame.serialize());
 }
 
 void WebSocket::generate_mask() {

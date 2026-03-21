@@ -1,0 +1,7 @@
+#pragma once
+
+#define AO_SDL_VERSION "@AO_SDL_VERSION@"
+
+inline const char* ao_sdl_version() {
+    return AO_SDL_VERSION;
+}

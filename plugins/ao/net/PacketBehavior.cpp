@@ -2,6 +2,8 @@
 
 #include "AOClient.h"
 #include "ao/event/ICMessageEvent.h"
+#include "ao/event/ServerInfoEvent.h"
+#include "utils/Version.h"
 #include "event/BackgroundEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
@@ -31,7 +33,10 @@ void AOPacketIDClient::handle(AOClient& cli) {
     cli.server_software = server_software;
     cli.server_version = server_version;
 
-    AOPacketIDServer id_to_server("tsurushiage", "2.999.999");
+    EventManager::instance().get_channel<ServerInfoEvent>().publish(
+        ServerInfoEvent(server_software, server_version, player_number));
+
+    AOPacketIDServer id_to_server(std::string("AO-SDL/") + ao_sdl_version(), "2.999.999");
     cli.add_message(id_to_server);
 }
 

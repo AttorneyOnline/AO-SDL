@@ -61,6 +61,41 @@ else()
 endif()
 
 # =============================================================================
+# Version string from git
+# =============================================================================
+
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+execute_process(
+    COMMAND git status --porcelain
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_STATUS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(GIT_HASH STREQUAL "")
+    set(AO_SDL_VERSION "unknown")
+elseif(NOT GIT_STATUS STREQUAL "")
+    set(AO_SDL_VERSION "${GIT_HASH}-dirty")
+else()
+    set(AO_SDL_VERSION "${GIT_HASH}")
+endif()
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/include/utils/Version.h.in
+    ${CMAKE_BINARY_DIR}/generated/utils/Version.h
+    @ONLY
+)
+
+message(STATUS "AO-SDL version: ${AO_SDL_VERSION}")
+
+# =============================================================================
 # aoengine — core engine library (no GL, no SDL)
 #
 # Public include root: engine/
@@ -118,6 +153,7 @@ set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
 target_include_directories(aoengine
     PUBLIC  include
+            ${CMAKE_BINARY_DIR}/generated
             third-party/header-libs
     PRIVATE engine
             third-party/stb

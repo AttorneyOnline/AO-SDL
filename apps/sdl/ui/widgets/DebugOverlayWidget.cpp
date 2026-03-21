@@ -154,8 +154,12 @@ void DebugOverlayWidget::render() {
     ImGui::SeparatorText("Connection");
     ImGui::Text("State: %s", conn_state_str(s.conn_state));
     if (s.conn_state > 0) {
-        if (!s.server_software.empty())
-            ImGui::Text("Server: %s", s.server_software.c_str());
+        if (!s.server_software.empty()) {
+            if (!s.server_version.empty())
+                ImGui::Text("Server: %s %s", s.server_software.c_str(), s.server_version.c_str());
+            else
+                ImGui::Text("Server: %s", s.server_software.c_str());
+        }
         ImGui::Text("Players: %d / %d", s.current_players, s.max_players);
     }
 

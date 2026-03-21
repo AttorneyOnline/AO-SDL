@@ -33,6 +33,7 @@ struct DebugStats {
     size_t cache_max_bytes = 0;
 
     std::string server_software;
+    std::string server_version;
     int current_players = 0;
     int max_players = 0;
     int conn_state = 0;
