@@ -2,6 +2,7 @@
 
 #include "AOClient.h"
 #include "ao/event/ICMessageEvent.h"
+#include "platform/HardwareId.h"
 #include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
 #include "utils/Version.h"
@@ -24,7 +25,7 @@ void AOPacketDecryptor::handle(AOClient& cli) {
 
     cli.decryptor = decryptor;
 
-    AOPacketHI hi("bullshit hdid changeme");
+    AOPacketHI hi(platform::hardware_id());
     cli.add_message(hi);
 }
 

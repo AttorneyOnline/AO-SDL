@@ -151,13 +151,22 @@ add_library(aoengine STATIC
     engine/render/TextRenderer.cpp
 )
 
-# Platform-specific font discovery (selected at build time)
+# Platform-specific implementations (selected at build time)
 if(APPLE)
-    target_sources(aoengine PRIVATE platform/macos/SystemFonts.mm)
+    target_sources(aoengine PRIVATE
+        platform/macos/SystemFonts.mm
+        platform/macos/HardwareId.mm
+    )
 elseif(WIN32)
-    target_sources(aoengine PRIVATE platform/windows/SystemFonts.cpp)
+    target_sources(aoengine PRIVATE
+        platform/windows/SystemFonts.cpp
+        platform/windows/HardwareId.cpp
+    )
 else()
-    target_sources(aoengine PRIVATE platform/linux/SystemFonts.cpp)
+    target_sources(aoengine PRIVATE
+        platform/linux/SystemFonts.cpp
+        platform/linux/HardwareId.cpp
+    )
 endif()
 
 set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
@@ -178,6 +187,7 @@ if(APPLE)
     target_link_libraries(aoengine PRIVATE
         "-framework CoreText"
         "-framework Foundation"
+        "-framework IOKit"
     )
 endif()
 

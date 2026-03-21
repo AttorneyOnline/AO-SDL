@@ -6,6 +6,7 @@
 #include "event/EventManager.h"
 #include "event/OutgoingChatEvent.h"
 #include "event/OutgoingMusicEvent.h"
+#include "platform/HardwareId.h"
 #include "utils/Log.h"
 
 AOClient::AOClient() = default;
@@ -65,7 +66,7 @@ std::vector<std::string> AOClient::flush_outgoing() {
     while (auto optev = char_select_channel.get_event()) {
         AOPacketPW pw("");
         add_message(pw);
-        AOPacketCC cc(player_number, optev->get_char_id(), "bullshit hdid changeme");
+        AOPacketCC cc(player_number, optev->get_char_id(), platform::hardware_id());
         add_message(cc);
     }
 
