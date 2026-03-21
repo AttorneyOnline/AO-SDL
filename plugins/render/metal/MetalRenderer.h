@@ -15,6 +15,7 @@ class MetalRenderer : public IRenderer {
     void draw(const RenderState* state) override;
     void bind_default_framebuffer() override;
     void clear() override;
+    void resize(int width, int height) override;
     uintptr_t get_render_texture_id() const override;
     uintptr_t get_display_texture_id(int display_w, int display_h) override;
     bool uv_flipped() const override {

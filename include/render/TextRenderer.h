@@ -83,6 +83,9 @@ class TextRenderer {
     /** @brief Line height in pixels for the current font. */
     int line_height() const;
 
+    /** @brief Measure the width in pixels of the given text (no wrapping). */
+    int measure_width(const std::string& text);
+
     struct GlyphLayout {
         uint32_t codepoint;
         int pen_x, pen_y;

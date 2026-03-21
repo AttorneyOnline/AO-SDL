@@ -87,6 +87,16 @@ int TextRenderer::line_height() const {
     return impl->ready ? impl->line_h : 0;
 }
 
+int TextRenderer::measure_width(const std::string& text) {
+    auto layout = compute_layout(text, 0); // no wrapping
+    int max_x = 0;
+    for (const auto& g : layout) {
+        if (!FT_Load_Char(impl->face, g.codepoint, FT_LOAD_DEFAULT))
+            max_x = std::max(max_x, g.pen_x + (int)(impl->face->glyph->advance.x >> 6));
+    }
+    return max_x;
+}
+
 std::vector<TextRenderer::GlyphLayout> TextRenderer::compute_layout(const std::string& text, int wrap_width) {
     FT_Face face = impl->face;
 

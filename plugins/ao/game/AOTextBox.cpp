@@ -149,13 +149,6 @@ void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
     if (state != TextState::INACTIVE && !current_message.empty()) {
         TextColor color = {colors[current_color_idx].r, colors[current_color_idx].g, colors[current_color_idx].b};
 
-        if (!current_showname.empty()) {
-            TextColor showname_color = {255, 255, 255};
-            text_renderer.render(current_showname, (int)current_showname.size(), showname_color,
-                                 chatbox_rect.x + showname_rect.x, chatbox_rect.y + showname_rect.y, viewport_w,
-                                 viewport_h, showname_rect.w, 0, pixels);
-        }
-
         std::string display_text = previous_message + current_message;
         int prev_chars = UTF8::length(previous_message);
         text_renderer.render(display_text, prev_chars + chars_visible, color, chatbox_rect.x + message_rect.x,
@@ -173,4 +166,62 @@ void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
         std::memcpy(top, bot, row_bytes);
         std::memcpy(bot, row_tmp.data(), row_bytes);
     }
+}
+
+std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
+    if (current_showname.empty())
+        return nullptr;
+
+    if (current_showname == cached_nameplate_name_ && cached_nameplate_)
+        return cached_nameplate_;
+
+    if (!font_loaded)
+        return nullptr;
+
+    // Render the showname text into a tight pixel buffer
+    int text_w = text_renderer.measure_width(current_showname);
+    int text_h = text_renderer.line_height();
+    if (text_w <= 0 || text_h <= 0)
+        return nullptr;
+
+    std::vector<uint8_t> pixels(text_w * text_h * 4, 0);
+    TextColor white = {255, 255, 255};
+    text_renderer.render(current_showname, (int)current_showname.size(), white, 0, 0, text_w, text_h, 0, 0,
+                         pixels.data());
+
+    // Flip vertically for GL
+    size_t row_bytes = (size_t)text_w * 4;
+    std::vector<uint8_t> row_tmp(row_bytes);
+    for (int y = 0; y < text_h / 2; y++) {
+        uint8_t* top = pixels.data() + y * row_bytes;
+        uint8_t* bot = pixels.data() + (text_h - 1 - y) * row_bytes;
+        std::memcpy(row_tmp.data(), top, row_bytes);
+        std::memcpy(top, bot, row_bytes);
+        std::memcpy(bot, row_tmp.data(), row_bytes);
+    }
+
+    ImageFrame frame;
+    frame.width = text_w;
+    frame.height = text_h;
+    frame.duration_ms = 0;
+    frame.pixels = std::move(pixels);
+
+    cached_nameplate_ = std::make_shared<ImageAsset>("_nameplate", "raw", std::vector<ImageFrame>{std::move(frame)});
+    cached_nameplate_name_ = current_showname;
+    return cached_nameplate_;
+}
+
+AOTextBox::NameplateLayout AOTextBox::nameplate_layout() const {
+    NameplateLayout nl;
+    nl.x = chatbox_rect.x + showname_rect.x;
+    nl.y = chatbox_rect.y + showname_rect.y;
+    nl.w = showname_rect.w;
+    nl.h = showname_rect.h > 0 ? showname_rect.h : text_renderer.line_height();
+
+    int text_w = 0;
+    if (font_loaded && !current_showname.empty())
+        text_w = const_cast<TextRenderer&>(text_renderer).measure_width(current_showname);
+
+    nl.scale = (text_w > nl.w && text_w > 0) ? (float)nl.w / text_w : 1.0f;
+    return nl;
 }

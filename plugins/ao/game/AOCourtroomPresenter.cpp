@@ -63,7 +63,13 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
 
     emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
 
-    textbox.start_message(msg.showname, msg.message, msg.text_color, msg.additive);
+    std::string showname = msg.showname;
+    if (showname.empty()) {
+        auto sheet = ao_assets->character_sheet(msg.character);
+        showname = sheet ? sheet->showname() : msg.character;
+    }
+
+    textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
     textbox_dirty = true;
 
     if (msg.screenshake)
@@ -134,13 +140,13 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     }
 
     if (textbox_dirty && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
-        std::vector<uint8_t> pixels(VIEWPORT_W * VIEWPORT_H * 4, 0);
-        textbox.render(VIEWPORT_W, VIEWPORT_H, pixels.data());
+        std::vector<uint8_t> pixels(BASE_W * BASE_H * 4, 0);
+        textbox.render(BASE_W, BASE_H, pixels.data());
 
         if (!textbox_overlay) {
             ImageFrame frame;
-            frame.width = VIEWPORT_W;
-            frame.height = VIEWPORT_H;
+            frame.width = BASE_W;
+            frame.height = BASE_H;
             frame.duration_ms = 0;
             frame.pixels = std::move(pixels);
             textbox_overlay =
@@ -188,6 +194,25 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
     if (textbox_overlay && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
         scene.add_layer(20, Layer(textbox_overlay, 0, 20));
+    }
+
+    // Nameplate: rendered once, positioned and scaled via GPU transform
+    auto nameplate = textbox.get_nameplate();
+    if (nameplate && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
+        auto nl = textbox.nameplate_layout();
+
+        // Convert pixel coordinates to NDC [-1,1]
+        // The sprite quad spans [-1,1] so it covers the full viewport.
+        // We need to scale it down to the nameplate size and translate it.
+        float ndc_w = (float)nameplate->width() * nl.scale / BASE_W * 2.0f;
+        float ndc_h = (float)nameplate->height() / (float)BASE_H * 2.0f;
+        float ndc_x = ((float)nl.x / BASE_W) * 2.0f - 1.0f + ndc_w * 0.5f;
+        float ndc_y = 1.0f - ((float)nl.y / BASE_H) * 2.0f - ndc_h * 0.5f;
+
+        Layer nameplate_layer(nameplate, 0, 25);
+        nameplate_layer.transform().scale({ndc_w * 0.5f, ndc_h * 0.5f});
+        nameplate_layer.transform().translate({ndc_x, ndc_y});
+        scene.add_layer(25, std::move(nameplate_layer));
     }
 
     for (auto* effect : effects_) {

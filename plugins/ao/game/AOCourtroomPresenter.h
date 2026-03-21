@@ -61,7 +61,7 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     // Scene effects
     ScreenshakeEffect screenshake_;
-    FlashEffect flash_{VIEWPORT_W, VIEWPORT_H};
+    FlashEffect flash_{BASE_W, BASE_H};
     ShaderEffect rainbow_{"shaders/rainbow", 5.0f, 5};
     ShaderEffect shatter_{"shaders/shatter", 4.0f, 5};
     ShaderEffect cube_{"shaders/cube", 0, 5};
@@ -69,6 +69,8 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     TickProfile profile_;
 
-    static constexpr int VIEWPORT_W = 256;
-    static constexpr int VIEWPORT_H = 192;
+    // Base resolution for CPU-side rendering (textbox overlay, etc.)
+    // GPU render texture resolution is controlled by DebugContext::internal_scale.
+    static constexpr int BASE_W = 256;
+    static constexpr int BASE_H = 192;
 };

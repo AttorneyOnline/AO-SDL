@@ -525,6 +525,19 @@ void MetalRenderer::clear() {
     // Clearing is done at the start of each draw() via loadAction.
 }
 
+void MetalRenderer::resize(int width, int height) {
+    if (width == impl->fb_width && height == impl->fb_height)
+        return;
+    impl->fb_width = width;
+    impl->fb_height = height;
+    impl->build_render_targets();
+    // Invalidate display texture so it gets recreated at next blit
+    impl->display_texture = nil;
+    impl->display_width = 0;
+    impl->display_height = 0;
+    Log::log_print(DEBUG, "MetalRenderer: resized to %dx%d", width, height);
+}
+
 uintptr_t MetalRenderer::get_render_texture_id() const {
     return (uintptr_t)(__bridge void*)impl->render_texture;
 }

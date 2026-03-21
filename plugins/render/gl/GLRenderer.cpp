@@ -236,6 +236,24 @@ std::unique_ptr<IRenderer> create_renderer(int width, int height) {
     return create_gl_renderer(embedded_vertex_glsl, embedded_fragment_glsl, width, height);
 }
 
+void GLRenderer::resize(int width, int height) {
+    if (width == fb_width && height == fb_height)
+        return;
+
+    // Tear down old render targets
+    glDeleteFramebuffers(1, &framebuffer_id);
+    glDeleteTextures(1, &render_texture);
+
+    fb_width = width;
+    fb_height = height;
+
+    auto [tex, fbo] = setup_render_texture();
+    render_texture = tex;
+    framebuffer_id = fbo;
+
+    Log::log_print(DEBUG, "GLRenderer: resized to %dx%d", fb_width, fb_height);
+}
+
 std::tuple<GLuint, GLuint> GLRenderer::setup_render_texture() {
     GLuint viewport_framebuffer = 0;
     glGenFramebuffers(1, &viewport_framebuffer);

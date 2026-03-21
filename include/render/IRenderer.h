@@ -92,6 +92,14 @@ class IRenderer {
         return nullptr;
     }
 
+    /**
+     * @brief Resize the offscreen render target.
+     *
+     * Recreates the framebuffer and depth buffer at the new dimensions.
+     * Called from the render thread when the internal resolution scale changes.
+     */
+    virtual void resize(int width, int height) = 0;
+
     virtual const char* backend_name() const = 0;
 
     /// Number of draw calls in the last frame.

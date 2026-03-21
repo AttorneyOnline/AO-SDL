@@ -26,6 +26,18 @@ class AOTextBox {
                        bool additive = false);
     bool tick(int delta_ms);
 
+    /// Render the showname into its own ImageAsset. Returns nullptr if empty.
+    /// The asset is cached and only re-rendered when the name changes.
+    std::shared_ptr<ImageAsset> get_nameplate();
+
+    /// Get the nameplate rect in viewport coordinates and the scale factor
+    /// needed to fit the rendered text within the box.
+    struct NameplateLayout {
+        int x, y, w, h;    // position and box size in viewport pixels
+        float scale;        // horizontal scale to fit text in box (1.0 = fits naturally)
+    };
+    NameplateLayout nameplate_layout() const;
+
     TextState text_state() const {
         return state;
     }
@@ -67,6 +79,10 @@ class AOTextBox {
 
     bool is_punctuation(char c) const;
     int current_tick_delay() const;
+
+    // Nameplate cache
+    std::string cached_nameplate_name_;
+    std::shared_ptr<ImageAsset> cached_nameplate_;
 
     // Persistent font data (TextRenderer needs the buffer alive)
     std::vector<uint8_t> font_storage;

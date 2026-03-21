@@ -54,16 +54,20 @@ int main(int argc, char* argv[]) {
     auto protocol = ao::create_protocol();
     NetworkThread net_thread(*protocol);
 
-    // Render backend — AO2 viewport is 256x192
-    RenderManager renderer(buffer, create_renderer(256, 192));
+    // Render backend — scaled internal resolution (256x192 base, 4:3 aspect)
+    auto& debug_ctx = DebugContext::instance();
+    int render_w = DebugContext::BASE_W * debug_ctx.internal_scale;
+    int render_h = DebugContext::BASE_H * debug_ctx.internal_scale;
+    RenderManager renderer(buffer, create_renderer(render_w, render_h));
     MediaManager::instance().assets().set_shader_backend(renderer.get_renderer().backend_name());
 
     // Scene presenter — swap this to change game logic
     auto presenter = ao::create_presenter();
     GameThread game_logic(buffer, *presenter);
 
-    DebugContext::instance().game_thread = &game_logic;
-    DebugContext::instance().presenter = presenter.get();
+    debug_ctx.game_thread = &game_logic;
+    debug_ctx.presenter = presenter.get();
+    debug_ctx.render_manager = &renderer;
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;
