@@ -2,6 +2,9 @@
 
 #include "utils/Log.h"
 
+#include <httplib.h>
+#include <json.hpp>
+
 #include <iomanip>
 #include <sstream>
 
@@ -55,7 +58,68 @@ MountHttp::MountHttp(const std::string& base_url, HttpPool& pool)
 }
 
 void MountHttp::load() {
-    // Nothing to index — files are discovered on demand.
+    // Fetch extensions.json to know which file formats the server hosts
+    fetch_extensions();
+}
+
+void MountHttp::fetch_extensions() {
+    std::string ext_path = path_prefix_ + "/extensions.json";
+    pool_.get(host_, url_encode_path(ext_path), [this](HttpResponse resp) {
+        if (resp.status != 200 || resp.body.empty()) {
+            Log::log_print(DEBUG, "MountHttp: no extensions.json, using defaults");
+            return;
+        }
+        try {
+            auto j = nlohmann::json::parse(resp.body);
+            auto parse_list = [](const nlohmann::json& j, const std::string& key) -> std::vector<std::string> {
+                std::vector<std::string> out;
+                if (j.contains(key) && j[key].is_array()) {
+                    for (const auto& v : j[key]) {
+                        std::string ext = v.get<std::string>();
+                        // Strip leading dot: ".png" -> "png"
+                        if (!ext.empty() && ext[0] == '.')
+                            ext = ext.substr(1);
+                        // Skip compound extensions like "webp.static"
+                        if (ext.find('.') != std::string::npos)
+                            continue;
+                        out.push_back(ext);
+                    }
+                }
+                return out;
+            };
+
+            std::lock_guard lock(mutex_);
+            charicon_exts_ = parse_list(j, "charicon_extensions");
+            emote_exts_ = parse_list(j, "emote_extensions");
+            emotions_exts_ = parse_list(j, "emotions_extensions");
+            background_exts_ = parse_list(j, "background_extensions");
+            extensions_loaded_ = true;
+
+            Log::log_print(DEBUG, "MountHttp: extensions.json loaded (icons=%zu emotes=%zu bg=%zu)",
+                           charicon_exts_.size(), emote_exts_.size(), background_exts_.size());
+        } catch (const std::exception& e) {
+            Log::log_print(WARNING, "MountHttp: failed to parse extensions.json: %s", e.what());
+        }
+    }, HttpPriority::CRITICAL);
+}
+
+std::vector<std::string> MountHttp::extensions_for(AssetType type) const {
+    std::lock_guard lock(mutex_);
+    if (extensions_loaded_) {
+        switch (type) {
+        case AssetType::CHARICON: return charicon_exts_;
+        case AssetType::EMOTE: return emote_exts_;
+        case AssetType::EMOTIONS: return emotions_exts_;
+        case AssetType::BACKGROUND: return background_exts_;
+        }
+    }
+    // Defaults
+    return {"webp", "png", "gif"};
+}
+
+bool MountHttp::has_extensions() const {
+    std::lock_guard lock(mutex_);
+    return extensions_loaded_;
 }
 
 bool MountHttp::seek_file(const std::string& path) const {
@@ -71,7 +135,38 @@ std::vector<uint8_t> MountHttp::fetch_data(const std::string& path) {
     return {};
 }
 
-void MountHttp::request(const std::string& path) {
+std::vector<uint8_t> MountHttp::fetch_sync(const std::string& path) {
+    // Check cache first
+    {
+        std::lock_guard lock(mutex_);
+        auto it = cache_.find(path);
+        if (it != cache_.end())
+            return it->second;
+        if (failed_.count(path))
+            return {};
+    }
+
+    // Blocking HTTP GET
+    std::string http_path = url_encode_path(path_prefix_ + "/" + path);
+    httplib::Client cli(host_);
+    cli.set_connection_timeout(5);
+    cli.set_read_timeout(10);
+    auto res = cli.Get(http_path);
+
+    if (res && res->status == 200 && !res->body.empty()) {
+        std::vector<uint8_t> data(res->body.begin(), res->body.end());
+        Log::log_print(VERBOSE, "MountHttp: sync downloaded %s (%zu bytes)", path.c_str(), data.size());
+        std::lock_guard lock(mutex_);
+        cache_[path] = data;
+        return data;
+    }
+
+    std::lock_guard lock(mutex_);
+    failed_.insert(path);
+    return {};
+}
+
+void MountHttp::request(const std::string& path, HttpPriority priority) {
     {
         std::lock_guard lock(mutex_);
         // Already have it, downloading it, or know it doesn't exist
@@ -93,13 +188,23 @@ void MountHttp::request(const std::string& path) {
                            captured_path.c_str(), resp.body.size());
         } else {
             failed_.insert(captured_path);
-            Log::log_print(VERBOSE, "MountHttp: failed %s (status=%d)",
-                           captured_path.c_str(), resp.status);
+            Log::log_print(VERBOSE, "MountHttp: failed %s (status=%d err=%s)",
+                           captured_path.c_str(), resp.status, resp.error.c_str());
         }
-    });
+    }, priority);
 }
 
 int MountHttp::pending_count() const {
     std::lock_guard lock(mutex_);
     return (int)pending_.size();
+}
+
+int MountHttp::cached_count() const {
+    std::lock_guard lock(mutex_);
+    return (int)cache_.size();
+}
+
+int MountHttp::failed_count() const {
+    std::lock_guard lock(mutex_);
+    return (int)failed_.size();
 }

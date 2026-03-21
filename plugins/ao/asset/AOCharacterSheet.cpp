@@ -25,7 +25,7 @@ AOCharacterSheet::find_section(const IniDocument& ini, const std::string& name) 
 std::optional<AOCharacterSheet> AOCharacterSheet::load(AssetLibrary& assets, const std::string& character) {
     auto ini = assets.config("characters/" + character + "/char.ini");
     if (!ini) {
-        Log::log_print(WARNING, "AOCharacterSheet: char.ini not found for '%s'", character.c_str());
+        Log::log_print(VERBOSE, "AOCharacterSheet: char.ini not found for '%s'", character.c_str());
         return std::nullopt;
     }
 

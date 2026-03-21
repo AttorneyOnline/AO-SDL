@@ -69,6 +69,9 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
                  msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
     current_flip = msg.flip;
 
+    // Prefetch character assets via HTTP
+    ao_assets->prefetch_character(msg.character, msg.emote, msg.pre_emote, 2);
+
     // Resolve showname: prefer the one from the message, fall back to char.ini
     std::string showname = msg.showname;
     if (showname.empty()) {
@@ -140,11 +143,17 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
     profile_.events_us.store(us_since(events_start), std::memory_order_relaxed);
 
-    // ---- Animation ----
-    auto anim_start = Clock::now();
+    // ---- Assets (HTTP retries, sync fetches) ----
+    auto assets_start = Clock::now();
 
     background.reload_if_needed(*ao_assets);
     emote_player.retry_load(*ao_assets);
+
+    profile_.assets_us.store(us_since(assets_start), std::memory_order_relaxed);
+
+    // ---- Animation ----
+    auto anim_start = Clock::now();
+
     emote_player.tick(delta_ms);
 
     if (textbox.text_state() == AOTextBox::TextState::DONE && emote_player.state() == AOEmotePlayer::State::TALKING) {

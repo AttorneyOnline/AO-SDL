@@ -67,6 +67,10 @@ class MountManager {
      */
     std::optional<std::vector<uint8_t>> fetch_data(const std::string& relative_path);
 
+    /// Get the server-advertised extensions for an asset type from the HTTP mount.
+    /// Returns empty if no HTTP mount or extensions.json not loaded yet.
+    std::vector<std::string> http_extensions(int asset_type) const;
+
     /**
      * @brief Trigger async HTTP downloads for a file not found in local mounts.
      *
@@ -76,9 +80,21 @@ class MountManager {
      *
      * @param relative_path The virtual path to prefetch.
      */
-    void prefetch(const std::string& relative_path);
+    void prefetch(const std::string& relative_path, int priority = 1);
+
+    /// Drop all queued HTTP requests below the given priority level.
+    void drop_http_below(int priority);
+
+    /// Get HTTP mount stats (pending downloads, cached files, failed files).
+    struct HttpStats {
+        int pending = 0;
+        int cached = 0;
+        int failed = 0;
+        int pool_pending = 0;
+    };
+    HttpStats http_stats() const;
 
   private:
-    std::shared_mutex lock; /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */
+    mutable std::shared_mutex lock; /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */
     std::vector<std::unique_ptr<Mount>> loaded_mounts; /**< Ordered list of active mount backends. */
 };

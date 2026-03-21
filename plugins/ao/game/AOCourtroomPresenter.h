@@ -19,6 +19,7 @@ class ISceneEffect;
 
 struct TickProfile {
     std::atomic<int> events_us{0};
+    std::atomic<int> assets_us{0};
     std::atomic<int> animation_us{0};
     std::atomic<int> textbox_us{0};
     std::atomic<int> effects_us{0};
@@ -35,6 +36,7 @@ class AOCourtroomPresenter : public IScenePresenter {
     std::vector<ProfileEntry> tick_profile() const override {
         return {
             {"Events",    &profile_.events_us},
+            {"Assets",    &profile_.assets_us},
             {"Animation", &profile_.animation_us},
             {"Textbox",   &profile_.textbox_us},
             {"Effects",   &profile_.effects_us},

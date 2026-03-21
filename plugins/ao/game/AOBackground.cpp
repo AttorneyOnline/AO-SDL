@@ -22,8 +22,8 @@ void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
     if (!dirty && !bg && !bg_name.empty()) {
         bg = ao_assets.background(bg_name, pos);
         if (!bg) {
-            // Prefetch via HTTP so it's available next retry
-            ao_assets.engine_assets().prefetch_image("background/" + bg_name + "/" + pos);
+            // Prefetch via HTTP so it's available next retry (3=BACKGROUND type)
+            ao_assets.engine_assets().prefetch_image("background/" + bg_name + "/" + pos, 3);
         } else {
             desk = ao_assets.desk_overlay(bg_name, pos);
         }
@@ -34,8 +34,8 @@ void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
         return;
     dirty = false;
 
-    // Prefetch via HTTP
-    ao_assets.engine_assets().prefetch_image("background/" + bg_name + "/" + pos);
+    // Prefetch via HTTP (3=BACKGROUND type)
+    ao_assets.engine_assets().prefetch_image("background/" + bg_name + "/" + pos, 3);
 
     bg = ao_assets.background(bg_name, pos);
     desk = ao_assets.desk_overlay(bg_name, pos);

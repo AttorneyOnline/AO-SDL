@@ -69,8 +69,8 @@ void CharSelectScreen::load_icons() {
     for (auto& entry : chars) {
         std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
 
-        // Trigger HTTP prefetch for missing icons
-        lib.prefetch_image(icon_path);
+        // Trigger HTTP prefetch for missing icons (0=CHARICON, LOW priority)
+        lib.prefetch_image(icon_path, 0, 0);
 
         auto asset = lib.image(icon_path);
         if (!asset || asset->frame_count() == 0)

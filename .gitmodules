@@ -19,3 +19,6 @@
 [submodule "third-party/freetype"]
 	path = third-party/freetype
 	url = https://github.com/freetype/freetype.git
+[submodule "third-party/libwebp"]
+	path = third-party/libwebp
+	url = https://chromium.googlesource.com/webm/libwebp

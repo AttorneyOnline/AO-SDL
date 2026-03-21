@@ -327,12 +327,32 @@ std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string&
 }
 
 void AOAssetLibrary::prefetch_character(const std::string& character, const std::string& emote,
-                                         const std::string& pre_emote) {
+                                         const std::string& pre_emote, int priority) {
     std::string base = "characters/" + character + "/";
-    assets.prefetch_image(base + "(a)" + emote);
-    assets.prefetch_image(base + "(b)" + emote);
+    assets.prefetch_image(base + "(a)" + emote, 1, priority);
+    assets.prefetch_image(base + "(b)" + emote, 1, priority);
     if (!pre_emote.empty())
-        assets.prefetch_image(base + pre_emote);
-    // Also prefetch char.ini so character_sheet() is ready
+        assets.prefetch_image(base + pre_emote, 1, priority);
     assets.prefetch_config(base + "char.ini");
+}
+
+void AOAssetLibrary::prefetch_own_character(const std::string& character) {
+    // char.ini is fetched synchronously by the config path, so it's
+    // already available. Use it to prefetch all emote icons and sprites.
+    auto sheet = character_sheet(character);
+    if (!sheet)
+        return;
+
+    std::string base = "characters/" + character + "/";
+    int count = sheet->emote_count();
+    for (int i = 0; i < count; i++) {
+        // Emote button icons (2=EMOTIONS type)
+        assets.prefetch_image(base + "emotions/button" + std::to_string(i + 1) + "_off", 2, 2);
+        // Emote sprites (1=EMOTE type)
+        const auto& emo = sheet->emote(i);
+        assets.prefetch_image(base + "(a)" + emo.anim_name, 1, 2);
+        assets.prefetch_image(base + "(b)" + emo.anim_name, 1, 2);
+        if (!emo.pre_anim.empty() && emo.pre_anim != "-")
+            assets.prefetch_image(base + emo.pre_anim, 1, 2);
+    }
 }

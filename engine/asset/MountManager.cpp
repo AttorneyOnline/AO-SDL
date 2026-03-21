@@ -43,7 +43,17 @@ void MountManager::add_mount(std::unique_ptr<Mount> mount) {
     loaded_mounts.push_back(std::move(mount));
 }
 
-void MountManager::prefetch(const std::string& relative_path) {
+std::vector<std::string> MountManager::http_extensions(int asset_type) const {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http && http->has_extensions())
+            return http->extensions_for(static_cast<MountHttp::AssetType>(asset_type));
+    }
+    return {};
+}
+
+void MountManager::prefetch(const std::string& relative_path, int priority) {
     std::shared_lock<std::shared_mutex> locker(lock);
 
     // If any local (non-HTTP) mount has the file, skip — no need to fetch remotely
@@ -57,8 +67,32 @@ void MountManager::prefetch(const std::string& relative_path) {
     for (auto& mount : loaded_mounts) {
         auto* http = dynamic_cast<MountHttp*>(mount.get());
         if (http)
-            http->request(relative_path);
+            http->request(relative_path, static_cast<HttpPriority>(priority));
     }
+}
+
+void MountManager::drop_http_below(int priority) {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http)
+            http->pool().drop_below(static_cast<HttpPriority>(priority));
+    }
+}
+
+MountManager::HttpStats MountManager::http_stats() const {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    HttpStats stats;
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http) {
+            stats.pending += http->pending_count();
+            stats.cached += http->cached_count();
+            stats.failed += http->failed_count();
+            stats.pool_pending = http->pool().pending();
+        }
+    }
+    return stats;
 }
 
 std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& relative_path) {
@@ -72,6 +106,20 @@ std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& 
             catch (const std::exception& e) {
                 Log::log_print(ERR, std::format("Failed to fetch {}: {}", relative_path, e.what()).c_str());
             }
+        }
+    }
+
+    // Sync fallback: try HTTP mounts for config/ini files that must be
+    // available immediately (e.g. char.ini needed before emotes can load).
+    // Images use the async prefetch path instead.
+    if (relative_path.ends_with(".ini") || relative_path.ends_with(".json")) {
+        for (auto& mount : loaded_mounts) {
+            auto* http = dynamic_cast<MountHttp*>(mount.get());
+            if (!http)
+                continue;
+            auto data = http->fetch_sync(relative_path);
+            if (!data.empty())
+                return data;
         }
     }
 

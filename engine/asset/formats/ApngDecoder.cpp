@@ -325,3 +325,43 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
 }
 
 } // namespace ApngDecoder
+
+// ---------------------------------------------------------------------------
+// ImageDecoder interface for PNG/APNG
+// ---------------------------------------------------------------------------
+
+#include "asset/ImageDecoder.h"
+
+class ApngImageDecoder : public ImageDecoder {
+  public:
+    std::vector<std::string> extensions() const override { return {"apng", "png"}; }
+
+    std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+        auto apng_frames = ApngDecoder::decode(data, size, true);
+        if (apng_frames && !apng_frames->empty())
+            return std::move(*apng_frames);
+
+        // Fallback: plain PNG via stb_image
+        int width, height, channels;
+        stbi_set_flip_vertically_on_load(true);
+        uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);
+        stbi_set_flip_vertically_on_load(false);
+
+        std::vector<ImageFrame> frames;
+        if (!pixels)
+            return frames;
+
+        ImageFrame f;
+        f.width = width;
+        f.height = height;
+        f.duration_ms = 0;
+        f.pixels.assign(pixels, pixels + width * height * 4);
+        stbi_image_free(pixels);
+        frames.push_back(std::move(f));
+        return frames;
+    }
+};
+
+std::unique_ptr<ImageDecoder> create_apng_decoder() {
+    return std::make_unique<ApngImageDecoder>();
+}

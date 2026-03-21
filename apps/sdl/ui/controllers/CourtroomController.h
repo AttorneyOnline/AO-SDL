@@ -30,6 +30,7 @@ class CourtroomController : public IScreenController {
 
   private:
     void update_debug_stats();
+    void retry_emote_icons();
 
     ChatWidget chat_;
     ICMessageState ic_state_;

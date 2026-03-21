@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 /// Mount backend that fetches files over HTTP on demand.
 ///
@@ -27,10 +28,33 @@ class MountHttp : public Mount {
 
     /// Trigger an async download for the given path if not already
     /// cached, pending, or previously failed (404).
-    void request(const std::string& path);
+    void request(const std::string& path, HttpPriority priority = HttpPriority::NORMAL);
+
+    /// Synchronous (blocking) download. Returns the data immediately.
+    /// Use for small critical files like char.ini that must be available
+    /// before proceeding. Returns empty vector on failure.
+    std::vector<uint8_t> fetch_sync(const std::string& path);
 
     /// Number of downloads currently in-flight.
     int pending_count() const;
+    /// Number of files cached in memory.
+    int cached_count() const;
+    /// Number of paths that returned 404 or error.
+    int failed_count() const;
+
+    /// Asset type categories for extension lookup.
+    enum class AssetType { CHARICON, EMOTE, EMOTIONS, BACKGROUND };
+
+    /// Get the server-advertised extensions for an asset type.
+    /// Returns the extensions from extensions.json (with leading dots stripped).
+    /// Falls back to defaults if extensions.json hasn't been fetched yet.
+    std::vector<std::string> extensions_for(AssetType type) const;
+
+    /// Whether extensions.json has been loaded.
+    bool has_extensions() const;
+
+    /// Access the underlying HttpPool (for drop_below, pending count, etc.).
+    HttpPool& pool() { return pool_; }
 
   protected:
     void load_cache() override {}
@@ -42,8 +66,17 @@ class MountHttp : public Mount {
     std::string path_prefix_; // e.g. "/assets"
     HttpPool& pool_;
 
+    void fetch_extensions();
+
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::vector<uint8_t>> cache_;
     std::unordered_set<std::string> pending_;
     std::unordered_set<std::string> failed_;
+
+    // extensions.json data (guarded by mutex_)
+    bool extensions_loaded_ = false;
+    std::vector<std::string> charicon_exts_;
+    std::vector<std::string> emote_exts_;
+    std::vector<std::string> emotions_exts_;
+    std::vector<std::string> background_exts_;
 };

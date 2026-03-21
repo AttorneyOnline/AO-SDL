@@ -46,6 +46,12 @@ struct DebugStats {
     int current_players = 0;
     int max_players = 0;
     int conn_state = 0;
+
+    // HTTP asset streaming stats
+    int http_pending = 0;
+    int http_cached = 0;
+    int http_failed = 0;
+    int http_pool_pending = 0;
 };
 
 class DebugOverlayWidget : public IWidget {

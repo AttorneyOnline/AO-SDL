@@ -17,6 +17,18 @@ add_subdirectory(third-party/SDL)
 set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
 add_subdirectory(third-party/bit7z)
 
+set(WEBP_BUILD_ANIM_UTILS OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_CWEBP OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_DWEBP OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_GIF2WEBP OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_IMG2WEBP OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_VWEBP OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_WEBPINFO OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_LIBWEBPMUX OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_WEBPMUX OFF CACHE BOOL "" FORCE)
+set(WEBP_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third-party/libwebp)
+
 set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
@@ -125,7 +137,7 @@ add_library(aoengine STATIC
     engine/game/ServerList.cpp
 
     engine/asset/AssetLibrary.cpp
-    engine/asset/ApngDecoder.cpp
+    engine/asset/formats/ApngDecoder.cpp
     engine/asset/AssetCache.cpp
     engine/asset/MediaManager.cpp
     engine/asset/MountManager.cpp
@@ -153,6 +165,10 @@ add_library(aoengine STATIC
     engine/render/TextMeshBuilder.cpp
     engine/net/HttpPool.cpp
     engine/asset/MountHttp.cpp
+    engine/asset/ImageDecoders.cpp
+    engine/asset/formats/WebPDecoder.cpp
+    engine/asset/formats/GifDecoder.cpp
+    engine/asset/formats/StbiDecoder.cpp
 )
 
 # Platform-specific implementations (selected at build time)
@@ -185,7 +201,15 @@ target_include_directories(aoengine
             third-party/bit7z
 )
 
-target_link_libraries(aoengine PUBLIC bit7z freetype)
+# OpenSSL for HTTPS support in httplib
+find_package(OpenSSL)
+if(OPENSSL_FOUND)
+    target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv OpenSSL::SSL OpenSSL::Crypto)
+else()
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv)
+endif()
+target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 
 if(APPLE)
     target_link_libraries(aoengine PRIVATE

@@ -26,6 +26,8 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
 
     // If no assets loaded yet (HTTP download pending), mark for retry
     needs_retry_ = !idle_asset && !talk_asset;
+    if (needs_retry_ && !emote.empty())
+        Log::log_print(DEBUG, "Emote: needs retry for %s/%s (HTTP pending)", character.c_str(), emote.c_str());
 
     idle.load(idle_asset, true);
     talk.load(talk_asset, true);

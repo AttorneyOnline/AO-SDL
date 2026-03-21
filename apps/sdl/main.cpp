@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
     MediaManager::instance().init(std::filesystem::path(std::getenv("HOME")) / "Documents" / "AO2" / "base");
 
     // HTTP thread pool — used for all HTTP downloads
-    HttpPool http_pool(2);
+    HttpPool http_pool(50);
     http_pool.get("http://servers.aceattorneyonline.com", "/servers", [](HttpResponse resp) {
         if (resp.status == 200) {
             ServerList svlist(resp.body);

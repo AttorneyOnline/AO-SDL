@@ -106,7 +106,11 @@ class AOAssetLibrary {
     /// Trigger background HTTP prefetch for a character's emote assets.
     /// No-op if assets are available locally or no HTTP mount is configured.
     void prefetch_character(const std::string& character, const std::string& emote,
-                            const std::string& pre_emote);
+                            const std::string& pre_emote, int priority = 1);
+
+    /// Prefetch all emote icons and sprites for the player's own character.
+    /// Uses HIGH priority since these are needed immediately.
+    void prefetch_own_character(const std::string& character);
 
   private:
     AssetLibrary& assets;

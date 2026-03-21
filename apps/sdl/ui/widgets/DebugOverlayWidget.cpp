@@ -166,6 +166,13 @@ void DebugOverlayWidget::render() {
         ImGui::Text("Players: %d / %d", s.current_players, s.max_players);
     }
 
+    // --- HTTP Streaming ---
+    if (s.http_cached > 0 || s.http_pending > 0 || s.http_pool_pending > 0) {
+        ImGui::SeparatorText("HTTP Streaming");
+        ImGui::Text("Pool: %d queued | Downloading: %d", s.http_pool_pending, s.http_pending);
+        ImGui::Text("Cached: %d | Failed: %d", s.http_cached, s.http_failed);
+    }
+
     // --- Asset Cache ---
     ImGui::SeparatorText("Asset Cache");
     ImGui::Text("%zu entries | %s / %s", s.cache_entries.size(),

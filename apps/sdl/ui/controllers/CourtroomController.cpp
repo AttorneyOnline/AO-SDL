@@ -1,7 +1,10 @@
 #include "ui/controllers/CourtroomController.h"
 
+#include "ao/asset/AOAssetLibrary.h"
+#include "utils/Log.h"
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
+#include "asset/MountManager.h"
 #include "event/EventManager.h"
 #include "event/PlayerCountEvent.h"
 #include "event/ServerInfoEvent.h"
@@ -116,9 +119,41 @@ void CourtroomController::update_debug_stats() {
         s.current_players = ev->get_current();
         s.max_players = ev->get_max();
     }
+
+    auto http = MediaManager::instance().mounts_ref().http_stats();
+    s.http_pending = http.pending;
+    s.http_cached = http.cached;
+    s.http_failed = http.failed;
+    s.http_pool_pending = http.pool_pending;
+}
+
+void CourtroomController::retry_emote_icons() {
+    if (!ic_state_.char_sheet)
+        return;
+
+    AOAssetLibrary ao_assets(MediaManager::instance().assets());
+    bool any_missing = false;
+
+    for (int i = 0; i < (int)ic_state_.emote_icons.size(); i++) {
+        if (ic_state_.emote_icons[i].icon.has_value())
+            continue;
+        any_missing = true;
+
+        auto asset = ao_assets.emote_icon(ic_state_.character, i);
+        if (asset && asset->frame_count() > 0) {
+            const ImageFrame& frame = asset->frame(0);
+            ic_state_.emote_icons[i].icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
+            Log::log_print(DEBUG, "Retry loaded emote icon %d for %s", i, ic_state_.character.c_str());
+        }
+    }
+
+    // Stop retrying once all icons are loaded
+    (void)any_missing;
 }
 
 void CourtroomController::render() {
+    retry_emote_icons();
+
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);

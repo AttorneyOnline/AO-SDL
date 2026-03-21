@@ -124,10 +124,14 @@ class AssetLibrary {
      * @param path Virtual path without extension.
      * @param extensions Extensions to try (e.g. {"webp", "png"}).
      */
-    void prefetch(const std::string& path, const std::vector<std::string>& extensions);
+    void prefetch(const std::string& path, const std::vector<std::string>& extensions, int priority = 1);
 
     /// Convenience: prefetch an image path with default image extensions.
     void prefetch_image(const std::string& path);
+
+    /// Prefetch an image using server-advertised extensions for the given type.
+    /// asset_type maps to MountHttp::AssetType (0=charicon, 1=emote, 2=emotions, 3=background).
+    void prefetch_image(const std::string& path, int asset_type, int priority = 1);
 
     /// Convenience: prefetch a config file (exact path with extension).
     void prefetch_config(const std::string& path);
