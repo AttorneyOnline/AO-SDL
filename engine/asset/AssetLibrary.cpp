@@ -186,8 +186,8 @@ std::vector<std::string> AssetLibrary::list(const std::string& directory) {
     return {};
 }
 
-void AssetLibrary::evict_unused() {
-    cache_.evict_unused();
+void AssetLibrary::evict() {
+    cache_.evict();
 }
 
 std::optional<std::pair<std::string, std::vector<uint8_t>>>

@@ -354,7 +354,10 @@ struct MetalRendererImpl {
 
     // --- draw ----------------------------------------------------------------
 
+    int draw_call_count = 0;
+
     void draw(const RenderState* state) {
+        draw_call_count = 0;
         @autoreleasepool {
             id<MTLCommandBuffer> cmd = [command_queue commandBuffer];
 
@@ -409,6 +412,7 @@ struct MetalRendererImpl {
                                          indexType:MTLIndexTypeUInt32
                                        indexBuffer:quad_ib
                                  indexBufferOffset:0];
+                        draw_call_count++;
                     }
                 }
             }
@@ -431,6 +435,7 @@ MetalRenderer::~MetalRenderer() = default;
 
 void MetalRenderer::draw(const RenderState* state) {
     impl->draw(state);
+    draw_calls_ = impl->draw_call_count;
 }
 
 void MetalRenderer::bind_default_framebuffer() {

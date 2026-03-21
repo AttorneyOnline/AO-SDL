@@ -8,7 +8,14 @@
 #include "render/RenderState.h"
 #include "utils/Log.h"
 
+#include <chrono>
 #include <cstring>
+
+using Clock = std::chrono::steady_clock;
+
+static int us_since(Clock::time_point start) {
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count());
+}
 
 AOCourtroomPresenter::AOCourtroomPresenter() {
     effects_.push_back(&screenshake_);
@@ -16,6 +23,8 @@ AOCourtroomPresenter::AOCourtroomPresenter() {
 }
 
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
+    auto tick_start = Clock::now();
+
     int delta_ms = static_cast<int>(t);
     if (delta_ms <= 0)
         delta_ms = 16;
@@ -37,13 +46,14 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         Log::log_print(DEBUG, "AOCourtroomPresenter: using theme '%s'", theme.c_str());
     }
 
-    // ---- Drain background events ----
+    // ---- Drain events ----
+    auto events_start = Clock::now();
+
     auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
     while (auto ev = bg_ch.get_event()) {
         background.set(ev->get_background(), ev->get_position().empty() ? background.position() : ev->get_position());
     }
 
-    // ---- Drain IC message events ----
     auto& ic_ch = EventManager::instance().get_channel<ICMessageEvent>();
     while (auto ev = ic_ch.get_event()) {
         if (!ev->get_side().empty()) {
@@ -65,23 +75,27 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             flash_.trigger();
     }
 
-    // ---- Update components ----
+    profile_.events_us.store(us_since(events_start), std::memory_order_relaxed);
+
+    // ---- Animation ----
+    auto anim_start = Clock::now();
+
     background.reload_if_needed(*ao_assets);
     emote_player.tick(delta_ms);
-
-    if (textbox.tick(delta_ms)) {
-        textbox_dirty = true;
-    }
 
     if (textbox.text_state() == AOTextBox::TextState::DONE && emote_player.state() == AOEmotePlayer::State::TALKING) {
         emote_player.transition_to_idle();
     }
 
-    // ---- Tick effects ----
-    for (auto* effect : effects_)
-        effect->tick(delta_ms);
+    profile_.animation_us.store(us_since(anim_start), std::memory_order_relaxed);
 
-    // ---- Render textbox overlay when text changes ----
+    // ---- Textbox ----
+    auto textbox_start = Clock::now();
+
+    if (textbox.tick(delta_ms)) {
+        textbox_dirty = true;
+    }
+
     if (textbox_dirty && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
         std::vector<uint8_t> pixels(VIEWPORT_W * VIEWPORT_H * 4, 0);
         textbox.render(VIEWPORT_W, VIEWPORT_H, pixels.data());
@@ -101,14 +115,26 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         textbox_dirty = false;
     }
 
+    profile_.textbox_us.store(us_since(textbox_start), std::memory_order_relaxed);
+
+    // ---- Effects ----
+    auto effects_start = Clock::now();
+
+    for (auto* effect : effects_)
+        effect->tick(delta_ms);
+
+    profile_.effects_us.store(us_since(effects_start), std::memory_order_relaxed);
+
+    // ---- Compose RenderState ----
+    auto compose_start = Clock::now();
+
     // Periodic cache eviction
     evict_timer_ms += delta_ms;
     if (evict_timer_ms >= 30000) {
         evict_timer_ms = 0;
-        ao_assets->engine_assets().evict_unused();
+        ao_assets->engine_assets().evict();
     }
 
-    // ---- Assemble RenderState ----
     RenderState state;
     LayerGroup scene;
 
@@ -128,12 +154,15 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         scene.add_layer(20, Layer(textbox_overlay, 0, 20));
     }
 
-    // ---- Apply active effects ----
     for (auto* effect : effects_) {
         if (effect->is_active())
             effect->apply(scene);
     }
 
     state.add_layer_group(0, scene);
+
+    profile_.compose_us.store(us_since(compose_start), std::memory_order_relaxed);
+    profile_.total_us.store(us_since(tick_start), std::memory_order_relaxed);
+
     return state;
 }

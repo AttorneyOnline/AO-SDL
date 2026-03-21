@@ -28,6 +28,7 @@ class GLRenderer : public IRenderer {
     bool uv_flipped() const override {
         return true;
     }
+    const char* backend_name() const override { return "OpenGL"; }
 
   private:
     std::tuple<GLuint, GLuint> setup_render_texture();

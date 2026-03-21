@@ -108,29 +108,47 @@ TEST(AssetCache, GetPromotesToMru) {
 }
 
 // ---------------------------------------------------------------------------
-// evict_unused
+// Pressure-based eviction
 // ---------------------------------------------------------------------------
 
-TEST(AssetCache, EvictUnusedRemovesUnpinnedEntries) {
+TEST(AssetCache, EvictDoesNothingUnderBudget) {
     AssetCache cache(1024);
     cache.insert(make_asset("a", 100));
     cache.insert(make_asset("b", 100));
-    // No external holders → both unpinned.
-    cache.evict_unused();
-    EXPECT_EQ(cache.get("a"), nullptr);
-    EXPECT_EQ(cache.get("b"), nullptr);
-    EXPECT_EQ(cache.used_bytes(), 0u);
+    // Under budget (200 < 1024) → evict() should keep everything.
+    cache.evict();
+    EXPECT_NE(cache.get("a"), nullptr);
+    EXPECT_NE(cache.get("b"), nullptr);
+    EXPECT_EQ(cache.used_bytes(), 200u);
 }
 
-TEST(AssetCache, EvictUnusedSparesPinnedEntries) {
-    AssetCache cache(1024);
+TEST(AssetCache, EvictRemovesLruWhenOverBudget) {
+    AssetCache cache(150);
+    cache.insert(make_asset("a", 100));
+    cache.insert(make_asset("b", 100));
+    // Over budget (200 > 150) — "a" is LRU and unpinned, should be evicted.
+    EXPECT_EQ(cache.get("a"), nullptr);
+    EXPECT_NE(cache.get("b"), nullptr);
+    EXPECT_EQ(cache.used_bytes(), 100u);
+}
+
+TEST(AssetCache, EvictSparesPinnedEvenOverBudget) {
+    AssetCache cache(150);
     auto pinned = make_asset("pinned", 100);
     cache.insert(pinned);
     cache.insert(make_asset("unpinned", 100));
-
-    cache.evict_unused();
-
+    // Over budget, but "pinned" is held externally → only "unpinned" evicted.
+    // "unpinned" is MRU but also the only evictable entry.
+    cache.evict();
     EXPECT_NE(cache.get("pinned"), nullptr);
-    EXPECT_EQ(cache.get("unpinned"), nullptr);
     EXPECT_EQ(cache.used_bytes(), 100u);
+}
+
+TEST(AssetCache, UnusedEntriesStayWarmUnderBudget) {
+    AssetCache cache(1024);
+    cache.insert(make_asset("warm", 100));
+    // Drop all external references — entry is unused but under budget.
+    cache.evict();
+    // Should still be retrievable from cache.
+    EXPECT_NE(cache.get("warm"), nullptr);
 }

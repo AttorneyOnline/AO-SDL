@@ -3,6 +3,7 @@
 #include "ui/controllers/IScreenController.h"
 #include "ui/widgets/ChatWidget.h"
 #include "ui/widgets/CourtroomWidget.h"
+#include "ui/widgets/DebugOverlayWidget.h"
 #include "ui/widgets/EmoteSelectorWidget.h"
 #include "ui/widgets/ICChatWidget.h"
 #include "ui/widgets/ICMessageState.h"
@@ -22,6 +23,8 @@ class CourtroomController : public IScreenController {
     IUIRenderer::NavAction nav_action() override;
 
   private:
+    void update_debug_stats();
+
     ChatWidget chat_;
     ICMessageState ic_state_;
     IUIRenderer::NavAction nav_action_ = IUIRenderer::NavAction::NONE;
@@ -32,4 +35,8 @@ class CourtroomController : public IScreenController {
     std::unique_ptr<InterjectionWidget> interjection_;
     std::unique_ptr<SideSelectWidget> side_select_;
     std::unique_ptr<MessageOptionsWidget> message_options_;
+    DebugOverlayWidget debug_;
+    RenderManager* render_ = nullptr;
+    bool debug_floating_ = false;
+    bool debug_open_ = true;
 };

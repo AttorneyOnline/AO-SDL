@@ -103,11 +103,12 @@ class AssetLibrary {
     std::vector<std::string> list(const std::string& directory);
 
     /**
-     * @brief Evict all cached assets not currently held by any caller.
+     * @brief Evict LRU entries until the cache is within its memory budget.
      *
-     * Useful after a scene transition to free memory from the previous scene.
+     * Only evicts entries not currently held by any caller. Safe to call
+     * periodically — does nothing if the cache is already under budget.
      */
-    void evict_unused();
+    void evict();
 
     /**
      * @brief Get a const reference to the internal AssetCache.

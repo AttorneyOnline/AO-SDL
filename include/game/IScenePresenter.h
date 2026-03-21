@@ -6,6 +6,7 @@
 
 #include "render/RenderState.h"
 
+#include <atomic>
 #include <cstdint>
 
 /**
@@ -27,4 +28,12 @@ class IScenePresenter {
      * @return A RenderState describing what should be drawn this frame.
      */
     virtual RenderState tick(uint64_t delta_ms) = 0;
+
+    struct ProfileEntry {
+        const char* name;
+        const std::atomic<int>* us;
+    };
+
+    /// Override to expose per-section tick profiling. Returns empty span by default.
+    virtual std::vector<ProfileEntry> tick_profile() const { return {}; }
 };

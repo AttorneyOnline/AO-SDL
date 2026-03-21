@@ -52,11 +52,12 @@ class AssetCache {
     void insert(std::shared_ptr<Asset> asset);
 
     /**
-     * @brief Evict all entries with no external holders regardless of the memory limit.
+     * @brief Evict LRU entries that are not externally held until under the memory limit.
      *
-     * Removes every entry whose shared_ptr use_count is 1 (only the cache holds it).
+     * Call periodically as a nudge — only evicts when the cache is over budget.
+     * Entries with use_count > 1 (held by callers) are skipped.
      */
-    void evict_unused();
+    void evict();
 
     /**
      * @brief Get the current total memory usage of cached assets.
@@ -74,11 +75,27 @@ class AssetCache {
         return max_bytes_;
     }
 
+    size_t entry_count() const {
+        return entries.size();
+    }
+
+    struct CacheEntry {
+        std::string path;
+        std::string format;
+        size_t bytes;
+        long use_count;
+    };
+
+    std::vector<CacheEntry> snapshot() const {
+        std::vector<CacheEntry> result;
+        result.reserve(entries.size());
+        for (const auto& [path, entry] : entries) {
+            result.push_back({path, entry.asset->format(), entry.asset->memory_size(), entry.asset.use_count()});
+        }
+        return result;
+    }
+
   private:
-    /**
-     * @brief Evict least-recently-used, unpinned entries until under the memory limit.
-     */
-    void evict_to_limit();
 
     size_t max_bytes_;
     size_t used_bytes_ = 0;

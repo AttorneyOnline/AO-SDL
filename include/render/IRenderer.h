@@ -7,6 +7,7 @@
 #include <cstdint>
 
 class RenderState;
+class Layer;
 
 /**
  * @brief Backend-agnostic renderer interface.
@@ -90,4 +91,12 @@ class IRenderer {
     virtual void* get_command_queue_ptr() const {
         return nullptr;
     }
+
+    virtual const char* backend_name() const = 0;
+
+    /// Number of draw calls in the last frame.
+    int last_draw_calls() const { return draw_calls_; }
+
+  protected:
+    int draw_calls_ = 0;
 };

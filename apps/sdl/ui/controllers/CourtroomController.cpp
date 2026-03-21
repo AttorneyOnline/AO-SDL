@@ -3,6 +3,10 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
+#include "game/GameThread.h"
+#include "game/IScenePresenter.h"
+#include "render/RenderManager.h"
+#include "ui/DebugContext.h"
 
 #include <imgui.h>
 
@@ -15,7 +19,8 @@ static int side_to_index(const std::string& side) {
     return 2; // default: wit
 }
 
-CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager& render) {
+CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager& render)
+    : render_(&render) {
     ic_state_ = {};
     ic_state_.character = screen.get_character_name();
     ic_state_.char_id = screen.get_char_id();
@@ -51,6 +56,38 @@ CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager&
     message_options_ = std::make_unique<MessageOptionsWidget>(&ic_state_);
 }
 
+void CourtroomController::update_debug_stats() {
+    auto& s = debug_.stats();
+    auto& ctx = DebugContext::instance();
+
+    const auto& io = ImGui::GetIO();
+    s.frame_time_ms = io.DeltaTime * 1000.0f;
+    s.fps = io.Framerate;
+
+    if (ctx.game_thread) {
+        s.game_tick_ms = ctx.game_thread->last_tick_us() / 1000.0f;
+        s.tick_rate_hz = ctx.game_thread->tick_rate_hz();
+    }
+
+    if (ctx.presenter) {
+        auto profile = ctx.presenter->tick_profile();
+        s.tick_sections.clear();
+        for (const auto& entry : profile)
+            s.tick_sections.push_back({entry.name, static_cast<float>(entry.us->load(std::memory_order_relaxed))});
+    }
+
+    s.gpu_backend = render_->get_renderer().backend_name();
+    s.draw_calls = render_->get_renderer().last_draw_calls();
+
+    const auto& cache = MediaManager::instance().assets().cache();
+    s.cache_used_bytes = cache.used_bytes();
+    s.cache_max_bytes = cache.max_bytes();
+    s.cache_entries.clear();
+    for (const auto& e : cache.snapshot()) {
+        s.cache_entries.push_back({e.path, e.format, e.bytes, e.use_count});
+    }
+}
+
 void CourtroomController::render() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
@@ -67,14 +104,12 @@ void CourtroomController::render() {
 
     // === Top row ===
 
-    // Top-left: courtroom viewport
     ImGui::BeginChild("##viewport", ImVec2(left_width, top_height), ImGuiChildFlags_Borders);
     courtroom_->render();
     ImGui::EndChild();
 
     ImGui::SameLine();
 
-    // Top-right: emotes
     ImGui::BeginChild("##emotes", ImVec2(right_width, top_height), ImGuiChildFlags_Borders);
     ImGui::SeparatorText("Emotes");
     emote_selector_->render();
@@ -82,7 +117,6 @@ void CourtroomController::render() {
 
     // === Bottom row ===
 
-    // Bottom-left: IC controls + chat
     float ic_controls_width = left_width * 0.55f;
     float ooc_width = left_width - ic_controls_width - ImGui::GetStyle().ItemSpacing.x;
 
@@ -112,14 +146,46 @@ void CourtroomController::render() {
 
     ImGui::SameLine();
 
-    // Bottom-right: OOC chat
     ImGui::BeginChild("##ooc_chat", ImVec2(ooc_width, bottom_height), ImGuiChildFlags_Borders);
     ImGui::SeparatorText("OOC Chat");
     chat_.handle_events();
     chat_.render();
     ImGui::EndChild();
 
+    ImGui::SameLine();
+
+    // Bottom-right: debug panel (docked) or toggle button
+    if (!debug_floating_) {
+        ImGui::BeginChild("##debug", ImVec2(right_width, bottom_height), ImGuiChildFlags_Borders);
+        if (ImGui::SmallButton("Pop Out")) debug_floating_ = true;
+        ImGui::SameLine();
+        ImGui::SeparatorText("Debug");
+        update_debug_stats();
+        debug_.render();
+        ImGui::EndChild();
+    } else {
+        ImGui::BeginChild("##debug_placeholder", ImVec2(right_width, bottom_height), ImGuiChildFlags_Borders);
+        if (ImGui::Button("Show Debug Panel"))
+            debug_floating_ = false;
+        ImGui::EndChild();
+    }
+
     ImGui::End();
+
+    // Floating debug window
+    if (debug_floating_ && debug_open_) {
+        ImGui::SetNextWindowSize(ImVec2(320, 500), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Debug", &debug_open_);
+        if (ImGui::SmallButton("Dock")) debug_floating_ = false;
+        update_debug_stats();
+        debug_.render();
+        ImGui::End();
+
+        if (!debug_open_) {
+            debug_open_ = true;
+            debug_floating_ = false;
+        }
+    }
 }
 
 IUIRenderer::NavAction CourtroomController::nav_action() {

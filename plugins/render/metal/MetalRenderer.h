@@ -22,6 +22,7 @@ class MetalRenderer : public IRenderer {
     }
     void* get_device_ptr() const override;
     void* get_command_queue_ptr() const override;
+    const char* backend_name() const override { return "Metal"; }
 
   private:
     std::unique_ptr<MetalRendererImpl> impl;

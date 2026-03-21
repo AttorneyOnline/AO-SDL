@@ -18,6 +18,7 @@
 
 // App — create_gpu_backend() is defined in whichever backend source is linked.
 #include "render/IGPUBackend.h"
+#include "ui/DebugContext.h"
 #include "ui/ImGuiUIRenderer.h"
 #include "SDLGameWindow.h"
 
@@ -59,6 +60,9 @@ int main(int argc, char* argv[]) {
     // Scene presenter — swap this to change game logic
     auto presenter = ao::create_presenter();
     GameThread game_logic(buffer, *presenter);
+
+    DebugContext::instance().game_thread = &game_logic;
+    DebugContext::instance().presenter = presenter.get();
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;

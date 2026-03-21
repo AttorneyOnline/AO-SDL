@@ -111,6 +111,7 @@ void GLRenderer::draw(const RenderState* state) {
         evict_expired_textures();
     }
 
+    draw_calls_ = 0;
     for (const auto& [_, group] : state->get_layer_groups()) {
         Mat4 group_mat = group.transform().get_local_transform();
         for (const auto& [__, layer] : group.get_layers()) {
@@ -127,6 +128,7 @@ void GLRenderer::draw(const RenderState* state) {
             Mat4 local = group_mat * layer.transform().get_local_transform();
             GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio(), layer.get_opacity());
             sprite.draw(program);
+            draw_calls_++;
         }
     }
 }
