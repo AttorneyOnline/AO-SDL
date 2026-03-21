@@ -71,6 +71,9 @@ class AOAssetLibrary {
     /// Load the desk overlay for a position.
     std::shared_ptr<ImageAsset> desk_overlay(const std::string& name, const std::string& position);
 
+    /// Prefetch background images for a position (legacy + modern names).
+    void prefetch_background(const std::string& name, const std::string& position, int priority = 3);
+
     // -------------------------------------------------------------------------
     // Theme / UI
     // -------------------------------------------------------------------------

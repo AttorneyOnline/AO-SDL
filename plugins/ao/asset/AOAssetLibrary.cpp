@@ -147,6 +147,15 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::desk_overlay(const std::string& name
     return result;
 }
 
+void AOAssetLibrary::prefetch_background(const std::string& name, const std::string& position, int priority) {
+    std::string base = "background/" + name + "/";
+    std::string legacy = bg_filename(position);
+    // Prefetch both legacy name (e.g. "prosecutorempty") and modern name (e.g. "pro")
+    assets.prefetch_image(base + legacy, 3, priority);
+    if (legacy != position)
+        assets.prefetch_image(base + position, 3, priority);
+}
+
 // ---- Theme / UI ------------------------------------------------------------
 
 std::shared_ptr<ImageAsset> AOAssetLibrary::theme_image(const std::string& element) {

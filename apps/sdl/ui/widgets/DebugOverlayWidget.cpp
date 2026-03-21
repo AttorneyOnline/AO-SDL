@@ -130,64 +130,67 @@ void DebugOverlayWidget::render() {
     frame_count_++;
 
     // --- Performance ---
-    ImGui::SeparatorText("Performance");
-    ImGui::Text("FPS: %.0f  |  Frame: %.2f ms", s.fps, s.frame_time_ms);
-    ImGui::Text("Game tick: %.3f ms @ %.0f Hz", s.game_tick_ms, s.tick_rate_hz);
-    ImGui::Text("Draw calls: %d", s.draw_calls);
+    if (ImGui::CollapsingHeader("Performance")) {
+        ImGui::Text("FPS: %.0f  |  Frame: %.2f ms", s.fps, s.frame_time_ms);
+        ImGui::Text("Game tick: %.3f ms @ %.0f Hz", s.game_tick_ms, s.tick_rate_hz);
+        ImGui::Text("Draw calls: %d", s.draw_calls);
+    }
 
     // --- Game tick breakdown ---
     if (!s.tick_sections.empty() && frame_count_ >= 5) {
-        ImGui::SeparatorText("Tick Breakdown");
-        if (ImGui::BeginTabBar("##tick_tabs")) {
-            if (ImGui::BeginTabItem("Pie")) {
-                std::vector<std::pair<const char*, float>> slices;
-                for (const auto& sec : s.tick_sections)
-                    slices.push_back({sec.name, tick_avg_[sec.name].average()});
-                draw_pie(slices);
-                ImGui::EndTabItem();
+        if (ImGui::CollapsingHeader("Tick Breakdown", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::BeginTabBar("##tick_tabs")) {
+                if (ImGui::BeginTabItem("Pie")) {
+                    std::vector<std::pair<const char*, float>> slices;
+                    for (const auto& sec : s.tick_sections)
+                        slices.push_back({sec.name, tick_avg_[sec.name].average()});
+                    draw_pie(slices);
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("History")) {
+                    draw_history();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
             }
-            if (ImGui::BeginTabItem("History")) {
-                draw_history();
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
         }
     }
 
     // --- Renderer ---
-    ImGui::SeparatorText("Renderer");
-    ImGui::Text("Backend: %s", s.gpu_backend);
+    if (ImGui::CollapsingHeader("Renderer")) {
+        ImGui::Text("Backend: %s", s.gpu_backend);
 
-    auto& ctx = DebugContext::instance();
-    int scale = ctx.internal_scale.load();
-    ImGui::SetNextItemWidth(80);
-    if (ImGui::InputInt("Scale", &scale)) {
-        scale = std::clamp(scale, 1, 16);
-        ctx.internal_scale.store(scale);
+        auto& ctx = DebugContext::instance();
+        int scale = ctx.internal_scale.load();
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputInt("Scale", &scale)) {
+            scale = std::clamp(scale, 1, 16);
+            ctx.internal_scale.store(scale);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%dx%d)", DebugContext::BASE_W * scale, DebugContext::BASE_H * scale);
+
+        bool wf = ctx.wireframe.load();
+        if (ImGui::Checkbox("Wireframe", &wf))
+            ctx.wireframe.store(wf);
     }
-    ImGui::SameLine();
-    ImGui::TextDisabled("(%dx%d)", DebugContext::BASE_W * scale, DebugContext::BASE_H * scale);
-
-    bool wf = ctx.wireframe.load();
-    if (ImGui::Checkbox("Wireframe", &wf))
-        ctx.wireframe.store(wf);
 
     // --- Connection ---
-    ImGui::SeparatorText("Connection");
-    ImGui::Text("State: %s", conn_state_str(s.conn_state));
-    if (s.conn_state > 0) {
-        if (!s.server_software.empty()) {
-            if (!s.server_version.empty())
-                ImGui::Text("Server: %s %s", s.server_software.c_str(), s.server_version.c_str());
-            else
-                ImGui::Text("Server: %s", s.server_software.c_str());
+    if (ImGui::CollapsingHeader("Connection")) {
+        ImGui::Text("State: %s", conn_state_str(s.conn_state));
+        if (s.conn_state > 0) {
+            if (!s.server_software.empty()) {
+                if (!s.server_version.empty())
+                    ImGui::Text("Server: %s %s", s.server_software.c_str(), s.server_version.c_str());
+                else
+                    ImGui::Text("Server: %s", s.server_software.c_str());
+            }
+            ImGui::Text("Players: %d / %d", s.current_players, s.max_players);
         }
-        ImGui::Text("Players: %d / %d", s.current_players, s.max_players);
     }
 
     // --- HTTP Streaming ---
-    if (s.http_cached > 0 || s.http_pending > 0 || s.http_pool_pending > 0) {
-        ImGui::SeparatorText("HTTP Streaming");
+    if (ImGui::CollapsingHeader("HTTP Streaming")) {
         char hbuf[64];
         ImGui::Text("Queue: %d | In-flight: %d | Failed: %d", s.http_pool_pending, s.http_pending, s.http_failed);
         ImGui::Text("Raw cache: %d files, %s", s.http_cached,
@@ -196,22 +199,23 @@ void DebugOverlayWidget::render() {
 
     // --- Event Stats ---
     if (!s.event_stats.empty()) {
-        ImGui::SeparatorText("Event Stats");
-        uint64_t total = 0;
-        for (const auto& es : s.event_stats)
-            total += es.count;
-        ImGui::Text("Total: %llu across %zu channels", (unsigned long long)total, s.event_stats.size());
+        if (ImGui::CollapsingHeader("Event Stats")) {
+            uint64_t total = 0;
+            for (const auto& es : s.event_stats)
+                total += es.count;
+            ImGui::Text("Total: %llu across %zu channels", (unsigned long long)total, s.event_stats.size());
 
-        ImGui::BeginChild("##event_stats", ImVec2(0, 150), ImGuiChildFlags_Borders);
-        for (const auto& es : s.event_stats) {
-            if (es.count == 0) continue;
-            ImGui::Text("%6llu  %s", (unsigned long long)es.count, demangle(es.name.c_str()).c_str());
+            ImGui::BeginChild("##event_stats", ImVec2(0, 150), ImGuiChildFlags_Borders);
+            for (const auto& es : s.event_stats) {
+                if (es.count == 0) continue;
+                ImGui::Text("%6llu  %s", (unsigned long long)es.count, demangle(es.name.c_str()).c_str());
+            }
+            ImGui::EndChild();
         }
-        ImGui::EndChild();
     }
 
     // --- Asset Cache ---
-    ImGui::SeparatorText("Asset Cache");
+    if (ImGui::CollapsingHeader("Asset Cache")) {
     ImGui::Text("%zu entries | %s / %s", s.cache_entries.size(),
                 format_bytes(s.cache_used_bytes, buf, sizeof(buf)),
                 format_bytes(s.cache_max_bytes, buf2, sizeof(buf2)));
@@ -234,6 +238,9 @@ void DebugOverlayWidget::render() {
     sort_btn("Refs", SORT_REFS);
     ImGui::SameLine();
     sort_btn("Size", SORT_SIZE);
+
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    ImGui::InputTextWithHint("##cache_search", "Search...", cache_search_, sizeof(cache_search_));
 
     // Sort entries (cache_entries arrives in LRU order from snapshot_lru)
     auto& entries = s.cache_entries;
@@ -283,6 +290,8 @@ void DebugOverlayWidget::render() {
     ImGui::BeginChild("##cache_list", ImVec2(list_w, section_h), ImGuiChildFlags_Borders);
     for (int i = 0; i < (int)entries.size(); i++) {
         const auto& e = entries[i];
+        if (cache_search_[0] != '\0' && e.path.find(cache_search_) == std::string::npos)
+            continue;
         char label[256];
         char size_buf2[64];
         format_bytes(e.bytes, size_buf2, sizeof(size_buf2));
@@ -349,10 +358,11 @@ void DebugOverlayWidget::render() {
         ImGui::EndChild();
         ImGui::TreePop();
     }
+    } // Asset Cache
 
     // --- Log ---
-    ImGui::SeparatorText("Log");
-    draw_log();
+    if (ImGui::CollapsingHeader("Log"))
+        draw_log();
 }
 
 void DebugOverlayWidget::draw_history() {

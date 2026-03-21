@@ -137,4 +137,5 @@ class DebugOverlayWidget : public IWidget {
     std::string selected_cache_path_;
     enum CacheSortMode { SORT_NAME, SORT_LRU, SORT_REFS, SORT_SIZE };
     CacheSortMode cache_sort_ = SORT_NAME;
+    char cache_search_[128] = "";
 };
