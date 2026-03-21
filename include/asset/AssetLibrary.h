@@ -113,6 +113,22 @@ class AssetLibrary {
     std::vector<std::string> list(const std::string& directory);
 
     /**
+     * @brief Register a manually-created asset in the cache.
+     *
+     * Use for procedurally generated assets (e.g. GPU-rendered text).
+     * The asset's path() is used as the cache key.
+     */
+    void register_asset(std::shared_ptr<Asset> asset);
+
+    /**
+     * @brief Look up a cached asset by path (promotes LRU).
+     * @return Shared pointer to the asset, or nullptr if not cached.
+     */
+    std::shared_ptr<Asset> get_cached(const std::string& path) {
+        return cache_.get(path);
+    }
+
+    /**
      * @brief Evict LRU entries until the cache is within its memory budget.
      *
      * Only evicts entries not currently held by any caller. Safe to call

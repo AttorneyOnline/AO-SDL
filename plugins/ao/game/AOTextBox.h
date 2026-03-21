@@ -27,14 +27,12 @@ class AOTextBox {
     bool tick(int delta_ms);
 
     /// Render the showname into its own ImageAsset. Returns nullptr if empty.
-    /// The asset is cached and only re-rendered when the name changes.
     std::shared_ptr<ImageAsset> get_nameplate();
 
-    /// Get the nameplate rect in viewport coordinates and the scale factor
-    /// needed to fit the rendered text within the box.
+    /// Get the nameplate rect in viewport coordinates and the scale factor.
     struct NameplateLayout {
-        int x, y, w, h;    // position and box size in viewport pixels
-        float scale;        // horizontal scale to fit text in box (1.0 = fits naturally)
+        int x, y, w, h;
+        float scale;
     };
     NameplateLayout nameplate_layout() const;
 
@@ -50,12 +48,16 @@ class AOTextBox {
     // Theme assets
     std::shared_ptr<ImageAsset> chatbox_bg;
     TextRenderer text_renderer;
+    TextRenderer showname_renderer;
     bool font_loaded = false;
+    bool showname_font_loaded = false;
 
     // Layout from courtroom_design.ini
     AORect chatbox_rect = {0, 114, 256, 78};
     AORect message_rect = {10, 13, 242, 57};
     AORect showname_rect = {1, 0, 46, 15};
+    enum class Align { LEFT, CENTER, RIGHT };
+    Align showname_align = Align::LEFT;
 
     // Colors from chat_config.ini
     std::vector<AOTextColorDef> colors;
@@ -80,10 +82,12 @@ class AOTextBox {
     bool is_punctuation(char c) const;
     int current_tick_delay() const;
 
-    // Nameplate cache
+    // Nameplate: stored in the engine asset cache under "_nameplate/<showname>"
+    AssetLibrary* engine_assets_ = nullptr;
     std::string cached_nameplate_name_;
-    std::shared_ptr<ImageAsset> cached_nameplate_;
+    NameplateLayout cached_nameplate_layout_{};
 
     // Persistent font data (TextRenderer needs the buffer alive)
     std::vector<uint8_t> font_storage;
+    std::vector<uint8_t> showname_font_storage;
 };

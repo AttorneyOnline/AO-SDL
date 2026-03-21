@@ -61,8 +61,7 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
                  msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
     current_flip = msg.flip;
 
-    emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
-
+    // Resolve showname: prefer the one from the message, fall back to char.ini
     std::string showname = msg.showname;
     if (showname.empty()) {
         auto sheet = ao_assets->character_sheet(msg.character);
@@ -71,6 +70,14 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
 
     textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
     textbox_dirty = true;
+
+    // Blank messages skip pre-anim and go straight to idle
+    if (textbox.text_state() == AOTextBox::TextState::INACTIVE) {
+        emote_player.start(*ao_assets, msg.character, msg.emote, "", EmoteMod::IDLE);
+        emote_player.transition_to_idle();
+    } else {
+        emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
+    }
 
     if (msg.screenshake)
         screenshake_.trigger();
@@ -84,7 +91,7 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
         cube_.trigger();
 
     EventManager::instance().get_channel<ICLogEvent>().publish(
-        ICLogEvent(msg.showname, msg.message, msg.text_color));
+        ICLogEvent(showname, msg.message, msg.text_color));
 }
 
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
@@ -139,7 +146,11 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         textbox_dirty = true;
     }
 
-    if (textbox_dirty && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
+    if (textbox.text_state() == AOTextBox::TextState::INACTIVE) {
+        textbox_overlay.reset();
+        textbox_dirty = false;
+    }
+    else if (textbox_dirty) {
         std::vector<uint8_t> pixels(BASE_W * BASE_H * 4, 0);
         textbox.render(BASE_W, BASE_H, pixels.data());
 
@@ -201,9 +212,6 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     if (nameplate && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
         auto nl = textbox.nameplate_layout();
 
-        // Convert pixel coordinates to NDC [-1,1]
-        // The sprite quad spans [-1,1] so it covers the full viewport.
-        // We need to scale it down to the nameplate size and translate it.
         float ndc_w = (float)nameplate->width() * nl.scale / BASE_W * 2.0f;
         float ndc_h = (float)nameplate->height() / (float)BASE_H * 2.0f;
         float ndc_x = ((float)nl.x / BASE_W) * 2.0f - 1.0f + ndc_w * 0.5f;

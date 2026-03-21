@@ -16,6 +16,7 @@ struct TextRenderer::Impl {
     bool ready = false;
     bool sharp = false;
     int ascender = 0;
+    int descender = 0;
     int line_h = 0;
 
     ~Impl() {
@@ -52,6 +53,7 @@ bool TextRenderer::load_font(const std::string& path, int size_px) {
 
     FT_Set_Pixel_Sizes(impl->face, 0, size_px);
     impl->ascender = impl->face->size->metrics.ascender >> 6;
+    impl->descender = -(impl->face->size->metrics.descender >> 6); // FT descender is negative
     impl->line_h = impl->face->size->metrics.height >> 6;
     impl->ready = true;
     return true;
@@ -74,6 +76,7 @@ bool TextRenderer::load_font_memory(const uint8_t* data, size_t data_size, int s
 
     FT_Set_Pixel_Sizes(impl->face, 0, size_px);
     impl->ascender = impl->face->size->metrics.ascender >> 6;
+    impl->descender = -(impl->face->size->metrics.descender >> 6);
     impl->line_h = impl->face->size->metrics.height >> 6;
     impl->ready = true;
     return true;
@@ -85,6 +88,14 @@ void TextRenderer::set_sharp(bool sharp) {
 
 int TextRenderer::line_height() const {
     return impl->ready ? impl->line_h : 0;
+}
+
+int TextRenderer::ascender() const {
+    return impl->ready ? impl->ascender : 0;
+}
+
+int TextRenderer::descender() const {
+    return impl->ready ? impl->descender : 0;
 }
 
 int TextRenderer::measure_width(const std::string& text) {

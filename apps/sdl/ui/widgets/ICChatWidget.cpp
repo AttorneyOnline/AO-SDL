@@ -13,9 +13,6 @@ void ICChatWidget::handle_events() {
 }
 
 void ICChatWidget::send() {
-    if (state_->message[0] == '\0')
-        return;
-
     ICMessageData data;
     data.character = state_->character;
     data.char_id = state_->char_id;

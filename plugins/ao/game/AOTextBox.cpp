@@ -10,6 +10,8 @@
 constexpr double AOTextBox::SPEED_MULT[];
 
 void AOTextBox::load(AOAssetLibrary& ao_assets) {
+    engine_assets_ = &ao_assets.engine_assets();
+
     // Chatbox background image
     chatbox_bg = ao_assets.theme_image("chat");
     if (!chatbox_bg)
@@ -26,6 +28,15 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
     // message and showname are already relative to the chatbox — no adjustment needed.
     message_rect = ao_assets.design_rect("message");
     showname_rect = ao_assets.design_rect("showname");
+
+    // Showname horizontal alignment (default: left)
+    std::string align_str = ao_assets.design_value("showname_align");
+    if (align_str == "center" || align_str == "justify")
+        showname_align = Align::CENTER;
+    else if (align_str == "right")
+        showname_align = Align::RIGHT;
+    else
+        showname_align = Align::LEFT;
 
     // Text colors from chat_config.ini
     colors = ao_assets.text_colors();
@@ -47,6 +58,21 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
 
     if (!font_loaded) {
         Log::log_print(WARNING, "AOTextBox: no font loaded, text will not render");
+    }
+
+    // Showname font (may differ from message font)
+    AOFontSpec sn_font = ao_assets.showname_font_spec();
+    auto sn_font_data = ao_assets.find_font(sn_font.name);
+    if (!sn_font_data)
+        sn_font_data = font_data ? std::optional(std::vector<uint8_t>(font_storage)) : std::nullopt;
+
+    if (sn_font_data) {
+        showname_font_storage = std::move(*sn_font_data);
+        showname_font_loaded = showname_renderer.load_font_memory(
+            showname_font_storage.data(), showname_font_storage.size(), sn_font.size_px);
+        showname_renderer.set_sharp(sn_font.sharp);
+        Log::log_print(DEBUG, "AOTextBox: showname_font='%s' %dpt (%dpx) sharp=%d", sn_font.name.c_str(),
+                       sn_font.size_pt, sn_font.size_px, sn_font.sharp);
     }
 
     Log::log_print(DEBUG, "AOTextBox: chatbox=%d,%d,%dx%d message=%d,%d,%dx%d", chatbox_rect.x, chatbox_rect.y,
@@ -71,7 +97,15 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
     // Count UTF-8 characters
     total_chars = UTF8::length(message);
 
-    state = total_chars > 0 ? TextState::TICKING : TextState::DONE;
+    // Don't show the textbox at all for empty/whitespace-only messages
+    bool blank = true;
+    for (char c : message) {
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            blank = false;
+            break;
+        }
+    }
+    state = blank ? TextState::INACTIVE : (total_chars > 0 ? TextState::TICKING : TextState::DONE);
 }
 
 bool AOTextBox::is_punctuation(char c) const {
@@ -169,25 +203,28 @@ void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
 }
 
 std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
-    if (current_showname.empty())
+    if (current_showname.empty() || !showname_font_loaded || !engine_assets_)
         return nullptr;
 
-    if (current_showname == cached_nameplate_name_ && cached_nameplate_)
-        return cached_nameplate_;
+    std::string cache_path = "_nameplate/" + current_showname;
 
-    if (!font_loaded)
-        return nullptr;
+    // Check the global asset cache first
+    if (current_showname == cached_nameplate_name_) {
+        auto cached = std::dynamic_pointer_cast<ImageAsset>(engine_assets_->get_cached(cache_path));
+        if (cached)
+            return cached;
+    }
 
-    // Render the showname text into a tight pixel buffer
-    int text_w = text_renderer.measure_width(current_showname);
-    int text_h = text_renderer.line_height();
+    // Render text and compute layout (only when cache miss)
+    int text_w = showname_renderer.measure_width(current_showname);
+    int text_h = showname_renderer.line_height();
     if (text_w <= 0 || text_h <= 0)
         return nullptr;
 
     std::vector<uint8_t> pixels(text_w * text_h * 4, 0);
     TextColor white = {255, 255, 255};
-    text_renderer.render(current_showname, (int)current_showname.size(), white, 0, 0, text_w, text_h, 0, 0,
-                         pixels.data());
+    showname_renderer.render(current_showname, (int)current_showname.size(), white, 0, 0, text_w, text_h, 0, 0,
+                             pixels.data());
 
     // Flip vertically for GL
     size_t row_bytes = (size_t)text_w * 4;
@@ -206,22 +243,30 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
     frame.duration_ms = 0;
     frame.pixels = std::move(pixels);
 
-    cached_nameplate_ = std::make_shared<ImageAsset>("_nameplate", "raw", std::vector<ImageFrame>{std::move(frame)});
+    auto nameplate = std::make_shared<ImageAsset>(cache_path, "gpu", std::vector<ImageFrame>{std::move(frame)});
+    engine_assets_->register_asset(nameplate);
     cached_nameplate_name_ = current_showname;
-    return cached_nameplate_;
+
+    // Cache the layout alongside the texture
+    NameplateLayout nl;
+    nl.w = showname_rect.w;
+    nl.h = showname_rect.h > 0 ? showname_rect.h : text_h;
+    nl.scale = (text_w > nl.w && text_w > 0) ? (float)nl.w / text_w : 1.0f;
+    int display_w = (int)(text_w * nl.scale);
+
+    int x_offset = 0;
+    if (showname_align == Align::CENTER)
+        x_offset = (showname_rect.w - display_w) / 2;
+    else if (showname_align == Align::RIGHT)
+        x_offset = showname_rect.w - display_w;
+    nl.x = chatbox_rect.x + showname_rect.x + x_offset;
+    nl.y = chatbox_rect.y + showname_rect.y;
+    cached_nameplate_layout_ = nl;
+
+    return nameplate;
 }
 
 AOTextBox::NameplateLayout AOTextBox::nameplate_layout() const {
-    NameplateLayout nl;
-    nl.x = chatbox_rect.x + showname_rect.x;
-    nl.y = chatbox_rect.y + showname_rect.y;
-    nl.w = showname_rect.w;
-    nl.h = showname_rect.h > 0 ? showname_rect.h : text_renderer.line_height();
-
-    int text_w = 0;
-    if (font_loaded && !current_showname.empty())
-        text_w = const_cast<TextRenderer&>(text_renderer).measure_width(current_showname);
-
-    nl.scale = (text_w > nl.w && text_w > 0) ? (float)nl.w / text_w : 1.0f;
-    return nl;
+    return cached_nameplate_layout_;
 }
+

@@ -84,8 +84,14 @@ class AOAssetLibrary {
     /// Parse a rect from courtroom_design.ini.
     AORect design_rect(const std::string& key);
 
+    /// Read a raw string value from courtroom_design.ini.
+    std::string design_value(const std::string& key);
+
     /// Get the message font spec from courtroom_fonts.ini.
     AOFontSpec message_font_spec();
+
+    /// Get the showname font spec from courtroom_fonts.ini.
+    AOFontSpec showname_font_spec();
 
     /// Get text colors from chat_config.ini (indices 0-8).
     std::vector<AOTextColorDef> text_colors();

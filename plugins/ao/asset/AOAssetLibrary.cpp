@@ -170,6 +170,19 @@ AORect AOAssetLibrary::design_rect(const std::string& key) {
     return r;
 }
 
+std::string AOAssetLibrary::design_value(const std::string& key) {
+    ensure_configs();
+    if (cached_design) {
+        auto it = cached_design->find("");
+        if (it != cached_design->end()) {
+            auto val = it->second.find(key);
+            if (val != it->second.end())
+                return val->second;
+        }
+    }
+    return {};
+}
+
 AOFontSpec AOAssetLibrary::message_font_spec() {
     ensure_configs();
     AOFontSpec spec;
@@ -198,6 +211,36 @@ AOFontSpec AOAssetLibrary::message_font_spec() {
     }
 
     spec.size_px = (spec.size_pt * 4 + 2) / 3; // pt→px at 96 DPI
+    return spec;
+}
+
+AOFontSpec AOAssetLibrary::showname_font_spec() {
+    ensure_configs();
+    AOFontSpec spec;
+    // Default to message font if showname font isn't specified
+    spec = message_font_spec();
+
+    if (cached_fonts) {
+        auto it = cached_fonts->find("");
+        if (it != cached_fonts->end()) {
+            auto fn = it->second.find("showname_font");
+            if (fn != it->second.end()) {
+                spec.name = normalize_font_name(fn->second);
+            }
+            auto fs = it->second.find("showname");
+            if (fs != it->second.end()) {
+                spec.size_pt = std::atoi(fs->second.c_str());
+                if (spec.size_pt <= 0)
+                    spec.size_pt = 10;
+                spec.size_px = (spec.size_pt * 4 + 2) / 3;
+            }
+            auto sh = it->second.find("showname_sharp");
+            if (sh != it->second.end()) {
+                spec.sharp = (sh->second == "1");
+            }
+        }
+    }
+
     return spec;
 }
 
@@ -242,27 +285,43 @@ std::vector<AOTextColorDef> AOAssetLibrary::text_colors() {
 }
 
 std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string& normalized_name) {
-    std::string filename = normalized_name + ".ttf";
+    // Build candidate filenames: original, underscored, and _Regular variants.
+    // Qt matches font family names to files via its font database; we don't have
+    // that, so we try common naming conventions used by AO theme fonts.
+    std::string underscore_name = normalized_name;
+    for (auto& c : underscore_name)
+        if (c == '-') c = '_';
+
+    std::vector<std::string> candidates = {
+        normalized_name + ".ttf",
+        underscore_name + ".ttf",
+        normalized_name + "-regular.ttf",
+        underscore_name + "_regular.ttf",
+        normalized_name + "_Regular.ttf",
+        underscore_name + "_Regular.ttf",
+    };
 
     // Search: active theme → default → known font-shipping themes → global fonts
-    auto result = assets.raw("themes/" + active_theme + "/" + filename);
-    if (!result && active_theme != "default")
-        result = assets.raw("themes/default/" + filename);
-    if (!result)
-        result = assets.raw("themes/AceAttorney DS/" + filename);
-    if (!result)
-        result = assets.raw("themes/AceAttorney2x/" + filename);
-    if (!result)
-        result = assets.raw("themes/AceAttorney 2x/" + filename);
-    if (!result)
-        result = assets.raw("fonts/" + filename);
+    std::vector<std::string> dirs = {
+        "themes/" + active_theme + "/",
+    };
+    if (active_theme != "default")
+        dirs.push_back("themes/default/");
+    dirs.push_back("themes/AceAttorney DS/");
+    dirs.push_back("themes/AceAttorney2x/");
+    dirs.push_back("themes/AceAttorney 2x/");
+    dirs.push_back("fonts/");
 
-    if (result) {
-        Log::log_print(DEBUG, "AOAssetLibrary: found font '%s'", filename.c_str());
-    }
-    else {
-        Log::log_print(WARNING, "AOAssetLibrary: font '%s' not found", filename.c_str());
+    for (const auto& dir : dirs) {
+        for (const auto& filename : candidates) {
+            auto result = assets.raw(dir + filename);
+            if (result) {
+                Log::log_print(DEBUG, "AOAssetLibrary: found font '%s%s'", dir.c_str(), filename.c_str());
+                return result;
+            }
+        }
     }
 
-    return result;
+    Log::log_print(WARNING, "AOAssetLibrary: font '%s' not found", normalized_name.c_str());
+    return std::nullopt;
 }

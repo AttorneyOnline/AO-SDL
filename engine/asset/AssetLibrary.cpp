@@ -205,6 +205,10 @@ std::vector<std::string> AssetLibrary::list(const std::string& directory) {
     return {};
 }
 
+void AssetLibrary::register_asset(std::shared_ptr<Asset> asset) {
+    cache_.insert(std::move(asset));
+}
+
 void AssetLibrary::evict() {
     cache_.evict();
 }

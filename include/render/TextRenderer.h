@@ -83,6 +83,12 @@ class TextRenderer {
     /** @brief Line height in pixels for the current font. */
     int line_height() const;
 
+    /** @brief Distance from baseline to top of tallest glyph (pixels). */
+    int ascender() const;
+
+    /** @brief Distance from baseline to bottom of lowest glyph (pixels, positive). */
+    int descender() const;
+
     /** @brief Measure the width in pixels of the given text (no wrapping). */
     int measure_width(const std::string& text);
 
