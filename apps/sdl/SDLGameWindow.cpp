@@ -1,5 +1,6 @@
 #include "SDLGameWindow.h"
 
+#include "platform/SystemFonts.h"
 #include "utils/Log.h"
 
 #include <imgui.h>
@@ -21,6 +22,59 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui::GetStyle().WindowPadding = ImVec2(0, 0);
+
+    // Load system fonts with wide Unicode coverage into ImGui's atlas.
+    // The first font provides the base Latin glyphs; subsequent fonts are
+    // merged to cover CJK, Korean, Thai, Cyrillic, etc.
+    auto font_paths = platform::fallback_font_paths();
+    if (!font_paths.empty()) {
+        ImGuiIO& io = ImGui::GetIO();
+
+        // Base font: load the first available system font with default ranges
+        bool base_loaded = false;
+        for (const auto& path : font_paths) {
+            if (io.Fonts->AddFontFromFileTTF(path.c_str(), 15.0f, nullptr,
+                                              io.Fonts->GetGlyphRangesDefault())) {
+                Log::log_print(DEBUG, "ImGui: base UI font from %s", path.c_str());
+                base_loaded = true;
+                break;
+            }
+        }
+        if (!base_loaded)
+            io.Fonts->AddFontDefault();
+
+        // Merge additional glyph ranges from system fonts.
+        // Each range is tried against each font until one provides it.
+        struct RangeSet {
+            const char* name;
+            const ImWchar* (*getter)(ImFontAtlas*);
+        };
+        RangeSet extra_ranges[] = {
+            {"Korean",     [](ImFontAtlas* a) { return a->GetGlyphRangesKorean(); }},
+            {"Chinese",    [](ImFontAtlas* a) { return a->GetGlyphRangesChineseFull(); }},
+            {"Japanese",   [](ImFontAtlas* a) { return a->GetGlyphRangesJapanese(); }},
+            {"Cyrillic",   [](ImFontAtlas* a) { return a->GetGlyphRangesCyrillic(); }},
+            {"Thai",       [](ImFontAtlas* a) { return a->GetGlyphRangesThai(); }},
+            {"Vietnamese", [](ImFontAtlas* a) { return a->GetGlyphRangesVietnamese(); }},
+        };
+
+        // Merge from ALL system fonts so each contributes the glyphs it has.
+        // ImGui's atlas deduplicates — a glyph already covered by an earlier
+        // font won't be overwritten.
+        ImFontGlyphRangesBuilder builder;
+        for (auto& rs : extra_ranges)
+            builder.AddRanges(rs.getter(io.Fonts));
+        ImVector<ImWchar> merged_ranges;
+        builder.BuildRanges(&merged_ranges);
+
+        for (const auto& path : font_paths) {
+            ImFontConfig merge_cfg;
+            merge_cfg.MergeMode = true;
+            merge_cfg.OversampleH = 1;
+            if (io.Fonts->AddFontFromFileTTF(path.c_str(), 15.0f, &merge_cfg, merged_ranges.Data))
+                Log::log_print(DEBUG, "ImGui: merged glyphs from %s", path.c_str());
+        }
+    }
 }
 
 SDLGameWindow::~SDLGameWindow() {
