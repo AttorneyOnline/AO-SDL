@@ -9,6 +9,8 @@
 #include "asset/ImageAsset.h"
 #include "utils/Log.h"
 
+#include "asset/ShaderAsset.h"
+
 #include <algorithm>
 #include <unordered_map>
 
@@ -67,6 +69,7 @@ struct MetalRendererImpl {
         uint64_t generation = 0;
     };
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
+    std::unordered_map<const ShaderAsset*, id<MTLRenderPipelineState>> shader_pipeline_cache;
 
     // --- setup ---------------------------------------------------------------
 
@@ -352,6 +355,60 @@ struct MetalRendererImpl {
         }
     }
 
+    // --- shader pipeline cache -----------------------------------------------
+
+    id<MTLRenderPipelineState> resolve_pipeline(const ShaderAsset* shader) {
+        if (!shader || shader->is_default())
+            return pipeline;
+
+        auto it = shader_pipeline_cache.find(shader);
+        if (it != shader_pipeline_cache.end())
+            return it->second;
+
+        // Metal: concatenate vertex + fragment source (both use known function names)
+        std::string combined = shader->vertex_source() + "\n" + shader->fragment_source();
+        NSString* src = [NSString stringWithUTF8String:combined.c_str()];
+
+        NSError* err = nil;
+        id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
+        if (!lib) {
+            Log::log_print(FATAL, "Metal custom shader compile: %s",
+                           [[err localizedDescription] UTF8String]);
+            return pipeline;
+        }
+
+        id<MTLFunction> vert = [lib newFunctionWithName:@"vertex_main"];
+        id<MTLFunction> frag = [lib newFunctionWithName:@"fragment_main"];
+        if (!vert || !frag) return pipeline;
+
+        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        vd.attributes[0].format = MTLVertexFormatFloat2;
+        vd.attributes[0].offset = offsetof(MetalVertex, position);
+        vd.attributes[0].bufferIndex = 0;
+        vd.attributes[1].format = MTLVertexFormatFloat2;
+        vd.attributes[1].offset = offsetof(MetalVertex, texcoord);
+        vd.attributes[1].bufferIndex = 0;
+        vd.layouts[0].stride = sizeof(MetalVertex);
+
+        MTLRenderPipelineDescriptor* pd = [[MTLRenderPipelineDescriptor alloc] init];
+        pd.vertexFunction   = vert;
+        pd.fragmentFunction = frag;
+        pd.vertexDescriptor = vd;
+        pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        pd.colorAttachments[0].blendingEnabled = YES;
+        pd.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorSourceAlpha;
+        pd.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOneMinusSourceAlpha;
+        pd.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorSourceAlpha;
+        pd.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+        pd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+
+        auto pso = [device newRenderPipelineStateWithDescriptor:pd error:&err];
+        if (!pso) return pipeline;
+
+        shader_pipeline_cache[shader] = pso;
+        return pso;
+    }
+
     // --- draw ----------------------------------------------------------------
 
     int draw_call_count = 0;
@@ -372,7 +429,6 @@ struct MetalRendererImpl {
             rpd.depthAttachment.clearDepth  = 1.0;
 
             id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
-            [enc setRenderPipelineState:pipeline];
             [enc setDepthStencilState:depth_state];
             [enc setVertexBuffer:quad_vb offset:0 atIndex:0];
             [enc setFragmentSamplerState:sampler atIndex:0];
@@ -383,7 +439,9 @@ struct MetalRendererImpl {
 
             if (state) {
                 for (const auto& [_, group] : state->get_layer_groups()) {
+                    const ShaderAsset* group_shader = group.get_shader().get();
                     Mat4 group_mat = group.transform().get_local_transform();
+
                     for (const auto& [__, layer] : group.get_layers()) {
                         const auto& asset = layer.get_asset();
                         if (!asset || asset->frame_count() == 0) continue;
@@ -394,18 +452,39 @@ struct MetalRendererImpl {
                         int frame = std::clamp(layer.get_frame_index(), 0,
                                                asset->frame_count() - 1);
 
+                        // Resolve shader: layer overrides group overrides default
+                        const ShaderAsset* effective = layer.get_shader().get();
+                        if (!effective) effective = group_shader;
+                        [enc setRenderPipelineState:resolve_pipeline(effective)];
+
                         Mat4 local = group_mat * layer.transform().get_local_transform();
                         VertexUniforms vu;
                         vu.local  = mat4_to_simd(local);
                         vu.aspect = Transform::get_aspect_ratio();
 
-                        FragmentUniforms fu;
-                        fu.frame_index = frame;
-                        fu.opacity = layer.get_opacity();
-
                         [enc setVertexBytes:&vu   length:sizeof(vu)   atIndex:1];
-                        [enc setFragmentBytes:&fu length:sizeof(fu)   atIndex:0];
                         [enc setFragmentTexture:tex atIndex:0];
+
+                        // Build fragment uniforms — base fields + custom uniforms
+                        if (effective && effective->uniform_provider()) {
+                            auto custom = effective->uniform_provider()->get_uniforms();
+                            // Pack: frame_index(int32), opacity(float), then custom floats
+                            struct { int32_t frame_index; float opacity; float extras[16]; } fu;
+                            fu.frame_index = frame;
+                            fu.opacity = layer.get_opacity();
+                            int ei = 0;
+                            for (const auto& [name, val] : custom) {
+                                if (auto* f = std::get_if<float>(&val))
+                                    if (ei < 16) fu.extras[ei++] = *f;
+                            }
+                            size_t fu_size = offsetof(decltype(fu), extras) + ei * sizeof(float);
+                            [enc setFragmentBytes:&fu length:fu_size atIndex:0];
+                        } else {
+                            FragmentUniforms fu;
+                            fu.frame_index = frame;
+                            fu.opacity = layer.get_opacity();
+                            [enc setFragmentBytes:&fu length:sizeof(fu) atIndex:0];
+                        }
 
                         [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
                                         indexCount:6

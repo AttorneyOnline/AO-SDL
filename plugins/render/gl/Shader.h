@@ -37,6 +37,8 @@ class GLProgram {
 
     void uniform(const std::string& name, GLint value);
     void uniform(const std::string& name, GLfloat value);
+    void uniform(const std::string& name, Vec2 value);
+    void uniform(const std::string& name, Vec3 value);
     void uniform(const std::string& name, Mat4 value);
 
     GLuint get_id();

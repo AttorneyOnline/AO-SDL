@@ -1,6 +1,7 @@
 #include "GLRenderer.h"
 
 #include "GLSprite.h"
+#include "asset/ShaderAsset.h"
 #include "render/Transform.h"
 #include "utils/Log.h"
 
@@ -100,20 +101,57 @@ void GLRenderer::evict_expired_textures() {
     }
 }
 
+GLProgram& GLRenderer::resolve_program(const ShaderAsset* shader) {
+    if (!shader || shader->is_default())
+        return program;
+
+    auto it = shader_cache_.find(shader);
+    if (it != shader_cache_.end())
+        return *it->second;
+
+    auto prog = std::make_unique<GLProgram>();
+    GLShader vert(ShaderType::Vertex, shader->vertex_source(), true);
+    GLShader frag(ShaderType::Fragment, shader->fragment_source(), true);
+    prog->link_shaders({vert, frag});
+
+    auto* ptr = prog.get();
+    shader_cache_[shader] = std::move(prog);
+    return *ptr;
+}
+
+static void apply_uniforms(GLProgram& prog, const ShaderAsset* shader) {
+    if (!shader || !shader->uniform_provider())
+        return;
+    prog.use();
+    for (const auto& [name, val] : shader->uniform_provider()->get_uniforms()) {
+        if (auto* i = std::get_if<int>(&val))
+            prog.uniform(name, (GLint)*i);
+        else if (auto* f = std::get_if<float>(&val))
+            prog.uniform(name, (GLfloat)*f);
+        else if (auto* v2 = std::get_if<Vec2>(&val))
+            prog.uniform(name, *v2);
+        else if (auto* v3 = std::get_if<Vec3>(&val))
+            prog.uniform(name, *v3);
+        else if (auto* m = std::get_if<Mat4>(&val))
+            prog.uniform(name, *m);
+    }
+}
+
 void GLRenderer::draw(const RenderState* state) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
     glViewport(0, 0, fb_width, fb_height);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Sweep expired textures periodically (every ~60 frames, not every frame)
     if (++frame_counter % 60 == 0) {
         evict_expired_textures();
     }
 
     draw_calls_ = 0;
     for (const auto& [_, group] : state->get_layer_groups()) {
+        const ShaderAsset* group_shader = group.get_shader().get();
         Mat4 group_mat = group.transform().get_local_transform();
+
         for (const auto& [__, layer] : group.get_layers()) {
             const auto& asset = layer.get_asset();
             if (!asset || asset->frame_count() == 0)
@@ -125,9 +163,15 @@ void GLRenderer::draw(const RenderState* state) {
 
             int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
+            // Resolve shader: layer overrides group overrides default
+            const ShaderAsset* effective = layer.get_shader().get();
+            if (!effective) effective = group_shader;
+            GLProgram& prog = resolve_program(effective);
+            apply_uniforms(prog, effective);
+
             Mat4 local = group_mat * layer.transform().get_local_transform();
             GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio(), layer.get_opacity());
-            sprite.draw(program);
+            sprite.draw(prog);
             draw_calls_++;
         }
     }

@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
 
     // Render backend — AO2 viewport is 256x192
     RenderManager renderer(buffer, create_renderer(256, 192));
+    MediaManager::instance().assets().set_shader_backend(renderer.get_renderer().backend_name());
 
     // Scene presenter — swap this to change game logic
     auto presenter = ao::create_presenter();

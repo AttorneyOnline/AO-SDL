@@ -11,6 +11,7 @@
 #include "Asset.h"
 #include "AssetCache.h"
 #include "ImageAsset.h"
+#include "ShaderAsset.h"
 
 #include <memory>
 #include <optional>
@@ -71,12 +72,21 @@ class AssetLibrary {
      */
     std::optional<IniDocument> config(const std::string& path);
 
+    /// Set the GPU backend name (e.g. "OpenGL", "Metal"). Called once at
+    /// startup so shader() knows which subdirectory to probe.
+    void set_shader_backend(const std::string& backend) { shader_backend_ = backend; }
+
     /**
-     * @brief Load a shader source file by virtual path (with extension).
-     * @param path Virtual path including the file extension.
-     * @return Shared pointer to the shader Asset, or nullptr if not found.
+     * @brief Load a shader pair (vertex + fragment) by virtual path.
+     *
+     * Probes backend-specific subdirectories based on the configured backend:
+     *   path/glsl/vertex.{glsl,vert} + path/glsl/fragment.{glsl,frag}
+     *   path/metal/vertex.metal      + path/metal/fragment.metal
+     *
+     * @param path Virtual path prefix (e.g. "shaders/screentint").
+     * @return Shared pointer to the ShaderAsset, or nullptr if not found.
      */
-    std::shared_ptr<Asset> shader(const std::string& path);
+    std::shared_ptr<ShaderAsset> shader(const std::string& path);
 
     /**
      * @brief Load a font file by virtual path (with extension).
@@ -128,6 +138,7 @@ class AssetLibrary {
     std::optional<std::pair<std::string, std::vector<uint8_t>>> probe(const std::string& path,
                                                                       const std::vector<std::string>& extensions);
 
-    MountManager& mounts; /**< Filesystem mount manager. */
-    AssetCache cache_;    /**< Internal LRU asset cache. */
+    MountManager& mounts;          /**< Filesystem mount manager. */
+    AssetCache cache_;             /**< Internal LRU asset cache. */
+    std::string shader_backend_;   /**< GPU backend name for shader path probing. */
 };

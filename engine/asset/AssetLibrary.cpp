@@ -161,12 +161,31 @@ std::optional<IniDocument> AssetLibrary::config(const std::string& path) {
     return doc;
 }
 
-std::shared_ptr<Asset> AssetLibrary::shader(const std::string& path) {
-    auto data = mounts.fetch_data(path);
-    if (!data)
+std::shared_ptr<ShaderAsset> AssetLibrary::shader(const std::string& path) {
+    const std::string& backend = shader_backend_;
+    std::string cache_key = path + ":" + backend;
+    auto cached = cache_.get(cache_key);
+    if (cached)
+        return std::dynamic_pointer_cast<ShaderAsset>(cached);
+
+    std::string subdir = (backend == "Metal") ? "metal" : "glsl";
+    std::string vert_path = path + "/" + subdir + "/vertex";
+    std::string frag_path = path + "/" + subdir + "/fragment";
+
+    auto vert_exts = (subdir == "metal") ? std::vector<std::string>{"metal"} : std::vector<std::string>{"glsl", "vert"};
+    auto frag_exts = (subdir == "metal") ? std::vector<std::string>{"metal"} : std::vector<std::string>{"glsl", "frag"};
+
+    auto vert_result = probe(vert_path, vert_exts);
+    auto frag_result = probe(frag_path, frag_exts);
+    if (!vert_result || !frag_result)
         return nullptr;
-    // todo: return a ShaderAsset once that type exists
-    return nullptr;
+
+    std::string vert_src(vert_result->second.begin(), vert_result->second.end());
+    std::string frag_src(frag_result->second.begin(), frag_result->second.end());
+
+    auto asset = std::make_shared<ShaderAsset>(cache_key, subdir, std::move(vert_src), std::move(frag_src));
+    cache_.insert(asset);
+    return asset;
 }
 
 std::shared_ptr<Asset> AssetLibrary::font(const std::string& path) {

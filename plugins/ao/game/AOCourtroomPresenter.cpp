@@ -21,6 +21,9 @@ static int us_since(Clock::time_point start) {
 AOCourtroomPresenter::AOCourtroomPresenter() {
     effects_.push_back(&screenshake_);
     effects_.push_back(&flash_);
+    effects_.push_back(&rainbow_);
+    effects_.push_back(&shatter_);
+    effects_.push_back(&cube_);
 
     // Prefetch assets for queued messages so they're cache-warm when played
     message_queue_.set_prefetch([this](const ICMessage& msg) {
@@ -50,6 +53,12 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
         screenshake_.trigger();
     if (msg.realization)
         flash_.trigger();
+    if (msg.message.find("rainbow") != std::string::npos)
+        rainbow_.trigger();
+    if (msg.message.find("glass") != std::string::npos)
+        shatter_.trigger();
+    if (msg.message.find("cube") != std::string::npos)
+        cube_.trigger();
 
     EventManager::instance().get_channel<ICLogEvent>().publish(
         ICLogEvent(msg.showname, msg.message, msg.text_color));

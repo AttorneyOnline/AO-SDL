@@ -36,6 +36,8 @@ class GLRenderer : public IRenderer {
     GLuint get_texture_array(const std::shared_ptr<ImageAsset>& asset);
     void evict_expired_textures();
 
+    GLProgram& resolve_program(const class ShaderAsset* shader);
+
     GLProgram program;
     GLuint render_texture;
     GLuint framebuffer_id;
@@ -50,6 +52,7 @@ class GLRenderer : public IRenderer {
     };
 
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
+    std::unordered_map<const class ShaderAsset*, std::unique_ptr<GLProgram>> shader_cache_;
 };
 
 /// Factory: creates a GLRenderer after initializing GLEW.

@@ -7,6 +7,8 @@
 #include <map>
 #include <memory>
 
+class ShaderAsset;
+
 class Layer {
   public:
     Layer(std::shared_ptr<ImageAsset> asset, int frame_index, uint16_t z_index);
@@ -18,6 +20,9 @@ class Layer {
     void set_opacity(float o) { opacity = o; }
     float get_opacity() const { return opacity; }
 
+    void set_shader(std::shared_ptr<ShaderAsset> s) { shader_ = std::move(s); }
+    const std::shared_ptr<ShaderAsset>& get_shader() const { return shader_; }
+
     Transform& transform() { return transform_; }
     const Transform& transform() const { return transform_; }
 
@@ -26,6 +31,7 @@ class Layer {
     int frame_index;
     uint16_t z_index;
     float opacity = 1.0f;
+    std::shared_ptr<ShaderAsset> shader_;
     Transform transform_;
 };
 
@@ -34,12 +40,17 @@ class LayerGroup {
     LayerGroup();
 
     void add_layer(int id, Layer layer);
+    Layer* get_layer(int id);
     const std::map<int, Layer>& get_layers() const { return layers; }
+
+    void set_shader(std::shared_ptr<ShaderAsset> s) { shader_ = std::move(s); }
+    const std::shared_ptr<ShaderAsset>& get_shader() const { return shader_; }
 
     Transform& transform() { return transform_; }
     const Transform& transform() const { return transform_; }
 
   private:
     std::map<int, Layer> layers;
+    std::shared_ptr<ShaderAsset> shader_;
     Transform transform_;
 };

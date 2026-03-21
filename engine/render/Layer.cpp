@@ -11,3 +11,8 @@ LayerGroup::LayerGroup() {
 void LayerGroup::add_layer(int id, Layer layer) {
     layers.insert_or_assign(id, std::move(layer));
 }
+
+Layer* LayerGroup::get_layer(int id) {
+    auto it = layers.find(id);
+    return it != layers.end() ? &it->second : nullptr;
+}

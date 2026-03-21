@@ -8,6 +8,7 @@
 #include "asset/ImageAsset.h"
 #include "ao/game/effects/FlashEffect.h"
 #include "ao/game/effects/ScreenshakeEffect.h"
+#include "ao/game/effects/ShaderEffect.h"
 #include "game/IScenePresenter.h"
 
 #include <atomic>
@@ -61,6 +62,9 @@ class AOCourtroomPresenter : public IScenePresenter {
     // Scene effects
     ScreenshakeEffect screenshake_;
     FlashEffect flash_{VIEWPORT_W, VIEWPORT_H};
+    ShaderEffect rainbow_{"shaders/rainbow", 5.0f, 5};
+    ShaderEffect shatter_{"shaders/shatter", 4.0f, 5};
+    ShaderEffect cube_{"shaders/cube", 0, 5};
     std::vector<ISceneEffect*> effects_;
 
     TickProfile profile_;

@@ -87,6 +87,14 @@ void GLProgram::uniform(const std::string& name, GLfloat value) {
     glUniform1f(glGetUniformLocation(id, name.c_str()), value);
 }
 
+void GLProgram::uniform(const std::string& name, Vec2 value) {
+    glUniform2f(glGetUniformLocation(id, name.c_str()), value.x, value.y);
+}
+
+void GLProgram::uniform(const std::string& name, Vec3 value) {
+    glUniform3f(glGetUniformLocation(id, name.c_str()), value.x, value.y, value.z);
+}
+
 void GLProgram::uniform(const std::string& name, Mat4 value) {
     glUniformMatrix4fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE, value.data());
 }
