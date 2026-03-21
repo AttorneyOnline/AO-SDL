@@ -25,6 +25,7 @@ enum class EmoteMod {
  * @brief Controls desk overlay visibility during this message.
  */
 enum class DeskMod {
+    CHAT = -1,         ///< Default: desk shown for def/pro/wit, hidden for hld/hlp/jud.
     HIDE = 0,          ///< Hide desk.
     SHOW = 1,          ///< Show desk.
     EMOTE_ONLY = 2,    ///< Show desk only during emote.

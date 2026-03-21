@@ -66,7 +66,9 @@ class AOAssetLibrary {
     // -------------------------------------------------------------------------
 
     /// Load the background image for a position (legacy name mapping + fallbacks).
-    std::shared_ptr<ImageAsset> background(const std::string& name, const std::string& position);
+    /// If @p no_default is true, skip the default background fallback.
+    std::shared_ptr<ImageAsset> background(const std::string& name, const std::string& position,
+                                            bool no_default = false);
 
     /// Load the desk overlay for a position.
     std::shared_ptr<ImageAsset> desk_overlay(const std::string& name, const std::string& position);

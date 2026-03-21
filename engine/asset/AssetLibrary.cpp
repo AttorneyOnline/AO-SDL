@@ -5,6 +5,8 @@
 #include "asset/RawAsset.h"
 #include "utils/Log.h"
 
+#include <algorithm>
+
 AssetLibrary::AssetLibrary(MountManager& mounts, size_t cache_max_bytes) : mounts(mounts), cache_(cache_max_bytes) {
 }
 
@@ -198,8 +200,13 @@ void AssetLibrary::prefetch_image(const std::string& path, int asset_type, int p
     if (cache_.get(path))
         return;
     auto exts = mounts.http_extensions(asset_type);
-    if (exts.empty())
-        exts = {"webp", "apng", "gif", "png"};
+    // Always include default extensions as fallbacks — the server's extension
+    // list is an optimization hint, not exhaustive. Some assets only exist in
+    // formats the server doesn't advertise.
+    for (const auto& fallback : {"webp", "apng", "gif", "png"}) {
+        if (std::find(exts.begin(), exts.end(), fallback) == exts.end())
+            exts.push_back(fallback);
+    }
     prefetch(path, exts, priority);
 }
 

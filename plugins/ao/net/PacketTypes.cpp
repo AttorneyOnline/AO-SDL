@@ -268,7 +268,8 @@ AOPacketMS::AOPacketMS(const ICMessageData& d)
 
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        desk_mod = std::stoi(fields[0]);
+        // "chat" means use default desk behavior based on position
+        desk_mod = (fields[0] == "chat") ? -1 : std::stoi(fields[0]);
         pre_emote = ao_decode(fields[1]);
         character = ao_decode(fields[2]);
         emote = ao_decode(fields[3]);

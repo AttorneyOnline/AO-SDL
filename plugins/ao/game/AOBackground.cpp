@@ -34,11 +34,17 @@ void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
 
     ao_assets.prefetch_background(bg_name, pos);
 
-    bg = ao_assets.background(bg_name, pos);
-    desk = ao_assets.desk_overlay(bg_name, pos);
-
-    if (bg) {
+    // Try loading the exact background without falling back to default.
+    // If the real bg isn't available yet (HTTP pending), show the default
+    // as a placeholder but keep dirty=true so we retry on future ticks.
+    auto real = ao_assets.background(bg_name, pos, /*no_default=*/true);
+    if (real) {
+        bg = real;
+        desk = ao_assets.desk_overlay(bg_name, pos);
         dirty = false;
         Log::log_print(DEBUG, "Loaded background: %s/%s", bg_name.c_str(), pos.c_str());
+    } else {
+        bg = ao_assets.background(bg_name, pos);
+        desk = ao_assets.desk_overlay(bg_name, pos);
     }
 }

@@ -66,8 +66,13 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (!msg.side.empty())
         background.set_position(msg.side);
 
-    show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
-                 msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
+    if (msg.desk_mod == DeskMod::CHAT) {
+        // Default: desk shown for def/pro/wit, hidden for other positions
+        show_desk = (msg.side == "def" || msg.side == "pro" || msg.side == "wit");
+    } else {
+        show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
+                     msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
+    }
     current_flip = msg.flip;
 
     // Prefetch character assets via HTTP

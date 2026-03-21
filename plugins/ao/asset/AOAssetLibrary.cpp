@@ -124,7 +124,8 @@ std::optional<AOCharacterSheet> AOAssetLibrary::character_sheet(const std::strin
 
 // ---- Background ------------------------------------------------------------
 
-std::shared_ptr<ImageAsset> AOAssetLibrary::background(const std::string& name, const std::string& position) {
+std::shared_ptr<ImageAsset> AOAssetLibrary::background(const std::string& name, const std::string& position,
+                                                        bool no_default) {
     std::string legacy = bg_filename(position);
     auto result = assets.image("background/" + name + "/" + legacy);
     // Modern naming fallback
@@ -132,7 +133,7 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::background(const std::string& name, 
         result = assets.image("background/" + name + "/" + position);
     }
     // Default background fallback
-    if (!result && name != "default") {
+    if (!result && !no_default && name != "default") {
         result = assets.image("background/default/" + bg_filename(position));
     }
     return result;
