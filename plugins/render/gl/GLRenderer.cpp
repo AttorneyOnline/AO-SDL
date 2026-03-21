@@ -101,7 +101,7 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    Log::log_print(DEBUG, "GLRenderer: uploaded %dx%d x %d frames for %s", w, h, count, asset->path().c_str());
+    Log::log_print(VERBOSE, "GLRenderer: uploaded %dx%d x %d frames for %s", w, h, count, asset->path().c_str());
 
     texture_cache[asset.get()] = {asset, tex, asset->generation()};
     return tex;
@@ -110,7 +110,7 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
 void GLRenderer::evict_expired_textures() {
     for (auto it = texture_cache.begin(); it != texture_cache.end();) {
         if (it->second.asset.expired()) {
-            Log::log_print(DEBUG, "GLRenderer: evicting expired texture %u", it->second.texture);
+            Log::log_print(VERBOSE, "GLRenderer: evicting expired texture %u", it->second.texture);
             glDeleteTextures(1, &it->second.texture);
             it = texture_cache.erase(it);
         }

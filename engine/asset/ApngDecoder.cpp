@@ -163,7 +163,7 @@ static std::vector<FrameInfo> collect_frames(const std::vector<ChunkRef>& chunks
         frame_infos[0].data = all_idats;
     }
 
-    Log::log_print(DEBUG, "APNG: parsed %zu frame_infos, %zu IDAT chunks, %zu ancillary chunks", frame_infos.size(),
+    Log::log_print(VERBOSE, "APNG: parsed %zu frame_infos, %zu IDAT chunks, %zu ancillary chunks", frame_infos.size(),
                    all_idats.size(), ancillary.size());
 
     return frame_infos;
@@ -317,7 +317,7 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
         }
     }
 
-    Log::log_print(DEBUG, "APNG: decoded %zu frames total", frames.size());
+    Log::log_print(VERBOSE, "APNG: decoded %zu frames total", frames.size());
 
     if (frames.empty())
         return std::nullopt;

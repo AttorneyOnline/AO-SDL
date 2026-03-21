@@ -40,7 +40,7 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
         break;
     }
 
-    Log::log_print(DEBUG, "Emote: char=%s emote=%s pre=%s state=%d", character.c_str(), emote.c_str(),
+    Log::log_print(VERBOSE, "Emote: char=%s emote=%s pre=%s state=%d", character.c_str(), emote.c_str(),
                    pre_emote.c_str(), static_cast<int>(current_state));
 }
 

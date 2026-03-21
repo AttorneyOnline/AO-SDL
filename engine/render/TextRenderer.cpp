@@ -56,11 +56,11 @@ struct TextRenderer::Impl {
             if (!FT_New_Face(library, path.c_str(), 0, &fb)) {
                 FT_Set_Pixel_Sizes(fb, 0, size_px);
                 fallbacks.push_back(fb);
-                Log::log_print(DEBUG, "TextRenderer: fallback [%zu] %s", fallbacks.size(), path.c_str());
+                Log::log_print(VERBOSE, "TextRenderer: fallback [%zu] %s", fallbacks.size(), path.c_str());
             }
         }
         if (fallbacks.empty())
-            Log::log_print(DEBUG, "TextRenderer: no fallback fonts found");
+            Log::log_print(WARNING, "TextRenderer: no fallback fonts found");
     }
 };
 

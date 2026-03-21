@@ -68,7 +68,7 @@ void CharSelectScreen::load_icons() {
         auto asset = lib.image(icon_path);
 
         if (!asset || asset->frame_count() == 0) {
-            Log::log_print(DEBUG, "No icon for character: %s", entry.folder.c_str());
+            Log::log_print(VERBOSE, "No icon for character: %s", entry.folder.c_str());
             continue;
         }
 

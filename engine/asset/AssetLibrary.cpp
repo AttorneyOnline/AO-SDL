@@ -78,11 +78,11 @@ std::shared_ptr<ImageAsset> AssetLibrary::image(const std::string& path) {
         auto apng_frames = ApngDecoder::decode(data.data(), data.size(), true);
         if (apng_frames && !apng_frames->empty()) {
             frames = std::move(*apng_frames);
-            Log::log_print(DEBUG, "APNG decoded %zu frames from %s", frames.size(), resolved.c_str());
+            Log::log_print(VERBOSE, "APNG decoded %zu frames from %s", frames.size(), resolved.c_str());
         }
         else {
             frames = decode_static(data.data(), data.size(), true);
-            Log::log_print(DEBUG, "Static fallback for %s", resolved.c_str());
+            Log::log_print(VERBOSE, "Static fallback for %s", resolved.c_str());
         }
     }
     else if (format == "gif") {

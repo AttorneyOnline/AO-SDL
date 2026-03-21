@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;
-    Log::log_print(DEBUG, "main: entering render loop");
+    Log::log_print(INFO, "main: entering render loop");
     game_window.start_loop(renderer, ui_renderer);
     Log::log_print(DEBUG, "main: render loop exited");
 
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
     Log::log_print(DEBUG, "main: game thread stopped");
 
     MediaManager::instance().shutdown();
-    Log::log_print(DEBUG, "main: shutdown complete");
+    Log::log_print(INFO, "main: shutdown complete");
 
     return 0;
 }

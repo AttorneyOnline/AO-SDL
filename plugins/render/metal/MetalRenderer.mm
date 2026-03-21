@@ -428,7 +428,7 @@ struct MetalRendererImpl {
         id<MTLTexture> tex = [device newTextureWithDescriptor:td];
         upload_texture_data(tex, asset);
 
-        Log::log_print(DEBUG, "MetalRenderer: uploaded %dx%d x %d frames for %s",
+        Log::log_print(VERBOSE, "MetalRenderer: uploaded %dx%d x %d frames for %s",
                        w, h, count, asset->path().c_str());
 
         texture_cache[asset.get()] = {asset, tex, asset->generation()};
@@ -438,7 +438,7 @@ struct MetalRendererImpl {
     void evict_expired_textures() {
         for (auto it = texture_cache.begin(); it != texture_cache.end();) {
             if (it->second.asset.expired()) {
-                Log::log_print(DEBUG, "MetalRenderer: evicting expired texture");
+                Log::log_print(VERBOSE, "MetalRenderer: evicting expired texture");
                 it = texture_cache.erase(it);
             } else {
                 ++it;

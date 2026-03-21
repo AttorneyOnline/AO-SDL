@@ -42,7 +42,7 @@ std::optional<ServerEntry> ServerEntry::from_json(const nlohmann::json& server_d
         JsonValidation::containsKeys(server_data, settings);
     }
     catch (std::exception exception) {
-        Log::log_print(DEBUG, exception.what());
+        Log::log_print(WARNING, exception.what());
         return std::nullopt;
     }
 

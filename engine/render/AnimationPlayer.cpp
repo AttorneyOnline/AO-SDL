@@ -10,10 +10,10 @@ void AnimationPlayer::load(std::shared_ptr<ImageAsset> asset, bool loop) {
     done = false;
 
     if (current_asset) {
-        Log::log_print(DEBUG, "AnimPlayer: loaded %d frames, loop=%d, path=%s", current_asset->frame_count(), loop,
+        Log::log_print(VERBOSE, "AnimPlayer: loaded %d frames, loop=%d, path=%s", current_asset->frame_count(), loop,
                        current_asset->path().c_str());
         if (current_asset->frame_count() > 0) {
-            Log::log_print(DEBUG, "AnimPlayer: frame0 duration=%dms, size=%dx%d", current_asset->frame(0).duration_ms,
+            Log::log_print(VERBOSE, "AnimPlayer: frame0 duration=%dms, size=%dx%d", current_asset->frame(0).duration_ms,
                            current_asset->frame(0).width, current_asset->frame(0).height);
         }
     }
@@ -65,7 +65,7 @@ void AnimationPlayer::tick(int delta_ms) {
             else {
                 frame_index = current_asset->frame_count() - 1;
                 done = true;
-                Log::log_print(DEBUG, "AnimPlayer: finished one-shot at frame %d", frame_index);
+                Log::log_print(VERBOSE, "AnimPlayer: finished one-shot at frame %d", frame_index);
                 return;
             }
         }

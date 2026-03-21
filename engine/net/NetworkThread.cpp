@@ -58,13 +58,13 @@ void NetworkThread::net_loop() {
 
                 for (const auto& msg : msgs) {
                     std::string msgstr(msg.data.begin(), msg.data.end());
-                    Log::log_print(DEBUG, "SERVER: %s", msgstr.c_str());
+                    Log::log_print(VERBOSE, "SERVER: %s", msgstr.c_str());
                     handler.on_message(msgstr);
                 }
                 msgs.clear();
 
                 for (const auto& out : handler.flush_outgoing()) {
-                    Log::log_print(DEBUG, "CLIENT: %s", out.c_str());
+                    Log::log_print(VERBOSE, "CLIENT: %s", out.c_str());
                     sock->write(std::vector<uint8_t>(out.begin(), out.end()));
                 }
             }

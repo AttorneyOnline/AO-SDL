@@ -63,5 +63,5 @@ bool AOPacket::is_valid() {
 }
 
 void AOPacket::handle(AOClient& cli) {
-    Log::log_print(WARNING, "Unhandled packet %s", header.c_str());
+    Log::log_print(DEBUG, "Unhandled packet %s", header.c_str());
 }
