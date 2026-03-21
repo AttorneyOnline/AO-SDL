@@ -149,6 +149,8 @@ add_library(aoengine STATIC
     engine/render/Layer.cpp
     engine/render/AnimationPlayer.cpp
     engine/render/TextRenderer.cpp
+    engine/render/GlyphCache.cpp
+    engine/render/TextMeshBuilder.cpp
 )
 
 # Platform-specific implementations (selected at build time)

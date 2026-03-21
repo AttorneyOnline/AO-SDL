@@ -54,9 +54,6 @@ class AOCourtroomPresenter : public IScenePresenter {
     bool show_desk = true;
     bool current_flip = false;
 
-    std::shared_ptr<ImageAsset> textbox_overlay;
-    bool textbox_dirty = false;
-
     int evict_timer_ms = 0;
 
     // Scene effects

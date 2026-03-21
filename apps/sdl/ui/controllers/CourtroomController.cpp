@@ -80,13 +80,25 @@ void CourtroomController::update_debug_stats() {
 
     s.gpu_backend = render_->get_renderer().backend_name();
     s.draw_calls = render_->get_renderer().last_draw_calls();
+    s.uv_flipped = render_->get_renderer().uv_flipped();
 
-    const auto& cache = MediaManager::instance().assets().cache();
+    auto& assets = MediaManager::instance().assets();
+    const auto& cache = assets.cache();
     s.cache_used_bytes = cache.used_bytes();
     s.cache_max_bytes = cache.max_bytes();
     s.cache_entries.clear();
     for (const auto& e : cache.snapshot()) {
-        s.cache_entries.push_back({e.path, e.format, e.bytes, e.use_count});
+        DebugStats::CacheEntry entry{e.path, e.format, e.bytes, e.use_count};
+        auto cached = assets.get_cached(e.path);
+        auto img = std::dynamic_pointer_cast<ImageAsset>(cached);
+        if (img) {
+            entry.width = img->width();
+            entry.height = img->height();
+            entry.frame_count = img->frame_count();
+            entry.image = img;
+            entry.texture_id = render_->get_renderer().get_texture_id(img);
+        }
+        s.cache_entries.push_back(std::move(entry));
     }
 
     // If we're in the courtroom, we're joined

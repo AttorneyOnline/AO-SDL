@@ -27,6 +27,25 @@ GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& frag
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
 
+    // Wireframe shader: solid green, no texturing
+    {
+        static const char* wf_vert = R"glsl(
+#version 450
+layout (location = 0) in vec2 vertex_pos;
+layout (location = 1) in vec2 vertex_tex_coord;
+uniform mat4 local;
+void main() { gl_Position = local * vec4(vertex_pos, 0.0, 1.0); }
+)glsl";
+        static const char* wf_frag = R"glsl(
+#version 450
+layout (location = 0) out vec4 frag_color;
+void main() { frag_color = vec4(0.0, 1.0, 0.0, 1.0); }
+)glsl";
+        GLShader wv(ShaderType::Vertex, wf_vert, true);
+        GLShader wf(ShaderType::Fragment, wf_frag, true);
+        wireframe_program_.link_shaders({wv, wf});
+    }
+
     auto [tex, fbo] = setup_render_texture();
     render_texture = tex;
     framebuffer_id = fbo;
@@ -137,14 +156,70 @@ static void apply_uniforms(GLProgram& prog, const ShaderAsset* shader) {
     }
 }
 
+GLRenderer::MeshCacheEntry& GLRenderer::get_mesh_entry(const std::shared_ptr<MeshAsset>& mesh) {
+    auto it = mesh_cache_.find(mesh.get());
+    if (it != mesh_cache_.end() && it->second.generation == mesh->generation())
+        return it->second;
+
+    MeshCacheEntry entry;
+    if (it != mesh_cache_.end()) {
+        entry = it->second;
+    } else {
+        glGenVertexArrays(1, &entry.vao);
+        glGenBuffers(1, &entry.vbo);
+        glGenBuffers(1, &entry.ebo);
+    }
+
+    glBindVertexArray(entry.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, entry.vbo);
+    glBufferData(GL_ARRAY_BUFFER, mesh->vertices().size() * sizeof(MeshVertex),
+                 mesh->vertices().data(), GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entry.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices().size() * sizeof(uint32_t),
+                 mesh->indices().data(), GL_DYNAMIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)(2 * sizeof(float)));
+    glBindVertexArray(0);
+
+    entry.asset = mesh;
+    entry.generation = mesh->generation();
+    entry.index_count = mesh->index_count();
+    mesh_cache_[mesh.get()] = entry;
+    return mesh_cache_[mesh.get()];
+}
+
+void GLRenderer::evict_expired_meshes() {
+    for (auto it = mesh_cache_.begin(); it != mesh_cache_.end();) {
+        if (it->second.asset.expired()) {
+            glDeleteVertexArrays(1, &it->second.vao);
+            glDeleteBuffers(1, &it->second.vbo);
+            glDeleteBuffers(1, &it->second.ebo);
+            it = mesh_cache_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void GLRenderer::draw(const RenderState* state) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
     glViewport(0, 0, fb_width, fb_height);
 
+    if (wireframe_) {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glDisable(GL_BLEND);
+    } else {
+        glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+        glEnable(GL_BLEND);
+    }
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (++frame_counter % 60 == 0) {
         evict_expired_textures();
+        evict_expired_meshes();
     }
 
     draw_calls_ = 0;
@@ -163,15 +238,52 @@ void GLRenderer::draw(const RenderState* state) {
 
             int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
-            // Resolve shader: layer overrides group overrides default
-            const ShaderAsset* effective = layer.get_shader().get();
-            if (!effective) effective = group_shader;
-            GLProgram& prog = resolve_program(effective);
-            apply_uniforms(prog, effective);
-
             Mat4 local = group_mat * layer.transform().get_local_transform();
-            GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio(), layer.get_opacity());
-            sprite.draw(prog);
+
+            if (wireframe_) {
+                // Wireframe: solid green, no textures
+                wireframe_program_.use();
+                wireframe_program_.uniform("local", local);
+
+                const auto& mesh = layer.get_mesh();
+                if (mesh && mesh->index_count() > 0) {
+                    auto& entry = get_mesh_entry(mesh);
+                    glBindVertexArray(entry.vao);
+                    glDrawElements(GL_TRIANGLES, (GLsizei)entry.index_count, GL_UNSIGNED_INT, NULL);
+                    glBindVertexArray(0);
+                } else {
+                    glBindVertexArray(GLSprite::get_quad_mesh().get_vao());
+                    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL);
+                    glBindVertexArray(0);
+                }
+                glUseProgram(0);
+            } else {
+                const ShaderAsset* effective = layer.get_shader().get();
+                if (!effective) effective = group_shader;
+                GLProgram& prog = resolve_program(effective);
+                apply_uniforms(prog, effective);
+
+                const auto& mesh = layer.get_mesh();
+                if (mesh && mesh->index_count() > 0) {
+                    prog.use();
+                    prog.uniform("local", local);
+                    prog.uniform("aspect", Transform::get_aspect_ratio());
+                    prog.uniform("frame_index", (GLint)frame);
+                    prog.uniform("opacity", layer.get_opacity());
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D_ARRAY, tex_array);
+                    prog.uniform("texture_sample", 0);
+
+                    auto& entry = get_mesh_entry(mesh);
+                    glBindVertexArray(entry.vao);
+                    glDrawElements(GL_TRIANGLES, (GLsizei)entry.index_count, GL_UNSIGNED_INT, NULL);
+                    glBindVertexArray(0);
+                    glUseProgram(0);
+                } else {
+                    GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio(), layer.get_opacity());
+                    sprite.draw(prog);
+                }
+            }
             draw_calls_++;
         }
     }
@@ -187,6 +299,25 @@ void GLRenderer::bind_default_framebuffer() {
 
 void GLRenderer::clear() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void GLRenderer::set_wireframe(bool enabled) {
+    wireframe_ = enabled;
+    glPolygonMode(GL_FRONT_AND_BACK, enabled ? GL_LINE : GL_FILL);
+
+    // Use linear filtering in wireframe mode so thin lines aren't lost during downsampling
+    GLenum filter = enabled ? GL_LINEAR : GL_NEAREST;
+    glBindTexture(GL_TEXTURE_2D, render_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+uintptr_t GLRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
+    if (!asset || asset->frame_count() == 0) return 0;
+    // Upload on demand if not cached
+    GLuint tex = get_texture_array(asset);
+    return (uintptr_t)tex;
 }
 
 std::unique_ptr<IRenderer> create_gl_renderer(const std::string& vertex_source, const std::string& fragment_source,

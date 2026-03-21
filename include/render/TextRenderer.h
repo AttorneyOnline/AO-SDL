@@ -98,9 +98,13 @@ class TextRenderer {
         int char_index;
     };
 
-  private:
+    /// Compute glyph positions for text with word wrapping.
     std::vector<GlyphLayout> compute_layout(const std::string& text, int wrap_width) const;
+
+    /// Compute the vertical scroll offset so the last visible line stays in view.
     int compute_scroll_offset(const std::vector<GlyphLayout>& layout, int char_count, int max_height);
+
+  private:
     void blit_glyphs(const std::vector<GlyphLayout>& layout, int char_count, TextColor color, int x, int y,
                      int scroll_y, int max_height, int buf_width, int buf_height, uint8_t* pixels);
 

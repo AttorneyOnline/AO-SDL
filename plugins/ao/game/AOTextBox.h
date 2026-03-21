@@ -2,6 +2,9 @@
 
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/ImageAsset.h"
+#include "asset/MeshAsset.h"
+#include "asset/ShaderAsset.h"
+#include "render/GlyphCache.h"
 #include "render/TextRenderer.h"
 
 #include <cstdint>
@@ -41,8 +44,27 @@ class AOTextBox {
     }
     bool is_talking() const;
 
-    /// Render chatbox into a viewport-sized RGBA pixel buffer (pre-cleared).
-    void render(int viewport_w, int viewport_h, uint8_t* pixels);
+    // --- GPU assets for the presenter ---
+
+    /// Chatbox background image (positioned at chatbox_rect by presenter).
+    std::shared_ptr<ImageAsset> chatbox_background() const { return chatbox_bg; }
+
+    /// Message text mesh (rebuilt on tick when chars change).
+    std::shared_ptr<MeshAsset> message_mesh() const { return msg_mesh_; }
+
+    /// Glyph atlas texture for message text.
+    std::shared_ptr<ImageAsset> message_atlas() const {
+        return msg_glyph_cache_ ? msg_glyph_cache_->atlas_asset() : nullptr;
+    }
+
+    /// Text shader.
+    std::shared_ptr<ShaderAsset> text_shader() const { return text_shader_; }
+
+    /// Current message color (for shader uniform).
+    void message_color_rgb(float& r, float& g, float& b) const;
+
+    /// Chatbox rect in viewport coordinates (for positioning the background layer).
+    const AORect& chatbox_position() const { return chatbox_rect; }
 
   private:
     // Theme assets
@@ -92,4 +114,15 @@ class AOTextBox {
     // Persistent font data (TextRenderer needs the buffer alive)
     std::vector<uint8_t> font_storage;
     std::vector<uint8_t> showname_font_storage;
+
+    // GPU text rendering
+    std::unique_ptr<GlyphCache> msg_glyph_cache_;
+    std::shared_ptr<MeshAsset> msg_mesh_;
+    std::shared_ptr<ShaderAsset> text_shader_;
+    int last_chars_visible_ = -1; // track when mesh needs rebuild
+
+    // Cached layout (computed once in start_message, reused every tick)
+    std::vector<TextRenderer::GlyphLayout> cached_layout_;
+    std::string cached_display_text_;
+    int cached_prev_chars_ = 0;
 };

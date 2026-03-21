@@ -22,4 +22,6 @@ struct DebugContext {
 
     static constexpr int BASE_W = 256;
     static constexpr int BASE_H = 192;
+
+    std::atomic<bool> wireframe{false};
 };

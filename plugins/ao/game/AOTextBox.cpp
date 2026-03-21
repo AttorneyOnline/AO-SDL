@@ -1,6 +1,6 @@
 #include "ao/game/AOTextBox.h"
 
-#include "utils/BlendOps.h"
+#include "render/TextMeshBuilder.h"
 #include "utils/ImageOps.h"
 #include "utils/Log.h"
 #include "utils/UTF8.h"
@@ -78,6 +78,20 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
 
     Log::log_print(DEBUG, "AOTextBox: chatbox=%d,%d,%dx%d message=%d,%d,%dx%d", chatbox_rect.x, chatbox_rect.y,
                    chatbox_rect.w, chatbox_rect.h, message_rect.x, message_rect.y, message_rect.w, message_rect.h);
+
+    // GPU text: create glyph cache and load text shader
+    if (font_loaded) {
+        msg_glyph_cache_ = std::make_unique<GlyphCache>(text_renderer);
+        msg_mesh_ = std::make_shared<MeshAsset>("_text_mesh", std::vector<MeshVertex>{}, std::vector<uint32_t>{});
+
+        // Register the glyph atlas in the asset cache so it shows in the debug viewer
+        engine_assets_->register_asset(msg_glyph_cache_->atlas_asset());
+
+        text_shader_ = engine_assets_->shader("shaders/text");
+        if (text_shader_) {
+            Log::log_print(DEBUG, "AOTextBox: text shader loaded for GPU rendering");
+        }
+    }
 }
 
 void AOTextBox::start_message(const std::string& showname, const std::string& message, int color_idx, bool additive) {
@@ -107,6 +121,27 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
         }
     }
     state = blank ? TextState::INACTIVE : (total_chars > 0 ? TextState::TICKING : TextState::DONE);
+    last_chars_visible_ = -1; // force mesh rebuild on next tick
+
+    // Pre-compute layout once — it doesn't change as characters appear
+    cached_display_text_ = previous_message + current_message;
+    cached_prev_chars_ = UTF8::length(previous_message);
+    if (msg_glyph_cache_) {
+        int wrap_w = message_rect.w > 0 ? message_rect.w : 256;
+        cached_layout_ = text_renderer.compute_layout(cached_display_text_, wrap_w);
+    } else {
+        cached_layout_.clear();
+    }
+}
+
+void AOTextBox::message_color_rgb(float& r, float& g, float& b) const {
+    if (current_color_idx >= 0 && current_color_idx < (int)colors.size()) {
+        r = colors[current_color_idx].r / 255.0f;
+        g = colors[current_color_idx].g / 255.0f;
+        b = colors[current_color_idx].b / 255.0f;
+    } else {
+        r = g = b = 1.0f;
+    }
 }
 
 bool AOTextBox::is_punctuation(char c) const {
@@ -147,6 +182,21 @@ bool AOTextBox::tick(int delta_ms) {
         delay = current_tick_delay();
     }
 
+    // Rebuild GPU text mesh when characters advance (layout is cached from start_message)
+    if (advanced && msg_glyph_cache_ && msg_mesh_ && chars_visible != last_chars_visible_) {
+        last_chars_visible_ = chars_visible;
+
+        int visible = cached_prev_chars_ + chars_visible;
+        int scroll_y = text_renderer.compute_scroll_offset(cached_layout_, visible, message_rect.h);
+
+        std::vector<MeshVertex> verts;
+        std::vector<uint32_t> indices;
+        TextMeshBuilder::build(*msg_glyph_cache_, cached_layout_, visible,
+                               chatbox_rect.x + message_rect.x, chatbox_rect.y + message_rect.y,
+                               scroll_y, message_rect.h, 256, 192, verts, indices);
+        msg_mesh_->update(std::move(verts), std::move(indices));
+    }
+
     return advanced;
 }
 
@@ -158,41 +208,6 @@ bool AOTextBox::is_talking() const {
     return colors[current_color_idx].talking;
 }
 
-void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
-    if (!font_loaded)
-        return;
-
-    // Composite chatbox background (undo stbi flip by reading rows in reverse)
-    if (chatbox_bg && chatbox_bg->frame_count() > 0) {
-        const auto& frame = chatbox_bg->frame(0);
-        for (int row = 0; row < frame.height && (chatbox_rect.y + row) < viewport_h; row++) {
-            int src_row = frame.height - 1 - row;
-            for (int col = 0; col < frame.width && (chatbox_rect.x + col) < viewport_w; col++) {
-                int dx = chatbox_rect.x + col;
-                int dy = chatbox_rect.y + row;
-                if (dx < 0 || dy < 0)
-                    continue;
-
-                size_t src = ((size_t)src_row * frame.width + col) * 4;
-                size_t dst = ((size_t)dy * viewport_w + dx) * 4;
-
-                BlendOps::blend_over(&pixels[dst], &frame.pixels[src]);
-            }
-        }
-    }
-
-    if (state != TextState::INACTIVE && !current_message.empty()) {
-        TextColor color = {colors[current_color_idx].r, colors[current_color_idx].g, colors[current_color_idx].b};
-
-        std::string display_text = previous_message + current_message;
-        int prev_chars = UTF8::length(previous_message);
-        text_renderer.render(display_text, prev_chars + chars_visible, color, chatbox_rect.x + message_rect.x,
-                             chatbox_rect.y + message_rect.y, viewport_w, viewport_h, message_rect.w, message_rect.h,
-                             pixels);
-    }
-
-    flip_vertical_rgba(pixels, viewport_w, viewport_h);
-}
 
 std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
     if (current_showname.empty() || !showname_font_loaded || !engine_assets_)

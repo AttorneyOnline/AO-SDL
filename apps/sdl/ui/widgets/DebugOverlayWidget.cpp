@@ -149,6 +149,10 @@ void DebugOverlayWidget::render() {
     ImGui::SameLine();
     ImGui::TextDisabled("(%dx%d)", DebugContext::BASE_W * scale, DebugContext::BASE_H * scale);
 
+    bool wf = ctx.wireframe.load();
+    if (ImGui::Checkbox("Wireframe", &wf))
+        ctx.wireframe.store(wf);
+
     // --- Connection ---
     ImGui::SeparatorText("Connection");
     ImGui::Text("State: %s", conn_state_str(s.conn_state));
@@ -168,14 +172,68 @@ void DebugOverlayWidget::render() {
                 format_bytes(s.cache_used_bytes, buf, sizeof(buf)),
                 format_bytes(s.cache_max_bytes, buf2, sizeof(buf2)));
 
-    if (ImGui::TreeNode("Entries")) {
-        for (const auto& e : s.cache_entries) {
-            char size_buf[64];
-            format_bytes(e.bytes, size_buf, sizeof(size_buf));
-            ImGui::BulletText("%s [%s] %s (refs: %ld)", e.path.c_str(), e.format.c_str(), size_buf, e.use_count);
-        }
-        ImGui::TreePop();
+    // Two-column layout: list on left, preview on right
+    float avail_w = ImGui::GetContentRegionAvail().x;
+    float preview_w = 140.0f;
+    float list_w = avail_w - preview_w - ImGui::GetStyle().ItemSpacing.x;
+    float section_h = 200.0f;
+
+    ImGui::BeginChild("##cache_list", ImVec2(list_w, section_h), ImGuiChildFlags_Borders);
+    for (int i = 0; i < (int)s.cache_entries.size(); i++) {
+        const auto& e = s.cache_entries[i];
+        char label[256];
+        char size_buf2[64];
+        format_bytes(e.bytes, size_buf2, sizeof(size_buf2));
+        std::snprintf(label, sizeof(label), "%s [%s] %s", e.path.c_str(), e.format.c_str(), size_buf2);
+        if (ImGui::Selectable(label, selected_cache_entry_ == i))
+            selected_cache_entry_ = i;
     }
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    ImGui::BeginChild("##cache_preview", ImVec2(preview_w, section_h), ImGuiChildFlags_Borders);
+    if (selected_cache_entry_ >= 0 && selected_cache_entry_ < (int)s.cache_entries.size()) {
+        const auto& e = s.cache_entries[selected_cache_entry_];
+
+        if (e.texture_id != 0 && e.width > 0 && e.height > 0) {
+            float aspect = (float)e.width / (float)e.height;
+            float img_w = preview_w - 8.0f;
+            float img_h = img_w / aspect;
+            if (img_h > section_h * 0.6f) {
+                img_h = section_h * 0.6f;
+                img_w = img_h * aspect;
+            }
+            ImTextureID tex = (ImTextureID)e.texture_id;
+            ImVec2 uv0(0, 1);
+            ImVec2 uv1(1, 0);
+            ImGui::Image(tex, ImVec2(img_w, img_h), uv0, uv1);
+
+            // Hover: show at native resolution in a tooltip
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::Image(tex, ImVec2((float)e.width, (float)e.height), uv0, uv1);
+                ImGui::EndTooltip();
+            }
+        } else {
+            ImGui::TextDisabled("(no preview)");
+        }
+
+        ImGui::Separator();
+        ImGui::TextWrapped("%s", e.path.c_str());
+        ImGui::Text("Format: %s", e.format.c_str());
+        if (e.width > 0)
+            ImGui::Text("Size: %dx%d", e.width, e.height);
+        if (e.frame_count > 1)
+            ImGui::Text("Frames: %d", e.frame_count);
+        char sb[64];
+        format_bytes(e.bytes, sb, sizeof(sb));
+        ImGui::Text("Memory: %s", sb);
+        ImGui::Text("Refs: %ld", e.use_count);
+    } else {
+        ImGui::TextDisabled("Select an entry");
+    }
+    ImGui::EndChild();
 
     // --- Log ---
     ImGui::SeparatorText("Log");

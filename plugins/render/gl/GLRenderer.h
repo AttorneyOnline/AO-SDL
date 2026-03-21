@@ -2,6 +2,7 @@
 
 #include "Shader.h"
 #include "asset/ImageAsset.h"
+#include "asset/MeshAsset.h"
 #include "render/IRenderer.h"
 #include "render/RenderState.h"
 
@@ -25,6 +26,8 @@ class GLRenderer : public IRenderer {
     void bind_default_framebuffer() override;
     void clear() override;
     void resize(int width, int height) override;
+    void set_wireframe(bool enabled) override;
+    uintptr_t get_texture_id(const std::shared_ptr<ImageAsset>& asset) override;
     uintptr_t get_render_texture_id() const override;
     bool uv_flipped() const override {
         return true;
@@ -40,6 +43,8 @@ class GLRenderer : public IRenderer {
     GLProgram& resolve_program(const class ShaderAsset* shader);
 
     GLProgram program;
+    GLProgram wireframe_program_;
+    bool wireframe_ = false;
     GLuint render_texture;
     GLuint framebuffer_id;
     int fb_width;
@@ -54,6 +59,17 @@ class GLRenderer : public IRenderer {
 
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
     std::unordered_map<const class ShaderAsset*, std::unique_ptr<GLProgram>> shader_cache_;
+
+    struct MeshCacheEntry {
+        std::weak_ptr<MeshAsset> asset;
+        GLuint vao = 0, vbo = 0, ebo = 0;
+        uint64_t generation = 0;
+        size_t index_count = 0;
+    };
+    std::unordered_map<const MeshAsset*, MeshCacheEntry> mesh_cache_;
+
+    MeshCacheEntry& get_mesh_entry(const std::shared_ptr<MeshAsset>& mesh);
+    void evict_expired_meshes();
 };
 
 /// Factory: creates a GLRenderer after initializing GLEW.

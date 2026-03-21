@@ -3,6 +3,7 @@
 #include "ao/event/ICLogEvent.h"
 #include "ao/event/ICMessageEvent.h"
 #include "asset/MediaManager.h"
+#include "asset/ShaderAsset.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
 #include "render/Layer.h"
@@ -13,6 +14,17 @@
 #include <cstring>
 
 using Clock = std::chrono::steady_clock;
+
+/// Provides text color uniforms (u_text_r/g/b) to the text shader.
+class TextColorProvider : public ShaderUniformProvider {
+  public:
+    TextColorProvider(float r, float g, float b) : r_(r), g_(g), b_(b) {}
+    std::unordered_map<std::string, UniformValue> get_uniforms() const override {
+        return {{"u_text_r", r_}, {"u_text_g", g_}, {"u_text_b", b_}};
+    }
+  private:
+    float r_, g_, b_;
+};
 
 static int us_since(Clock::time_point start) {
     return static_cast<int>(std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count());
@@ -63,7 +75,6 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     }
 
     textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
-    textbox_dirty = true;
 
     // Blank messages skip pre-anim and go straight to idle
     if (textbox.text_state() == AOTextBox::TextState::INACTIVE) {
@@ -106,8 +117,6 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
         // Area change: clear IC state so only the background shows
         textbox.start_message("", "", 0);
-        textbox_dirty = true;
-        textbox_overlay.reset();
         message_queue_.clear();
         emote_player.stop();
         for_each_effect([](auto& e) { e.stop(); });
@@ -144,32 +153,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     // ---- Textbox ----
     auto textbox_start = Clock::now();
 
-    if (textbox.tick(delta_ms)) {
-        textbox_dirty = true;
-    }
-
-    if (textbox.text_state() == AOTextBox::TextState::INACTIVE) {
-        textbox_overlay.reset();
-        textbox_dirty = false;
-    }
-    else if (textbox_dirty) {
-        std::vector<uint8_t> pixels(BASE_W * BASE_H * 4, 0);
-        textbox.render(BASE_W, BASE_H, pixels.data());
-
-        if (!textbox_overlay) {
-            ImageFrame frame;
-            frame.width = BASE_W;
-            frame.height = BASE_H;
-            frame.duration_ms = 0;
-            frame.pixels = std::move(pixels);
-            textbox_overlay =
-                std::make_shared<ImageAsset>("_textbox_overlay", "raw", std::vector<ImageFrame>{std::move(frame)});
-        }
-        else {
-            textbox_overlay->update_frame(0, std::move(pixels));
-        }
-        textbox_dirty = false;
-    }
+    textbox.tick(delta_ms);
 
     profile_.textbox_us.store(us_since(textbox_start), std::memory_order_relaxed);
 
@@ -204,8 +188,38 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         scene.add_layer(10, Layer(background.desk_asset(), 0, 10));
     }
 
-    if (textbox_overlay && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
-        scene.add_layer(20, Layer(textbox_overlay, 0, 20));
+    if (textbox.text_state() != AOTextBox::TextState::INACTIVE) {
+        // Chatbox background — positioned via transform at the chatbox rect
+        auto chatbox_bg = textbox.chatbox_background();
+        if (chatbox_bg && chatbox_bg->frame_count() > 0) {
+            const auto& rect = textbox.chatbox_position();
+            float ndc_w = (float)chatbox_bg->width() / BASE_W * 2.0f;
+            float ndc_h = (float)chatbox_bg->height() / BASE_H * 2.0f;
+            float ndc_x = ((float)rect.x / BASE_W) * 2.0f - 1.0f + ndc_w * 0.5f;
+            float ndc_y = 1.0f - ((float)rect.y / BASE_H) * 2.0f - ndc_h * 0.5f;
+
+            Layer bg_layer(chatbox_bg, 0, 20);
+            bg_layer.transform().scale({ndc_w * 0.5f, ndc_h * 0.5f});
+            bg_layer.transform().translate({ndc_x, ndc_y});
+            scene.add_layer(20, std::move(bg_layer));
+        }
+
+        // GPU text mesh
+        auto atlas = textbox.message_atlas();
+        auto mesh = textbox.message_mesh();
+        auto shader = textbox.text_shader();
+        if (atlas && mesh && mesh->index_count() > 0 && shader) {
+            float r, g, b;
+            textbox.message_color_rgb(r, g, b);
+
+            auto provider = std::make_shared<TextColorProvider>(r, g, b);
+            shader->set_uniform_provider(provider);
+
+            Layer text_layer(atlas, 0, 21);
+            text_layer.set_mesh(mesh);
+            text_layer.set_shader(shader);
+            scene.add_layer(21, std::move(text_layer));
+        }
     }
 
     // Nameplate: rendered once, positioned and scaled via GPU transform

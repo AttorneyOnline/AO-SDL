@@ -49,8 +49,10 @@ struct MetalRendererImpl {
     id<MTLDevice>              device;
     id<MTLCommandQueue>        command_queue;
     id<MTLRenderPipelineState> pipeline;
+    id<MTLRenderPipelineState> wireframe_pipeline;
     id<MTLDepthStencilState>   depth_state;
     id<MTLSamplerState>        sampler;
+    id<MTLSamplerState>        sampler_linear;
     id<MTLBuffer>              quad_vb;
     id<MTLBuffer>              quad_ib;
     id<MTLTexture>             render_texture;
@@ -62,6 +64,7 @@ struct MetalRendererImpl {
     int display_width  = 0;
     int display_height = 0;
     uint64_t frame_counter = 0;
+    bool wireframe = false;
 
     struct TextureCacheEntry {
         std::weak_ptr<ImageAsset> asset;
@@ -69,7 +72,49 @@ struct MetalRendererImpl {
         uint64_t generation = 0;
     };
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
+
+    // 2D views of array textures for ImGui preview (ImGui can't sample texture2d_array)
+    struct PreviewViewEntry {
+        std::weak_ptr<ImageAsset> asset;
+        id<MTLTexture> view;
+        uint64_t generation = 0;
+    };
+    std::unordered_map<const ImageAsset*, PreviewViewEntry> preview_views;
+
     std::unordered_map<const ShaderAsset*, id<MTLRenderPipelineState>> shader_pipeline_cache;
+
+    struct MeshCacheEntry {
+        std::weak_ptr<MeshAsset> asset;
+        id<MTLBuffer> vb;
+        id<MTLBuffer> ib;
+        uint64_t generation = 0;
+        size_t index_count = 0;
+    };
+    std::unordered_map<const MeshAsset*, MeshCacheEntry> mesh_cache;
+
+    std::pair<id<MTLBuffer>, id<MTLBuffer>> get_mesh_buffers(const std::shared_ptr<MeshAsset>& mesh) {
+        auto it = mesh_cache.find(mesh.get());
+        if (it != mesh_cache.end() && it->second.generation == mesh->generation())
+            return {it->second.vb, it->second.ib};
+
+        id<MTLBuffer> vb = [device newBufferWithBytes:mesh->vertices().data()
+                                               length:mesh->vertices().size() * sizeof(MeshVertex)
+                                              options:MTLResourceStorageModeShared];
+        id<MTLBuffer> ib = [device newBufferWithBytes:mesh->indices().data()
+                                               length:mesh->indices().size() * sizeof(uint32_t)
+                                              options:MTLResourceStorageModeShared];
+        mesh_cache[mesh.get()] = {mesh, vb, ib, mesh->generation(), mesh->index_count()};
+        return {vb, ib};
+    }
+
+    void evict_expired_meshes() {
+        for (auto it = mesh_cache.begin(); it != mesh_cache.end();) {
+            if (it->second.asset.expired())
+                it = mesh_cache.erase(it);
+            else
+                ++it;
+        }
+    }
 
     // --- setup ---------------------------------------------------------------
 
@@ -83,6 +128,7 @@ struct MetalRendererImpl {
         @autoreleasepool {
             build_pipeline();
             build_blit_pipeline();
+            build_wireframe_pipeline();
             build_depth_state();
             build_sampler();
             build_quad();
@@ -193,6 +239,45 @@ struct MetalRendererImpl {
         }
     }
 
+    void build_wireframe_pipeline() {
+        NSString* src = @
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct WFIn { float2 position [[attribute(0)]]; float2 texcoord [[attribute(1)]]; };\n"
+            "struct WFOut { float4 position [[position]]; };\n"
+            "struct WFUniforms { float4x4 local; float aspect; };\n"
+            "vertex WFOut wf_vertex(WFIn in [[stage_in]], constant WFUniforms& u [[buffer(1)]]) {\n"
+            "    WFOut out;\n"
+            "    out.position = u.local * float4(in.position, 0.0, 1.0);\n"
+            "    return out;\n"
+            "}\n"
+            "fragment float4 wf_fragment(WFOut in [[stage_in]]) {\n"
+            "    return float4(0.0, 1.0, 0.0, 1.0);\n"
+            "}\n";
+
+        NSError* err = nil;
+        id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
+        if (!lib) return;
+
+        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        vd.attributes[0].format = MTLVertexFormatFloat2;
+        vd.attributes[0].offset = offsetof(MetalVertex, position);
+        vd.attributes[0].bufferIndex = 0;
+        vd.attributes[1].format = MTLVertexFormatFloat2;
+        vd.attributes[1].offset = offsetof(MetalVertex, texcoord);
+        vd.attributes[1].bufferIndex = 0;
+        vd.layouts[0].stride = sizeof(MetalVertex);
+
+        MTLRenderPipelineDescriptor* pd = [[MTLRenderPipelineDescriptor alloc] init];
+        pd.vertexFunction = [lib newFunctionWithName:@"wf_vertex"];
+        pd.fragmentFunction = [lib newFunctionWithName:@"wf_fragment"];
+        pd.vertexDescriptor = vd;
+        pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        pd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+
+        wireframe_pipeline = [device newRenderPipelineStateWithDescriptor:pd error:&err];
+    }
+
     void ensure_display_texture(int w, int h) {
         if (display_texture && display_width == w && display_height == h)
             return;
@@ -226,7 +311,7 @@ struct MetalRendererImpl {
             id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
             [enc setRenderPipelineState:blit_pipeline];
             [enc setFragmentTexture:render_texture atIndex:0];
-            [enc setFragmentSamplerState:sampler atIndex:0];
+            [enc setFragmentSamplerState:(wireframe ? sampler_linear : sampler) atIndex:0];
             [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
             [enc endEncoding];
 
@@ -251,6 +336,10 @@ struct MetalRendererImpl {
         sd.sAddressMode = MTLSamplerAddressModeClampToEdge;
         sd.tAddressMode = MTLSamplerAddressModeClampToEdge;
         sampler = [device newSamplerStateWithDescriptor:sd];
+
+        sd.minFilter = MTLSamplerMinMagFilterLinear;
+        sd.magFilter = MTLSamplerMinMagFilterLinear;
+        sampler_linear = [device newSamplerStateWithDescriptor:sd];
     }
 
     void build_quad() {
@@ -381,7 +470,11 @@ struct MetalRendererImpl {
 
         id<MTLFunction> vert = [lib newFunctionWithName:@"vertex_main"];
         id<MTLFunction> frag = [lib newFunctionWithName:@"fragment_main"];
-        if (!vert || !frag) return pipeline;
+        if (!vert || !frag) {
+            Log::log_print(ERR, "Metal custom shader: missing vertex_main(%d) or fragment_main(%d)",
+                           vert != nil, frag != nil);
+            return pipeline;
+        }
 
         MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
         vd.attributes[0].format = MTLVertexFormatFloat2;
@@ -405,7 +498,11 @@ struct MetalRendererImpl {
         pd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
 
         auto pso = [device newRenderPipelineStateWithDescriptor:pd error:&err];
-        if (!pso) return pipeline;
+        if (!pso) {
+            Log::log_print(ERR, "Metal custom pipeline create failed: %s",
+                           err ? [[err localizedDescription] UTF8String] : "unknown");
+            return pipeline;
+        }
 
         shader_pipeline_cache[shader] = pso;
         return pso;
@@ -424,7 +521,9 @@ struct MetalRendererImpl {
             rpd.colorAttachments[0].texture    = render_texture;
             rpd.colorAttachments[0].loadAction = MTLLoadActionClear;
             rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-            rpd.colorAttachments[0].clearColor = MTLClearColorMake(0.1, 0.1, 0.2, 1.0);
+            rpd.colorAttachments[0].clearColor = wireframe
+                ? MTLClearColorMake(0.0, 0.0, 0.0, 1.0)
+                : MTLClearColorMake(0.1, 0.1, 0.2, 1.0);
             rpd.depthAttachment.texture     = depth_texture;
             rpd.depthAttachment.loadAction  = MTLLoadActionClear;
             rpd.depthAttachment.storeAction = MTLStoreActionDontCare;
@@ -432,11 +531,13 @@ struct MetalRendererImpl {
 
             id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
             [enc setDepthStencilState:depth_state];
+            [enc setTriangleFillMode:wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
             [enc setVertexBuffer:quad_vb offset:0 atIndex:0];
-            [enc setFragmentSamplerState:sampler atIndex:0];
+            [enc setFragmentSamplerState:(wireframe ? sampler_linear : sampler) atIndex:0];
 
             if (++frame_counter % 60 == 0) {
                 evict_expired_textures();
+                evict_expired_meshes();
             }
 
             if (state) {
@@ -454,45 +555,66 @@ struct MetalRendererImpl {
                         int frame = std::clamp(layer.get_frame_index(), 0,
                                                asset->frame_count() - 1);
 
-                        // Resolve shader: layer overrides group overrides default
-                        const ShaderAsset* effective = layer.get_shader().get();
-                        if (!effective) effective = group_shader;
-                        [enc setRenderPipelineState:resolve_pipeline(effective)];
-
                         Mat4 local = group_mat * layer.transform().get_local_transform();
                         VertexUniforms vu;
                         vu.local  = mat4_to_simd(local);
                         vu.aspect = Transform::get_aspect_ratio();
+                        [enc setVertexBytes:&vu length:sizeof(vu) atIndex:1];
 
-                        [enc setVertexBytes:&vu   length:sizeof(vu)   atIndex:1];
-                        [enc setFragmentTexture:tex atIndex:0];
-
-                        // Build fragment uniforms — base fields + custom uniforms
-                        if (effective && effective->uniform_provider()) {
-                            auto custom = effective->uniform_provider()->get_uniforms();
-                            // Pack: frame_index(int32), opacity(float), then custom floats
-                            struct { int32_t frame_index; float opacity; float extras[16]; } fu;
-                            fu.frame_index = frame;
-                            fu.opacity = layer.get_opacity();
-                            int ei = 0;
-                            for (const auto& [name, val] : custom) {
-                                if (auto* f = std::get_if<float>(&val))
-                                    if (ei < 16) fu.extras[ei++] = *f;
-                            }
-                            size_t fu_size = offsetof(decltype(fu), extras) + ei * sizeof(float);
-                            [enc setFragmentBytes:&fu length:fu_size atIndex:0];
+                        if (wireframe) {
+                            // Wireframe: solid green, no textures
+                            [enc setRenderPipelineState:wireframe_pipeline];
                         } else {
-                            FragmentUniforms fu;
-                            fu.frame_index = frame;
-                            fu.opacity = layer.get_opacity();
-                            [enc setFragmentBytes:&fu length:sizeof(fu) atIndex:0];
-                        }
+                            // Resolve shader: layer overrides group overrides default
+                            const ShaderAsset* effective = layer.get_shader().get();
+                            if (!effective) effective = group_shader;
+                            [enc setRenderPipelineState:resolve_pipeline(effective)];
 
-                        [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-                                        indexCount:6
-                                         indexType:MTLIndexTypeUInt32
-                                       indexBuffer:quad_ib
-                                 indexBufferOffset:0];
+                            [enc setFragmentTexture:tex atIndex:0];
+
+                            // Build fragment uniforms
+                            if (effective && effective->uniform_provider()) {
+                                auto custom = effective->uniform_provider()->get_uniforms();
+                                // Sort by key name for deterministic Metal struct layout
+                                std::vector<std::pair<std::string, UniformValue>> sorted(custom.begin(), custom.end());
+                                std::sort(sorted.begin(), sorted.end(),
+                                          [](const auto& a, const auto& b) { return a.first < b.first; });
+                                struct { int32_t frame_index; float opacity; float extras[16]; } fu;
+                                fu.frame_index = frame;
+                                fu.opacity = layer.get_opacity();
+                                int ei = 0;
+                                for (const auto& [name, val] : sorted) {
+                                    if (auto* f = std::get_if<float>(&val))
+                                        if (ei < 16) fu.extras[ei++] = *f;
+                                }
+                                size_t fu_size = offsetof(decltype(fu), extras) + ei * sizeof(float);
+                                [enc setFragmentBytes:&fu length:fu_size atIndex:0];
+                            } else {
+                                FragmentUniforms fu;
+                                fu.frame_index = frame;
+                                fu.opacity = layer.get_opacity();
+                                [enc setFragmentBytes:&fu length:sizeof(fu) atIndex:0];
+                            }
+                        } // end !wireframe
+
+                        const auto& mesh = layer.get_mesh();
+                        if (mesh && mesh->index_count() > 0) {
+                            auto [mvb, mib] = get_mesh_buffers(mesh);
+                            [enc setVertexBuffer:mvb offset:0 atIndex:0];
+                            [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                                            indexCount:mesh->index_count()
+                                             indexType:MTLIndexTypeUInt32
+                                           indexBuffer:mib
+                                     indexBufferOffset:0];
+                            // Restore default quad VB for subsequent layers
+                            [enc setVertexBuffer:quad_vb offset:0 atIndex:0];
+                        } else {
+                            [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                                            indexCount:6
+                                             indexType:MTLIndexTypeUInt32
+                                           indexBuffer:quad_ib
+                                     indexBufferOffset:0];
+                        }
                         draw_call_count++;
                     }
                 }
@@ -525,6 +647,30 @@ void MetalRenderer::bind_default_framebuffer() {
 
 void MetalRenderer::clear() {
     // Clearing is done at the start of each draw() via loadAction.
+}
+
+void MetalRenderer::set_wireframe(bool enabled) {
+    impl->wireframe = enabled;
+}
+
+uintptr_t MetalRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
+    if (!asset || asset->frame_count() == 0) return 0;
+    // Upload on demand if not cached
+    id<MTLTexture> tex = impl->get_texture_array(asset);
+    if (!tex) return 0;
+
+    // ImGui expects a regular texture2d, but we store texture2d_array.
+    // Create a 2D view of slice 0 for preview.
+    auto vit = impl->preview_views.find(asset.get());
+    if (vit != impl->preview_views.end() && vit->second.generation == asset->generation())
+        return (uintptr_t)(__bridge void*)vit->second.view;
+
+    id<MTLTexture> view = [tex newTextureViewWithPixelFormat:tex.pixelFormat
+                                                textureType:MTLTextureType2D
+                                                     levels:NSMakeRange(0, 1)
+                                                     slices:NSMakeRange(0, 1)];
+    impl->preview_views[asset.get()] = {asset, view, asset->generation()};
+    return (uintptr_t)(__bridge void*)view;
 }
 
 void MetalRenderer::resize(int width, int height) {

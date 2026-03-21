@@ -10,12 +10,16 @@ void CourtroomWidget::handle_events() {
 }
 
 void CourtroomWidget::render() {
-    // Poll for resolution scale changes (set by debug widget on UI thread)
-    int scale = DebugContext::instance().internal_scale.load();
+    auto& ctx = DebugContext::instance();
+
+    bool wf = ctx.wireframe.load();
+    int scale = ctx.internal_scale.load();
     if (scale != last_scale_) {
         last_scale_ = scale;
         render_.get_renderer().resize(DebugContext::BASE_W * scale, DebugContext::BASE_H * scale);
     }
+
+    render_.get_renderer().set_wireframe(wf);
 
     render_.render_frame();
     render_.begin_frame();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/ImageAsset.h"
+#include "asset/MeshAsset.h"
 #include "render/Transform.h"
 
 #include <cstdint>
@@ -23,6 +24,9 @@ class Layer {
     void set_shader(std::shared_ptr<ShaderAsset> s) { shader_ = std::move(s); }
     const std::shared_ptr<ShaderAsset>& get_shader() const { return shader_; }
 
+    void set_mesh(std::shared_ptr<MeshAsset> m) { mesh_ = std::move(m); }
+    const std::shared_ptr<MeshAsset>& get_mesh() const { return mesh_; }
+
     Transform& transform() { return transform_; }
     const Transform& transform() const { return transform_; }
 
@@ -32,6 +36,7 @@ class Layer {
     uint16_t z_index;
     float opacity = 1.0f;
     std::shared_ptr<ShaderAsset> shader_;
+    std::shared_ptr<MeshAsset> mesh_;
     Transform transform_;
 };
 

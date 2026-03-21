@@ -1,5 +1,6 @@
 #pragma once
 
+#include "asset/ImageAsset.h"
 #include "ui/IWidget.h"
 #include "ui/LogBuffer.h"
 #include "utils/Log.h"
@@ -24,12 +25,17 @@ struct DebugStats {
 
     const char* gpu_backend = "Unknown";
     int draw_calls = 0;
+    bool uv_flipped = false; // true for GL (V=0 at bottom)
 
     struct CacheEntry {
         std::string path;
         std::string format;
         size_t bytes;
         long use_count;
+        int width = 0, height = 0;
+        int frame_count = 0;
+        std::shared_ptr<ImageAsset> image; // for texture preview
+        uintptr_t texture_id = 0;        // GPU texture handle for ImGui::Image
     };
     std::vector<CacheEntry> cache_entries;
     size_t cache_used_bytes = 0;
@@ -105,4 +111,7 @@ class DebugOverlayWidget : public IWidget {
     char log_search_[128] = "";
     std::deque<LogBuffer::Entry> log_local_;
     size_t log_gen_ = 0;
+
+    // Asset preview
+    int selected_cache_entry_ = -1;
 };

@@ -20,7 +20,9 @@ void Transform::scale(Vec2 s) {
 }
 
 void Transform::translate(Vec2 offset) {
-    translation = Vec3(offset.x, offset.y, 0.0f);
+    translation.x = offset.x;
+    translation.y = offset.y;
+    // Preserve Z set by zindex()
     recalculate();
 }
 
