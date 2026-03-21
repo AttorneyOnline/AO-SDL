@@ -10,8 +10,12 @@
 #include "ui/widgets/ICMessageState.h"
 #include "ui/widgets/InterjectionWidget.h"
 #include "ui/widgets/MessageOptionsWidget.h"
+#include "ui/widgets/EvidenceWidget.h"
+#include "ui/widgets/HealthBarWidget.h"
 #include "ui/widgets/MusicAreaWidget.h"
+#include "ui/widgets/PlayerListWidget.h"
 #include "ui/widgets/SideSelectWidget.h"
+#include "ui/widgets/TimerWidget.h"
 
 #include <memory>
 
@@ -39,6 +43,10 @@ class CourtroomController : public IScreenController {
     std::unique_ptr<MessageOptionsWidget> message_options_;
     ICLogWidget ic_log_;
     std::unique_ptr<MusicAreaWidget> music_area_;
+    HealthBarWidget health_bar_{&ic_state_};
+    TimerWidget timer_;
+    EvidenceWidget evidence_;
+    PlayerListWidget player_list_;
     DebugOverlayWidget debug_;
     RenderManager* render_ = nullptr;
     bool debug_open_ = false; // toggled by /debug in OOC chat

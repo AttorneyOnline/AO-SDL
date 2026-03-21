@@ -6,16 +6,23 @@
 
 #include <imgui.h>
 
-#include <format>
+std::string& ChatWidget::shared_buffer() {
+    static std::string buf;
+    return buf;
+}
 
 void ChatWidget::handle_events() {
     auto& channel = EventManager::instance().get_channel<ChatEvent>();
+    auto& buf = shared_buffer();
     while (auto optev = channel.get_event()) {
-        m_buffer = std::format("{}\n{}", m_buffer, optev->to_string());
+        if (!buf.empty())
+            buf += '\n';
+        buf += optev->to_string();
     }
 }
 
 void ChatWidget::render() {
+    auto& buf = shared_buffer();
     float input_height = ImGui::GetFrameHeightWithSpacing() * 3 + ImGui::GetStyle().ItemSpacing.y;
     float log_height = ImGui::GetContentRegionAvail().y - input_height;
 
@@ -23,7 +30,7 @@ void ChatWidget::render() {
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
-        ImGui::InputTextMultiline("##chat_log", const_cast<char*>(m_buffer.c_str()), m_buffer.size() + 1,
+        ImGui::InputTextMultiline("##chat_log", const_cast<char*>(buf.c_str()), buf.size() + 1,
                                   ImVec2(-1, log_height), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
         ImGui::PopStyleColor(3);
     }

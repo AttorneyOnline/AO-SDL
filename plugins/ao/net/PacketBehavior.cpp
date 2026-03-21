@@ -8,12 +8,17 @@
 #include "utils/Version.h"
 #include "event/AreaUpdateEvent.h"
 #include "event/BackgroundEvent.h"
+#include "event/EvidenceListEvent.h"
+#include "event/FeatureListEvent.h"
+#include "event/HealthBarEvent.h"
 #include "event/MusicChangeEvent.h"
 #include "event/MusicListEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
 #include "event/ChatEvent.h"
 #include "event/EventManager.h"
+#include "event/PlayerListEvent.h"
+#include "event/TimerEvent.h"
 #include "event/UIEvent.h"
 
 // Keeping the actual handler functions in a separate file here just for clarity
@@ -193,4 +198,66 @@ void AOPacketPV::handle(AOClient& cli) {
 
 void AOPacketCT::handle(AOClient& cli) {
     EventManager::instance().get_channel<ChatEvent>().publish(ChatEvent(sender_name, message, system_message));
+}
+
+void AOPacketFL::handle(AOClient& cli) {
+    cli.features = features;
+    EventManager::instance().get_channel<FeatureListEvent>().publish(FeatureListEvent(features));
+}
+
+void AOPacketFA::handle(AOClient& cli) {
+    EventManager::instance().get_channel<MusicListEvent>().publish(
+        MusicListEvent(areas, {}, true));
+}
+
+void AOPacketFM::handle(AOClient& cli) {
+    EventManager::instance().get_channel<MusicListEvent>().publish(
+        MusicListEvent({}, tracks, true));
+}
+
+void AOPacketHP::handle(AOClient& cli) {
+    EventManager::instance().get_channel<HealthBarEvent>().publish(HealthBarEvent(side, value));
+}
+
+void AOPacketTI::handle(AOClient& cli) {
+    EventManager::instance().get_channel<TimerEvent>().publish(TimerEvent(timer_id, action, time_ms));
+}
+
+void AOPacketLE::handle(AOClient& cli) {
+    std::vector<EvidenceItem> items;
+    for (const auto& raw : raw_items) {
+        EvidenceItem item;
+        size_t p1 = raw.find('&');
+        if (p1 == std::string::npos) {
+            item.name = raw;
+        } else {
+            item.name = raw.substr(0, p1);
+            size_t p2 = raw.find('&', p1 + 1);
+            if (p2 == std::string::npos) {
+                item.description = raw.substr(p1 + 1);
+            } else {
+                item.description = raw.substr(p1 + 1, p2 - p1 - 1);
+                item.image = raw.substr(p2 + 1);
+            }
+        }
+        items.push_back(std::move(item));
+    }
+    EventManager::instance().get_channel<EvidenceListEvent>().publish(EvidenceListEvent(std::move(items)));
+}
+
+void AOPacketPR::handle(AOClient& cli) {
+    auto action = (update_type == 0) ? PlayerListEvent::Action::ADD : PlayerListEvent::Action::REMOVE;
+    EventManager::instance().get_channel<PlayerListEvent>().publish(PlayerListEvent(action, player_id));
+}
+
+void AOPacketPU::handle(AOClient& cli) {
+    PlayerListEvent::Action action;
+    switch (data_type) {
+    case 0: action = PlayerListEvent::Action::UPDATE_NAME; break;
+    case 1: action = PlayerListEvent::Action::UPDATE_CHARACTER; break;
+    case 2: action = PlayerListEvent::Action::UPDATE_CHARNAME; break;
+    case 3: action = PlayerListEvent::Action::UPDATE_AREA; break;
+    default: return;
+    }
+    EventManager::instance().get_channel<PlayerListEvent>().publish(PlayerListEvent(action, player_id, data));
 }

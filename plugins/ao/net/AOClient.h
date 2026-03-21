@@ -41,6 +41,8 @@ class AOClient : public ProtocolHandler {
 
     int char_id = -1; // Set by PV packet when character is confirmed
 
+    std::vector<std::string> features; // Server feature list (FL packet)
+
   private:
     std::string incomplete_buf;
     std::vector<std::string> buffered_messages;

@@ -15,6 +15,10 @@ set(SDL_APP_SOURCES
     ui/widgets/DebugOverlayWidget.cpp
     ui/widgets/ICLogWidget.cpp
     ui/widgets/MusicAreaWidget.cpp
+    ui/widgets/HealthBarWidget.cpp
+    ui/widgets/TimerWidget.cpp
+    ui/widgets/EvidenceWidget.cpp
+    ui/widgets/PlayerListWidget.cpp
     ui/controllers/ServerListController.cpp
     ui/controllers/CharSelectController.cpp
     ui/controllers/CourtroomController.cpp

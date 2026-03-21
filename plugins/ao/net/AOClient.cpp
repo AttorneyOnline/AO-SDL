@@ -5,6 +5,7 @@
 #include "event/CharSelectRequestEvent.h"
 #include "event/EventManager.h"
 #include "event/OutgoingChatEvent.h"
+#include "event/OutgoingHealthBarEvent.h"
 #include "event/OutgoingMusicEvent.h"
 #include "platform/HardwareId.h"
 #include "utils/Log.h"
@@ -69,6 +70,12 @@ std::vector<std::string> AOClient::flush_outgoing() {
         add_message(pw);
         AOPacketCC cc(player_number, optev->get_char_id(), platform::hardware_id());
         add_message(cc);
+    }
+
+    auto& hp_channel = EventManager::instance().get_channel<OutgoingHealthBarEvent>();
+    while (auto optev = hp_channel.get_event()) {
+        AOPacketHP hp({std::to_string(optev->side()), std::to_string(optev->value())});
+        add_message(hp);
     }
 
     // Keepalive: send CH packet periodically to prevent proxy/server timeouts

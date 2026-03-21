@@ -310,6 +310,101 @@ class AOPacketARUP : public AOPacket {
     static constexpr int MIN_FIELDS = 2;
 };
 
+/// Feature list (server → client). Lists supported protocol features.
+class AOPacketFL : public AOPacket {
+  public:
+    AOPacketFL(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    std::vector<std::string> features;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
+/// Fetch areas (server → client). Replaces area list dynamically.
+class AOPacketFA : public AOPacket {
+  public:
+    AOPacketFA(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    std::vector<std::string> areas;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
+/// Fetch music (server → client). Replaces music list dynamically.
+class AOPacketFM : public AOPacket {
+  public:
+    AOPacketFM(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    std::vector<std::string> tracks;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
+/// Health/penalty bar (server → client). side: 1=def, 2=pro. value: 0-10.
+class AOPacketHP : public AOPacket {
+  public:
+    AOPacketHP(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    int side = 0;
+    int value = 0;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 2;
+};
+
+/// Timer control (server → client).
+/// action: 0=start/sync, 1=pause, 2=show, 3=hide.
+class AOPacketTI : public AOPacket {
+  public:
+    AOPacketTI(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    int timer_id = 0;
+    int action = 0;
+    int64_t time_ms = 0;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 2;
+};
+
+/// List evidence (server → client). Each field is "name&description&image".
+class AOPacketLE : public AOPacket {
+  public:
+    AOPacketLE(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    std::vector<std::string> raw_items;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
+/// Player register (server → client). type: 0=add, 1=remove.
+class AOPacketPR : public AOPacket {
+  public:
+    AOPacketPR(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    int player_id = 0;
+    int update_type = 0;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 2;
+};
+
+/// Player update (server → client). data_type: 0=name, 1=character, 2=charname, 3=area.
+class AOPacketPU : public AOPacket {
+  public:
+    AOPacketPU(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    int player_id = 0;
+    int data_type = 0;
+    std::string data;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 3;
+};
+
 class AOPacketCT : public AOPacket {
   public:
     AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message);

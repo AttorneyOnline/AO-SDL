@@ -124,7 +124,11 @@ void CourtroomController::render() {
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::Begin("##courtroom_screen", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+                 ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
+                 ImGuiWindowFlags_NoScrollWithMouse);
+
+    health_bar_.handle_events();
+    timer_.handle_events();
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     float right_width = 280.0f;
@@ -151,6 +155,16 @@ void CourtroomController::render() {
             music_area_->render();
             ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Evidence")) {
+            evidence_.handle_events();
+            evidence_.render();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Players")) {
+            player_list_.handle_events();
+            player_list_.render();
+            ImGui::EndTabItem();
+        }
         ImGui::EndTabBar();
     }
     ImGui::EndChild();
@@ -158,9 +172,14 @@ void CourtroomController::render() {
     // === Bottom row ===
 
     float ic_controls_width = left_width * 0.55f;
-    float ooc_width = left_width - ic_controls_width - ImGui::GetStyle().ItemSpacing.x;
 
     ImGui::BeginChild("##ic_controls", ImVec2(ic_controls_width, bottom_height), ImGuiChildFlags_Borders);
+
+    // HP bars & timers
+    health_bar_.render();
+    timer_.render();
+    ImGui::Separator();
+
     ImGui::SeparatorText("IC Chat");
     ic_chat_->render();
 

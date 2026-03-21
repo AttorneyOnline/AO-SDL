@@ -251,16 +251,19 @@ PacketRegistrar AOPacketMS::registrar("MS", [](const auto& f) { return std::make
 
 AOPacketMS::AOPacketMS(const ICMessageData& d)
     : AOPacket("MS",
-               {std::to_string(d.desk_mod), ao_encode(d.pre_emote), ao_encode(d.character), ao_encode(d.emote),
+               {// 0-14: core fields
+                std::to_string(d.desk_mod), ao_encode(d.pre_emote), ao_encode(d.character), ao_encode(d.emote),
                 ao_encode(d.message), ao_encode(d.side), ao_encode(d.sfx_name), std::to_string(d.emote_mod),
                 std::to_string(d.char_id), std::to_string(d.sfx_delay), std::to_string(d.objection_mod),
                 std::to_string(d.evidence_id), std::to_string(d.flip), std::to_string(d.realization),
-                std::to_string(d.text_color), ao_encode(d.showname), std::to_string(d.other_charid),
-                ao_encode(d.other_name), ao_encode(d.other_emote), ao_encode(d.self_offset),
-                ao_encode(d.other_offset), std::to_string(d.other_flip), std::to_string(d.immediate),
+                std::to_string(d.text_color),
+                // 15-18: 2.6 extensions (client→server format)
+                ao_encode(d.showname), std::to_string(d.other_charid),
+                ao_encode(d.self_offset), std::to_string(d.immediate),
+                // 19-25: 2.8 extensions
                 std::to_string(d.looping_sfx), std::to_string(d.screenshake), ao_encode(d.frame_screenshake),
                 ao_encode(d.frame_realization), ao_encode(d.frame_sfx), std::to_string(d.additive),
-                ao_encode(d.effects), ao_encode(d.blipname), std::to_string(d.slide.empty() ? 0 : std::stoi(d.slide))}) {
+                ao_encode(d.effects)}) {
 }
 
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {
@@ -284,13 +287,15 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         // Showname (optional field 15)
         showname = fields.size() > 15 ? ao_decode(fields[15]) : character;
 
-        // Screenshake (field 24) and frame screenshake (field 25)
+        // 2.8 extensions (server→client echo format)
+        // 23: looping_sfx, 24: screenshake, 25: frame_screenshake,
+        // 26: frame_realization, 27: frame_sfx, 28: additive, 29: effects
         if (fields.size() > 24)
             screenshake = fields[24] == "1";
         if (fields.size() > 25)
             frame_screenshake = ao_decode(fields[25]);
-        if (fields.size() > 29)
-            additive = fields[29] == "1";
+        if (fields.size() > 28)
+            additive = fields[28] == "1";
 
         // Legacy emote_mod remapping
         if (emote_mod == 4)
@@ -360,6 +365,97 @@ PacketRegistrar AOPacketPV::registrar("PV", [](const auto& f) { return std::make
 AOPacketPV::AOPacketPV(const std::vector<std::string>& fields) : AOPacket("PV", fields) {
     if (fields.size() >= MIN_FIELDS) {
         char_id = std::stoi(fields[2]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketFL
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketFL::registrar("FL", [](const auto& f) { return std::make_unique<AOPacketFL>(f); });
+
+AOPacketFL::AOPacketFL(const std::vector<std::string>& fields) : AOPacket("FL", fields), features(fields) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketFA
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketFA::registrar("FA", [](const auto& f) { return std::make_unique<AOPacketFA>(f); });
+
+AOPacketFA::AOPacketFA(const std::vector<std::string>& fields) : AOPacket("FA", fields), areas(fields) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketFM
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketFM::registrar("FM", [](const auto& f) { return std::make_unique<AOPacketFM>(f); });
+
+AOPacketFM::AOPacketFM(const std::vector<std::string>& fields) : AOPacket("FM", fields), tracks(fields) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketHP
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketHP::registrar("HP", [](const auto& f) { return std::make_unique<AOPacketHP>(f); });
+
+AOPacketHP::AOPacketHP(const std::vector<std::string>& fields) : AOPacket("HP", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        side = std::stoi(fields[0]);
+        value = std::stoi(fields[1]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketTI
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketTI::registrar("TI", [](const auto& f) { return std::make_unique<AOPacketTI>(f); });
+
+AOPacketTI::AOPacketTI(const std::vector<std::string>& fields) : AOPacket("TI", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        timer_id = std::stoi(fields[0]);
+        action = std::stoi(fields[1]);
+        if (fields.size() > 2)
+            time_ms = std::stoll(fields[2]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketLE
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketLE::registrar("LE", [](const auto& f) { return std::make_unique<AOPacketLE>(f); });
+
+AOPacketLE::AOPacketLE(const std::vector<std::string>& fields) : AOPacket("LE", fields), raw_items(fields) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketPR
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketPR::registrar("PR", [](const auto& f) { return std::make_unique<AOPacketPR>(f); });
+
+AOPacketPR::AOPacketPR(const std::vector<std::string>& fields) : AOPacket("PR", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        player_id = std::stoi(fields[0]);
+        update_type = std::stoi(fields[1]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketPU
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketPU::registrar("PU", [](const auto& f) { return std::make_unique<AOPacketPU>(f); });
+
+AOPacketPU::AOPacketPU(const std::vector<std::string>& fields) : AOPacket("PU", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        player_id = std::stoi(fields[0]);
+        data_type = std::stoi(fields[1]);
+        data = fields[2];
     }
 }
 

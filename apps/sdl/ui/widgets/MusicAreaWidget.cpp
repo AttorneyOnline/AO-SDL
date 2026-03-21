@@ -15,8 +15,28 @@
 void MusicAreaWidget::handle_events() {
     auto& list_ch = EventManager::instance().get_channel<MusicListEvent>();
     while (auto ev = list_ch.get_event()) {
-        areas_ = ev->areas();
-        tracks_ = ev->tracks();
+        // Partial updates (FA/FM) only replace the non-empty list
+        if (ev->partial()) {
+            if (!ev->areas().empty()) {
+                areas_ = ev->areas();
+                size_t n = areas_.size();
+                area_players_.assign(n, -1);
+                area_status_.assign(n, "Unknown");
+                area_cm_.assign(n, "Unknown");
+                area_lock_.assign(n, "Unknown");
+            }
+            if (!ev->tracks().empty()) {
+                tracks_ = ev->tracks();
+            }
+        } else {
+            areas_ = ev->areas();
+            tracks_ = ev->tracks();
+            size_t n = areas_.size();
+            area_players_.assign(n, -1);
+            area_status_.assign(n, "Unknown");
+            area_cm_.assign(n, "Unknown");
+            area_lock_.assign(n, "Unknown");
+        }
         // Pre-lowercase track names for filtering
         tracks_lower_.resize(tracks_.size());
         for (size_t i = 0; i < tracks_.size(); i++) {
@@ -24,12 +44,6 @@ void MusicAreaWidget::handle_events() {
             std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(),
                            tracks_lower_[i].begin(), [](unsigned char c) { return std::tolower(c); });
         }
-        // Reset ARUP data to match new area count
-        size_t n = areas_.size();
-        area_players_.assign(n, -1);
-        area_status_.assign(n, "Unknown");
-        area_cm_.assign(n, "Unknown");
-        area_lock_.assign(n, "Unknown");
     }
 
     auto& arup_ch = EventManager::instance().get_channel<AreaUpdateEvent>();

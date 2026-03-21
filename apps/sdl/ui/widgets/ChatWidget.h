@@ -17,7 +17,9 @@ class ChatWidget : public IWidget {
     }
 
   private:
-    std::string m_buffer;
+    /// Shared OOC log buffer that persists across screen transitions.
+    static std::string& shared_buffer();
+
     char m_name[32] = "";
     char m_message[1024] = "";
     bool debug_toggled_ = false;
