@@ -21,6 +21,10 @@ class AOEmotePlayer {
 
     void tick(int delta_ms);
 
+    /// Retry loading assets that were nullptr (e.g. HTTP download completed).
+    /// Returns true if any asset was newly loaded.
+    bool retry_load(AOAssetLibrary& ao_assets);
+
     /// Transition from TALKING to IDLE (called when text finishes scrolling).
     void transition_to_idle();
 
@@ -39,6 +43,13 @@ class AOEmotePlayer {
 
   private:
     State current_state = State::NONE;
+    bool needs_retry_ = false;
+
+    // Stored for retry
+    std::string character_;
+    std::string emote_;
+    std::string pre_emote_;
+    EmoteMod emote_mod_ = EmoteMod::IDLE;
 
     AnimationPlayer preanim;
     AnimationPlayer talk;

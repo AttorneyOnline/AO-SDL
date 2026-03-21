@@ -4,6 +4,12 @@
 
 void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& character, const std::string& emote,
                           const std::string& pre_emote, EmoteMod emote_mod) {
+    // Store for retry
+    character_ = character;
+    emote_ = emote;
+    pre_emote_ = pre_emote;
+    emote_mod_ = emote_mod;
+
     // Preanim: direct name, no prefix
     std::shared_ptr<ImageAsset> preanim_asset;
     if (!pre_emote.empty() && pre_emote != "-") {
@@ -17,6 +23,9 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
     auto talk_asset = ao_assets.character_emote(character, emote, "(b)");
     if (!talk_asset)
         talk_asset = idle_asset;
+
+    // If no assets loaded yet (HTTP download pending), mark for retry
+    needs_retry_ = !idle_asset && !talk_asset;
 
     idle.load(idle_asset, true);
     talk.load(talk_asset, true);
@@ -42,6 +51,26 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
 
     Log::log_print(VERBOSE, "Emote: char=%s emote=%s pre=%s state=%d", character.c_str(), emote.c_str(),
                    pre_emote.c_str(), static_cast<int>(current_state));
+}
+
+bool AOEmotePlayer::retry_load(AOAssetLibrary& ao_assets) {
+    if (!needs_retry_)
+        return false;
+
+    auto idle_asset = ao_assets.character_emote(character_, emote_, "(a)");
+    if (!idle_asset)
+        return false; // still not available
+
+    auto talk_asset = ao_assets.character_emote(character_, emote_, "(b)");
+    if (!talk_asset)
+        talk_asset = idle_asset;
+
+    idle.load(idle_asset, true);
+    talk.load(talk_asset, true);
+    needs_retry_ = false;
+
+    Log::log_print(DEBUG, "Emote: retry loaded %s/%s", character_.c_str(), emote_.c_str());
+    return true;
 }
 
 void AOEmotePlayer::transition_to_idle() {

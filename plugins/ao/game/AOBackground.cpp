@@ -18,17 +18,29 @@ void AOBackground::set_position(const std::string& position) {
 }
 
 void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
+    // Retry if background was requested but not yet available (HTTP pending)
+    if (!dirty && !bg && !bg_name.empty()) {
+        bg = ao_assets.background(bg_name, pos);
+        if (!bg) {
+            // Prefetch via HTTP so it's available next retry
+            ao_assets.engine_assets().prefetch_image("background/" + bg_name + "/" + pos);
+        } else {
+            desk = ao_assets.desk_overlay(bg_name, pos);
+        }
+        return;
+    }
+
     if (!dirty)
         return;
     dirty = false;
+
+    // Prefetch via HTTP
+    ao_assets.engine_assets().prefetch_image("background/" + bg_name + "/" + pos);
 
     bg = ao_assets.background(bg_name, pos);
     desk = ao_assets.desk_overlay(bg_name, pos);
 
     if (bg) {
         Log::log_print(DEBUG, "Loaded background: %s/%s", bg_name.c_str(), pos.c_str());
-    }
-    else {
-        Log::log_print(WARNING, "Failed to load background: %s/%s", bg_name.c_str(), pos.c_str());
     }
 }

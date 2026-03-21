@@ -144,6 +144,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     auto anim_start = Clock::now();
 
     background.reload_if_needed(*ao_assets);
+    emote_player.retry_load(*ao_assets);
     emote_player.tick(delta_ms);
 
     if (textbox.text_state() == AOTextBox::TextState::DONE && emote_player.state() == AOEmotePlayer::State::TALKING) {

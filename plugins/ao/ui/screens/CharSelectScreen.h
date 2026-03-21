@@ -90,10 +90,8 @@ class CharSelectScreen : public Screen {
     void select_character(int index);
 
   private:
-    /**
-     * @brief Load character icon textures from disk.
-     */
     void load_icons();
+    void retry_icons();
 
     ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
     std::vector<CharEntry> chars;           ///< Character roster entries.

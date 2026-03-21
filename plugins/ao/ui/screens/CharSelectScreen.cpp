@@ -39,6 +39,9 @@ void CharSelectScreen::handle_events() {
         }
     }
 
+    // Retry loading icons that are pending HTTP download
+    retry_icons();
+
     // Transition to courtroom on confirmed character selection
     auto& ui_channel = EventManager::instance().get_channel<UIEvent>();
     while (auto optev = ui_channel.get_event()) {
@@ -65,12 +68,30 @@ void CharSelectScreen::load_icons() {
 
     for (auto& entry : chars) {
         std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
-        auto asset = lib.image(icon_path);
 
-        if (!asset || asset->frame_count() == 0) {
-            Log::log_print(VERBOSE, "No icon for character: %s", entry.folder.c_str());
+        // Trigger HTTP prefetch for missing icons
+        lib.prefetch_image(icon_path);
+
+        auto asset = lib.image(icon_path);
+        if (!asset || asset->frame_count() == 0)
             continue;
-        }
+
+        const ImageFrame& frame = asset->frame(0);
+        entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
+    }
+}
+
+void CharSelectScreen::retry_icons() {
+    AssetLibrary& lib = MediaManager::instance().assets();
+
+    for (auto& entry : chars) {
+        if (entry.icon.has_value())
+            continue;
+
+        std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
+        auto asset = lib.image(icon_path);
+        if (!asset || asset->frame_count() == 0)
+            continue;
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
