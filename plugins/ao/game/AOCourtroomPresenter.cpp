@@ -197,7 +197,12 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     }
 
     if (emote_player.has_frame()) {
-        scene.add_layer(5, Layer(emote_player.asset(), emote_player.current_frame_index(), 5));
+        Layer char_layer(emote_player.asset(), emote_player.current_frame_index(), 5);
+        // Preserve sprite aspect ratio: lock height to viewport, scale width proportionally.
+        float sprite_aspect = (float)emote_player.asset()->width() / (float)emote_player.asset()->height();
+        float viewport_aspect = (float)BASE_W / (float)BASE_H;
+        char_layer.transform().scale({sprite_aspect / viewport_aspect, 1.0f});
+        scene.add_layer(5, std::move(char_layer));
     }
 
     if (background.desk_asset() && show_desk) {
