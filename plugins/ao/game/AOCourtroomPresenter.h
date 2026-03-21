@@ -1,29 +1,25 @@
 #pragma once
 
-/// @file AOCourtroomPresenter.h
-/// @brief AO2-specific courtroom scene presenter — thin orchestration layer.
-
 #include "AOBackground.h"
 #include "AOEmotePlayer.h"
 #include "AOTextBox.h"
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/ImageAsset.h"
+#include "ao/game/effects/FlashEffect.h"
+#include "ao/game/effects/ScreenshakeEffect.h"
 #include "game/IScenePresenter.h"
-#include "render/TransformAnimator.h"
 
 #include <memory>
+#include <vector>
 
-/// AO2 courtroom scene presenter.
-///
-/// Owns an AOAssetLibrary that all components share for path resolution.
-/// Thin orchestrator: drains events → delegates to components → assembles RenderState.
+class ISceneEffect;
+
 class AOCourtroomPresenter : public IScenePresenter {
   public:
+    AOCourtroomPresenter();
     RenderState tick(uint64_t t) override;
 
   private:
-    void trigger_screenshake();
-
     std::unique_ptr<AOAssetLibrary> ao_assets;
     AOBackground background;
     AOEmotePlayer emote_player;
@@ -38,8 +34,10 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     int evict_timer_ms = 0;
 
-    TransformAnimator shake_anim_;
-    bool pending_screenshake_ = false;
+    // Scene effects
+    ScreenshakeEffect screenshake_;
+    FlashEffect flash_{VIEWPORT_W, VIEWPORT_H};
+    std::vector<ISceneEffect*> effects_;
 
     static constexpr int VIEWPORT_W = 256;
     static constexpr int VIEWPORT_H = 192;

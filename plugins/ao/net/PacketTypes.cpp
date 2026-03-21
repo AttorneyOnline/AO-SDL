@@ -262,7 +262,7 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         // fields[10] = objection_mod (skipped)
         // fields[11] = evidence_id (skipped)
         flip = fields[12] == "1";
-        // fields[13] = realization (skipped)
+        realization = fields[13] == "1";
         text_color = std::stoi(fields[14]);
 
         // Showname (optional field 15)
@@ -273,6 +273,8 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
             screenshake = fields[24] == "1";
         if (fields.size() > 25)
             frame_screenshake = ao_decode(fields[25]);
+        if (fields.size() > 29)
+            additive = fields[29] == "1";
 
         // Legacy emote_mod remapping
         if (emote_mod == 4)

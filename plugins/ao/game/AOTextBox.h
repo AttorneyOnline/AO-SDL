@@ -22,7 +22,8 @@ class AOTextBox {
     /// Load chatbox assets from AOAssetLibrary.
     void load(AOAssetLibrary& ao_assets);
 
-    void start_message(const std::string& showname, const std::string& message, int color_idx);
+    void start_message(const std::string& showname, const std::string& message, int color_idx,
+                       bool additive = false);
     bool tick(int delta_ms);
 
     TextState text_state() const {
@@ -50,6 +51,7 @@ class AOTextBox {
     // Current message state
     std::string current_showname;
     std::string current_message;
+    std::string previous_message; // for additive mode
     int current_color_idx = 0;
     int chars_visible = 0;
     int total_chars = 0;

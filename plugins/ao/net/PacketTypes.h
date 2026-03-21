@@ -235,6 +235,8 @@ class AOPacketMS : public AOPacket {
     bool flip;
     int text_color;
     bool screenshake = false;
+    bool realization = false;
+    bool additive = false;
     std::string frame_screenshake;
 
     static PacketRegistrar registrar;

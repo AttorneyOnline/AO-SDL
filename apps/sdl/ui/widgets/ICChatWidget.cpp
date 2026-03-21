@@ -37,6 +37,7 @@ void ICChatWidget::send() {
     data.text_color = state_->text_color;
     data.realization = state_->realization ? 1 : 0;
     data.screenshake = state_->screenshake ? 1 : 0;
+    data.additive = state_->additive ? 1 : 0;
 
     EventManager::instance().get_channel<OutgoingICMessageEvent>().publish(
         OutgoingICMessageEvent(std::move(data)));

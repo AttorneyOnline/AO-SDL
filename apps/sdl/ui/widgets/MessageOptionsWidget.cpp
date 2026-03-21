@@ -16,6 +16,8 @@ void MessageOptionsWidget::render() {
     ImGui::Checkbox("Realization", &state_->realization);
     ImGui::SameLine();
     ImGui::Checkbox("Screenshake", &state_->screenshake);
+    ImGui::SameLine();
+    ImGui::Checkbox("Additive", &state_->additive);
 
     ImGui::Combo("Text Color", &state_->text_color, COLOR_LABELS, COLOR_COUNT);
 }

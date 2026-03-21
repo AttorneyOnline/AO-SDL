@@ -53,8 +53,15 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
                    chatbox_rect.w, chatbox_rect.h, message_rect.x, message_rect.y, message_rect.w, message_rect.h);
 }
 
-void AOTextBox::start_message(const std::string& showname, const std::string& message, int color_idx) {
+void AOTextBox::start_message(const std::string& showname, const std::string& message, int color_idx, bool additive) {
     current_showname = showname;
+
+    if (additive) {
+        previous_message += current_message;
+    } else {
+        previous_message.clear();
+    }
+
     current_message = message;
     current_color_idx = std::clamp(color_idx, 0, (int)colors.size() - 1);
     chars_visible = 0;
@@ -149,7 +156,9 @@ void AOTextBox::render(int viewport_w, int viewport_h, uint8_t* pixels) {
                                  viewport_h, showname_rect.w, 0, pixels);
         }
 
-        text_renderer.render(current_message, chars_visible, color, chatbox_rect.x + message_rect.x,
+        std::string display_text = previous_message + current_message;
+        int prev_chars = UTF8::length(previous_message);
+        text_renderer.render(display_text, prev_chars + chars_visible, color, chatbox_rect.x + message_rect.x,
                              chatbox_rect.y + message_rect.y, viewport_w, viewport_h, message_rect.w, message_rect.h,
                              pixels);
     }

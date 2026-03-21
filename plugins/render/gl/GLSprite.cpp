@@ -2,8 +2,8 @@
 
 GLMesh* GLSprite::quad_mesh = nullptr;
 
-GLSprite::GLSprite(GLuint texture_array, int frame_index, const Mat4& transform, float aspect)
-    : texture_array(texture_array), frame_index(frame_index), transform(transform), aspect(aspect) {
+GLSprite::GLSprite(GLuint texture_array, int frame_index, const Mat4& transform, float aspect, float opacity)
+    : texture_array(texture_array), frame_index(frame_index), transform(transform), aspect(aspect), opacity(opacity) {
 }
 
 void GLSprite::draw(GLProgram& shader) {
@@ -11,6 +11,7 @@ void GLSprite::draw(GLProgram& shader) {
     shader.uniform("local", transform);
     shader.uniform("aspect", aspect);
     shader.uniform("frame_index", (GLint)frame_index);
+    shader.uniform("opacity", opacity);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texture_array);

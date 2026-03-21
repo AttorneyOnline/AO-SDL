@@ -21,6 +21,7 @@ struct VertexUniforms {
 
 struct FragmentUniforms {
     int32_t frame_index;
+    float opacity;
 };
 
 // ---- helpers ----------------------------------------------------------------
@@ -91,7 +92,7 @@ struct MetalRendererImpl {
             "struct VertexIn { float2 position [[attribute(0)]]; float2 texcoord [[attribute(1)]]; };\n"
             "struct VertexOut { float4 position [[position]]; float2 texcoord; };\n"
             "struct VertexUniforms { float4x4 local; float aspect; };\n"
-            "struct FragmentUniforms { int frame_index; };\n"
+            "struct FragmentUniforms { int frame_index; float opacity; };\n"
             "vertex VertexOut vertex_main(VertexIn in [[stage_in]],\n"
             "                             constant VertexUniforms& u [[buffer(1)]]) {\n"
             "    VertexOut out;\n"
@@ -104,6 +105,7 @@ struct MetalRendererImpl {
             "                              sampler samp [[sampler(0)]],\n"
             "                              constant FragmentUniforms& u [[buffer(0)]]) {\n"
             "    float4 color = tex.sample(samp, in.texcoord, u.frame_index);\n"
+            "    color.a *= u.opacity;\n"
             "    if (color.a < 0.001) discard_fragment();\n"
             "    return color;\n"
             "}\n";
@@ -396,6 +398,7 @@ struct MetalRendererImpl {
 
                         FragmentUniforms fu;
                         fu.frame_index = frame;
+                        fu.opacity = layer.get_opacity();
 
                         [enc setVertexBytes:&vu   length:sizeof(vu)   atIndex:1];
                         [enc setFragmentBytes:&fu length:sizeof(fu)   atIndex:0];

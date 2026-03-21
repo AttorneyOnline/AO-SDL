@@ -194,6 +194,8 @@ add_library(ao_protocol STATIC
     plugins/ao/game/AOBackground.cpp
     plugins/ao/game/AOEmotePlayer.cpp
     plugins/ao/game/AOTextBox.cpp
+    plugins/ao/game/effects/ScreenshakeEffect.cpp
+    plugins/ao/game/effects/FlashEffect.cpp
     plugins/ao/net/AOClient.cpp
     plugins/ao/net/AOPacket.cpp
     plugins/ao/net/PacketTypes.cpp

@@ -15,6 +15,9 @@ class Layer {
     int get_frame_index() const { return frame_index; }
     uint16_t get_z_index() const { return z_index; }
 
+    void set_opacity(float o) { opacity = o; }
+    float get_opacity() const { return opacity; }
+
     Transform& transform() { return transform_; }
     const Transform& transform() const { return transform_; }
 
@@ -22,6 +25,7 @@ class Layer {
     std::shared_ptr<ImageAsset> asset;
     int frame_index;
     uint16_t z_index;
+    float opacity = 1.0f;
     Transform transform_;
 };
 

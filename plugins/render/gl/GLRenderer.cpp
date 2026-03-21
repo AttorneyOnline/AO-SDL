@@ -125,7 +125,7 @@ void GLRenderer::draw(const RenderState* state) {
             int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
             Mat4 local = group_mat * layer.transform().get_local_transform();
-            GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio());
+            GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio(), layer.get_opacity());
             sprite.draw(program);
         }
     }
@@ -174,9 +174,11 @@ in vec2 vert_texcoord;
 
 uniform sampler2DArray texture_sample;
 uniform int frame_index;
+uniform float opacity;
 
 void main() {
     vec4 tex_color = texture(texture_sample, vec3(vert_texcoord, float(frame_index)));
+    tex_color.a *= opacity;
     if (tex_color.a < 0.001f) {
         discard;
     }

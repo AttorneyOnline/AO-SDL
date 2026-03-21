@@ -9,48 +9,23 @@
 #include "utils/Log.h"
 
 #include <cstring>
-#include <random>
 
-void AOCourtroomPresenter::trigger_screenshake() {
-    // 300ms total, 20ms per jolt = 15 keyframes + final rest frame
-    // Max deviation: 7/192 in NDC (base viewport height = 192px)
-    constexpr int DURATION_MS = 300;
-    constexpr int JOLT_MS = 20;
-    constexpr float MAX_DEV = 7.0f / 192.0f * 2.0f; // NDC range is [-1, 1] = 2 units
-
-    shake_anim_.clear_keyframes();
-    shake_anim_.set_easing(Easing::LINEAR);
-    shake_anim_.set_looping(false);
-
-    thread_local std::mt19937 rng(std::random_device{}());
-    std::uniform_real_distribution<float> dist(-MAX_DEV, MAX_DEV);
-
-    int t = 0;
-    while (t < DURATION_MS) {
-        shake_anim_.add_keyframe({t, {dist(rng), dist(rng)}, {1, 1}, 0});
-        t += JOLT_MS;
-    }
-
-    // Final keyframe: return to origin
-    shake_anim_.add_keyframe({DURATION_MS, {0, 0}, {1, 1}, 0});
-
-    shake_anim_.play();
+AOCourtroomPresenter::AOCourtroomPresenter() {
+    effects_.push_back(&screenshake_);
+    effects_.push_back(&flash_);
 }
 
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
-    // t is real elapsed time in ms from the game thread
     int delta_ms = static_cast<int>(t);
     if (delta_ms <= 0)
         delta_ms = 16;
     if (delta_ms > 200)
-        delta_ms = 200; // clamp to avoid huge jumps
+        delta_ms = 200;
 
     // Initialize AOAssetLibrary on first tick
     if (!initialized) {
         auto& engine = MediaManager::instance().assets();
 
-        // Pick the best available theme
-        // TODO: make theme configurable via settings
         std::string theme = "default";
         if (engine.config("themes/AceAttorney DS/courtroom_fonts.ini")) {
             theme = "AceAttorney DS";
@@ -81,11 +56,13 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
         emote_player.start(*ao_assets, ev->get_character(), ev->get_emote(), ev->get_pre_emote(), ev->get_emote_mod());
 
-        textbox.start_message(ev->get_showname(), ev->get_message(), ev->get_text_color());
+        textbox.start_message(ev->get_showname(), ev->get_message(), ev->get_text_color(), ev->get_additive());
         textbox_dirty = true;
 
         if (ev->get_screenshake())
-            pending_screenshake_ = true;
+            screenshake_.trigger();
+        if (ev->get_realization())
+            flash_.trigger();
     }
 
     // ---- Update components ----
@@ -96,17 +73,13 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         textbox_dirty = true;
     }
 
-    // Text finished scrolling → transition character to idle animation
     if (textbox.text_state() == AOTextBox::TextState::DONE && emote_player.state() == AOEmotePlayer::State::TALKING) {
         emote_player.transition_to_idle();
     }
 
-    // ---- Screenshake ----
-    if (pending_screenshake_) {
-        trigger_screenshake();
-        pending_screenshake_ = false;
-    }
-    shake_anim_.tick(delta_ms);
+    // ---- Tick effects ----
+    for (auto* effect : effects_)
+        effect->tick(delta_ms);
 
     // ---- Render textbox overlay when text changes ----
     if (textbox_dirty && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
@@ -128,7 +101,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         textbox_dirty = false;
     }
 
-    // Periodic cache eviction (~every 30 seconds)
+    // Periodic cache eviction
     evict_timer_ms += delta_ms;
     if (evict_timer_ms >= 30000) {
         evict_timer_ms = 0;
@@ -155,9 +128,10 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         scene.add_layer(20, Layer(textbox_overlay, 0, 20));
     }
 
-    // Apply screenshake to the entire scene group
-    if (shake_anim_.is_playing() || !shake_anim_.is_finished()) {
-        shake_anim_.apply(scene.transform());
+    // ---- Apply active effects ----
+    for (auto* effect : effects_) {
+        if (effect->is_active())
+            effect->apply(scene);
     }
 
     state.add_layer_group(0, scene);

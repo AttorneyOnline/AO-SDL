@@ -38,4 +38,5 @@ struct ICMessageState {
     int text_color = 0;
     bool realization = false;
     bool screenshake = false;
+    bool additive = false;
 };
