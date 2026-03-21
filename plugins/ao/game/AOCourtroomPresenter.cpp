@@ -73,12 +73,14 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     // Prefetch character assets via HTTP
     ao_assets->prefetch_character(msg.character, msg.emote, msg.pre_emote, 2);
 
+    // Always load the character sheet so char.ini is promoted from the HTTP
+    // raw cache into the asset cache (survives release_all_http eviction).
+    auto sheet = ao_assets->character_sheet(msg.character);
+
     // Resolve showname: prefer the one from the message, fall back to char.ini
     std::string showname = msg.showname;
-    if (showname.empty()) {
-        auto sheet = ao_assets->character_sheet(msg.character);
+    if (showname.empty())
         showname = sheet ? sheet->showname() : msg.character;
-    }
 
     textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
 
