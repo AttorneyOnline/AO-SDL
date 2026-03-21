@@ -113,6 +113,9 @@ void WebSocket::connect(const std::string& endpoint) {
 }
 
 std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
+    if (!ready)
+        throw WebSocketException("Cannot read from a closed WebSocket");
+
     std::vector<WebSocketFrame> messages;
 
     do {
@@ -211,9 +214,9 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
                 send_close(code, "");
                 ready = false;
             }
-            // Deliver the close frame so callers can see the disconnect
-            messages.push_back(frame);
-            return messages;
+            // Don't deliver CLOSE as a message — throw so the network
+            // thread's catch block handles the disconnect cleanly.
+            throw WebSocketException("Connection closed by server");
         }
         else if (frame.opcode == PING) {
             WebSocketFrame pong;
@@ -281,6 +284,9 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
 }
 
 void WebSocket::write(std::span<const uint8_t> data_bytes) {
+    if (!ready)
+        throw WebSocketException("Cannot write to a closed WebSocket");
+
     WebSocketFrame frame;
 
     frame.fin = true;

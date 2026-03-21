@@ -92,6 +92,7 @@ void SDLGameWindow::start_loop(RenderManager& render, IUIRenderer& ui_renderer) 
     while (running) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
+                Log::log_print(DEBUG, "SDLGameWindow: SDL_QUIT received");
                 running = false;
             }
             ImGui_ImplSDL2_ProcessEvent(&event);

@@ -160,6 +160,24 @@ class AOPacketRD : public AOPacket {
     static constexpr int MIN_FIELDS = 0;
 };
 
+/// Keepalive heartbeat (client → server). Sent every ~45s.
+class AOPacketCH : public AOPacket {
+  public:
+    AOPacketCH(int char_id);
+  private:
+    static constexpr int MIN_FIELDS = 1;
+};
+
+/// Keepalive response (server → client). Received in response to CH.
+class AOPacketCHECK : public AOPacket {
+  public:
+    AOPacketCHECK(const std::vector<std::string>& fields);
+    virtual void handle(AOClient& cli) override;
+  private:
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
 class AOPacketDONE : public AOPacket {
   public:
     AOPacketDONE();

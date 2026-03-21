@@ -24,8 +24,11 @@ std::vector<uint8_t> KissnetTcpSocket::recv() {
     kissnet::buffer<RECV_BUF_SIZE> buf;
     const auto [recv_size, status] = sock.recv(buf);
 
-    if (!status.valid) {
-        throw WebSocketException("TCP socket read invalid");
+    if (status.value == kissnet::socket_status::errored) {
+        throw WebSocketException("TCP socket read error");
+    }
+    if (status.value == kissnet::socket_status::cleanly_disconnected) {
+        throw WebSocketException("TCP connection closed by peer");
     }
 
     std::vector<uint8_t> result;

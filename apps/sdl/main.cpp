@@ -24,6 +24,7 @@
 
 #include "httplib.h"
 
+#include <csignal>
 #include <cstdlib>
 #include <filesystem>
 
@@ -31,6 +32,13 @@
 std::unique_ptr<IRenderer> create_renderer(int width, int height);
 
 int main(int argc, char* argv[]) {
+    // Ignore SIGPIPE so that writing to a closed socket returns EPIPE
+    // instead of killing the process. Without this, a server disconnect
+    // followed by a write() silently terminates the app on macOS/Linux.
+    // The EPIPE error is then surfaced as an exception by the socket layer.
+#ifndef _WIN32
+    std::signal(SIGPIPE, SIG_IGN);
+#endif
     MediaManager::instance().init(std::filesystem::path(std::getenv("HOME")) / "Documents" / "AO2" / "base");
 
     // todo: kick off another thread to do this
@@ -70,12 +78,17 @@ int main(int argc, char* argv[]) {
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;
+    Log::log_print(DEBUG, "main: entering render loop");
     game_window.start_loop(renderer, ui_renderer);
+    Log::log_print(DEBUG, "main: render loop exited");
 
     net_thread.stop();
+    Log::log_print(DEBUG, "main: network thread stopped");
     game_logic.stop();
+    Log::log_print(DEBUG, "main: game thread stopped");
 
     MediaManager::instance().shutdown();
+    Log::log_print(DEBUG, "main: shutdown complete");
 
     return 0;
 }

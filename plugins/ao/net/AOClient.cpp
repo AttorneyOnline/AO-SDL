@@ -13,6 +13,7 @@ AOClient::AOClient() = default;
 
 void AOClient::on_connect() {
     conn_state = CONNECTED;
+    last_keepalive_ = std::chrono::steady_clock::now();
 }
 
 void AOClient::on_message(const std::string& message) {
@@ -68,6 +69,17 @@ std::vector<std::string> AOClient::flush_outgoing() {
         add_message(pw);
         AOPacketCC cc(player_number, optev->get_char_id(), platform::hardware_id());
         add_message(cc);
+    }
+
+    // Keepalive: send CH packet periodically to prevent proxy/server timeouts
+    if (conn_state == JOINED && char_id >= 0) {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_keepalive_).count();
+        if (elapsed >= KEEPALIVE_INTERVAL_MS) {
+            AOPacketCH ch(char_id);
+            add_message(ch);
+            last_keepalive_ = now;
+        }
     }
 
     std::vector<std::string> out = std::move(buffered_messages);

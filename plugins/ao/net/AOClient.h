@@ -3,6 +3,7 @@
 #include "AOPacket.h"
 #include "net/ProtocolHandler.h"
 
+#include <chrono>
 #include <string>
 #include <cstring>
 #include <vector>
@@ -38,7 +39,13 @@ class AOClient : public ProtocolHandler {
     std::vector<std::string> character_list;
     std::vector<std::string> music_list;
 
+    int char_id = -1; // Set by PV packet when character is confirmed
+
   private:
     std::string incomplete_buf;
     std::vector<std::string> buffered_messages;
+
+    // Keepalive: send CH every 45 seconds to prevent proxy/server timeouts
+    std::chrono::steady_clock::time_point last_keepalive_{};
+    static constexpr int KEEPALIVE_INTERVAL_MS = 45000;
 };

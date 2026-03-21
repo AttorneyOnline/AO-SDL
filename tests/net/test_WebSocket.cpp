@@ -60,11 +60,29 @@ static std::string extract_header(const std::string& request, const std::string&
     return request.substr(start, end - start);
 }
 
-// Build a WebSocket with an injected mock socket.
+// Build a WebSocket with an injected mock socket (not connected).
 static std::pair<WebSocket, MockTcpSocket*> make_ws() {
     auto* raw = new MockTcpSocket();
     WebSocket ws("localhost", 0, std::unique_ptr<ITcpSocket>(raw));
     return {std::move(ws), raw};
+}
+
+// Forward declaration — defined further down.
+static std::string make_101_response(const std::vector<uint8_t>& request_bytes);
+
+// Build a connected WebSocket via mock handshake.
+static std::pair<WebSocket, MockTcpSocket*> make_connected_ws() {
+    auto [ws, mock] = make_ws();
+    mock->on_send = [mock](const std::vector<uint8_t>& sent) {
+        if (mock->bytes_available())
+            return;
+        auto resp = make_101_response(sent);
+        mock->feed(std::vector<uint8_t>(resp.begin(), resp.end()));
+    };
+    ws.connect();
+    mock->on_send = nullptr;
+    mock->clear_sent();
+    return {std::move(ws), mock};
 }
 
 // ---------------------------------------------------------------------------
@@ -244,13 +262,13 @@ TEST(WebSocket, IsConnectedFalseWithMockBeforeConnect) {
 // ---------------------------------------------------------------------------
 
 TEST(WebSocketRead, ReturnsEmptyWhenNoData) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     // No data fed — mock returns empty vector, read() returns empty list.
     EXPECT_TRUE(ws.read().empty());
 }
 
 TEST(WebSocketRead, ParsesSmallTextFrame) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     mock->feed({0x81, 0x02, 'h', 'i'}); // FIN+TEXT, len=2
 
     auto frames = ws.read();
@@ -263,7 +281,7 @@ TEST(WebSocketRead, ParsesSmallTextFrame) {
 }
 
 TEST(WebSocketRead, ParsesBinaryFrame) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     mock->feed({0x82, 0x03, 0x01, 0x02, 0x03}); // FIN+BINARY, len=3
 
     auto frames = ws.read();
@@ -275,7 +293,7 @@ TEST(WebSocketRead, ParsesBinaryFrame) {
 TEST(WebSocketRead, ParsesExtended16BitLength) {
     // FIN+TEXT, len_code=0x7E (126), 2-byte len = 0x0003 (big-endian), then 3 bytes
     std::vector<uint8_t> frame = {0x81, 0x7E, 0x00, 0x03, 'a', 'b', 'c'};
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     mock->feed(frame);
 
     auto frames = ws.read();
@@ -286,7 +304,7 @@ TEST(WebSocketRead, ParsesExtended16BitLength) {
 }
 
 TEST(WebSocketRead, ParsesTwoFramesFromOneChunk) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     // Two complete frames in a single recv chunk.
     mock->feed({0x81, 0x01, 'A',   // frame 1: "A"
                 0x81, 0x01, 'B'}); // frame 2: "B"
@@ -298,7 +316,7 @@ TEST(WebSocketRead, ParsesTwoFramesFromOneChunk) {
 }
 
 TEST(WebSocketRead, BuffersIncompleteFrameForNextRead) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     // First read: only the header, no payload yet.
     mock->feed({0x81, 0x02});
 
@@ -313,14 +331,14 @@ TEST(WebSocketRead, BuffersIncompleteFrameForNextRead) {
 }
 
 TEST(WebSocketRead, ThrowsOnServerMaskedFrame) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     // Byte 1 = 0x82 → MASK bit set, len=2
     mock->feed({0x81, 0x82, 0xDE, 0xAD, 0xBE, 0xEF, 'h', 'i'});
     EXPECT_THROW(ws.read(), WebSocketException);
 }
 
 TEST(WebSocketRead, PingFrameAutoRepliesWithPong) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     mock->feed({0x89, 0x00}); // FIN+PING, empty payload
 
     auto frames = ws.read();
@@ -338,7 +356,7 @@ TEST(WebSocketRead, PingFrameAutoRepliesWithPong) {
 // ---------------------------------------------------------------------------
 
 TEST(WebSocketWrite, SendsTextFrameWithCorrectFirstByte) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     std::string payload = "hello";
     ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
@@ -348,7 +366,7 @@ TEST(WebSocketWrite, SendsTextFrameWithCorrectFirstByte) {
 }
 
 TEST(WebSocketWrite, SentFrameHasMaskBitSet) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     std::string payload = "hi";
     ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
@@ -356,7 +374,7 @@ TEST(WebSocketWrite, SentFrameHasMaskBitSet) {
 }
 
 TEST(WebSocketWrite, SentFramePayloadLengthIsCorrect) {
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     std::string payload = "hello"; // 5 bytes
     ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 
@@ -366,7 +384,7 @@ TEST(WebSocketWrite, SentFramePayloadLengthIsCorrect) {
 TEST(WebSocketWrite, MaskedPayloadDecodesBack) {
     // The write() method masks the payload with a random key.
     // We can recover the original by XOR-ing with the key bytes from the wire frame.
-    auto [ws, mock] = make_ws();
+    auto [ws, mock] = make_connected_ws();
     std::string payload = "AO2";
     ws.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
 

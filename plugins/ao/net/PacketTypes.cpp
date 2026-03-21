@@ -181,6 +181,22 @@ AOPacketSM::AOPacketSM(const std::vector<std::string>& fields) : AOPacket("SM", 
 }
 
 // ---------------------------------------------------------------------------
+// AOPacketCH  (client → server keepalive, no handle)
+// ---------------------------------------------------------------------------
+
+AOPacketCH::AOPacketCH(int char_id) : AOPacket("CH", {std::to_string(char_id)}) {
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketCHECK  (server → client keepalive response)
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketCHECK::registrar("CHECK", [](const auto& f) { return std::make_unique<AOPacketCHECK>(f); });
+
+AOPacketCHECK::AOPacketCHECK(const std::vector<std::string>& fields) : AOPacket("CHECK", fields) {
+}
+
+// ---------------------------------------------------------------------------
 // AOPacketRD  (client → server, no handle)
 // ---------------------------------------------------------------------------
 

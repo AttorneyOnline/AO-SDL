@@ -140,6 +140,10 @@ void AOPacketSM::handle(AOClient& cli) {
     cli.add_message(signal_done);
 }
 
+void AOPacketCHECK::handle(AOClient& cli) {
+    // Server acknowledged our keepalive. Could measure latency here.
+}
+
 void AOPacketDONE::handle(AOClient& cli) {
     if (cli.conn_state != CONNECTED) {
         throw ProtocolStateException("Received DONE when client is not in CONNECTED state");
@@ -179,6 +183,7 @@ void AOPacketARUP::handle(AOClient& cli) {
 }
 
 void AOPacketPV::handle(AOClient& cli) {
+    cli.char_id = char_id;
     std::string character_name;
     if (char_id >= 0 && char_id < (int)cli.character_list.size())
         character_name = cli.character_list[char_id];
