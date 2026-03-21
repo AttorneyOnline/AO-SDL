@@ -5,7 +5,7 @@ float Transform::aspect_ratio = 1.0f;
 Transform::Transform() : transform(Mat4::identity()), rotation(0.0f), scaling(1.0f), translation(0.0f) {
 }
 
-Mat4 Transform::get_local_transform() {
+Mat4 Transform::get_local_transform() const {
     return transform;
 }
 

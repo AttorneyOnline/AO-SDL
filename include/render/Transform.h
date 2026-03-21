@@ -8,7 +8,7 @@ class Transform {
   public:
     Transform();
 
-    Mat4 get_local_transform();
+    Mat4 get_local_transform() const;
 
     void rotate(float degrees);
     void scale(Vec2 scale);

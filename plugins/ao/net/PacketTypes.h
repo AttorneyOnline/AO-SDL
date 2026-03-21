@@ -234,6 +234,8 @@ class AOPacketMS : public AOPacket {
     int char_id;
     bool flip;
     int text_color;
+    bool screenshake = false;
+    std::string frame_screenshake;
 
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 15;

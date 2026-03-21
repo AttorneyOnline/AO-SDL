@@ -268,6 +268,12 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         // Showname (optional field 15)
         showname = fields.size() > 15 ? ao_decode(fields[15]) : character;
 
+        // Screenshake (field 24) and frame screenshake (field 25)
+        if (fields.size() > 24)
+            screenshake = fields[24] == "1";
+        if (fields.size() > 25)
+            frame_screenshake = ao_decode(fields[25]);
+
         // Legacy emote_mod remapping
         if (emote_mod == 4)
             emote_mod = 6; // legacy → PREANIM_ZOOM

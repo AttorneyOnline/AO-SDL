@@ -9,6 +9,7 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/ImageAsset.h"
 #include "game/IScenePresenter.h"
+#include "render/TransformAnimator.h"
 
 #include <memory>
 
@@ -21,6 +22,8 @@ class AOCourtroomPresenter : public IScenePresenter {
     RenderState tick(uint64_t t) override;
 
   private:
+    void trigger_screenshake();
+
     std::unique_ptr<AOAssetLibrary> ao_assets;
     AOBackground background;
     AOEmotePlayer emote_player;
@@ -34,6 +37,9 @@ class AOCourtroomPresenter : public IScenePresenter {
     bool textbox_dirty = false;
 
     int evict_timer_ms = 0;
+
+    TransformAnimator shake_anim_;
+    bool pending_screenshake_ = false;
 
     static constexpr int VIEWPORT_W = 256;
     static constexpr int VIEWPORT_H = 192;

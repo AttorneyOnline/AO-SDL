@@ -1,7 +1,5 @@
 #pragma once
 
-#include "render/Image.h"
-
 #include <GL/glew.h>
 
 #include <cstdint>
@@ -27,7 +25,6 @@ class GLTexture {
 
 class GLTexture2D : public GLTexture {
   public:
-    GLTexture2D(Image img);
     GLTexture2D(int width, int height, const uint8_t* pixels, GLint internal_format, GLenum source_format);
     void activate(int texture_unit);
 

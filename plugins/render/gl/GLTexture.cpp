@@ -18,11 +18,6 @@ void GLTexture::activate(GLenum target, int texture_unit) {
     glBindTexture(target, texture);
 }
 
-GLTexture2D::GLTexture2D(Image img)
-    : GLTexture2D(img.get_width(), img.get_height(), img.get_pixels(), GL_RGBA,
-                  img.get_num_channels() == 3 ? GL_RGB : GL_RGBA) {
-}
-
 GLTexture2D::GLTexture2D(int width, int height, const uint8_t* pixels, GLint internal_format, GLenum source_format)
     : GLTexture(pixels, internal_format, source_format), width(width), height(height) {
 

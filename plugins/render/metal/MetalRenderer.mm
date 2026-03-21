@@ -378,6 +378,7 @@ struct MetalRendererImpl {
 
             if (state) {
                 for (const auto& [_, group] : state->get_layer_groups()) {
+                    Mat4 group_mat = group.transform().get_local_transform();
                     for (const auto& [__, layer] : group.get_layers()) {
                         const auto& asset = layer.get_asset();
                         if (!asset || asset->frame_count() == 0) continue;
@@ -388,11 +389,9 @@ struct MetalRendererImpl {
                         int frame = std::clamp(layer.get_frame_index(), 0,
                                                asset->frame_count() - 1);
 
-                        Transform t;
-                        t.zindex(layer.get_z_index() + 1);
-
+                        Mat4 local = group_mat * layer.transform().get_local_transform();
                         VertexUniforms vu;
-                        vu.local  = mat4_to_simd(t.get_local_transform());
+                        vu.local  = mat4_to_simd(local);
                         vu.aspect = Transform::get_aspect_ratio();
 
                         FragmentUniforms fu;

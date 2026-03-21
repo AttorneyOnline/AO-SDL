@@ -1,6 +1,7 @@
 #include "GLRenderer.h"
 
 #include "GLSprite.h"
+#include "render/Transform.h"
 #include "utils/Log.h"
 
 #include <algorithm>
@@ -111,6 +112,7 @@ void GLRenderer::draw(const RenderState* state) {
     }
 
     for (const auto& [_, group] : state->get_layer_groups()) {
+        Mat4 group_mat = group.transform().get_local_transform();
         for (const auto& [__, layer] : group.get_layers()) {
             const auto& asset = layer.get_asset();
             if (!asset || asset->frame_count() == 0)
@@ -122,8 +124,8 @@ void GLRenderer::draw(const RenderState* state) {
 
             int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
-            GLSprite sprite(tex_array, frame);
-            sprite.zindex(layer.get_z_index() + 1);
+            Mat4 local = group_mat * layer.transform().get_local_transform();
+            GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio());
             sprite.draw(program);
         }
     }

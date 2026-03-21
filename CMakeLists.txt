@@ -91,13 +91,11 @@ add_library(aoengine STATIC
 
     engine/asset/AssetLibrary.cpp
     engine/asset/ApngDecoder.cpp
-    engine/asset/Asset.cpp
     engine/asset/AssetCache.cpp
     engine/asset/MediaManager.cpp
     engine/asset/MountManager.cpp
     engine/asset/MountArchive.cpp
     engine/asset/MountDirectory.cpp
-    engine/asset/ImageAsset.cpp
     engine/asset/stb_image_impl.cpp
 
     engine/net/WebSocket.cpp
@@ -108,10 +106,10 @@ add_library(aoengine STATIC
     engine/ui/UIManager.cpp
 
     engine/render/Transform.cpp
+    engine/render/TransformAnimator.cpp
     engine/render/StateBuffer.cpp
     engine/render/RenderState.cpp
     engine/render/RenderManager.cpp
-    engine/render/Image.cpp
     engine/render/Layer.cpp
     engine/render/AnimationPlayer.cpp
     engine/render/TextRenderer.cpp
