@@ -19,6 +19,8 @@
 
 #include "Mount.h"
 
+class MountHttp;
+
 /**
  * @brief Aggregates Mount backends and provides unified virtual file access.
  *
@@ -46,6 +48,13 @@ class MountManager {
     void load_mounts(const std::vector<std::filesystem::path>& target_mount_path);
 
     /**
+     * @brief Append a mount to the end of the mount list (lowest priority).
+     *
+     * @note Acquires an exclusive lock on the internal shared_mutex.
+     */
+    void add_mount(std::unique_ptr<Mount> mount);
+
+    /**
      * @brief Fetch file data by virtual (relative) path from the first matching mount.
      *
      * Searches mounts in order and returns data from the first mount that
@@ -57,6 +66,17 @@ class MountManager {
      * @return The file contents as a byte vector, or std::nullopt if not found in any mount.
      */
     std::optional<std::vector<uint8_t>> fetch_data(const std::string& relative_path);
+
+    /**
+     * @brief Trigger async HTTP downloads for a file not found in local mounts.
+     *
+     * If the file exists in a local (non-HTTP) mount, does nothing.
+     * Otherwise, calls request() on all HTTP mounts so the file
+     * will be available on a future fetch_data() call.
+     *
+     * @param relative_path The virtual path to prefetch.
+     */
+    void prefetch(const std::string& relative_path);
 
   private:
     std::shared_mutex lock; /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */

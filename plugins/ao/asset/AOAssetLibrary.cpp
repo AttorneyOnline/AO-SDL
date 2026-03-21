@@ -325,3 +325,14 @@ std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string&
     Log::log_print(WARNING, "AOAssetLibrary: font '%s' not found", normalized_name.c_str());
     return std::nullopt;
 }
+
+void AOAssetLibrary::prefetch_character(const std::string& character, const std::string& emote,
+                                         const std::string& pre_emote) {
+    std::string base = "characters/" + character + "/";
+    assets.prefetch_image(base + "(a)" + emote);
+    assets.prefetch_image(base + "(b)" + emote);
+    if (!pre_emote.empty())
+        assets.prefetch_image(base + pre_emote);
+    // Also prefetch char.ini so character_sheet() is ready
+    assets.prefetch_config(base + "char.ini");
+}

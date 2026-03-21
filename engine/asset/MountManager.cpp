@@ -2,6 +2,7 @@
 
 #include "asset/MountArchive.h"
 #include "asset/MountDirectory.h"
+#include "asset/MountHttp.h"
 #include "utils/Log.h"
 
 #include <format>
@@ -33,6 +34,30 @@ void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_
             Log::log_print(WARNING,
                            std::format("Failed to create mount at {}: {}", mount_path.string(), e.what()).c_str());
         }
+    }
+}
+
+void MountManager::add_mount(std::unique_ptr<Mount> mount) {
+    std::unique_lock<std::shared_mutex> locker(lock);
+    mount->load();
+    loaded_mounts.push_back(std::move(mount));
+}
+
+void MountManager::prefetch(const std::string& relative_path) {
+    std::shared_lock<std::shared_mutex> locker(lock);
+
+    // If any local (non-HTTP) mount has the file, skip — no need to fetch remotely
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (!http && mount->seek_file(relative_path))
+            return;
+    }
+
+    // Trigger HTTP downloads
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (http)
+            http->request(relative_path);
     }
 }
 

@@ -113,6 +113,26 @@ class AssetLibrary {
     std::vector<std::string> list(const std::string& directory);
 
     /**
+     * @brief Trigger background HTTP downloads for an asset not yet available.
+     *
+     * Probes each extension and calls MountManager::prefetch() for candidates
+     * not found in any local mount. The downloaded data will be available on
+     * a subsequent call to image()/config()/etc.
+     *
+     * No-op if no HTTP mounts are configured.
+     *
+     * @param path Virtual path without extension.
+     * @param extensions Extensions to try (e.g. {"webp", "png"}).
+     */
+    void prefetch(const std::string& path, const std::vector<std::string>& extensions);
+
+    /// Convenience: prefetch an image path with default image extensions.
+    void prefetch_image(const std::string& path);
+
+    /// Convenience: prefetch a config file (exact path with extension).
+    void prefetch_config(const std::string& path);
+
+    /**
      * @brief Register a manually-created asset in the cache.
      *
      * Use for procedurally generated assets (e.g. GPU-rendered text).

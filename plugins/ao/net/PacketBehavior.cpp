@@ -7,6 +7,7 @@
 #include "ao/event/ServerInfoEvent.h"
 #include "utils/Version.h"
 #include "event/AreaUpdateEvent.h"
+#include "event/AssetUrlEvent.h"
 #include "event/BackgroundEvent.h"
 #include "event/EvidenceListEvent.h"
 #include "event/FeatureListEvent.h"
@@ -66,6 +67,9 @@ void AOPacketASS::handle(AOClient& cli) {
     }
 
     cli.asset_url = asset_url;
+    if (!asset_url.empty()) {
+        EventManager::instance().get_channel<AssetUrlEvent>().publish(AssetUrlEvent(asset_url));
+    }
 }
 
 void AOPacketSI::handle(AOClient& cli) {

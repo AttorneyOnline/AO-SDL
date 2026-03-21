@@ -23,7 +23,10 @@
 #include "SDLGameWindow.h"
 #include "ui/LogBuffer.h"
 
-#include "httplib.h"
+#include "asset/MountHttp.h"
+#include "asset/MountManager.h"
+#include "event/AssetUrlEvent.h"
+#include "net/HttpPool.h"
 
 #include <csignal>
 #include <cstdlib>
@@ -43,13 +46,16 @@ int main(int argc, char* argv[]) {
     LogBuffer::instance(); // Install log sink before anything logs
     MediaManager::instance().init(std::filesystem::path(std::getenv("HOME")) / "Documents" / "AO2" / "base");
 
-    // todo: kick off another thread to do this
-    httplib::Client cli("http://servers.aceattorneyonline.com");
-    auto res = cli.Get("/servers");
-    if (res && res->status == 200) {
-        ServerList svlist(res->body);
-        EventManager::instance().get_channel<ServerListEvent>().publish(ServerListEvent(svlist));
-    }
+    // HTTP thread pool — used for all HTTP downloads
+    HttpPool http_pool(2);
+    http_pool.get("http://servers.aceattorneyonline.com", "/servers", [](HttpResponse resp) {
+        if (resp.status == 200) {
+            ServerList svlist(resp.body);
+            EventManager::instance().get_channel<ServerListEvent>().publish(ServerListEvent(svlist));
+        } else {
+            Log::log_print(ERR, "Failed to fetch server list: %s", resp.error.c_str());
+        }
+    });
 
     UIManager ui_mgr;
     ui_mgr.push_screen(std::make_unique<ServerListScreen>());
@@ -77,6 +83,19 @@ int main(int argc, char* argv[]) {
 
     debug_ctx.game_thread = &game_logic;
     debug_ctx.presenter = presenter.get();
+
+    // Poll HTTP responses and handle asset URL events on the main thread
+    game_window.set_frame_callback([&http_pool]() {
+        http_pool.poll();
+
+        // When the server sends an asset URL (ASS packet), create an HTTP mount
+        auto& asset_ch = EventManager::instance().get_channel<AssetUrlEvent>();
+        while (auto ev = asset_ch.get_event()) {
+            auto mount = std::make_unique<MountHttp>(ev->url(), http_pool);
+            MediaManager::instance().mounts_ref().add_mount(std::move(mount));
+            Log::log_print(INFO, "Added HTTP asset mount: %s", ev->url().c_str());
+        }
+    });
 
     // Kick off the render loop with ImGui backend
     ImGuiUIRenderer ui_renderer;

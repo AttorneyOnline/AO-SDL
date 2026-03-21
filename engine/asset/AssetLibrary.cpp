@@ -205,6 +205,22 @@ std::vector<std::string> AssetLibrary::list(const std::string& directory) {
     return {};
 }
 
+void AssetLibrary::prefetch(const std::string& path, const std::vector<std::string>& extensions) {
+    for (const auto& ext : extensions)
+        mounts.prefetch(path + "." + ext);
+}
+
+void AssetLibrary::prefetch_image(const std::string& path) {
+    // Skip if already in cache
+    if (cache_.get(path))
+        return;
+    prefetch(path, {"webp", "apng", "gif", "png"});
+}
+
+void AssetLibrary::prefetch_config(const std::string& path) {
+    mounts.prefetch(path);
+}
+
 void AssetLibrary::register_asset(std::shared_ptr<Asset> asset) {
     cache_.insert(std::move(asset));
 }

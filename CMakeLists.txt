@@ -151,6 +151,8 @@ add_library(aoengine STATIC
     engine/render/TextRenderer.cpp
     engine/render/GlyphCache.cpp
     engine/render/TextMeshBuilder.cpp
+    engine/net/HttpPool.cpp
+    engine/asset/MountHttp.cpp
 )
 
 # Platform-specific implementations (selected at build time)

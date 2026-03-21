@@ -99,6 +99,8 @@ void SDLGameWindow::start_loop(RenderManager& render, IUIRenderer& ui_renderer) 
         }
 
         gpu->begin_frame();
+        if (frame_callback_)
+            frame_callback_();
         ui_manager.handle_events();
 
         Screen* screen = ui_manager.active_screen();

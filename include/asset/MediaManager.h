@@ -53,6 +53,12 @@ class MediaManager {
     AssetLibrary& assets();
 
     /**
+     * @brief Get the MountManager for adding dynamic mounts.
+     * @pre init() must have been called at least once.
+     */
+    MountManager& mounts_ref() { return *mounts; }
+
+    /**
      * @brief Tear down the asset system before static destruction.
      *
      * Call this before main() returns to avoid crashes from static

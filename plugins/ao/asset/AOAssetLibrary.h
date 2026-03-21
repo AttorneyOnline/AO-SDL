@@ -103,6 +103,11 @@ class AOAssetLibrary {
         return assets;
     }
 
+    /// Trigger background HTTP prefetch for a character's emote assets.
+    /// No-op if assets are available locally or no HTTP mount is configured.
+    void prefetch_character(const std::string& character, const std::string& emote,
+                            const std::string& pre_emote);
+
   private:
     AssetLibrary& assets;
     std::string active_theme;

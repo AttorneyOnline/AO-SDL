@@ -35,7 +35,9 @@ AOCourtroomPresenter::AOCourtroomPresenter() {
     // Prefetch assets for queued messages so they're cache-warm when played
     message_queue_.set_prefetch([this](const ICMessage& msg) {
         if (!ao_assets) return;
-        // Touch emote assets to pull them into the cache
+        // Trigger HTTP downloads for missing assets (no-op if local)
+        ao_assets->prefetch_character(msg.character, msg.emote, msg.pre_emote);
+        // Also try loading locally cached assets into the decode cache
         ao_assets->character_emote(msg.character, msg.emote, "(a)");
         ao_assets->character_emote(msg.character, msg.emote, "(b)");
         if (!msg.pre_emote.empty())
