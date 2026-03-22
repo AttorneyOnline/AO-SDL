@@ -12,11 +12,39 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Third-party dependencies
 # =============================================================================
 
+# --- SDL2 — only need window, events, audio, video, timers, threads ---------
+# Disable subsystems we don't use
+set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
+set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
+set(SDL_HIDAPI OFF CACHE BOOL "" FORCE)
+set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
+set(SDL_LOCALE OFF CACHE BOOL "" FORCE)
+# Disable audio/video drivers we don't need
+set(SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
+set(SDL_DUMMYAUDIO OFF CACHE BOOL "" FORCE)
+set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
+set(SDL_OFFSCREEN OFF CACHE BOOL "" FORCE)
+set(SDL_DIRECTFB OFF CACHE BOOL "" FORCE)
+set(SDL_RPI OFF CACHE BOOL "" FORCE)
+set(SDL_VIVANTE OFF CACHE BOOL "" FORCE)
+# Disable rendering backends we don't use (we have our own renderer)
+set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
+set(SDL_RENDER_D3D OFF CACHE BOOL "" FORCE)
+# Don't build SDL test library or install
+set(SDL_TEST OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+set(SDL2_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+set(SDL2_DISABLE_UNINSTALL ON CACHE BOOL "" FORCE)
 add_subdirectory(third-party/SDL)
 
-set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "enable auto format support" FORCE)
+# --- bit7z — archive extraction only ----------------------------------------
+set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "" FORCE)
+set(BIT7Z_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BIT7Z_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 add_subdirectory(third-party/bit7z)
 
+# --- libwebp — decode only, no tools or encoding features -------------------
+set(WEBP_NEAR_LOSSLESS OFF CACHE BOOL "" FORCE)
 set(WEBP_BUILD_ANIM_UTILS OFF CACHE BOOL "" FORCE)
 set(WEBP_BUILD_CWEBP OFF CACHE BOOL "" FORCE)
 set(WEBP_BUILD_DWEBP OFF CACHE BOOL "" FORCE)
@@ -29,20 +57,22 @@ set(WEBP_BUILD_WEBPMUX OFF CACHE BOOL "" FORCE)
 set(WEBP_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
 add_subdirectory(third-party/libwebp)
 
+# --- FreeType — font rasterization only, no optional deps --------------------
 set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
 add_subdirectory(third-party/freetype)
 
-# Ogg container library
+# --- Ogg — container library, no extras --------------------------------------
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(INSTALL_DOCS OFF CACHE BOOL "" FORCE)
 set(INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 set(INSTALL_CMAKE_PACKAGE_MODULE OFF CACHE BOOL "" FORCE)
 add_subdirectory(third-party/ogg)
 
-# Opus codec library
+# --- Opus — codec library, no programs or tests -----------------------------
 set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
@@ -250,9 +280,9 @@ target_include_directories(aoengine
 find_package(OpenSSL)
 if(OPENSSL_FOUND)
     target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv opusfile OpenSSL::SSL OpenSSL::Crypto)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile OpenSSL::SSL OpenSSL::Crypto)
 else()
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv opusfile)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile)
 endif()
 target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 

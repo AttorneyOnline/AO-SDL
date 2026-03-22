@@ -1,4 +1,4 @@
-#version 450
+#version 330
 layout (location = 0) out vec4 frag_color;
 
 in vec2 vert_texcoord;

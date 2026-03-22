@@ -1,4 +1,4 @@
-#version 450
+#version 330
 layout (location = 0) in vec2 vertex_pos;
 layout (location = 1) in vec2 vertex_tex_coord;
 uniform mat4 local;
