@@ -324,9 +324,8 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
 PacketRegistrar AOPacketMC::registrar("MC", [](const auto& f) { return std::make_unique<AOPacketMC>(f); });
 
 AOPacketMC::AOPacketMC(const std::string& name, int char_id, const std::string& showname)
-    : AOPacket("MC", showname.empty()
-                         ? std::vector<std::string>{ao_encode(name), std::to_string(char_id)}
-                         : std::vector<std::string>{ao_encode(name), std::to_string(char_id), ao_encode(showname)}),
+    : AOPacket("MC", {ao_encode(name), std::to_string(char_id), ao_encode(showname), "1" /* looping */,
+                      "0" /* channel */, "0" /* effects */}),
       name(name), char_id(char_id), showname(showname) {
 }
 
