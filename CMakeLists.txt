@@ -10,6 +10,16 @@ if(WIN32)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
+# LTO for Release builds (significantly reduces binary size)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT IPO_SUPPORTED)
+    if(IPO_SUPPORTED)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+        message(STATUS "LTO enabled")
+    endif()
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =============================================================================
