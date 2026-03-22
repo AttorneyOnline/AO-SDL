@@ -90,10 +90,10 @@ class CharSelectScreen : public Screen {
     void select_character(int index);
 
   private:
-    void load_icons();
     void retry_icons();
 
     ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
     std::vector<CharEntry> chars;           ///< Character roster entries.
     int selected = -1;                      ///< Currently selected character index (-1 = none).
+    int prefetch_cursor_ = 0;               ///< Next character index to prefetch.
 };

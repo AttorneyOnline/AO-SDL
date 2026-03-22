@@ -7,17 +7,13 @@
 #include "event/CharsCheckEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
-#include "utils/Log.h"
 
 #include <format>
 
 void CharSelectScreen::enter(ScreenController& ctrl) {
     controller = &ctrl;
-    // Re-entering from courtroom: re-prefetch and reload icons.
-    // The courtroom drops low-priority downloads on entry, so icons
-    // that were still in-flight need to be re-requested.
-    if (!chars.empty())
-        load_icons();
+    // Re-entering from courtroom: re-request prefetches that were dropped
+    prefetch_cursor_ = 0;
 }
 
 void CharSelectScreen::exit() {
@@ -32,7 +28,7 @@ void CharSelectScreen::handle_events() {
         for (const auto& folder : optev->get_characters()) {
             chars.push_back({folder, std::nullopt, false});
         }
-        load_icons();
+        prefetch_cursor_ = 0;
     }
 
     // Update taken status
@@ -44,7 +40,7 @@ void CharSelectScreen::handle_events() {
         }
     }
 
-    // Retry loading icons that are pending HTTP download
+    // Progressively load icons: prefetch + decode + upload, all batched
     retry_icons();
 
     // Transition to courtroom on confirmed character selection
@@ -60,11 +56,9 @@ void CharSelectScreen::handle_events() {
 void CharSelectScreen::select_character(int index) {
     if (index < 0 || index >= (int)chars.size())
         return;
-    // Allow re-selecting our own character (already selected), reject others' taken chars
     if (chars[index].taken && index != selected)
         return;
 
-    // If re-selecting the same character, just go back to courtroom without a state change
     if (index == selected && controller) {
         controller->push_screen(std::make_unique<CourtroomScreen>(chars[index].folder, index));
         return;
@@ -74,22 +68,18 @@ void CharSelectScreen::select_character(int index) {
     EventManager::instance().get_channel<CharSelectRequestEvent>().publish(CharSelectRequestEvent(index));
 }
 
-void CharSelectScreen::load_icons() {
-    AssetLibrary& lib = MediaManager::instance().assets();
-
-    // Prefetch all icons via HTTP (queued at LOW priority, doesn't block)
-    for (auto& entry : chars) {
-        std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
-        lib.prefetch_image(icon_path, 0, 0);
-    }
-
-    // Upload to GPU is batched — actual loading happens in retry_icons()
-}
-
 void CharSelectScreen::retry_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
-    // Limit texture uploads per frame to avoid GPU stalls on GL backends
+    // Drip-feed HTTP prefetch requests: 16 per frame to avoid queuing
+    // hundreds of HTTP requests in one shot (each takes a mutex + lookup)
+    for (int i = 0; i < 16 && prefetch_cursor_ < (int)chars.size(); ++i, ++prefetch_cursor_) {
+        std::string icon_path = std::format("characters/{}/char_icon", chars[prefetch_cursor_].folder);
+        lib.prefetch_image(icon_path, 0, 0);
+    }
+
+    // Decode + GPU upload: limit to 4 per frame to avoid GL driver stalls.
+    // Scan from the start each time since icons arrive out of order.
     int uploaded = 0;
     for (auto& entry : chars) {
         if (entry.icon.has_value())
@@ -102,7 +92,7 @@ void CharSelectScreen::retry_icons() {
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
-        if (++uploaded >= 8)
+        if (++uploaded >= 4)
             break;
     }
 }
