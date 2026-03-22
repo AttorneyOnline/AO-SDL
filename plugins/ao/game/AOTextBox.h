@@ -50,7 +50,8 @@ class AOTextBox {
     // --- GPU assets for the presenter ---
 
     /// Chatbox background image (positioned at chatbox_rect by presenter).
-    std::shared_ptr<ImageAsset> chatbox_background() const { return chatbox_bg; }
+    /// Returns the active variant (chat/chatmed/chatbig) based on showname width.
+    std::shared_ptr<ImageAsset> chatbox_background() const { return active_chatbox ? active_chatbox : chatbox_bg; }
 
     /// Message text mesh (rebuilt on tick when chars change).
     std::shared_ptr<MeshAsset> message_mesh() const { return msg_mesh_; }
@@ -70,8 +71,12 @@ class AOTextBox {
     const AORect& chatbox_position() const { return chatbox_rect; }
 
   private:
-    // Theme assets
-    std::shared_ptr<ImageAsset> chatbox_bg;
+    // Theme assets — chatbox variants for different showname widths
+    std::shared_ptr<ImageAsset> chatbox_bg;       // default (shortest name tab)
+    std::shared_ptr<ImageAsset> chatbox_med;      // medium name tab
+    std::shared_ptr<ImageAsset> chatbox_big;      // large name tab
+    std::shared_ptr<ImageAsset> active_chatbox;    // currently selected variant
+    int showname_extra_width = 24;
     TextRenderer text_renderer;
     TextRenderer showname_renderer;
     bool font_loaded = false;

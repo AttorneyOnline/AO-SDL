@@ -389,6 +389,8 @@ void AOAssetLibrary::prefetch_theme() {
     std::string base = "themes/" + active_theme + "/";
     assets.prefetch_image(base + "chat");
     assets.prefetch_image(base + "chatbox");
+    assets.prefetch_image(base + "chatmed");
+    assets.prefetch_image(base + "chatbig");
     if (active_theme != "default") {
         assets.prefetch_image("themes/default/chat");
         assets.prefetch_image("themes/default/chatbox");

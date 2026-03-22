@@ -13,10 +13,13 @@ constexpr double AOTextBox::SPEED_MULT[];
 void AOTextBox::load(AOAssetLibrary& ao_assets) {
     engine_assets_ = &ao_assets.engine_assets();
 
-    // Chatbox background image
+    // Chatbox background images — variants for different showname widths
     chatbox_bg = ao_assets.theme_image("chat");
     if (!chatbox_bg)
         chatbox_bg = ao_assets.theme_image("chatbox");
+    chatbox_med = ao_assets.theme_image("chatmed");
+    chatbox_big = ao_assets.theme_image("chatbig");
+    active_chatbox = chatbox_bg;
 
     // Layout from courtroom_design.ini.
     // Chatbox coordinates are in courtroom space; we need them relative to the
@@ -29,6 +32,11 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
     // message and showname are already relative to the chatbox — no adjustment needed.
     message_rect = ao_assets.design_rect("message");
     showname_rect = ao_assets.design_rect("showname");
+
+    // Showname extra width for chatmed/chatbig variants
+    std::string extra_str = ao_assets.design_value("showname_extra_width");
+    if (!extra_str.empty())
+        showname_extra_width = std::atoi(extra_str.c_str());
 
     // Showname horizontal alignment (default: left)
     std::string align_str = ao_assets.design_value("showname_align");
@@ -278,20 +286,35 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
     cached_nameplate_ = nameplate;
     cached_nameplate_name_ = current_showname;
 
-    // Compute layout (always, since it depends on the name's width)
+    // Compute layout — select chatbox variant based on showname width.
+    // AO2 uses chat/chatmed/chatbig images with progressively wider name tabs.
     int text_w = nameplate->width();
     int text_h = nameplate->height();
+    int extra_w = 0;
+    if (text_w > showname_rect.w && chatbox_med) {
+        extra_w = showname_extra_width;
+        active_chatbox = chatbox_med;
+    }
+    if (text_w > showname_rect.w + showname_extra_width && chatbox_big) {
+        extra_w = showname_extra_width * 2;
+        active_chatbox = chatbox_big;
+    }
+    if (text_w <= showname_rect.w) {
+        extra_w = 0;
+        active_chatbox = chatbox_bg;
+    }
+
     NameplateLayout nl;
-    nl.w = showname_rect.w;
+    nl.w = showname_rect.w + extra_w;
     nl.h = showname_rect.h > 0 ? showname_rect.h : text_h;
     nl.scale = (text_w > nl.w && text_w > 0) ? (float)nl.w / text_w : 1.0f;
     int display_w = (int)(text_w * nl.scale);
 
     int x_offset = 0;
     if (showname_align == Align::CENTER)
-        x_offset = (showname_rect.w - display_w) / 2;
+        x_offset = (nl.w - display_w) / 2;
     else if (showname_align == Align::RIGHT)
-        x_offset = showname_rect.w - display_w;
+        x_offset = nl.w - display_w;
     nl.x = chatbox_rect.x + showname_rect.x + x_offset;
     nl.y = chatbox_rect.y + showname_rect.y;
     cached_nameplate_layout_ = nl;
