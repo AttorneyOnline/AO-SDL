@@ -13,6 +13,12 @@ HttpPool::HttpPool(int num_threads) {
 }
 
 HttpPool::~HttpPool() {
+    stop();
+}
+
+void HttpPool::stop() {
+    if (!running_.load(std::memory_order_acquire))
+        return;
     running_.store(false, std::memory_order_release);
     {
         std::lock_guard lock(work_mutex_);
@@ -21,7 +27,7 @@ HttpPool::~HttpPool() {
     work_cv_.notify_all();
     for (auto& t : workers_) {
         if (t.joinable())
-            t.detach();
+            t.join();
     }
 }
 

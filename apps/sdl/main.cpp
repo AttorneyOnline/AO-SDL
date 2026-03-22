@@ -138,6 +138,8 @@ int main(int argc, char* argv[]) {
     audio_device.close();
     Log::log_print(DEBUG, "main: audio thread stopped");
 
+    http_pool.stop();
+    Log::log_print(DEBUG, "main: HTTP pool stopped");
     MediaManager::instance().shutdown();
     Log::log_print(INFO, "main: shutdown complete");
 

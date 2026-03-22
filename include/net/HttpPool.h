@@ -39,8 +39,11 @@ class HttpPool {
     /// Create a pool with the given number of worker threads.
     explicit HttpPool(int num_threads = 2);
 
-    /// Signal all workers to stop and detach them.
+    /// Signal all workers to stop and join them.
     ~HttpPool();
+
+    /// Stop all worker threads. Safe to call multiple times.
+    void stop();
 
     HttpPool(const HttpPool&) = delete;
     HttpPool& operator=(const HttpPool&) = delete;

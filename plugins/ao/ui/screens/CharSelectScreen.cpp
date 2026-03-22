@@ -71,15 +71,15 @@ void CharSelectScreen::select_character(int index) {
 void CharSelectScreen::retry_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
-    // Drip-feed HTTP prefetch requests: 16 per frame to avoid queuing
-    // hundreds of HTTP requests in one shot (each takes a mutex + lookup)
-    for (int i = 0; i < 16 && prefetch_cursor_ < (int)chars.size(); ++i, ++prefetch_cursor_) {
+    // Drip-feed HTTP prefetch requests across frames.
+    // Use the broad prefetch (all common extensions) instead of server-advertised
+    // only, since some characters have icons in formats the server doesn't list.
+    for (int i = 0; i < 32 && prefetch_cursor_ < (int)chars.size(); ++i, ++prefetch_cursor_) {
         std::string icon_path = std::format("characters/{}/char_icon", chars[prefetch_cursor_].folder);
-        lib.prefetch_image(icon_path, 0, 0);
+        lib.prefetch_image(icon_path);
     }
 
-    // Decode + GPU upload: limit to 4 per frame to avoid GL driver stalls.
-    // Scan from the start each time since icons arrive out of order.
+    // Decode + GPU upload, batched to avoid GL driver stalls
     int uploaded = 0;
     for (auto& entry : chars) {
         if (entry.icon.has_value())
@@ -92,7 +92,7 @@ void CharSelectScreen::retry_icons() {
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
-        if (++uploaded >= 4)
+        if (++uploaded >= 8)
             break;
     }
 }
