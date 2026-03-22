@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 /**
  * @brief LRU cache for loaded Asset objects.

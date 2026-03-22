@@ -13,16 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jidicula/clang-format-action@v4.14.0
-        with:
-          clang-format-version: '14'
-          check-path: |
-            engine
-            plugins
-            apps/sdl
-            include
-            platform
-            tests
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-14
+      - name: Check formatting
+        run: |
+          find engine plugins apps/sdl include platform tests \
+            -name '*.cpp' -o -name '*.h' -o -name '*.mm' | \
+            xargs clang-format-14 --dry-run --Werror
 
   # ---- Build, test, and package per OS ----
   build:
@@ -43,7 +42,7 @@ jobs:
 
           - name: Windows
             os: windows-latest
-            cmake_args: -DCMAKE_BUILD_TYPE=Release
+            cmake_args: -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
             cmake_generator: -G "Visual Studio 17 2022" -A x64
 
     steps:
@@ -72,7 +71,7 @@ jobs:
 
       # ---- Build ----
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel 4
 
       - name: Build (coverage)
         if: matrix.coverage
