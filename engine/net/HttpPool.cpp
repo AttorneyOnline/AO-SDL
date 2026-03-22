@@ -35,11 +35,21 @@ void HttpPool::get(const std::string& host, const std::string& path, HttpCallbac
     pending_.fetch_add(1, std::memory_order_relaxed);
     {
         std::lock_guard lock(work_mutex_);
-        // Insert sorted by priority (highest first). Find the first element
-        // with lower priority and insert before it.
         auto it = std::find_if(work_queue_.begin(), work_queue_.end(),
                                [priority](const Request& r) { return r.priority < priority; });
-        work_queue_.insert(it, {host, path, std::move(cb), priority});
+        work_queue_.insert(it, {host, path, std::move(cb), nullptr, priority});
+    }
+    work_cv_.notify_one();
+}
+
+void HttpPool::get_streaming(const std::string& host, const std::string& path,
+                             HttpChunkCallback on_chunk, HttpCallback cb, HttpPriority priority) {
+    pending_.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::lock_guard lock(work_mutex_);
+        auto it = std::find_if(work_queue_.begin(), work_queue_.end(),
+                               [priority](const Request& r) { return r.priority < priority; });
+        work_queue_.insert(it, {host, path, std::move(cb), std::move(on_chunk), priority});
     }
     work_cv_.notify_one();
 }
@@ -91,6 +101,25 @@ int HttpPool::poll() {
 }
 
 void HttpPool::worker_loop() {
+    // Keep one persistent httplib::Client per host so TCP+SSL connections are
+    // reused via HTTP keep-alive.  This avoids creating a new SSL_CTX, loading
+    // the Windows certificate store, and performing a full TLS handshake for
+    // every single request.
+    std::unordered_map<std::string, std::unique_ptr<httplib::Client>> clients;
+
+    auto get_client = [&](const std::string& host) -> httplib::Client& {
+        auto it = clients.find(host);
+        if (it != clients.end())
+            return *it->second;
+        auto cli = std::make_unique<httplib::Client>(host);
+        cli->set_connection_timeout(5);
+        cli->set_read_timeout(10);
+        cli->set_keep_alive(true);
+        auto& ref = *cli;
+        clients.emplace(host, std::move(cli));
+        return ref;
+    };
+
     while (true) {
         Request req;
         {
@@ -105,26 +134,50 @@ void HttpPool::worker_loop() {
         HttpResponse resp;
         if (running_.load(std::memory_order_acquire)) {
             try {
-                httplib::Client cli(req.host);
-                cli.set_connection_timeout(5);
-                cli.set_read_timeout(10);
-                auto res = cli.Get(req.path);
-                if (res) {
-                    resp.status = res->status;
-                    resp.body = std::move(res->body);
+                auto& cli = get_client(req.host);
+                if (req.chunk_callback) {
+                    // Streaming: longer read timeout for large files (music)
+                    cli.set_read_timeout(30);
+                    auto res = cli.Get(req.path, [&](const char* data, size_t len) -> bool {
+                        return req.chunk_callback(reinterpret_cast<const uint8_t*>(data), len);
+                    });
+                    cli.set_read_timeout(10); // restore normal timeout
+                    if (res) {
+                        resp.status = res->status;
+                    }
+                    else {
+                        resp.error = httplib::to_string(res.error());
+                        clients.erase(req.host);
+                    }
                 }
                 else {
-                    resp.error = httplib::to_string(res.error());
+                    auto res = cli.Get(req.path);
+                    if (res) {
+                        resp.status = res->status;
+                        resp.body = std::move(res->body);
+                    }
+                    else {
+                        resp.error = httplib::to_string(res.error());
+                        clients.erase(req.host);
+                    }
                 }
             }
             catch (const std::exception& e) {
                 resp.error = e.what();
+                clients.erase(req.host);
             }
         }
 
         if (running_.load(std::memory_order_acquire)) {
-            std::lock_guard lock(result_mutex_);
-            result_queue_.push_back({std::move(resp), std::move(req.callback)});
+            if (req.chunk_callback) {
+                // Streaming: callback runs directly on worker thread (caller blocks on future)
+                if (req.callback)
+                    req.callback(std::move(resp));
+            }
+            else {
+                std::lock_guard lock(result_mutex_);
+                result_queue_.push_back({std::move(resp), std::move(req.callback)});
+            }
         }
         pending_.fetch_sub(1, std::memory_order_relaxed);
     }

@@ -96,4 +96,5 @@ class CharSelectScreen : public Screen {
     std::vector<CharEntry> chars;           ///< Character roster entries.
     int selected = -1;                      ///< Currently selected character index (-1 = none).
     int prefetch_cursor_ = 0;               ///< Next character index to prefetch.
+    int retry_cursor_ = 0;                  ///< Next character index to retry after transient failure.
 };

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 /// Result of an HTTP request.
@@ -18,6 +19,10 @@ struct HttpResponse {
 
 /// Callback invoked on the submitting thread's event loop (not the worker thread).
 using HttpCallback = std::function<void(HttpResponse)>;
+
+/// Callback invoked on a worker thread for each chunk of a streaming download.
+/// Return false to cancel the download.
+using HttpChunkCallback = std::function<bool(const uint8_t* data, size_t len)>;
 
 /// Priority levels for HTTP requests (higher = more urgent).
 enum class HttpPriority {
@@ -52,6 +57,13 @@ class HttpPool {
     void get(const std::string& host, const std::string& path, HttpCallback cb,
              HttpPriority priority = HttpPriority::NORMAL);
 
+    /// Submit a streaming HTTP GET. The on_chunk callback is invoked on a worker
+    /// thread for each received chunk. The completion callback follows the normal
+    /// path (delivered via poll()). Use for large downloads like music.
+    void get_streaming(const std::string& host, const std::string& path,
+                       HttpChunkCallback on_chunk, HttpCallback cb,
+                       HttpPriority priority = HttpPriority::NORMAL);
+
     /// Drop all queued (not yet started) requests at or below the given priority.
     /// In-flight requests are unaffected.
     void drop_below(HttpPriority threshold);
@@ -71,6 +83,7 @@ class HttpPool {
         std::string host;
         std::string path;
         HttpCallback callback;
+        HttpChunkCallback chunk_callback; ///< Non-null for streaming requests.
         HttpPriority priority;
     };
 

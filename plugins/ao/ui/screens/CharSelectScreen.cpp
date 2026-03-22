@@ -71,14 +71,29 @@ void CharSelectScreen::select_character(int index) {
 void CharSelectScreen::retry_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
-    // Drip-feed HTTP prefetch requests: 16 per frame to avoid queuing
-    // hundreds of HTTP requests in one shot (each takes a mutex + lookup)
-    for (int i = 0; i < 16 && prefetch_cursor_ < (int)chars.size(); ++i, ++prefetch_cursor_) {
+    // Drip-feed HTTP prefetch requests across frames.
+    // With keep-alive connections this is just queue insertion — cheap.
+    for (int i = 0; i < 32 && prefetch_cursor_ < (int)chars.size(); ++i, ++prefetch_cursor_) {
         std::string icon_path = std::format("characters/{}/char_icon", chars[prefetch_cursor_].folder);
         lib.prefetch_image(icon_path, 0, 0);
     }
 
-    // Decode + GPU upload: limit to 4 per frame to avoid GL driver stalls.
+    // Re-request icons that failed transiently (timeout, etc.) on initial pass.
+    // MountHttp::request() is a no-op for cached, pending, or permanently failed
+    // paths, so this is cheap once everything has settled. Reset the cursor on
+    // each complete scan to pick up icons whose transient failures have cleared.
+    if (prefetch_cursor_ >= (int)chars.size()) {
+        if (retry_cursor_ >= (int)chars.size())
+            retry_cursor_ = 0;
+        for (int i = 0; i < 16 && retry_cursor_ < (int)chars.size(); ++i, ++retry_cursor_) {
+            if (!chars[retry_cursor_].icon.has_value()) {
+                std::string icon_path = std::format("characters/{}/char_icon", chars[retry_cursor_].folder);
+                lib.prefetch_image(icon_path, 0, 0);
+            }
+        }
+    }
+
+    // Decode + GPU upload, batched to avoid GL driver stalls.
     // Scan from the start each time since icons arrive out of order.
     int uploaded = 0;
     for (auto& entry : chars) {
@@ -92,7 +107,7 @@ void CharSelectScreen::retry_icons() {
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
-        if (++uploaded >= 4)
+        if (++uploaded >= 8)
             break;
     }
 }

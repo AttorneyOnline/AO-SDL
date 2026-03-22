@@ -47,8 +47,10 @@ int main(int argc, char* argv[]) {
 #endif
     LogBuffer::instance(); // Install log sink before anything logs
 
-    // HTTP thread pool — used for all HTTP downloads
-    HttpPool http_pool(50);
+    // HTTP thread pool — used for all HTTP downloads.
+    // Each thread keeps a persistent connection per host (HTTP keep-alive),
+    // so a small pool saturates the link without overwhelming the server.
+    HttpPool http_pool(8);
     http_pool.get("http://servers.aceattorneyonline.com", "/servers", [](HttpResponse resp) {
         if (resp.status == 200) {
             ServerList svlist(resp.body);

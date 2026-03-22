@@ -2,10 +2,10 @@
 
 #include "utils/Log.h"
 
-#include <httplib.h>
 #include <json.hpp>
 
 #include <algorithm>
+#include <future>
 #include <iomanip>
 #include <sstream>
 
@@ -167,34 +167,58 @@ bool MountHttp::fetch_streaming(const std::string& raw_path, std::function<bool(
         }
     }
 
+    // Route through the pool's persistent connections instead of creating a
+    // throwaway client.  The chunk callback runs on a pool worker thread;
+    // the caller blocks on the future until the download finishes.
     std::string http_path = url_encode_path(path_prefix_ + "/" + path);
-    httplib::Client cli(host_);
-    cli.set_connection_timeout(5);
-    cli.set_read_timeout(30);
 
-    bool success = false;
-    auto res = cli.Get(http_path, [&](const char* data, size_t len) -> bool {
-        success = true;
-        return on_chunk(reinterpret_cast<const uint8_t*>(data), len);
-    });
+    std::promise<bool> done;
+    auto future = done.get_future();
+    bool got_data = false;
 
-    if (!res || res->status != 200) {
-        std::lock_guard lock(mutex_);
-        failed_.insert(path);
-        return false;
-    }
+    pool_.get_streaming(
+        host_, http_path,
+        [&](const uint8_t* data, size_t len) -> bool {
+            got_data = true;
+            return on_chunk(data, len);
+        },
+        [&](HttpResponse resp) {
+            if (resp.status == 200 && got_data) {
+                Log::log_print(VERBOSE, "MountHttp: streamed %s", path.c_str());
+                done.set_value(true);
+            }
+            else {
+                std::lock_guard lock(mutex_);
+                if (resp.status == 404)
+                    failed_.insert(path);
+                else
+                    ++transient_failures_[path];
+                Log::log_print(VERBOSE, "MountHttp: stream failed %s (status=%d err=%s)",
+                               path.c_str(), resp.status, resp.error.c_str());
+                done.set_value(false);
+            }
+        },
+        HttpPriority::HIGH);
 
-    Log::log_print(VERBOSE, "MountHttp: streamed %s", path.c_str());
-    return success;
+    // Block — the caller (AudioThread download thread) expects this.
+    return future.get();
 }
 
 void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
     std::string path = lowercase_path(raw_path);
     {
         std::lock_guard lock(mutex_);
-        // Already have it, downloading it, or know it doesn't exist
+        // Already have it, downloading it, or know it doesn't exist (404)
         if (cache_.count(path) || pending_.count(path) || failed_.count(path))
             return;
+        // Transient failures are retried up to max_retries_
+        if (auto it = transient_failures_.find(path); it != transient_failures_.end()) {
+            if (it->second >= max_retries_) {
+                failed_.insert(path);
+                transient_failures_.erase(it);
+                return;
+            }
+        }
         pending_.insert(path);
     }
 
@@ -212,6 +236,7 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
             pending_.erase(captured_path);
 
             if (resp.status == 200 && !resp.body.empty()) {
+                transient_failures_.erase(captured_path);
                 cache_[captured_path] = std::vector<uint8_t>(resp.body.begin(), resp.body.end());
                 Log::log_print(VERBOSE, "MountHttp: downloaded %s (%zu bytes)", captured_path.c_str(),
                                resp.body.size());
@@ -219,10 +244,16 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
             else if (resp.error == "dropped") {
                 // Request was dropped by priority — don't mark as failed so it can be re-requested
             }
-            else {
+            else if (resp.status == 404) {
+                // Permanent: file doesn't exist on the server
                 failed_.insert(captured_path);
-                Log::log_print(VERBOSE, "MountHttp: failed %s (status=%d err=%s)", captured_path.c_str(), resp.status,
-                               resp.error.c_str());
+                Log::log_print(VERBOSE, "MountHttp: not found %s", captured_path.c_str());
+            }
+            else {
+                // Transient (SSL error, timeout, server error) — allow retry
+                int attempt = ++transient_failures_[captured_path];
+                Log::log_print(VERBOSE, "MountHttp: failed %s attempt %d/%d (status=%d err=%s)",
+                               captured_path.c_str(), attempt, max_retries_, resp.status, resp.error.c_str());
             }
         },
         priority);

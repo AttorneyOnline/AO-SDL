@@ -7,6 +7,12 @@
 class GLTexture {
   public:
     GLTexture(const uint8_t* pixels, GLint internal_format, GLenum source_format);
+    virtual ~GLTexture();
+
+    GLTexture(const GLTexture&) = delete;
+    GLTexture& operator=(const GLTexture&) = delete;
+    GLTexture(GLTexture&& other) noexcept;
+    GLTexture& operator=(GLTexture&& other) noexcept;
 
   protected:
     void set_parameter(GLenum target, GLenum param_name, GLint value);

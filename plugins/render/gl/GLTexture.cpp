@@ -2,7 +2,39 @@
 
 GLTexture::GLTexture(const uint8_t* pixels, GLint internal_format, GLenum source_format)
     : pixels(pixels), num_channels(0), internal_format(internal_format), source_format(source_format), texture(0) {
-    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_texture_units);
+    // Cache this once per process instead of querying the driver every time
+    static int cached_max = [] {
+        int val = 0;
+        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &val);
+        return val;
+    }();
+    max_texture_units = cached_max;
+}
+
+GLTexture::~GLTexture() {
+    if (texture)
+        glDeleteTextures(1, &texture);
+}
+
+GLTexture::GLTexture(GLTexture&& other) noexcept
+    : pixels(other.pixels), num_channels(other.num_channels), internal_format(other.internal_format),
+      source_format(other.source_format), max_texture_units(other.max_texture_units), texture(other.texture) {
+    other.texture = 0;
+}
+
+GLTexture& GLTexture::operator=(GLTexture&& other) noexcept {
+    if (this != &other) {
+        if (texture)
+            glDeleteTextures(1, &texture);
+        pixels = other.pixels;
+        num_channels = other.num_channels;
+        internal_format = other.internal_format;
+        source_format = other.source_format;
+        max_texture_units = other.max_texture_units;
+        texture = other.texture;
+        other.texture = 0;
+    }
+    return *this;
 }
 
 void GLTexture::set_parameter(GLenum target, GLenum param_name, GLint value) {
