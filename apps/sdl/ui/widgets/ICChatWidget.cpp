@@ -46,10 +46,16 @@ void ICChatWidget::send() {
     state_->objection_mod = 0;
     state_->realization = false;
     state_->screenshake = false;
+    refocus_ = true;
 }
 
 void ICChatWidget::render() {
     ImGui::InputText("Showname", state_->showname, sizeof(state_->showname));
+
+    if (refocus_) {
+        ImGui::SetKeyboardFocusHere();
+        refocus_ = false;
+    }
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x -
                             ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().ItemSpacing.x);

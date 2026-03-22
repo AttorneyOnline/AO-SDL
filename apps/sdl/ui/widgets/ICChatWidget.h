@@ -15,4 +15,5 @@ class ICChatWidget : public IWidget {
   private:
     void send();
     ICMessageState* state_;
+    bool refocus_ = false;
 };
