@@ -37,6 +37,7 @@ AOCourtroomPresenter::AOCourtroomPresenter() {
     prof_audio_ = profiler_.add_section("Audio");
     prof_effects_ = profiler_.add_section("Effects");
     prof_compose_ = profiler_.add_section("Compose");
+    prof_cache_ = profiler_.add_section("Cache management");
 
     // Prefetch assets for queued messages so they're cache-warm when played
     message_queue_.set_prefetch([this](const ICMessage& msg) {
@@ -276,10 +277,9 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         for_each_effect([&](auto& e) { e.tick(delta_ms); });
     }
 
-    // ---- Compose RenderState ----
-    RenderState state;
+    // ---- Hint AssetCache Evictions ----
     {
-        auto _ = profiler_.scope(prof_compose_);
+        auto _ = profiler_.scope(prof_cache_);
 
         evict_timer_ms += delta_ms;
         if (evict_timer_ms >= 30000) {
@@ -289,6 +289,12 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             // anything still raw after 30s is probably not needed.
             MediaManager::instance().mounts_ref().release_all_http();
         }
+    }
+
+    // ---- Compose RenderState ----
+    RenderState state;
+    {
+        auto _ = profiler_.scope(prof_compose_);
 
         LayerGroup scene;
 

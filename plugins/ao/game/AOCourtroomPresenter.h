@@ -84,6 +84,7 @@ class AOCourtroomPresenter : public IScenePresenter {
     int prof_audio_ = 0;
     int prof_effects_ = 0;
     int prof_compose_ = 0;
+    int prof_cache_ = 0;
 
     // Base resolution for CPU-side rendering (textbox overlay, etc.)
     // GPU render texture resolution is controlled by DebugContext::internal_scale.
