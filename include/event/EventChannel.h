@@ -59,7 +59,9 @@ class EventChannel {
      * @brief Returns the total number of events published to this channel.
      * @return Monotonically increasing count of published events.
      */
-    uint64_t publish_count() const { return publish_count_.load(std::memory_order_relaxed); }
+    uint64_t publish_count() const {
+        return publish_count_.load(std::memory_order_relaxed);
+    }
 
     /**
      * @brief Checks whether the queue contains any pending events.
@@ -91,7 +93,7 @@ class EventChannel {
     }
 
   private:
-    std::mutex event_queue_mutex;           /**< Guards all access to @c event_queue. */
-    std::deque<T> event_queue;              /**< FIFO storage for pending events. */
+    std::mutex event_queue_mutex;            /**< Guards all access to @c event_queue. */
+    std::deque<T> event_queue;               /**< FIFO storage for pending events. */
     std::atomic<uint64_t> publish_count_{0}; /**< Total events published (for debug stats). */
 };

@@ -4,7 +4,9 @@
 
 class StbiImageDecoder : public ImageDecoder {
   public:
-    std::vector<std::string> extensions() const override { return {"jpg", "jpeg", "bmp", "tga"}; }
+    std::vector<std::string> extensions() const override {
+        return {"jpg", "jpeg", "bmp", "tga"};
+    }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
         int width, height, channels;

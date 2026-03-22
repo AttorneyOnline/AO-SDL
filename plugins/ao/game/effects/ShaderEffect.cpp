@@ -19,7 +19,8 @@ void ShaderEffect::trigger() {
 }
 
 void ShaderEffect::tick(int delta_ms) {
-    if (!active_) return;
+    if (!active_)
+        return;
 
     elapsed_s_ += delta_ms / 1000.0f;
     time_provider_->time = elapsed_s_;
@@ -29,12 +30,14 @@ void ShaderEffect::tick(int delta_ms) {
 }
 
 void ShaderEffect::apply(LayerGroup& scene) {
-    if (!shader_) return;
+    if (!shader_)
+        return;
 
     if (layer_id_ >= 0) {
         if (auto* layer = scene.get_layer(layer_id_))
             layer->set_shader(shader_);
-    } else {
+    }
+    else {
         scene.set_shader(shader_);
     }
 }

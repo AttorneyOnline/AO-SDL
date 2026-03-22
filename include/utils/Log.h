@@ -7,16 +7,7 @@
 #include <functional>
 #include <string>
 
-enum LogLevel {
-    INVALID = 0,
-    VERBOSE,
-    DEBUG,
-    INFO,
-    WARNING,
-    ERR,
-    FATAL,
-    COUNT
-};
+enum LogLevel { INVALID = 0, VERBOSE, DEBUG, INFO, WARNING, ERR, FATAL, COUNT };
 
 /// Returns the short string name for a log level (e.g. "DEBUG", "WARNING").
 const char* log_level_name(LogLevel level);

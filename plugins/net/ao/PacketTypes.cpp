@@ -250,20 +250,19 @@ AOPacketCC::AOPacketCC(int player_num, int char_id, const std::string& hdid)
 PacketRegistrar AOPacketMS::registrar("MS", [](const auto& f) { return std::make_unique<AOPacketMS>(f); });
 
 AOPacketMS::AOPacketMS(const ICMessageData& d)
-    : AOPacket("MS",
-               {// 0-14: core fields
-                std::to_string(d.desk_mod), ao_encode(d.pre_emote), ao_encode(d.character), ao_encode(d.emote),
-                ao_encode(d.message), ao_encode(d.side), ao_encode(d.sfx_name), std::to_string(d.emote_mod),
-                std::to_string(d.char_id), std::to_string(d.sfx_delay), std::to_string(d.objection_mod),
-                std::to_string(d.evidence_id), std::to_string(d.flip), std::to_string(d.realization),
-                std::to_string(d.text_color),
-                // 15-18: 2.6 extensions (client→server format)
-                ao_encode(d.showname), std::to_string(d.other_charid),
-                ao_encode(d.self_offset), std::to_string(d.immediate),
-                // 19-25: 2.8 extensions
-                std::to_string(d.looping_sfx), std::to_string(d.screenshake), ao_encode(d.frame_screenshake),
-                ao_encode(d.frame_realization), ao_encode(d.frame_sfx), std::to_string(d.additive),
-                ao_encode(d.effects)}) {
+    : AOPacket(
+          "MS",
+          {// 0-14: core fields
+           std::to_string(d.desk_mod), ao_encode(d.pre_emote), ao_encode(d.character), ao_encode(d.emote),
+           ao_encode(d.message), ao_encode(d.side), ao_encode(d.sfx_name), std::to_string(d.emote_mod),
+           std::to_string(d.char_id), std::to_string(d.sfx_delay), std::to_string(d.objection_mod),
+           std::to_string(d.evidence_id), std::to_string(d.flip), std::to_string(d.realization),
+           std::to_string(d.text_color),
+           // 15-18: 2.6 extensions (client→server format)
+           ao_encode(d.showname), std::to_string(d.other_charid), ao_encode(d.self_offset), std::to_string(d.immediate),
+           // 19-25: 2.8 extensions
+           std::to_string(d.looping_sfx), std::to_string(d.screenshake), ao_encode(d.frame_screenshake),
+           ao_encode(d.frame_realization), ao_encode(d.frame_sfx), std::to_string(d.additive), ao_encode(d.effects)}) {
 }
 
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {

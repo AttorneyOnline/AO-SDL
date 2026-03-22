@@ -1,9 +1,9 @@
 #include "ao/event/ICMessageEvent.h"
+#include "event/BackgroundEvent.h"
+#include "event/EventManager.h"
 #include "net/ao/AOClient.h"
 #include "net/ao/AOPacket.h"
 #include "net/ao/PacketTypes.h"
-#include "event/BackgroundEvent.h"
-#include "event/EventManager.h"
 
 #include <gtest/gtest.h>
 #include <optional>

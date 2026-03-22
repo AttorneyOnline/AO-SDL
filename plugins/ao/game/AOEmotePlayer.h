@@ -29,7 +29,9 @@ class AOEmotePlayer {
     void transition_to_idle();
 
     /// Stop all animation and reset to NONE.
-    void stop() { current_state = State::NONE; }
+    void stop() {
+        current_state = State::NONE;
+    }
 
     State state() const {
         return current_state;

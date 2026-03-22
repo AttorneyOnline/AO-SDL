@@ -4,15 +4,17 @@
 
 class GifImageDecoder : public ImageDecoder {
   public:
-    std::vector<std::string> extensions() const override { return {"gif"}; }
+    std::vector<std::string> extensions() const override {
+        return {"gif"};
+    }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
         int* delays = nullptr;
         int width, height, frame_count, channels;
 
         stbi_set_flip_vertically_on_load(true);
-        uint8_t* pixels = stbi_load_gif_from_memory(data, (int)size, &delays, &width, &height,
-                                                     &frame_count, &channels, 4);
+        uint8_t* pixels =
+            stbi_load_gif_from_memory(data, (int)size, &delays, &width, &height, &frame_count, &channels, 4);
         stbi_set_flip_vertically_on_load(false);
 
         std::vector<ImageFrame> frames;

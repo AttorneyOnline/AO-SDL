@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ui/IWidget.h"
 #include "event/EvidenceListEvent.h"
+#include "ui/IWidget.h"
 
 #include <string>
 #include <vector>

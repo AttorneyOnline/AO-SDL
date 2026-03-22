@@ -15,16 +15,15 @@ std::vector<std::string> fallback_font_paths() {
 
     // Priority order: wide Unicode coverage first, then CJK-specific
     static const char* names[] = {
-        "arial.ttf",
-        "segoeui.ttf",
-        "malgun.ttf",      // Korean (Malgun Gothic)
-        "meiryo.ttc",      // Japanese
-        "msyh.ttc",        // Chinese Simplified (Microsoft YaHei)
-        "msjh.ttc",        // Chinese Traditional
-        "msgothic.ttc",    // Japanese fallback
-        "simsun.ttc",      // Chinese fallback
-        "seguiemj.ttf",    // Emoji
-        "yugothic.ttf",    // Japanese (Yu Gothic)
+        "arial.ttf",    "segoeui.ttf",
+        "malgun.ttf",   // Korean (Malgun Gothic)
+        "meiryo.ttc",   // Japanese
+        "msyh.ttc",     // Chinese Simplified (Microsoft YaHei)
+        "msjh.ttc",     // Chinese Traditional
+        "msgothic.ttc", // Japanese fallback
+        "simsun.ttc",   // Chinese fallback
+        "seguiemj.ttf", // Emoji
+        "yugothic.ttf", // Japanese (Yu Gothic)
     };
 
     for (const char* name : names) {

@@ -39,7 +39,8 @@ void CourtroomWidget::render() {
         // Wider than 4:3 — pillarbox (bars on sides)
         img_h = avail.y;
         img_w = avail.y * target_aspect;
-    } else {
+    }
+    else {
         // Taller than 4:3 — letterbox (bars on top/bottom)
         img_w = avail.x;
         img_h = avail.x / target_aspect;

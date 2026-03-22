@@ -3,8 +3,7 @@
 #include <imgui.h>
 
 CharSelectController::CharSelectController(CharSelectScreen& screen, RenderManager& render)
-    : char_select_(std::make_unique<CharSelectWidget>(screen, render))
-{
+    : char_select_(std::make_unique<CharSelectWidget>(screen, render)) {
 }
 
 void CharSelectController::render() {
@@ -12,8 +11,7 @@ void CharSelectController::render() {
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::Begin("##char_select_screen", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     float left_width = avail.x * 0.65f;

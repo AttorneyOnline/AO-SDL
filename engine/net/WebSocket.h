@@ -241,7 +241,7 @@ class WebSocket {
     bool connecting; /**< True while the handshake is in progress. */
 
     // Continuation frame accumulation (RFC 6455 §5.4)
-    std::vector<uint8_t> fragment_buf_;  /**< Accumulated payload across fragments. */
-    Opcode fragment_opcode_ = TEXT;      /**< Opcode from the first fragment. */
-    bool in_fragment_ = false;           /**< True while accumulating fragments. */
+    std::vector<uint8_t> fragment_buf_; /**< Accumulated payload across fragments. */
+    Opcode fragment_opcode_ = TEXT;     /**< Opcode from the first fragment. */
+    bool in_fragment_ = false;          /**< True while accumulating fragments. */
 };

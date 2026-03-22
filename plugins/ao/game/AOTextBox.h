@@ -26,10 +26,11 @@ class AOTextBox {
     void load(AOAssetLibrary& ao_assets);
 
     /// Returns true if essential assets (font + chatbox image) are loaded.
-    bool loaded() const { return font_loaded && chatbox_bg; }
+    bool loaded() const {
+        return font_loaded && chatbox_bg;
+    }
 
-    void start_message(const std::string& showname, const std::string& message, int color_idx,
-                       bool additive = false);
+    void start_message(const std::string& showname, const std::string& message, int color_idx, bool additive = false);
     bool tick(int delta_ms);
 
     /// Render the showname into its own ImageAsset. Returns nullptr if empty.
@@ -51,10 +52,14 @@ class AOTextBox {
 
     /// Chatbox background image (positioned at chatbox_rect by presenter).
     /// Returns the active variant (chat/chatmed/chatbig) based on showname width.
-    std::shared_ptr<ImageAsset> chatbox_background() const { return active_chatbox ? active_chatbox : chatbox_bg; }
+    std::shared_ptr<ImageAsset> chatbox_background() const {
+        return active_chatbox ? active_chatbox : chatbox_bg;
+    }
 
     /// Message text mesh (rebuilt on tick when chars change).
-    std::shared_ptr<MeshAsset> message_mesh() const { return msg_mesh_; }
+    std::shared_ptr<MeshAsset> message_mesh() const {
+        return msg_mesh_;
+    }
 
     /// Glyph atlas texture for message text.
     std::shared_ptr<ImageAsset> message_atlas() const {
@@ -62,20 +67,24 @@ class AOTextBox {
     }
 
     /// Text shader.
-    std::shared_ptr<ShaderAsset> text_shader() const { return text_shader_; }
+    std::shared_ptr<ShaderAsset> text_shader() const {
+        return text_shader_;
+    }
 
     /// Current message color (for shader uniform).
     void message_color_rgb(float& r, float& g, float& b) const;
 
     /// Chatbox rect in viewport coordinates (for positioning the background layer).
-    const AORect& chatbox_position() const { return chatbox_rect; }
+    const AORect& chatbox_position() const {
+        return chatbox_rect;
+    }
 
   private:
     // Theme assets — chatbox variants for different showname widths
-    std::shared_ptr<ImageAsset> chatbox_bg;       // default (shortest name tab)
-    std::shared_ptr<ImageAsset> chatbox_med;      // medium name tab
-    std::shared_ptr<ImageAsset> chatbox_big;      // large name tab
-    std::shared_ptr<ImageAsset> active_chatbox;    // currently selected variant
+    std::shared_ptr<ImageAsset> chatbox_bg;     // default (shortest name tab)
+    std::shared_ptr<ImageAsset> chatbox_med;    // medium name tab
+    std::shared_ptr<ImageAsset> chatbox_big;    // large name tab
+    std::shared_ptr<ImageAsset> active_chatbox; // currently selected variant
     int showname_extra_width = 24;
     TextRenderer text_renderer;
     TextRenderer showname_renderer;

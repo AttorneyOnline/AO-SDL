@@ -3,26 +3,24 @@
 
 #include <SDL2/SDL.h>
 #include <imgui.h>
-#include <imgui_impl_sdl2.h>
 #include <imgui_impl_metal.h>
+#include <imgui_impl_sdl2.h>
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
 class MetalBackend : public IGPUBackend {
   public:
-    uint32_t window_flags() const override {
-        return SDL_WINDOW_METAL;
-    }
+    uint32_t window_flags() const override { return SDL_WINDOW_METAL; }
 
-    void init(SDL_Window* window, IRenderer& renderer) override {
+    void init(SDL_Window *window, IRenderer &renderer) override {
         window_ = window;
         metal_view_ = SDL_Metal_CreateView(window);
 
         device_ = (__bridge id<MTLDevice>)renderer.get_device_ptr();
-        queue_  = (__bridge id<MTLCommandQueue>)renderer.get_command_queue_ptr();
+        queue_ = (__bridge id<MTLCommandQueue>)renderer.get_command_queue_ptr();
 
-        layer_ = (__bridge CAMetalLayer*)SDL_Metal_GetLayer(metal_view_);
+        layer_ = (__bridge CAMetalLayer *)SDL_Metal_GetLayer(metal_view_);
         layer_.device = device_;
         layer_.pixelFormat = MTLPixelFormatBGRA8Unorm;
 
@@ -33,7 +31,8 @@ class MetalBackend : public IGPUBackend {
     void shutdown() override {
         ImGui_ImplMetal_Shutdown();
         ImGui_ImplSDL2_Shutdown();
-        if (metal_view_) SDL_Metal_DestroyView(metal_view_);
+        if (metal_view_)
+            SDL_Metal_DestroyView(metal_view_);
     }
 
     void begin_frame() override {
@@ -46,17 +45,18 @@ class MetalBackend : public IGPUBackend {
         drawable_ = [layer_ nextDrawable];
 
         rpd_ = [MTLRenderPassDescriptor renderPassDescriptor];
-        rpd_.colorAttachments[0].texture     = drawable_.texture;
-        rpd_.colorAttachments[0].loadAction  = MTLLoadActionClear;
+        rpd_.colorAttachments[0].texture = drawable_.texture;
+        rpd_.colorAttachments[0].loadAction = MTLLoadActionClear;
         rpd_.colorAttachments[0].storeAction = MTLStoreActionStore;
-        rpd_.colorAttachments[0].clearColor  = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+        rpd_.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
 
         ImGui_ImplMetal_NewFrame(rpd_);
         ImGui_ImplSDL2_NewFrame();
     }
 
     void present() override {
-        if (!drawable_) return;
+        if (!drawable_)
+            return;
 
         id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
         id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd_];
@@ -73,16 +73,14 @@ class MetalBackend : public IGPUBackend {
     }
 
   private:
-    SDL_Window*          window_     = nullptr;
-    SDL_MetalView        metal_view_ = nullptr;
-    id<MTLDevice>        device_     = nil;
-    id<MTLCommandQueue>  queue_      = nil;
-    CAMetalLayer*        layer_      = nil;
-    id<CAMetalDrawable>  drawable_   = nil;
-    MTLRenderPassDescriptor* rpd_    = nil;
-    NSAutoreleasePool*   pool_      = nil;
+    SDL_Window *window_ = nullptr;
+    SDL_MetalView metal_view_ = nullptr;
+    id<MTLDevice> device_ = nil;
+    id<MTLCommandQueue> queue_ = nil;
+    CAMetalLayer *layer_ = nil;
+    id<CAMetalDrawable> drawable_ = nil;
+    MTLRenderPassDescriptor *rpd_ = nil;
+    NSAutoreleasePool *pool_ = nil;
 };
 
-std::unique_ptr<IGPUBackend> create_gpu_backend() {
-    return std::make_unique<MetalBackend>();
-}
+std::unique_ptr<IGPUBackend> create_gpu_backend() { return std::make_unique<MetalBackend>(); }

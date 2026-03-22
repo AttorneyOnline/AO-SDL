@@ -2,25 +2,25 @@
 
 #include "AOClient.h"
 #include "ao/event/ICMessageEvent.h"
-#include "platform/HardwareId.h"
 #include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
-#include "utils/Version.h"
 #include "event/AreaUpdateEvent.h"
 #include "event/AssetUrlEvent.h"
 #include "event/BackgroundEvent.h"
+#include "event/CharacterListEvent.h"
+#include "event/CharsCheckEvent.h"
+#include "event/ChatEvent.h"
+#include "event/EventManager.h"
 #include "event/EvidenceListEvent.h"
 #include "event/FeatureListEvent.h"
 #include "event/HealthBarEvent.h"
 #include "event/MusicChangeEvent.h"
 #include "event/MusicListEvent.h"
-#include "event/CharacterListEvent.h"
-#include "event/CharsCheckEvent.h"
-#include "event/ChatEvent.h"
-#include "event/EventManager.h"
 #include "event/PlayerListEvent.h"
 #include "event/TimerEvent.h"
 #include "event/UIEvent.h"
+#include "platform/HardwareId.h"
+#include "utils/Version.h"
 
 // Keeping the actual handler functions in a separate file here just for clarity
 
@@ -108,8 +108,7 @@ void AOPacketSC::handle(AOClient& cli) {
 static bool has_audio_extension(const std::string& name) {
     static const std::string exts[] = {".wav", ".mp3", ".mp4", ".ogg", ".opus"};
     for (const auto& ext : exts) {
-        if (name.size() >= ext.size() &&
-            name.compare(name.size() - ext.size(), ext.size(), ext) == 0)
+        if (name.size() >= ext.size() && name.compare(name.size() - ext.size(), ext.size(), ext) == 0)
             return true;
     }
     return false;
@@ -129,7 +128,8 @@ void AOPacketSM::handle(AOClient& cli) {
     for (const auto& entry : music_list) {
         if (in_music) {
             tracks.push_back(entry);
-        } else if (has_audio_extension(entry)) {
+        }
+        else if (has_audio_extension(entry)) {
             // The previous "area" was actually a category header for music
             if (!areas.empty()) {
                 tracks.push_back(areas.back());
@@ -137,13 +137,13 @@ void AOPacketSM::handle(AOClient& cli) {
             }
             tracks.push_back(entry);
             in_music = true;
-        } else {
+        }
+        else {
             areas.push_back(entry);
         }
     }
 
-    EventManager::instance().get_channel<MusicListEvent>().publish(
-        MusicListEvent(std::move(areas), std::move(tracks)));
+    EventManager::instance().get_channel<MusicListEvent>().publish(MusicListEvent(std::move(areas), std::move(tracks)));
 
     AOPacketRD signal_done;
     cli.add_message(signal_done);
@@ -180,8 +180,7 @@ void AOPacketBN::handle(AOClient& cli) {
 }
 
 void AOPacketMC::handle(AOClient& cli) {
-    EventManager::instance().get_channel<MusicChangeEvent>().publish(
-        MusicChangeEvent(name, char_id, showname));
+    EventManager::instance().get_channel<MusicChangeEvent>().publish(MusicChangeEvent(name, char_id, showname));
 }
 
 void AOPacketARUP::handle(AOClient& cli) {
@@ -210,13 +209,11 @@ void AOPacketFL::handle(AOClient& cli) {
 }
 
 void AOPacketFA::handle(AOClient& cli) {
-    EventManager::instance().get_channel<MusicListEvent>().publish(
-        MusicListEvent(areas, {}, true));
+    EventManager::instance().get_channel<MusicListEvent>().publish(MusicListEvent(areas, {}, true));
 }
 
 void AOPacketFM::handle(AOClient& cli) {
-    EventManager::instance().get_channel<MusicListEvent>().publish(
-        MusicListEvent({}, tracks, true));
+    EventManager::instance().get_channel<MusicListEvent>().publish(MusicListEvent({}, tracks, true));
 }
 
 void AOPacketHP::handle(AOClient& cli) {
@@ -234,12 +231,14 @@ void AOPacketLE::handle(AOClient& cli) {
         size_t p1 = raw.find('&');
         if (p1 == std::string::npos) {
             item.name = raw;
-        } else {
+        }
+        else {
             item.name = raw.substr(0, p1);
             size_t p2 = raw.find('&', p1 + 1);
             if (p2 == std::string::npos) {
                 item.description = raw.substr(p1 + 1);
-            } else {
+            }
+            else {
                 item.description = raw.substr(p1 + 1, p2 - p1 - 1);
                 item.image = raw.substr(p2 + 1);
             }
@@ -257,11 +256,20 @@ void AOPacketPR::handle(AOClient& cli) {
 void AOPacketPU::handle(AOClient& cli) {
     PlayerListEvent::Action action;
     switch (data_type) {
-    case 0: action = PlayerListEvent::Action::UPDATE_NAME; break;
-    case 1: action = PlayerListEvent::Action::UPDATE_CHARACTER; break;
-    case 2: action = PlayerListEvent::Action::UPDATE_CHARNAME; break;
-    case 3: action = PlayerListEvent::Action::UPDATE_AREA; break;
-    default: return;
+    case 0:
+        action = PlayerListEvent::Action::UPDATE_NAME;
+        break;
+    case 1:
+        action = PlayerListEvent::Action::UPDATE_CHARACTER;
+        break;
+    case 2:
+        action = PlayerListEvent::Action::UPDATE_CHARNAME;
+        break;
+    case 3:
+        action = PlayerListEvent::Action::UPDATE_AREA;
+        break;
+    default:
+        return;
     }
     EventManager::instance().get_channel<PlayerListEvent>().publish(PlayerListEvent(action, player_id, data));
 }

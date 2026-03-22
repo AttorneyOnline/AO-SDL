@@ -131,7 +131,7 @@ std::optional<AOCharacterSheet> AOAssetLibrary::character_sheet(const std::strin
 // ---- Background ------------------------------------------------------------
 
 std::shared_ptr<ImageAsset> AOAssetLibrary::background(const std::string& name, const std::string& position,
-                                                        bool no_default) {
+                                                       bool no_default) {
     std::string legacy = bg_filename(position);
     auto result = assets.image("background/" + name + "/" + legacy);
     // Modern naming fallback
@@ -316,15 +316,12 @@ std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string&
     // that, so we try common naming conventions used by AO theme fonts.
     std::string underscore_name = normalized_name;
     for (auto& c : underscore_name)
-        if (c == '-') c = '_';
+        if (c == '-')
+            c = '_';
 
     std::vector<std::string> candidates = {
-        normalized_name + ".ttf",
-        underscore_name + ".ttf",
-        normalized_name + "-regular.ttf",
-        underscore_name + "_regular.ttf",
-        normalized_name + "_Regular.ttf",
-        underscore_name + "_Regular.ttf",
+        normalized_name + ".ttf",         underscore_name + ".ttf",         normalized_name + "-regular.ttf",
+        underscore_name + "_regular.ttf", normalized_name + "_Regular.ttf", underscore_name + "_Regular.ttf",
     };
 
     // Search: active theme → default → known font-shipping themes → global fonts
@@ -353,7 +350,7 @@ std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string&
 }
 
 void AOAssetLibrary::prefetch_character(const std::string& character, const std::string& emote,
-                                         const std::string& pre_emote, int priority) {
+                                        const std::string& pre_emote, int priority) {
     std::string base = "characters/" + character + "/";
     assets.prefetch_image(base + "(a)" + emote, 1, priority);
     assets.prefetch_image(base + "(b)" + emote, 1, priority);

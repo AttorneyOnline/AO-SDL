@@ -2,8 +2,8 @@
 
 #include "ui/widgets/ICMessageState.h"
 
-#include "event/OutgoingICMessageEvent.h"
 #include "event/EventManager.h"
+#include "event/OutgoingICMessageEvent.h"
 
 #include <imgui.h>
 
@@ -36,8 +36,7 @@ void ICChatWidget::send() {
     data.screenshake = state_->screenshake ? 1 : 0;
     data.additive = state_->additive ? 1 : 0;
 
-    EventManager::instance().get_channel<OutgoingICMessageEvent>().publish(
-        OutgoingICMessageEvent(std::move(data)));
+    EventManager::instance().get_channel<OutgoingICMessageEvent>().publish(OutgoingICMessageEvent(std::move(data)));
 
     state_->message[0] = '\0';
     state_->objection_mod = 0;
@@ -50,8 +49,7 @@ void ICChatWidget::render() {
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x -
                             ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().ItemSpacing.x);
-    if (ImGui::InputText("##ic_msg", state_->message, sizeof(state_->message),
-                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (ImGui::InputText("##ic_msg", state_->message, sizeof(state_->message), ImGuiInputTextFlags_EnterReturnsTrue)) {
         send();
     }
 

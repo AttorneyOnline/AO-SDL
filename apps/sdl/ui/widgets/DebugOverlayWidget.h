@@ -35,7 +35,7 @@ struct DebugStats {
         int width = 0, height = 0;
         int frame_count = 0;
         std::shared_ptr<ImageAsset> image; // for texture preview
-        uintptr_t texture_id = 0;        // GPU texture handle for ImGui::Image
+        uintptr_t texture_id = 0;          // GPU texture handle for ImGui::Image
     };
     std::vector<CacheEntry> cache_entries;
     size_t cache_used_bytes = 0;
@@ -73,7 +73,9 @@ class DebugOverlayWidget : public IWidget {
     void handle_events() override;
     void render() override;
 
-    DebugStats& stats() { return stats_; }
+    DebugStats& stats() {
+        return stats_;
+    }
 
   private:
     void draw_pie(const std::vector<std::pair<const char*, float>>& slices);
@@ -91,13 +93,16 @@ class DebugOverlayWidget : public IWidget {
         void push(float v) {
             samples[write_pos] = v;
             write_pos = (write_pos + 1) % AVG_WINDOW;
-            if (write_pos == 0) filled = true;
+            if (write_pos == 0)
+                filled = true;
         }
         float average() const {
             int count = filled ? AVG_WINDOW : write_pos;
-            if (count == 0) return 0;
+            if (count == 0)
+                return 0;
             float sum = 0;
-            for (int i = 0; i < count; i++) sum += samples[i];
+            for (int i = 0; i < count; i++)
+                sum += samples[i];
             return sum / count;
         }
     };
@@ -114,7 +119,8 @@ class DebugOverlayWidget : public IWidget {
         void push(float v) {
             data[write_pos] = v;
             write_pos = (write_pos + 1) % HISTORY_SIZE;
-            if (count < HISTORY_SIZE) count++;
+            if (count < HISTORY_SIZE)
+                count++;
         }
         float at(int i) const {
             // i=0 is oldest, i=count-1 is newest

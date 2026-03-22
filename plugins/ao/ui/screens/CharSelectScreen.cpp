@@ -1,12 +1,12 @@
 #include "ao/ui/screens/CharSelectScreen.h"
 
+#include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
 #include "event/CharSelectRequestEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
-#include "ao/ui/screens/CourtroomScreen.h"
 #include "utils/Log.h"
 
 #include <format>
@@ -55,7 +55,6 @@ void CharSelectScreen::handle_events() {
                 std::make_unique<CourtroomScreen>(optev->get_character_name(), optev->get_char_id()));
         }
     }
-
 }
 
 void CharSelectScreen::select_character(int index) {
@@ -67,8 +66,7 @@ void CharSelectScreen::select_character(int index) {
 
     // If re-selecting the same character, just go back to courtroom without a state change
     if (index == selected && controller) {
-        controller->push_screen(
-            std::make_unique<CourtroomScreen>(chars[index].folder, index));
+        controller->push_screen(std::make_unique<CourtroomScreen>(chars[index].folder, index));
         return;
     }
 

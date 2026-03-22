@@ -11,9 +11,9 @@
 
 /// Result of an HTTP request.
 struct HttpResponse {
-    int status = 0;         ///< HTTP status code (0 = connection error).
-    std::string body;       ///< Response body.
-    std::string error;      ///< Error description (empty on success).
+    int status = 0;    ///< HTTP status code (0 = connection error).
+    std::string body;  ///< Response body.
+    std::string error; ///< Error description (empty on success).
 };
 
 /// Callback invoked on the submitting thread's event loop (not the worker thread).
@@ -59,7 +59,9 @@ class HttpPool {
     int poll();
 
     /// Number of requests currently in-flight or queued.
-    int pending() const { return pending_.load(std::memory_order_relaxed); }
+    int pending() const {
+        return pending_.load(std::memory_order_relaxed);
+    }
 
   private:
     struct Request {

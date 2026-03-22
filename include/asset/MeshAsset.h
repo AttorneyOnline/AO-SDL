@@ -28,11 +28,18 @@ struct MeshVertex {
 class MeshAsset : public Asset {
   public:
     MeshAsset(const std::string& path, std::vector<MeshVertex> vertices, std::vector<uint32_t> indices)
-        : Asset(path, "mesh"), vertices_(std::move(vertices)), indices_(std::move(indices)) {}
+        : Asset(path, "mesh"), vertices_(std::move(vertices)), indices_(std::move(indices)) {
+    }
 
-    const std::vector<MeshVertex>& vertices() const { return vertices_; }
-    const std::vector<uint32_t>& indices() const { return indices_; }
-    size_t index_count() const { return indices_.size(); }
+    const std::vector<MeshVertex>& vertices() const {
+        return vertices_;
+    }
+    const std::vector<uint32_t>& indices() const {
+        return indices_;
+    }
+    size_t index_count() const {
+        return indices_.size();
+    }
 
     /// Update vertex and index data (bumps generation for renderer cache invalidation).
     void update(std::vector<MeshVertex> vertices, std::vector<uint32_t> indices) {
@@ -41,7 +48,9 @@ class MeshAsset : public Asset {
         generation_++;
     }
 
-    uint64_t generation() const { return generation_; }
+    uint64_t generation() const {
+        return generation_;
+    }
 
     size_t memory_size() const override {
         return vertices_.size() * sizeof(MeshVertex) + indices_.size() * sizeof(uint32_t);

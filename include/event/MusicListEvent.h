@@ -10,15 +10,22 @@
 class MusicListEvent : public Event {
   public:
     MusicListEvent(std::vector<std::string> areas, std::vector<std::string> tracks, bool partial = false)
-        : areas_(std::move(areas)), tracks_(std::move(tracks)), partial_(partial) {}
+        : areas_(std::move(areas)), tracks_(std::move(tracks)), partial_(partial) {
+    }
 
     std::string to_string() const override {
         return std::to_string(areas_.size()) + " areas, " + std::to_string(tracks_.size()) + " tracks";
     }
 
-    const std::vector<std::string>& areas() const { return areas_; }
-    const std::vector<std::string>& tracks() const { return tracks_; }
-    bool partial() const { return partial_; }
+    const std::vector<std::string>& areas() const {
+        return areas_;
+    }
+    const std::vector<std::string>& tracks() const {
+        return tracks_;
+    }
+    bool partial() const {
+        return partial_;
+    }
 
   private:
     std::vector<std::string> areas_;

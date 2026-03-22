@@ -3,8 +3,7 @@
 #include <imgui.h>
 
 ServerListController::ServerListController(ServerListScreen& screen, RenderManager& render)
-    : server_list_(std::make_unique<ServerListWidget>(screen, render))
-{
+    : server_list_(std::make_unique<ServerListWidget>(screen, render)) {
 }
 
 void ServerListController::render() {
@@ -12,8 +11,7 @@ void ServerListController::render() {
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::Begin("##server_list_screen", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     ImGui::SeparatorText("Servers");
     server_list_->render();

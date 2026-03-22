@@ -1,0 +1,22 @@
+#!/bin/sh
+# Pre-commit hook: run clang-format on staged C++/ObjC files.
+# Only reformats files that are part of this commit.
+
+CLANG_FORMAT=$(command -v clang-format 2>/dev/null)
+if [ -z "$CLANG_FORMAT" ]; then
+    echo "Warning: clang-format not found, skipping format check"
+    exit 0
+fi
+
+# Get list of staged files (added/modified)
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|h|mm)$' | grep -v '^third-party/')
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+# Format each staged file and re-stage
+for file in $STAGED; do
+    "$CLANG_FORMAT" -i "$file"
+    git add "$file"
+done

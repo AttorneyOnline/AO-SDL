@@ -19,10 +19,12 @@ using Clock = std::chrono::steady_clock;
 /// Provides text color uniforms (u_text_r/g/b) to the text shader.
 class TextColorProvider : public ShaderUniformProvider {
   public:
-    TextColorProvider(float r, float g, float b) : r_(r), g_(g), b_(b) {}
+    TextColorProvider(float r, float g, float b) : r_(r), g_(g), b_(b) {
+    }
     std::unordered_map<std::string, UniformValue> get_uniforms() const override {
         return {{"u_text_r", r_}, {"u_text_g", g_}, {"u_text_b", b_}};
     }
+
   private:
     float r_, g_, b_;
 };
@@ -35,7 +37,8 @@ AOCourtroomPresenter::AOCourtroomPresenter() {
 
     // Prefetch assets for queued messages so they're cache-warm when played
     message_queue_.set_prefetch([this](const ICMessage& msg) {
-        if (!ao_assets) return;
+        if (!ao_assets)
+            return;
         // Trigger HTTP downloads for missing assets (no-op if local)
         ao_assets->prefetch_character(msg.character, msg.emote, msg.pre_emote);
         // Also try loading locally cached assets into the decode cache
@@ -70,7 +73,8 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (msg.desk_mod == DeskMod::CHAT) {
         // Default: desk shown for def/pro/wit, hidden for other positions
         show_desk = (msg.side == "def" || msg.side == "pro" || msg.side == "wit");
-    } else {
+    }
+    else {
         show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
                      msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
     }
@@ -94,7 +98,8 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (textbox.text_state() == AOTextBox::TextState::INACTIVE) {
         emote_player.start(*ao_assets, msg.character, msg.emote, "", EmoteMod::IDLE);
         emote_player.transition_to_idle();
-    } else {
+    }
+    else {
         emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
     }
 
@@ -109,8 +114,7 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (msg.message.find("cube") != std::string::npos)
         cube_.trigger();
 
-    EventManager::instance().get_channel<ICLogEvent>().publish(
-        ICLogEvent(showname, msg.message, msg.text_color));
+    EventManager::instance().get_channel<ICLogEvent>().publish(ICLogEvent(showname, msg.message, msg.text_color));
 }
 
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
@@ -142,8 +146,8 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     }
 
     // Advance queue — dequeue next message when current one finishes
-    bool text_done = textbox.text_state() == AOTextBox::TextState::DONE ||
-                     textbox.text_state() == AOTextBox::TextState::INACTIVE;
+    bool text_done =
+        textbox.text_state() == AOTextBox::TextState::DONE || textbox.text_state() == AOTextBox::TextState::INACTIVE;
     message_queue_.tick(delta_ms, text_done);
 
     if (auto msg = message_queue_.next()) {

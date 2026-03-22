@@ -9,13 +9,16 @@ struct ICMessageState;
 
 class MusicAreaWidget : public IWidget {
   public:
-    explicit MusicAreaWidget(ICMessageState* state) : state_(state) {}
+    explicit MusicAreaWidget(ICMessageState* state) : state_(state) {
+    }
 
     void handle_events() override;
     void render() override;
 
     /// Current track name (set by incoming MusicChangeEvent).
-    const std::string& now_playing() const { return now_playing_; }
+    const std::string& now_playing() const {
+        return now_playing_;
+    }
 
   private:
     ICMessageState* state_;

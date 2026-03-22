@@ -9,13 +9,13 @@
 
 /// A single emote entry parsed from char.ini [Emotions].
 struct AOEmoteEntry {
-    std::string comment;   ///< Display name for the emote button.
-    std::string pre_anim;  ///< Pre-animation name, or "-" for none.
-    std::string anim_name; ///< Main animation name.
-    int mod = 0;           ///< Emote modifier.
-    int desk_mod = 0;      ///< Desk modifier.
-    std::string sfx_name;  ///< SFX from [SoundN], empty if none.
-    int sfx_delay = 0;     ///< SFX delay from [SoundT] (raw frame count).
+    std::string comment;      ///< Display name for the emote button.
+    std::string pre_anim;     ///< Pre-animation name, or "-" for none.
+    std::string anim_name;    ///< Main animation name.
+    int mod = 0;              ///< Emote modifier.
+    int desk_mod = 0;         ///< Desk modifier.
+    std::string sfx_name;     ///< SFX from [SoundN], empty if none.
+    int sfx_delay = 0;        ///< SFX delay from [SoundT] (raw frame count).
     bool sfx_looping = false; ///< Whether the SFX loops.
 };
 
@@ -29,22 +29,40 @@ class AOCharacterSheet : public ICharacterSheet {
     /// Returns nullopt if the ini file was not found.
     static std::optional<AOCharacterSheet> load(AssetLibrary& assets, const std::string& character);
 
-    const std::string& name() const override { return name_; }
-    const std::string& showname() const override { return showname_; }
-    const std::string& side() const override { return side_; }
-    const std::string& blips() const { return blips_; }
-    const std::string& effects_folder() const { return effects_; }
-    const std::string& chat_style() const { return chat_; }
+    const std::string& name() const override {
+        return name_;
+    }
+    const std::string& showname() const override {
+        return showname_;
+    }
+    const std::string& side() const override {
+        return side_;
+    }
+    const std::string& blips() const {
+        return blips_;
+    }
+    const std::string& effects_folder() const {
+        return effects_;
+    }
+    const std::string& chat_style() const {
+        return chat_;
+    }
 
-    int emote_count() const override { return (int)emotes_.size(); }
+    int emote_count() const override {
+        return (int)emotes_.size();
+    }
     EmoteEntry emote(int index) const override {
         const auto& e = emotes_.at(index);
         return {e.comment, e.pre_anim, e.anim_name, e.mod, e.desk_mod, e.sfx_name, e.sfx_delay};
     }
 
     /// AO-internal access to the full emote entry (includes sfx_looping etc.)
-    const AOEmoteEntry& ao_emote(int index) const { return emotes_.at(index); }
-    const std::vector<AOEmoteEntry>& emotes() const { return emotes_; }
+    const AOEmoteEntry& ao_emote(int index) const {
+        return emotes_.at(index);
+    }
+    const std::vector<AOEmoteEntry>& emotes() const {
+        return emotes_;
+    }
 
     /// Get the pre-animation duration override from [Time], or 0 if not set.
     int preanim_duration_ms(const std::string& pre_anim) const;
@@ -68,8 +86,8 @@ class AOCharacterSheet : public ICharacterSheet {
     void parse_frame_effects(const IniDocument& ini);
     void parse_time(const IniDocument& ini);
 
-    static const std::unordered_map<std::string, std::string>*
-    find_section(const IniDocument& ini, const std::string& name);
+    static const std::unordered_map<std::string, std::string>* find_section(const IniDocument& ini,
+                                                                            const std::string& name);
 
     std::string name_;
     std::string showname_;

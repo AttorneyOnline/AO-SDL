@@ -5,10 +5,10 @@
 #include "AOTextBox.h"
 #include "ICMessageQueue.h"
 #include "ao/asset/AOAssetLibrary.h"
-#include "asset/ImageAsset.h"
 #include "ao/game/effects/FlashEffect.h"
 #include "ao/game/effects/ScreenshakeEffect.h"
 #include "ao/game/effects/ShaderEffect.h"
+#include "asset/ImageAsset.h"
 #include "game/IScenePresenter.h"
 
 #include <atomic>
@@ -35,12 +35,8 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     std::vector<ProfileEntry> tick_profile() const override {
         return {
-            {"Events",    &profile_.events_us},
-            {"Assets",    &profile_.assets_us},
-            {"Animation", &profile_.animation_us},
-            {"Textbox",   &profile_.textbox_us},
-            {"Effects",   &profile_.effects_us},
-            {"Compose",   &profile_.compose_us},
+            {"Events", &profile_.events_us},   {"Assets", &profile_.assets_us},   {"Animation", &profile_.animation_us},
+            {"Textbox", &profile_.textbox_us}, {"Effects", &profile_.effects_us}, {"Compose", &profile_.compose_us},
         };
     }
 
@@ -66,8 +62,13 @@ class AOCourtroomPresenter : public IScenePresenter {
     ShaderEffect shatter_{"shaders/shatter", 4.0f, 5};
     ShaderEffect cube_{"shaders/cube", 0, 5};
 
-    template <typename F> void for_each_effect(F&& fn) {
-        fn(screenshake_); fn(flash_); fn(rainbow_); fn(shatter_); fn(cube_);
+    template <typename F>
+    void for_each_effect(F&& fn) {
+        fn(screenshake_);
+        fn(flash_);
+        fn(rainbow_);
+        fn(shatter_);
+        fn(cube_);
     }
 
     TickProfile profile_;

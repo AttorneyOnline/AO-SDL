@@ -30,8 +30,8 @@ void ChatWidget::render() {
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
-        ImGui::InputTextMultiline("##chat_log", const_cast<char*>(buf.c_str()), buf.size() + 1,
-                                  ImVec2(-1, log_height), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
+        ImGui::InputTextMultiline("##chat_log", const_cast<char*>(buf.c_str()), buf.size() + 1, ImVec2(-1, log_height),
+                                  ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
         ImGui::PopStyleColor(3);
     }
 

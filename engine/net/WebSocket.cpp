@@ -24,7 +24,6 @@
 #include <format>
 #include <functional>
 
-
 HTTPResponse::HTTPResponse(StatusLine status_line, HTTPHeaders headers) : status_line(status_line), headers(headers) {
 }
 
@@ -268,7 +267,8 @@ std::vector<WebSocket::WebSocketFrame> WebSocket::read() {
                     throw WebSocketException("Received new data frame while still accumulating fragments");
                 }
                 messages.push_back(frame);
-            } else {
+            }
+            else {
                 // First fragment of a fragmented message
                 if (in_fragment_) {
                     throw WebSocketException("Received new fragmented data frame while still accumulating fragments");

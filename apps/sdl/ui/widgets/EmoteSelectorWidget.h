@@ -6,7 +6,8 @@ struct ICMessageState;
 
 class EmoteSelectorWidget : public IWidget {
   public:
-    explicit EmoteSelectorWidget(ICMessageState* state) : state_(state) {}
+    explicit EmoteSelectorWidget(ICMessageState* state) : state_(state) {
+    }
 
     void handle_events() override;
     void render() override;

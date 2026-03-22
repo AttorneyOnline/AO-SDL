@@ -1,11 +1,11 @@
-#include "net/ao/AOClient.h"
-#include "net/ao/AOPacket.h"
-#include "net/ao/PacketTypes.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
 #include "event/ChatEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
+#include "net/ao/AOClient.h"
+#include "net/ao/AOPacket.h"
+#include "net/ao/PacketTypes.h"
 
 #include <gtest/gtest.h>
 #include <optional>

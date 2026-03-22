@@ -22,7 +22,8 @@ TEST(ICMessageEvent, ConstructorStoresAllFields) {
 }
 
 TEST(ICMessageEvent, FlipFalse) {
-    ICMessageEvent ev("Edgeworth", "thinking", "", "", "Edgeworth", "pro", EmoteMod::IDLE, DeskMod::HIDE, false, 7, 0, 0, false, false, false, "");
+    ICMessageEvent ev("Edgeworth", "thinking", "", "", "Edgeworth", "pro", EmoteMod::IDLE, DeskMod::HIDE, false, 7, 0,
+                      0, false, false, false, "");
     EXPECT_FALSE(ev.get_flip());
 }
 

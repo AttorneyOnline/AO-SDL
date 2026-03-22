@@ -4,9 +4,9 @@
 #import <QuartzCore/CAMetalLayer.h>
 #import <simd/simd.h>
 
+#include "asset/ImageAsset.h"
 #include "render/RenderState.h"
 #include "render/Transform.h"
-#include "asset/ImageAsset.h"
 #include "utils/Log.h"
 
 #include "asset/MediaManager.h"
@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <unordered_map>
 
-static std::string load_metal_source(const std::string& path) {
+static std::string load_metal_source(const std::string &path) {
     auto data = MediaManager::instance().assets().raw(path);
     if (!data) {
         Log::log_print(FATAL, "MetalRenderer: missing shader: %s", path.c_str());
@@ -38,7 +38,7 @@ struct FragmentUniforms {
 
 // ---- helpers ----------------------------------------------------------------
 
-static simd_float4x4 mat4_to_simd(const Mat4& m) {
+static simd_float4x4 mat4_to_simd(const Mat4 &m) {
     simd_float4x4 s;
     for (int c = 0; c < 4; c++)
         for (int r = 0; r < 4; r++)
@@ -56,22 +56,22 @@ struct MetalVertex {
 // ---- impl -------------------------------------------------------------------
 
 struct MetalRendererImpl {
-    id<MTLDevice>              device;
-    id<MTLCommandQueue>        command_queue;
+    id<MTLDevice> device;
+    id<MTLCommandQueue> command_queue;
     id<MTLRenderPipelineState> pipeline;
     id<MTLRenderPipelineState> wireframe_pipeline;
-    id<MTLDepthStencilState>   depth_state;
-    id<MTLSamplerState>        sampler;
-    id<MTLSamplerState>        sampler_linear;
-    id<MTLBuffer>              quad_vb;
-    id<MTLBuffer>              quad_ib;
-    id<MTLTexture>             render_texture;
-    id<MTLTexture>             depth_texture;
+    id<MTLDepthStencilState> depth_state;
+    id<MTLSamplerState> sampler;
+    id<MTLSamplerState> sampler_linear;
+    id<MTLBuffer> quad_vb;
+    id<MTLBuffer> quad_ib;
+    id<MTLTexture> render_texture;
+    id<MTLTexture> depth_texture;
     id<MTLRenderPipelineState> blit_pipeline;
-    id<MTLTexture>             display_texture;
+    id<MTLTexture> display_texture;
     int fb_width;
     int fb_height;
-    int display_width  = 0;
+    int display_width = 0;
     int display_height = 0;
     uint64_t frame_counter = 0;
     bool wireframe = false;
@@ -81,7 +81,7 @@ struct MetalRendererImpl {
         id<MTLTexture> texture;
         uint64_t generation = 0;
     };
-    std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
+    std::unordered_map<const ImageAsset *, TextureCacheEntry> texture_cache;
 
     // 2D views of array textures for ImGui preview (ImGui can't sample texture2d_array)
     struct PreviewViewEntry {
@@ -89,9 +89,9 @@ struct MetalRendererImpl {
         id<MTLTexture> view;
         uint64_t generation = 0;
     };
-    std::unordered_map<const ImageAsset*, PreviewViewEntry> preview_views;
+    std::unordered_map<const ImageAsset *, PreviewViewEntry> preview_views;
 
-    std::unordered_map<const ShaderAsset*, id<MTLRenderPipelineState>> shader_pipeline_cache;
+    std::unordered_map<const ShaderAsset *, id<MTLRenderPipelineState>> shader_pipeline_cache;
 
     struct MeshCacheEntry {
         std::weak_ptr<MeshAsset> asset;
@@ -100,9 +100,9 @@ struct MetalRendererImpl {
         uint64_t generation = 0;
         size_t index_count = 0;
     };
-    std::unordered_map<const MeshAsset*, MeshCacheEntry> mesh_cache;
+    std::unordered_map<const MeshAsset *, MeshCacheEntry> mesh_cache;
 
-    std::pair<id<MTLBuffer>, id<MTLBuffer>> get_mesh_buffers(const std::shared_ptr<MeshAsset>& mesh) {
+    std::pair<id<MTLBuffer>, id<MTLBuffer>> get_mesh_buffers(const std::shared_ptr<MeshAsset> &mesh) {
         auto it = mesh_cache.find(mesh.get());
         if (it != mesh_cache.end() && it->second.generation == mesh->generation())
             return {it->second.vb, it->second.ib};
@@ -129,7 +129,7 @@ struct MetalRendererImpl {
     // --- setup ---------------------------------------------------------------
 
     void init(int w, int h) {
-        fb_width  = w;
+        fb_width = w;
         fb_height = h;
 
         device = MTLCreateSystemDefaultDevice();
@@ -149,20 +149,19 @@ struct MetalRendererImpl {
     void build_pipeline() {
         auto vert_src = load_metal_source("shaders/main/metal/vertex.metal");
         auto frag_src = load_metal_source("shaders/main/metal/fragment.metal");
-        NSString* src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
+        NSString *src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
 
-        NSError* err = nil;
+        NSError *err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
         if (!lib) {
-            Log::log_print(FATAL, "Metal shader compile: %s",
-                           [[err localizedDescription] UTF8String]);
+            Log::log_print(FATAL, "Metal shader compile: %s", [[err localizedDescription] UTF8String]);
             return;
         }
 
         id<MTLFunction> vert = [lib newFunctionWithName:@"vertex_main"];
         id<MTLFunction> frag = [lib newFunctionWithName:@"fragment_main"];
 
-        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        MTLVertexDescriptor *vd = [MTLVertexDescriptor vertexDescriptor];
         vd.attributes[0].format = MTLVertexFormatFloat2;
         vd.attributes[0].offset = offsetof(MetalVertex, position);
         vd.attributes[0].bufferIndex = 0;
@@ -171,60 +170,58 @@ struct MetalRendererImpl {
         vd.attributes[1].bufferIndex = 0;
         vd.layouts[0].stride = sizeof(MetalVertex);
 
-        MTLRenderPipelineDescriptor* pd = [[MTLRenderPipelineDescriptor alloc] init];
-        pd.vertexFunction   = vert;
+        MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
+        pd.vertexFunction = vert;
         pd.fragmentFunction = frag;
         pd.vertexDescriptor = vd;
         pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
         pd.colorAttachments[0].blendingEnabled = YES;
-        pd.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorSourceAlpha;
-        pd.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOneMinusSourceAlpha;
-        pd.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorSourceAlpha;
+        pd.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+        pd.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+        pd.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
         pd.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
         pd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
 
         pipeline = [device newRenderPipelineStateWithDescriptor:pd error:&err];
         if (!pipeline) {
-            Log::log_print(FATAL, "Metal pipeline: %s",
-                           [[err localizedDescription] UTF8String]);
+            Log::log_print(FATAL, "Metal pipeline: %s", [[err localizedDescription] UTF8String]);
         }
     }
 
     void build_blit_pipeline() {
         auto vert_src = load_metal_source("shaders/blit/metal/vertex.metal");
         auto frag_src = load_metal_source("shaders/blit/metal/fragment.metal");
-        NSString* src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
+        NSString *src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
 
-        NSError* err = nil;
+        NSError *err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
         if (!lib) {
-            Log::log_print(FATAL, "Metal blit shader compile: %s",
-                           [[err localizedDescription] UTF8String]);
+            Log::log_print(FATAL, "Metal blit shader compile: %s", [[err localizedDescription] UTF8String]);
             return;
         }
 
-        MTLRenderPipelineDescriptor* pd = [[MTLRenderPipelineDescriptor alloc] init];
-        pd.vertexFunction   = [lib newFunctionWithName:@"blit_vertex"];
+        MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
+        pd.vertexFunction = [lib newFunctionWithName:@"blit_vertex"];
         pd.fragmentFunction = [lib newFunctionWithName:@"blit_fragment"];
         pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
 
         blit_pipeline = [device newRenderPipelineStateWithDescriptor:pd error:&err];
         if (!blit_pipeline) {
-            Log::log_print(FATAL, "Metal blit pipeline: %s",
-                           [[err localizedDescription] UTF8String]);
+            Log::log_print(FATAL, "Metal blit pipeline: %s", [[err localizedDescription] UTF8String]);
         }
     }
 
     void build_wireframe_pipeline() {
         auto vert_src = load_metal_source("shaders/wireframe/metal/vertex.metal");
         auto frag_src = load_metal_source("shaders/wireframe/metal/fragment.metal");
-        NSString* src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
+        NSString *src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
 
-        NSError* err = nil;
+        NSError *err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
-        if (!lib) return;
+        if (!lib)
+            return;
 
-        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        MTLVertexDescriptor *vd = [MTLVertexDescriptor vertexDescriptor];
         vd.attributes[0].format = MTLVertexFormatFloat2;
         vd.attributes[0].offset = offsetof(MetalVertex, position);
         vd.attributes[0].bufferIndex = 0;
@@ -233,7 +230,7 @@ struct MetalRendererImpl {
         vd.attributes[1].bufferIndex = 0;
         vd.layouts[0].stride = sizeof(MetalVertex);
 
-        MTLRenderPipelineDescriptor* pd = [[MTLRenderPipelineDescriptor alloc] init];
+        MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
         pd.vertexFunction = [lib newFunctionWithName:@"wf_vertex"];
         pd.fragmentFunction = [lib newFunctionWithName:@"wf_fragment"];
         pd.vertexDescriptor = vd;
@@ -247,30 +244,29 @@ struct MetalRendererImpl {
         if (display_texture && display_width == w && display_height == h)
             return;
 
-        MTLTextureDescriptor* td =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                                              width:w
-                                                             height:h
-                                                          mipmapped:NO];
-        td.usage       = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                      width:w
+                                                                                     height:h
+                                                                                  mipmapped:NO];
+        td.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
         td.storageMode = MTLStorageModePrivate;
         display_texture = [device newTextureWithDescriptor:td];
-        display_width   = w;
-        display_height  = h;
+        display_width = w;
+        display_height = h;
     }
 
     uintptr_t blit_for_display(int w, int h) {
         if (w <= 0 || h <= 0)
-            return (uintptr_t)(__bridge void*)render_texture;
+            return (uintptr_t)(__bridge void *)render_texture;
 
         ensure_display_texture(w, h);
 
         @autoreleasepool {
             id<MTLCommandBuffer> cmd = [command_queue commandBuffer];
 
-            MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-            rpd.colorAttachments[0].texture     = display_texture;
-            rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
+            MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+            rpd.colorAttachments[0].texture = display_texture;
+            rpd.colorAttachments[0].loadAction = MTLLoadActionDontCare;
             rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
 
             id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
@@ -284,20 +280,20 @@ struct MetalRendererImpl {
             [cmd waitUntilCompleted];
         }
 
-        return (uintptr_t)(__bridge void*)display_texture;
+        return (uintptr_t)(__bridge void *)display_texture;
     }
 
     void build_depth_state() {
-        MTLDepthStencilDescriptor* dd = [[MTLDepthStencilDescriptor alloc] init];
+        MTLDepthStencilDescriptor *dd = [[MTLDepthStencilDescriptor alloc] init];
         dd.depthCompareFunction = MTLCompareFunctionLess;
-        dd.depthWriteEnabled    = YES;
+        dd.depthWriteEnabled = YES;
         depth_state = [device newDepthStencilStateWithDescriptor:dd];
     }
 
     void build_sampler() {
-        MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
-        sd.minFilter    = MTLSamplerMinMagFilterNearest;
-        sd.magFilter    = MTLSamplerMinMagFilterNearest;
+        MTLSamplerDescriptor *sd = [[MTLSamplerDescriptor alloc] init];
+        sd.minFilter = MTLSamplerMinMagFilterNearest;
+        sd.magFilter = MTLSamplerMinMagFilterNearest;
         sd.sAddressMode = MTLSamplerAddressModeClampToEdge;
         sd.tAddressMode = MTLSamplerAddressModeClampToEdge;
         sampler = [device newSamplerStateWithDescriptor:sd];
@@ -309,36 +305,30 @@ struct MetalRendererImpl {
 
     void build_quad() {
         const MetalVertex verts[4] = {
-            {{ 1.0f,  1.0f}, {1.0f, 1.0f}},
-            {{ 1.0f, -1.0f}, {1.0f, 0.0f}},
+            {{1.0f, 1.0f}, {1.0f, 1.0f}},
+            {{1.0f, -1.0f}, {1.0f, 0.0f}},
             {{-1.0f, -1.0f}, {0.0f, 0.0f}},
-            {{-1.0f,  1.0f}, {0.0f, 1.0f}},
+            {{-1.0f, 1.0f}, {0.0f, 1.0f}},
         };
         const uint32_t indices[6] = {0, 1, 3, 1, 2, 3};
 
-        quad_vb = [device newBufferWithBytes:verts
-                                     length:sizeof(verts)
-                                    options:MTLResourceStorageModeShared];
-        quad_ib = [device newBufferWithBytes:indices
-                                     length:sizeof(indices)
-                                    options:MTLResourceStorageModeShared];
+        quad_vb = [device newBufferWithBytes:verts length:sizeof(verts) options:MTLResourceStorageModeShared];
+        quad_ib = [device newBufferWithBytes:indices length:sizeof(indices) options:MTLResourceStorageModeShared];
     }
 
     void build_render_targets() {
-        MTLTextureDescriptor* td =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                                              width:fb_width
-                                                             height:fb_height
-                                                          mipmapped:NO];
+        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                      width:fb_width
+                                                                                     height:fb_height
+                                                                                  mipmapped:NO];
         td.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
         td.storageMode = MTLStorageModePrivate;
         render_texture = [device newTextureWithDescriptor:td];
 
-        MTLTextureDescriptor* dd =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
-                                                              width:fb_width
-                                                             height:fb_height
-                                                          mipmapped:NO];
+        MTLTextureDescriptor *dd = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
+                                                                                      width:fb_width
+                                                                                     height:fb_height
+                                                                                  mipmapped:NO];
         dd.usage = MTLTextureUsageRenderTarget;
         dd.storageMode = MTLStorageModePrivate;
         depth_texture = [device newTextureWithDescriptor:dd];
@@ -346,12 +336,12 @@ struct MetalRendererImpl {
 
     // --- texture cache -------------------------------------------------------
 
-    void upload_texture_data(id<MTLTexture> tex, const std::shared_ptr<ImageAsset>& asset) {
+    void upload_texture_data(id<MTLTexture> tex, const std::shared_ptr<ImageAsset> &asset) {
         int w = asset->width();
         int h = asset->height();
         int count = asset->frame_count();
         for (int i = 0; i < count; i++) {
-            const auto& frame = asset->frame(i);
+            const auto &frame = asset->frame(i);
             int fw = std::min(frame.width, w);
             int fh = std::min(frame.height, h);
             MTLRegion region = MTLRegionMake2D(0, 0, fw, fh);
@@ -364,7 +354,7 @@ struct MetalRendererImpl {
         }
     }
 
-    id<MTLTexture> get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
+    id<MTLTexture> get_texture_array(const std::shared_ptr<ImageAsset> &asset) {
         auto it = texture_cache.find(asset.get());
         if (it != texture_cache.end()) {
             if (it->second.generation == asset->generation())
@@ -376,25 +366,25 @@ struct MetalRendererImpl {
             return it->second.texture;
         }
 
-        int w     = asset->width();
-        int h     = asset->height();
+        int w = asset->width();
+        int h = asset->height();
         int count = asset->frame_count();
-        if (w == 0 || h == 0 || count == 0) return nil;
+        if (w == 0 || h == 0 || count == 0)
+            return nil;
 
-        MTLTextureDescriptor* td = [[MTLTextureDescriptor alloc] init];
+        MTLTextureDescriptor *td = [[MTLTextureDescriptor alloc] init];
         td.textureType = MTLTextureType2DArray;
         td.pixelFormat = MTLPixelFormatRGBA8Unorm;
-        td.width       = w;
-        td.height      = h;
+        td.width = w;
+        td.height = h;
         td.arrayLength = count;
-        td.usage       = MTLTextureUsageShaderRead;
+        td.usage = MTLTextureUsageShaderRead;
         td.storageMode = MTLStorageModeShared;
 
         id<MTLTexture> tex = [device newTextureWithDescriptor:td];
         upload_texture_data(tex, asset);
 
-        Log::log_print(VERBOSE, "MetalRenderer: uploaded %dx%d x %d frames for %s",
-                       w, h, count, asset->path().c_str());
+        Log::log_print(VERBOSE, "MetalRenderer: uploaded %dx%d x %d frames for %s", w, h, count, asset->path().c_str());
 
         texture_cache[asset.get()] = {asset, tex, asset->generation()};
         return tex;
@@ -413,7 +403,7 @@ struct MetalRendererImpl {
 
     // --- shader pipeline cache -----------------------------------------------
 
-    id<MTLRenderPipelineState> resolve_pipeline(const ShaderAsset* shader) {
+    id<MTLRenderPipelineState> resolve_pipeline(const ShaderAsset *shader) {
         if (!shader || shader->is_default())
             return pipeline;
 
@@ -423,25 +413,24 @@ struct MetalRendererImpl {
 
         // Metal: concatenate vertex + fragment source (both use known function names)
         std::string combined = shader->vertex_source() + "\n" + shader->fragment_source();
-        NSString* src = [NSString stringWithUTF8String:combined.c_str()];
+        NSString *src = [NSString stringWithUTF8String:combined.c_str()];
 
-        NSError* err = nil;
+        NSError *err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
         if (!lib) {
-            Log::log_print(FATAL, "Metal custom shader compile: %s",
-                           [[err localizedDescription] UTF8String]);
+            Log::log_print(FATAL, "Metal custom shader compile: %s", [[err localizedDescription] UTF8String]);
             return pipeline;
         }
 
         id<MTLFunction> vert = [lib newFunctionWithName:@"vertex_main"];
         id<MTLFunction> frag = [lib newFunctionWithName:@"fragment_main"];
         if (!vert || !frag) {
-            Log::log_print(ERR, "Metal custom shader: missing vertex_main(%d) or fragment_main(%d)",
-                           vert != nil, frag != nil);
+            Log::log_print(ERR, "Metal custom shader: missing vertex_main(%d) or fragment_main(%d)", vert != nil,
+                           frag != nil);
             return pipeline;
         }
 
-        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        MTLVertexDescriptor *vd = [MTLVertexDescriptor vertexDescriptor];
         vd.attributes[0].format = MTLVertexFormatFloat2;
         vd.attributes[0].offset = offsetof(MetalVertex, position);
         vd.attributes[0].bufferIndex = 0;
@@ -450,15 +439,15 @@ struct MetalRendererImpl {
         vd.attributes[1].bufferIndex = 0;
         vd.layouts[0].stride = sizeof(MetalVertex);
 
-        MTLRenderPipelineDescriptor* pd = [[MTLRenderPipelineDescriptor alloc] init];
-        pd.vertexFunction   = vert;
+        MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
+        pd.vertexFunction = vert;
         pd.fragmentFunction = frag;
         pd.vertexDescriptor = vd;
         pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
         pd.colorAttachments[0].blendingEnabled = YES;
-        pd.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorSourceAlpha;
-        pd.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOneMinusSourceAlpha;
-        pd.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorSourceAlpha;
+        pd.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+        pd.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+        pd.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
         pd.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
         pd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
 
@@ -477,22 +466,21 @@ struct MetalRendererImpl {
 
     int draw_call_count = 0;
 
-    void draw(const RenderState* state) {
+    void draw(const RenderState *state) {
         draw_call_count = 0;
         @autoreleasepool {
             id<MTLCommandBuffer> cmd = [command_queue commandBuffer];
 
-            MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-            rpd.colorAttachments[0].texture    = render_texture;
+            MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+            rpd.colorAttachments[0].texture = render_texture;
             rpd.colorAttachments[0].loadAction = MTLLoadActionClear;
             rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-            rpd.colorAttachments[0].clearColor = wireframe
-                ? MTLClearColorMake(0.0, 0.0, 0.0, 1.0)
-                : MTLClearColorMake(0.1, 0.1, 0.2, 1.0);
-            rpd.depthAttachment.texture     = depth_texture;
-            rpd.depthAttachment.loadAction  = MTLLoadActionClear;
+            rpd.colorAttachments[0].clearColor =
+                wireframe ? MTLClearColorMake(0.0, 0.0, 0.0, 1.0) : MTLClearColorMake(0.1, 0.1, 0.2, 1.0);
+            rpd.depthAttachment.texture = depth_texture;
+            rpd.depthAttachment.loadAction = MTLLoadActionClear;
             rpd.depthAttachment.storeAction = MTLStoreActionDontCare;
-            rpd.depthAttachment.clearDepth  = 1.0;
+            rpd.depthAttachment.clearDepth = 1.0;
 
             id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
             [enc setDepthStencilState:depth_state];
@@ -506,23 +494,24 @@ struct MetalRendererImpl {
             }
 
             if (state) {
-                for (const auto& [_, group] : state->get_layer_groups()) {
-                    const ShaderAsset* group_shader = group.get_shader().get();
+                for (const auto &[_, group] : state->get_layer_groups()) {
+                    const ShaderAsset *group_shader = group.get_shader().get();
                     Mat4 group_mat = group.transform().get_local_transform();
 
-                    for (const auto& [__, layer] : group.get_layers()) {
-                        const auto& asset = layer.get_asset();
-                        if (!asset || asset->frame_count() == 0) continue;
+                    for (const auto &[__, layer] : group.get_layers()) {
+                        const auto &asset = layer.get_asset();
+                        if (!asset || asset->frame_count() == 0)
+                            continue;
 
                         id<MTLTexture> tex = get_texture_array(asset);
-                        if (!tex) continue;
+                        if (!tex)
+                            continue;
 
-                        int frame = std::clamp(layer.get_frame_index(), 0,
-                                               asset->frame_count() - 1);
+                        int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
                         Mat4 local = group_mat * layer.transform().get_local_transform();
                         VertexUniforms vu;
-                        vu.local  = mat4_to_simd(local);
+                        vu.local = mat4_to_simd(local);
                         vu.aspect = Transform::get_aspect_ratio();
                         [enc setVertexBytes:&vu length:sizeof(vu) atIndex:1];
 
@@ -531,8 +520,9 @@ struct MetalRendererImpl {
                             [enc setRenderPipelineState:wireframe_pipeline];
                         } else {
                             // Resolve shader: layer overrides group overrides default
-                            const ShaderAsset* effective = layer.get_shader().get();
-                            if (!effective) effective = group_shader;
+                            const ShaderAsset *effective = layer.get_shader().get();
+                            if (!effective)
+                                effective = group_shader;
                             [enc setRenderPipelineState:resolve_pipeline(effective)];
 
                             [enc setFragmentTexture:tex atIndex:0];
@@ -543,14 +533,19 @@ struct MetalRendererImpl {
                                 // Sort by key name for deterministic Metal struct layout
                                 std::vector<std::pair<std::string, UniformValue>> sorted(custom.begin(), custom.end());
                                 std::sort(sorted.begin(), sorted.end(),
-                                          [](const auto& a, const auto& b) { return a.first < b.first; });
-                                struct { int32_t frame_index; float opacity; float extras[16]; } fu;
+                                          [](const auto &a, const auto &b) { return a.first < b.first; });
+                                struct {
+                                    int32_t frame_index;
+                                    float opacity;
+                                    float extras[16];
+                                } fu;
                                 fu.frame_index = frame;
                                 fu.opacity = layer.get_opacity();
                                 int ei = 0;
-                                for (const auto& [name, val] : sorted) {
-                                    if (auto* f = std::get_if<float>(&val))
-                                        if (ei < 16) fu.extras[ei++] = *f;
+                                for (const auto &[name, val] : sorted) {
+                                    if (auto *f = std::get_if<float>(&val))
+                                        if (ei < 16)
+                                            fu.extras[ei++] = *f;
                                 }
                                 size_t fu_size = offsetof(decltype(fu), extras) + ei * sizeof(float);
                                 [enc setFragmentBytes:&fu length:fu_size atIndex:0];
@@ -562,7 +557,7 @@ struct MetalRendererImpl {
                             }
                         } // end !wireframe
 
-                        const auto& mesh = layer.get_mesh();
+                        const auto &mesh = layer.get_mesh();
                         if (mesh && mesh->index_count() > 0) {
                             auto [mvb, mib] = get_mesh_buffers(mesh);
                             [enc setVertexBuffer:mvb offset:0 atIndex:0];
@@ -594,14 +589,13 @@ struct MetalRendererImpl {
 
 // ---- MetalRenderer public API -----------------------------------------------
 
-MetalRenderer::MetalRenderer(int width, int height)
-    : impl(std::make_unique<MetalRendererImpl>()) {
+MetalRenderer::MetalRenderer(int width, int height) : impl(std::make_unique<MetalRendererImpl>()) {
     impl->init(width, height);
 }
 
 MetalRenderer::~MetalRenderer() = default;
 
-void MetalRenderer::draw(const RenderState* state) {
+void MetalRenderer::draw(const RenderState *state) {
     impl->draw(state);
     draw_calls_ = impl->draw_call_count;
 }
@@ -614,28 +608,28 @@ void MetalRenderer::clear() {
     // Clearing is done at the start of each draw() via loadAction.
 }
 
-void MetalRenderer::set_wireframe(bool enabled) {
-    impl->wireframe = enabled;
-}
+void MetalRenderer::set_wireframe(bool enabled) { impl->wireframe = enabled; }
 
-uintptr_t MetalRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
-    if (!asset || asset->frame_count() == 0) return 0;
+uintptr_t MetalRenderer::get_texture_id(const std::shared_ptr<ImageAsset> &asset) {
+    if (!asset || asset->frame_count() == 0)
+        return 0;
     // Upload on demand if not cached
     id<MTLTexture> tex = impl->get_texture_array(asset);
-    if (!tex) return 0;
+    if (!tex)
+        return 0;
 
     // ImGui expects a regular texture2d, but we store texture2d_array.
     // Create a 2D view of slice 0 for preview.
     auto vit = impl->preview_views.find(asset.get());
     if (vit != impl->preview_views.end() && vit->second.generation == asset->generation())
-        return (uintptr_t)(__bridge void*)vit->second.view;
+        return (uintptr_t)(__bridge void *)vit->second.view;
 
     id<MTLTexture> view = [tex newTextureViewWithPixelFormat:tex.pixelFormat
-                                                textureType:MTLTextureType2D
-                                                     levels:NSMakeRange(0, 1)
-                                                     slices:NSMakeRange(0, 1)];
+                                                 textureType:MTLTextureType2D
+                                                      levels:NSMakeRange(0, 1)
+                                                      slices:NSMakeRange(0, 1)];
     impl->preview_views[asset.get()] = {asset, view, asset->generation()};
-    return (uintptr_t)(__bridge void*)view;
+    return (uintptr_t)(__bridge void *)view;
 }
 
 void MetalRenderer::resize(int width, int height) {
@@ -653,21 +647,15 @@ void MetalRenderer::resize(int width, int height) {
     Log::log_print(DEBUG, "MetalRenderer: resized to %dx%d", width, height);
 }
 
-uintptr_t MetalRenderer::get_render_texture_id() const {
-    return (uintptr_t)(__bridge void*)impl->render_texture;
-}
+uintptr_t MetalRenderer::get_render_texture_id() const { return (uintptr_t)(__bridge void *)impl->render_texture; }
 
 uintptr_t MetalRenderer::get_display_texture_id(int display_w, int display_h) {
     return impl->blit_for_display(display_w, display_h);
 }
 
-void* MetalRenderer::get_device_ptr() const {
-    return (__bridge void*)impl->device;
-}
+void *MetalRenderer::get_device_ptr() const { return (__bridge void *)impl->device; }
 
-void* MetalRenderer::get_command_queue_ptr() const {
-    return (__bridge void*)impl->command_queue;
-}
+void *MetalRenderer::get_command_queue_ptr() const { return (__bridge void *)impl->command_queue; }
 
 std::unique_ptr<IRenderer> create_renderer(int width, int height) {
     return std::make_unique<MetalRenderer>(width, height);

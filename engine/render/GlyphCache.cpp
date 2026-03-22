@@ -26,8 +26,7 @@ GlyphCache::GlyphCache(TextRenderer& renderer, int atlas_size)
     frame.duration_ms = 0;
     frame.pixels = atlas_pixels_;
 
-    atlas_ = std::make_shared<ImageAsset>("_glyph_atlas", "gpu",
-                                          std::vector<ImageFrame>{std::move(frame)});
+    atlas_ = std::make_shared<ImageAsset>("_glyph_atlas", "gpu", std::vector<ImageFrame>{std::move(frame)});
 
     // Precache printable ASCII (space through tilde)
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++)
@@ -77,14 +76,17 @@ const GlyphInfo& GlyphCache::ensure(uint32_t codepoint) {
     std::string ch;
     if (codepoint < 0x80) {
         ch = (char)codepoint;
-    } else if (codepoint < 0x800) {
+    }
+    else if (codepoint < 0x800) {
         ch += (char)(0xC0 | (codepoint >> 6));
         ch += (char)(0x80 | (codepoint & 0x3F));
-    } else if (codepoint < 0x10000) {
+    }
+    else if (codepoint < 0x10000) {
         ch += (char)(0xE0 | (codepoint >> 12));
         ch += (char)(0x80 | ((codepoint >> 6) & 0x3F));
         ch += (char)(0x80 | (codepoint & 0x3F));
-    } else {
+    }
+    else {
         ch += (char)(0xF0 | (codepoint >> 18));
         ch += (char)(0x80 | ((codepoint >> 12) & 0x3F));
         ch += (char)(0x80 | ((codepoint >> 6) & 0x3F));

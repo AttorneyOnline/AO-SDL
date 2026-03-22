@@ -92,8 +92,8 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
 
     if (sn_font_data) {
         showname_font_storage = std::move(*sn_font_data);
-        showname_font_loaded = showname_renderer.load_font_memory(
-            showname_font_storage.data(), showname_font_storage.size(), sn_font.size_px);
+        showname_font_loaded = showname_renderer.load_font_memory(showname_font_storage.data(),
+                                                                  showname_font_storage.size(), sn_font.size_px);
         showname_renderer.set_sharp(sn_font.sharp);
         Log::log_print(DEBUG, "AOTextBox: showname_font='%s' %dpt (%dpx) sharp=%d", sn_font.name.c_str(),
                        sn_font.size_pt, sn_font.size_px, sn_font.sharp);
@@ -104,7 +104,8 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
 #elif defined(_WIN32)
         showname_font_loaded = showname_renderer.load_font("C:\\Windows\\Fonts\\arial.ttf", sn_font.size_px);
 #else
-        showname_font_loaded = showname_renderer.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", sn_font.size_px);
+        showname_font_loaded =
+            showname_renderer.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", sn_font.size_px);
 #endif
         if (showname_font_loaded)
             showname_renderer.set_sharp(sn_font.sharp);
@@ -133,7 +134,8 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
 
     if (additive) {
         previous_message += current_message;
-    } else {
+    }
+    else {
         previous_message.clear();
     }
 
@@ -163,7 +165,8 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
     if (msg_glyph_cache_) {
         int wrap_w = message_rect.w > 0 ? message_rect.w : 256;
         cached_layout_ = text_renderer.compute_layout(cached_display_text_, wrap_w);
-    } else {
+    }
+    else {
         cached_layout_.clear();
     }
 }
@@ -173,7 +176,8 @@ void AOTextBox::message_color_rgb(float& r, float& g, float& b) const {
         r = colors[current_color_idx].r / 255.0f;
         g = colors[current_color_idx].g / 255.0f;
         b = colors[current_color_idx].b / 255.0f;
-    } else {
+    }
+    else {
         r = g = b = 1.0f;
     }
 }
@@ -225,9 +229,8 @@ bool AOTextBox::tick(int delta_ms) {
 
         std::vector<MeshVertex> verts;
         std::vector<uint32_t> indices;
-        TextMeshBuilder::build(*msg_glyph_cache_, cached_layout_, visible,
-                               chatbox_rect.x + message_rect.x, chatbox_rect.y + message_rect.y,
-                               scroll_y, message_rect.h, 256, 192, verts, indices);
+        TextMeshBuilder::build(*msg_glyph_cache_, cached_layout_, visible, chatbox_rect.x + message_rect.x,
+                               chatbox_rect.y + message_rect.y, scroll_y, message_rect.h, 256, 192, verts, indices);
         msg_mesh_->update(std::move(verts), std::move(indices));
     }
 
@@ -241,7 +244,6 @@ bool AOTextBox::is_talking() const {
         return false;
     return colors[current_color_idx].talking;
 }
-
 
 std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
     if (current_showname.empty() || !showname_font_loaded || !engine_assets_)
@@ -259,7 +261,8 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
 
     if (cached) {
         nameplate = cached;
-    } else {
+    }
+    else {
         // Render text
         int text_w = showname_renderer.measure_width(current_showname);
         int text_h = showname_renderer.line_height();
@@ -325,4 +328,3 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
 AOTextBox::NameplateLayout AOTextBox::nameplate_layout() const {
     return cached_nameplate_layout_;
 }
-

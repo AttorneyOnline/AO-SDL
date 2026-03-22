@@ -23,7 +23,8 @@ void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
         bg = ao_assets.background(bg_name, pos);
         if (!bg) {
             ao_assets.prefetch_background(bg_name, pos);
-        } else {
+        }
+        else {
             desk = ao_assets.desk_overlay(bg_name, pos);
         }
         return;
@@ -43,7 +44,8 @@ void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
         desk = ao_assets.desk_overlay(bg_name, pos);
         dirty = false;
         Log::log_print(DEBUG, "Loaded background: %s/%s", bg_name.c_str(), pos.c_str());
-    } else {
+    }
+    else {
         bg = ao_assets.background(bg_name, pos);
         desk = ao_assets.desk_overlay(bg_name, pos);
     }

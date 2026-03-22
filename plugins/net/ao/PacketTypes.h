@@ -164,6 +164,7 @@ class AOPacketRD : public AOPacket {
 class AOPacketCH : public AOPacket {
   public:
     AOPacketCH(int char_id);
+
   private:
     static constexpr int MIN_FIELDS = 1;
 };
@@ -173,6 +174,7 @@ class AOPacketCHECK : public AOPacket {
   public:
     AOPacketCHECK(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
@@ -315,6 +317,7 @@ class AOPacketFL : public AOPacket {
   public:
     AOPacketFL(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     std::vector<std::string> features;
     static PacketRegistrar registrar;
@@ -326,6 +329,7 @@ class AOPacketFA : public AOPacket {
   public:
     AOPacketFA(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     std::vector<std::string> areas;
     static PacketRegistrar registrar;
@@ -337,6 +341,7 @@ class AOPacketFM : public AOPacket {
   public:
     AOPacketFM(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     std::vector<std::string> tracks;
     static PacketRegistrar registrar;
@@ -348,6 +353,7 @@ class AOPacketHP : public AOPacket {
   public:
     AOPacketHP(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     int side = 0;
     int value = 0;
@@ -361,6 +367,7 @@ class AOPacketTI : public AOPacket {
   public:
     AOPacketTI(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     int timer_id = 0;
     int action = 0;
@@ -374,6 +381,7 @@ class AOPacketLE : public AOPacket {
   public:
     AOPacketLE(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     std::vector<std::string> raw_items;
     static PacketRegistrar registrar;
@@ -385,6 +393,7 @@ class AOPacketPR : public AOPacket {
   public:
     AOPacketPR(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     int player_id = 0;
     int update_type = 0;
@@ -397,6 +406,7 @@ class AOPacketPU : public AOPacket {
   public:
     AOPacketPU(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+
   private:
     int player_id = 0;
     int data_type = 0;

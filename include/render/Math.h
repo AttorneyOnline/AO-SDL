@@ -6,14 +6,14 @@
 #if defined(__aarch64__) || defined(_M_ARM64)
 #include <arm_neon.h>
 #define AO_SIMD_NEON 1
-#define AO_SIMD_SSE  0
+#define AO_SIMD_SSE 0
 #elif defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <xmmintrin.h>
 #define AO_SIMD_NEON 0
-#define AO_SIMD_SSE  1
+#define AO_SIMD_SSE 1
 #else
 #define AO_SIMD_NEON 0
-#define AO_SIMD_SSE  0
+#define AO_SIMD_SSE 0
 #endif
 
 struct Vec2 {
@@ -23,8 +23,10 @@ struct Vec2 {
 struct Vec3 {
     float x = 0, y = 0, z = 0;
 
-    explicit Vec3(float v) : x(v), y(v), z(v) {}
-    Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
+    explicit Vec3(float v) : x(v), y(v), z(v) {
+    }
+    Vec3(float x, float y, float z) : x(x), y(y), z(z) {
+    }
     Vec3() = default;
 };
 
@@ -33,11 +35,17 @@ struct Mat4 {
     float m[16];
 
     /// Access column as float[4]. Usage: mat[col][row].
-    float* operator[](int col) { return &m[col * 4]; }
-    const float* operator[](int col) const { return &m[col * 4]; }
+    float* operator[](int col) {
+        return &m[col * 4];
+    }
+    const float* operator[](int col) const {
+        return &m[col * 4];
+    }
 
     /// Pointer to the underlying float[16] (for GL uniforms, Metal copies, etc.).
-    const float* data() const { return m; }
+    const float* data() const {
+        return m;
+    }
 
     static Mat4 identity() {
         Mat4 r;
@@ -107,8 +115,7 @@ inline Mat4 translate(const Mat4& basis, const Vec3& v) {
     _mm_storeu_ps(&r.m[12], c3);
 #else
     for (int i = 0; i < 4; i++)
-        r.m[12 + i] = basis.m[i] * v.x + basis.m[4 + i] * v.y +
-                       basis.m[8 + i] * v.z + basis.m[12 + i];
+        r.m[12 + i] = basis.m[i] * v.x + basis.m[4 + i] * v.y + basis.m[8 + i] * v.z + basis.m[12 + i];
 #endif
     return r;
 }
@@ -124,9 +131,12 @@ inline Mat4 scale(const Mat4& basis, const Vec3& v) {
     _mm_storeu_ps(&r.m[4], _mm_mul_ps(_mm_loadu_ps(&basis.m[4]), _mm_set1_ps(v.y)));
     _mm_storeu_ps(&r.m[8], _mm_mul_ps(_mm_loadu_ps(&basis.m[8]), _mm_set1_ps(v.z)));
 #else
-    for (int i = 0; i < 4; i++) r.m[i]     = basis.m[i]     * v.x;
-    for (int i = 0; i < 4; i++) r.m[4 + i]  = basis.m[4 + i]  * v.y;
-    for (int i = 0; i < 4; i++) r.m[8 + i]  = basis.m[8 + i]  * v.z;
+    for (int i = 0; i < 4; i++)
+        r.m[i] = basis.m[i] * v.x;
+    for (int i = 0; i < 4; i++)
+        r.m[4 + i] = basis.m[4 + i] * v.y;
+    for (int i = 0; i < 4; i++)
+        r.m[8 + i] = basis.m[8 + i] * v.z;
 #endif
     return r;
 }
@@ -139,8 +149,8 @@ inline Mat4 rotate(const Mat4& basis, float radians, const Vec3& axis) {
     float x = axis.x, y = axis.y, z = axis.z;
 
     // Build rotation matrix columns
-    Vec3 r0(t * x * x + c,     t * x * y + s * z, t * x * z - s * y);
-    Vec3 r1(t * x * y - s * z, t * y * y + c,     t * y * z + s * x);
+    Vec3 r0(t * x * x + c, t * x * y + s * z, t * x * z - s * y);
+    Vec3 r1(t * x * y - s * z, t * y * y + c, t * y * z + s * x);
     Vec3 r2(t * x * z + s * y, t * y * z - s * x, t * z * z + c);
 
     Mat4 r;
@@ -184,9 +194,9 @@ inline Mat4 rotate(const Mat4& basis, float radians, const Vec3& axis) {
     _mm_storeu_ps(&r.m[8], c2);
 #else
     for (int i = 0; i < 4; i++) {
-        r.m[i]     = basis.m[i] * r0.x + basis.m[4+i] * r0.y + basis.m[8+i] * r0.z;
-        r.m[4 + i] = basis.m[i] * r1.x + basis.m[4+i] * r1.y + basis.m[8+i] * r1.z;
-        r.m[8 + i] = basis.m[i] * r2.x + basis.m[4+i] * r2.y + basis.m[8+i] * r2.z;
+        r.m[i] = basis.m[i] * r0.x + basis.m[4 + i] * r0.y + basis.m[8 + i] * r0.z;
+        r.m[4 + i] = basis.m[i] * r1.x + basis.m[4 + i] * r1.y + basis.m[8 + i] * r1.z;
+        r.m[8 + i] = basis.m[i] * r2.x + basis.m[4 + i] * r2.y + basis.m[8 + i] * r2.z;
     }
 #endif
     // Column 3 unchanged

@@ -68,7 +68,7 @@ class AOAssetLibrary {
     /// Load the background image for a position (legacy name mapping + fallbacks).
     /// If @p no_default is true, skip the default background fallback.
     std::shared_ptr<ImageAsset> background(const std::string& name, const std::string& position,
-                                            bool no_default = false);
+                                           bool no_default = false);
 
     /// Load the desk overlay for a position.
     std::shared_ptr<ImageAsset> desk_overlay(const std::string& name, const std::string& position);
@@ -110,8 +110,8 @@ class AOAssetLibrary {
 
     /// Trigger background HTTP prefetch for a character's emote assets.
     /// No-op if assets are available locally or no HTTP mount is configured.
-    void prefetch_character(const std::string& character, const std::string& emote,
-                            const std::string& pre_emote, int priority = 1);
+    void prefetch_character(const std::string& character, const std::string& emote, const std::string& pre_emote,
+                            int priority = 1);
 
     /// Prefetch all emote icons and sprites for the player's own character.
     /// Uses HIGH priority since these are needed immediately.

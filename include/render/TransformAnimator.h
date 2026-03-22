@@ -37,15 +37,23 @@ class TransformAnimator {
     void add_keyframe(const TransformKeyframe& kf);
     void clear_keyframes();
 
-    void set_easing(Easing easing) { easing_ = easing; }
-    void set_looping(bool loop) { looping_ = loop; }
+    void set_easing(Easing easing) {
+        easing_ = easing;
+    }
+    void set_looping(bool loop) {
+        looping_ = loop;
+    }
 
     void play();
     void stop();
     void reset();
 
-    bool is_playing() const { return playing_; }
-    bool is_finished() const { return finished_; }
+    bool is_playing() const {
+        return playing_;
+    }
+    bool is_finished() const {
+        return finished_;
+    }
 
     /// Advance the animation by delta_ms. Returns true if the transform changed.
     bool tick(int delta_ms);
@@ -54,9 +62,15 @@ class TransformAnimator {
     void apply(Transform& target) const;
 
     /// Get the current interpolated values directly.
-    Vec2 current_translation() const { return current_.translation; }
-    Vec2 current_scale() const { return current_.scale; }
-    float current_rotation() const { return current_.rotation; }
+    Vec2 current_translation() const {
+        return current_.translation;
+    }
+    Vec2 current_scale() const {
+        return current_.scale;
+    }
+    float current_rotation() const {
+        return current_.rotation;
+    }
 
   private:
     float ease(float t) const;

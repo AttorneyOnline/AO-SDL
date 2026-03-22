@@ -29,7 +29,9 @@ class MockTcpSocket : public ITcpSocket {
         return sent_bytes;
     }
 
-    void clear_sent() { sent_bytes.clear(); }
+    void clear_sent() {
+        sent_bytes.clear();
+    }
 
     // Optional callback fired on every send() call.
     // Receives the full cumulative sent buffer so far.

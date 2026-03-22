@@ -26,13 +26,15 @@ struct ICMessage {
     int objection_mod;
 
     static ICMessage from_event(const ICMessageEvent& ev) {
-        return {ev.get_character(), ev.get_emote(),       ev.get_pre_emote(),   ev.get_message(),
-                ev.get_showname(),  ev.get_side(),        ev.get_emote_mod(),   ev.get_desk_mod(),
-                ev.get_flip(),      ev.get_char_id(),     ev.get_text_color(),  ev.get_screenshake(),
-                ev.get_realization(), ev.get_additive(),  ev.get_objection_mod()};
+        return {ev.get_character(),   ev.get_emote(),    ev.get_pre_emote(),    ev.get_message(),
+                ev.get_showname(),    ev.get_side(),     ev.get_emote_mod(),    ev.get_desk_mod(),
+                ev.get_flip(),        ev.get_char_id(),  ev.get_text_color(),   ev.get_screenshake(),
+                ev.get_realization(), ev.get_additive(), ev.get_objection_mod()};
     }
 
-    bool is_objection() const { return objection_mod >= 1 && objection_mod <= 4; }
+    bool is_objection() const {
+        return objection_mod >= 1 && objection_mod <= 4;
+    }
 };
 
 /// Queues IC messages so they play sequentially without stepping on each other.
@@ -47,7 +49,9 @@ class ICMessageQueue {
     /// Set a callback invoked when a message is enqueued but won't play
     /// immediately. Use this to prefetch assets (emotes, backgrounds) so
     /// they're cache-warm by the time the message plays.
-    void set_prefetch(std::function<void(const ICMessage&)> fn) { prefetch_ = std::move(fn); }
+    void set_prefetch(std::function<void(const ICMessage&)> fn) {
+        prefetch_ = std::move(fn);
+    }
 
     /// Add a message. If nothing is playing, it becomes immediately available
     /// via next(). Objections clear the queue and interrupt.
@@ -62,13 +66,22 @@ class ICMessageQueue {
     std::optional<ICMessage> next();
 
     /// Whether a message is currently being presented.
-    bool is_playing() const { return playing_; }
+    bool is_playing() const {
+        return playing_;
+    }
 
     /// Number of messages waiting in the queue.
-    size_t pending() const { return queue_.size(); }
+    size_t pending() const {
+        return queue_.size();
+    }
 
     /// Discard all queued messages and reset playback state.
-    void clear() { queue_.clear(); playing_ = false; ready_ = false; linger_ms_ = 0; }
+    void clear() {
+        queue_.clear();
+        playing_ = false;
+        ready_ = false;
+        linger_ms_ = 0;
+    }
 
   private:
     std::deque<ICMessage> queue_;

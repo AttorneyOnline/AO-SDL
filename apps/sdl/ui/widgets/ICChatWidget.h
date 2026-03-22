@@ -6,7 +6,8 @@ struct ICMessageState;
 
 class ICChatWidget : public IWidget {
   public:
-    explicit ICChatWidget(ICMessageState* state) : state_(state) {}
+    explicit ICChatWidget(ICMessageState* state) : state_(state) {
+    }
 
     void handle_events() override;
     void render() override;

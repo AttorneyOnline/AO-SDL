@@ -28,7 +28,8 @@ void MusicAreaWidget::handle_events() {
             if (!ev->tracks().empty()) {
                 tracks_ = ev->tracks();
             }
-        } else {
+        }
+        else {
             areas_ = ev->areas();
             tracks_ = ev->tracks();
             size_t n = areas_.size();
@@ -41,8 +42,8 @@ void MusicAreaWidget::handle_events() {
         tracks_lower_.resize(tracks_.size());
         for (size_t i = 0; i < tracks_.size(); i++) {
             tracks_lower_[i] = tracks_[i];
-            std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(),
-                           tracks_lower_[i].begin(), [](unsigned char c) { return std::tolower(c); });
+            std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
+                           [](unsigned char c) { return std::tolower(c); });
         }
     }
 
@@ -83,11 +84,16 @@ static bool matches_filter(const std::string& lower_name, const std::string& low
 }
 
 static ImVec4 status_color(const std::string& status) {
-    if (status == "LOOKING-FOR-PLAYERS") return {0.56f, 0.93f, 0.56f, 1.0f};
-    if (status == "CASING")              return {1.0f, 0.84f, 0.0f, 1.0f};
-    if (status == "RECESS")              return {0.68f, 0.85f, 0.90f, 1.0f};
-    if (status == "RP")                  return {0.87f, 0.63f, 0.87f, 1.0f};
-    if (status == "GAMING")              return {1.0f, 0.65f, 0.0f, 1.0f};
+    if (status == "LOOKING-FOR-PLAYERS")
+        return {0.56f, 0.93f, 0.56f, 1.0f};
+    if (status == "CASING")
+        return {1.0f, 0.84f, 0.0f, 1.0f};
+    if (status == "RECESS")
+        return {0.68f, 0.85f, 0.90f, 1.0f};
+    if (status == "RP")
+        return {0.87f, 0.63f, 0.87f, 1.0f};
+    if (status == "GAMING")
+        return {1.0f, 0.65f, 0.0f, 1.0f};
     return {0.7f, 0.7f, 0.7f, 1.0f}; // default/unknown
 }
 
@@ -116,7 +122,8 @@ void MusicAreaWidget::render() {
                 bool is_category = !track.empty() && track.find('.') == std::string::npos;
                 if (is_category) {
                     ImGui::SeparatorText(track.c_str());
-                } else {
+                }
+                else {
                     if (ImGui::Selectable(track.c_str())) {
                         std::string showname = state_->showname;
                         EventManager::instance().get_channel<OutgoingMusicEvent>().publish(

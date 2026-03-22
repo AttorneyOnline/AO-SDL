@@ -42,7 +42,7 @@ std::vector<std::string> fallback_font_paths() {
                 continue;
 
             char buf[1024];
-            if (CFURLGetFileSystemRepresentation(url, true, (UInt8*)buf, sizeof(buf))) {
+            if (CFURLGetFileSystemRepresentation(url, true, (UInt8 *)buf, sizeof(buf))) {
                 std::string path(buf);
                 if (seen.insert(path).second)
                     paths.push_back(std::move(path));

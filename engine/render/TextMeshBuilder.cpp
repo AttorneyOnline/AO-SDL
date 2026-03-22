@@ -2,13 +2,8 @@
 
 namespace TextMeshBuilder {
 
-void build(GlyphCache& cache,
-           const std::vector<TextRenderer::GlyphLayout>& layout,
-           int chars_visible,
-           int offset_x, int offset_y,
-           int scroll_y, int max_height,
-           int base_w, int base_h,
-           std::vector<MeshVertex>& out_vertices,
+void build(GlyphCache& cache, const std::vector<TextRenderer::GlyphLayout>& layout, int chars_visible, int offset_x,
+           int offset_y, int scroll_y, int max_height, int base_w, int base_h, std::vector<MeshVertex>& out_vertices,
            std::vector<uint32_t>& out_indices) {
     out_vertices.clear();
     out_indices.clear();
@@ -64,9 +59,9 @@ void build(GlyphCache& cache,
 
         // Convert pixel coords to NDC [-1, 1]
         float x0 = (px / bw) * 2.0f - 1.0f;
-        float y0 = 1.0f - (py / bh) * 2.0f;         // top (Y flipped for GL)
+        float y0 = 1.0f - (py / bh) * 2.0f; // top (Y flipped for GL)
         float x1 = ((px + pw) / bw) * 2.0f - 1.0f;
-        float y1 = 1.0f - ((py + ph) / bh) * 2.0f;  // bottom
+        float y1 = 1.0f - ((py + ph) / bh) * 2.0f; // bottom
 
         uint32_t base = (uint32_t)out_vertices.size();
 

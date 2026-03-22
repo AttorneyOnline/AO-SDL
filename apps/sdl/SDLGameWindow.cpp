@@ -33,8 +33,7 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
         // Base font: load the first available system font with default ranges
         bool base_loaded = false;
         for (const auto& path : font_paths) {
-            if (io.Fonts->AddFontFromFileTTF(path.c_str(), 15.0f, nullptr,
-                                              io.Fonts->GetGlyphRangesDefault())) {
+            if (io.Fonts->AddFontFromFileTTF(path.c_str(), 15.0f, nullptr, io.Fonts->GetGlyphRangesDefault())) {
                 Log::log_print(DEBUG, "ImGui: base UI font from %s", path.c_str());
                 base_loaded = true;
                 break;
@@ -50,11 +49,11 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
             const ImWchar* (*getter)(ImFontAtlas*);
         };
         RangeSet extra_ranges[] = {
-            {"Korean",     [](ImFontAtlas* a) { return a->GetGlyphRangesKorean(); }},
-            {"Chinese",    [](ImFontAtlas* a) { return a->GetGlyphRangesChineseFull(); }},
-            {"Japanese",   [](ImFontAtlas* a) { return a->GetGlyphRangesJapanese(); }},
-            {"Cyrillic",   [](ImFontAtlas* a) { return a->GetGlyphRangesCyrillic(); }},
-            {"Thai",       [](ImFontAtlas* a) { return a->GetGlyphRangesThai(); }},
+            {"Korean", [](ImFontAtlas* a) { return a->GetGlyphRangesKorean(); }},
+            {"Chinese", [](ImFontAtlas* a) { return a->GetGlyphRangesChineseFull(); }},
+            {"Japanese", [](ImFontAtlas* a) { return a->GetGlyphRangesJapanese(); }},
+            {"Cyrillic", [](ImFontAtlas* a) { return a->GetGlyphRangesCyrillic(); }},
+            {"Thai", [](ImFontAtlas* a) { return a->GetGlyphRangesThai(); }},
             {"Vietnamese", [](ImFontAtlas* a) { return a->GetGlyphRangesVietnamese(); }},
         };
 

@@ -1,6 +1,5 @@
 ---
 Language:        Cpp
-# BasedOnStyle:  LLVM
 AccessModifierOffset: -2
 AlignAfterOpenBracket: Align
 AlignConsecutiveMacros: false
@@ -133,5 +132,10 @@ StatementMacros:
 TabWidth:        8
 UseCRLF:         false
 UseTab:          Never
+---
+Language:        ObjC
+BasedOnStyle:    LLVM
+ColumnLimit:     120
+IndentWidth:     4
 ...
 

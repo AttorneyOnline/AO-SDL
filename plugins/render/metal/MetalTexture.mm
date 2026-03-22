@@ -10,15 +10,14 @@ static id<MTLDevice> shared_device() {
     return dev;
 }
 
-MetalTexture2D::MetalTexture2D(int width, int height, const uint8_t* pixels, int channels)
+MetalTexture2D::MetalTexture2D(int width, int height, const uint8_t *pixels, int channels)
     : width_(width), height_(height) {
 
-    MTLTextureDescriptor* td =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                                          width:width
-                                                         height:height
-                                                      mipmapped:NO];
-    td.usage       = MTLTextureUsageShaderRead;
+    MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                  width:width
+                                                                                 height:height
+                                                                              mipmapped:NO];
+    td.usage = MTLTextureUsageShaderRead;
     td.storageMode = MTLStorageModeShared;
 
     texture_ = [shared_device() newTextureWithDescriptor:td];
@@ -46,14 +45,8 @@ MetalTexture2D::~MetalTexture2D() {
     // ARC handles release
 }
 
-uint64_t MetalTexture2D::get_id() const {
-    return (uint64_t)(uintptr_t)(__bridge void*)texture_;
-}
+uint64_t MetalTexture2D::get_id() const { return (uint64_t)(uintptr_t)(__bridge void *)texture_; }
 
-int MetalTexture2D::get_width() const {
-    return width_;
-}
+int MetalTexture2D::get_width() const { return width_; }
 
-int MetalTexture2D::get_height() const {
-    return height_;
-}
+int MetalTexture2D::get_height() const { return height_; }

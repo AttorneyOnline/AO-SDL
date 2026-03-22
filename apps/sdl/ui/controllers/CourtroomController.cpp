@@ -1,7 +1,6 @@
 #include "ui/controllers/CourtroomController.h"
 
 #include "ao/asset/AOAssetLibrary.h"
-#include "utils/Log.h"
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
@@ -12,6 +11,7 @@
 #include "game/IScenePresenter.h"
 #include "render/RenderManager.h"
 #include "ui/DebugContext.h"
+#include "utils/Log.h"
 
 #include <imgui.h>
 
@@ -24,8 +24,7 @@ static int side_to_index(const std::string& side) {
     return 2; // default: wit
 }
 
-CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager& render)
-    : render_(&render) {
+CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager& render) : render_(&render) {
     ic_state_ = {};
     ic_state_.character = screen.get_character_name();
     ic_state_.char_id = screen.get_char_id();
@@ -34,8 +33,7 @@ CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager&
     if (sheet) {
         ic_state_.char_sheet = sheet;
         ic_state_.side_index = side_to_index(sheet->side());
-        std::strncpy(ic_state_.showname, sheet->showname().c_str(),
-                     sizeof(ic_state_.showname) - 1);
+        std::strncpy(ic_state_.showname, sheet->showname().c_str(), sizeof(ic_state_.showname) - 1);
     }
 
     const auto& icons = screen.get_emote_icons();
@@ -182,9 +180,8 @@ void CourtroomController::render() {
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::Begin("##courtroom_screen", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                 ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
-                 ImGuiWindowFlags_NoScrollWithMouse);
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     health_bar_.handle_events();
     timer_.handle_events();

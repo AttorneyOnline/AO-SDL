@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug aosdl",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/apps/sdl/aosdl",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build (Debug)",
+            "environment": [],
+            "externalConsole": false,
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing",
+                    "text": "settings set target.load-cwd-lldbinit true",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Attach to aosdl",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build/apps/sdl/aosdl",
+            "MIMode": "lldb",
+            "processId": "${command:pickProcess}"
+        }
+    ]
+}

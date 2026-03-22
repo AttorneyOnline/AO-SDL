@@ -38,8 +38,12 @@ class GameThread {
     void stop();
 
     /// Last tick duration in microseconds (thread-safe read).
-    int last_tick_us() const { return last_tick_us_.load(std::memory_order_relaxed); }
-    float tick_rate_hz() const { return tick_rate_hz_.load(std::memory_order_relaxed); }
+    int last_tick_us() const {
+        return last_tick_us_.load(std::memory_order_relaxed);
+    }
+    float tick_rate_hz() const {
+        return tick_rate_hz_.load(std::memory_order_relaxed);
+    }
 
   private:
     /**
@@ -50,10 +54,10 @@ class GameThread {
      */
     void game_loop();
 
-    std::atomic<bool> running;          /**< Flag to signal the loop to exit. */
-    std::atomic<int> last_tick_us_;     /**< Last tick() duration in microseconds. */
-    std::atomic<float> tick_rate_hz_;   /**< Measured tick frequency. */
-    StateBuffer& render_buffer; /**< Shared render state output buffer. */
-    IScenePresenter& presenter; /**< Scene presenter driven each tick. */
-    std::thread tick_thread;    /**< The background game thread. */
+    std::atomic<bool> running;        /**< Flag to signal the loop to exit. */
+    std::atomic<int> last_tick_us_;   /**< Last tick() duration in microseconds. */
+    std::atomic<float> tick_rate_hz_; /**< Measured tick frequency. */
+    StateBuffer& render_buffer;       /**< Shared render state output buffer. */
+    IScenePresenter& presenter;       /**< Scene presenter driven each tick. */
+    std::thread tick_thread;          /**< The background game thread. */
 };

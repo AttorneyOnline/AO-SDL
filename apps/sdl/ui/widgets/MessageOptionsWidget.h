@@ -6,7 +6,8 @@ struct ICMessageState;
 
 class MessageOptionsWidget : public IWidget {
   public:
-    explicit MessageOptionsWidget(ICMessageState* state) : state_(state) {}
+    explicit MessageOptionsWidget(ICMessageState* state) : state_(state) {
+    }
 
     void handle_events() override;
     void render() override;

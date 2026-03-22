@@ -7,8 +7,8 @@ class RenderManager;
 
 class CharSelectWidget : public IWidget {
   public:
-    CharSelectWidget(CharSelectScreen& screen, RenderManager& render)
-        : screen_(screen), render_(render) {}
+    CharSelectWidget(CharSelectScreen& screen, RenderManager& render) : screen_(screen), render_(render) {
+    }
 
     void handle_events() override;
     void render() override;

@@ -25,8 +25,7 @@ void GLRenderer::init_gl() {
     }
 }
 
-GLRenderer::GLRenderer(int width, int height)
-    : fb_width(width), fb_height(height) {
+GLRenderer::GLRenderer(int width, int height) : fb_width(width), fb_height(height) {
     // Load main scene shader from embedded assets
     auto vert_src = load_shader_source("shaders/main/glsl/vertex.glsl");
     auto frag_src = load_shader_source("shaders/main/glsl/fragment.glsl");
@@ -73,8 +72,7 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
             const auto& frame = asset->frame(i);
             int fw = std::min(frame.width, asset->width());
             int fh = std::min(frame.height, asset->height());
-            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                            frame.pixels.data());
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
         }
         it->second.generation = asset->generation();
         return it->second.texture;
@@ -167,7 +165,8 @@ GLRenderer::MeshCacheEntry& GLRenderer::get_mesh_entry(const std::shared_ptr<Mes
     MeshCacheEntry entry;
     if (it != mesh_cache_.end()) {
         entry = it->second;
-    } else {
+    }
+    else {
         glGenVertexArrays(1, &entry.vao);
         glGenBuffers(1, &entry.vbo);
         glGenBuffers(1, &entry.ebo);
@@ -175,11 +174,11 @@ GLRenderer::MeshCacheEntry& GLRenderer::get_mesh_entry(const std::shared_ptr<Mes
 
     glBindVertexArray(entry.vao);
     glBindBuffer(GL_ARRAY_BUFFER, entry.vbo);
-    glBufferData(GL_ARRAY_BUFFER, mesh->vertices().size() * sizeof(MeshVertex),
-                 mesh->vertices().data(), GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, mesh->vertices().size() * sizeof(MeshVertex), mesh->vertices().data(),
+                 GL_DYNAMIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entry.ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices().size() * sizeof(uint32_t),
-                 mesh->indices().data(), GL_DYNAMIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices().size() * sizeof(uint32_t), mesh->indices().data(),
+                 GL_DYNAMIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)0);
@@ -201,7 +200,8 @@ void GLRenderer::evict_expired_meshes() {
             glDeleteBuffers(1, &it->second.vbo);
             glDeleteBuffers(1, &it->second.ebo);
             it = mesh_cache_.erase(it);
-        } else {
+        }
+        else {
             ++it;
         }
     }
@@ -214,7 +214,8 @@ void GLRenderer::draw(const RenderState* state) {
     if (wireframe_) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glDisable(GL_BLEND);
-    } else {
+    }
+    else {
         glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
         glEnable(GL_BLEND);
     }
@@ -254,15 +255,18 @@ void GLRenderer::draw(const RenderState* state) {
                     glBindVertexArray(entry.vao);
                     glDrawElements(GL_TRIANGLES, (GLsizei)entry.index_count, GL_UNSIGNED_INT, NULL);
                     glBindVertexArray(0);
-                } else {
+                }
+                else {
                     glBindVertexArray(GLSprite::get_quad_mesh().get_vao());
                     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL);
                     glBindVertexArray(0);
                 }
                 glUseProgram(0);
-            } else {
+            }
+            else {
                 const ShaderAsset* effective = layer.get_shader().get();
-                if (!effective) effective = group_shader;
+                if (!effective)
+                    effective = group_shader;
                 GLProgram& prog = resolve_program(effective);
                 apply_uniforms(prog, effective);
 
@@ -282,7 +286,8 @@ void GLRenderer::draw(const RenderState* state) {
                     glDrawElements(GL_TRIANGLES, (GLsizei)entry.index_count, GL_UNSIGNED_INT, NULL);
                     glBindVertexArray(0);
                     glUseProgram(0);
-                } else {
+                }
+                else {
                     GLSprite sprite(tex_array, frame, local, Transform::get_aspect_ratio(), layer.get_opacity());
                     sprite.draw(prog);
                 }
@@ -317,7 +322,8 @@ void GLRenderer::set_wireframe(bool enabled) {
 }
 
 uintptr_t GLRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
-    if (!asset || asset->frame_count() == 0) return 0;
+    if (!asset || asset->frame_count() == 0)
+        return 0;
     // Upload on demand if not cached
     GLuint tex = get_texture_array(asset);
     return (uintptr_t)tex;

@@ -103,16 +103,23 @@ class IRenderer {
     virtual void resize(int width, int height) = 0;
 
     /// Toggle wireframe rendering mode (for debugging mesh geometry).
-    virtual void set_wireframe(bool enabled) { (void)enabled; }
+    virtual void set_wireframe(bool enabled) {
+        (void)enabled;
+    }
 
     /// Get the GPU texture handle for an ImageAsset (for ImGui preview).
     /// Returns 0 if the asset has not been uploaded. Does not trigger upload.
-    virtual uintptr_t get_texture_id(const std::shared_ptr<ImageAsset>& asset) { (void)asset; return 0; }
+    virtual uintptr_t get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
+        (void)asset;
+        return 0;
+    }
 
     virtual const char* backend_name() const = 0;
 
     /// Number of draw calls in the last frame.
-    int last_draw_calls() const { return draw_calls_; }
+    int last_draw_calls() const {
+        return draw_calls_;
+    }
 
   protected:
     int draw_calls_ = 0;

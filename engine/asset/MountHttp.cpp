@@ -25,7 +25,8 @@ static std::string url_encode_path(const std::string& path) {
         // Unreserved characters per RFC 3986 + '/' for path separators
         if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == '/' || c == '(' || c == ')') {
             out << c;
-        } else {
+        }
+        else {
             out << '%' << std::uppercase << std::setw(2) << (int)c;
         }
     }
@@ -46,7 +47,8 @@ static void split_url(const std::string& url, std::string& host, std::string& pa
     if (path_start == std::string::npos) {
         host = url;
         path_prefix = "";
-    } else {
+    }
+    else {
         host = url.substr(0, path_start);
         path_prefix = url.substr(path_start);
         // Remove trailing slash
@@ -72,53 +74,61 @@ void MountHttp::load() {
 
 void MountHttp::fetch_extensions() {
     std::string ext_path = path_prefix_ + "/extensions.json";
-    pool_.get(host_, url_encode_path(ext_path), [this](HttpResponse resp) {
-        if (resp.status != 200 || resp.body.empty()) {
-            Log::log_print(DEBUG, "MountHttp: no extensions.json, using defaults");
-            return;
-        }
-        try {
-            auto j = nlohmann::json::parse(resp.body);
-            auto parse_list = [](const nlohmann::json& j, const std::string& key) -> std::vector<std::string> {
-                std::vector<std::string> out;
-                if (j.contains(key) && j[key].is_array()) {
-                    for (const auto& v : j[key]) {
-                        std::string ext = v.get<std::string>();
-                        // Strip leading dot: ".png" -> "png"
-                        if (!ext.empty() && ext[0] == '.')
-                            ext = ext.substr(1);
-                        // Skip compound extensions like "webp.static"
-                        if (ext.find('.') != std::string::npos)
-                            continue;
-                        out.push_back(ext);
+    pool_.get(
+        host_, url_encode_path(ext_path),
+        [this](HttpResponse resp) {
+            if (resp.status != 200 || resp.body.empty()) {
+                Log::log_print(DEBUG, "MountHttp: no extensions.json, using defaults");
+                return;
+            }
+            try {
+                auto j = nlohmann::json::parse(resp.body);
+                auto parse_list = [](const nlohmann::json& j, const std::string& key) -> std::vector<std::string> {
+                    std::vector<std::string> out;
+                    if (j.contains(key) && j[key].is_array()) {
+                        for (const auto& v : j[key]) {
+                            std::string ext = v.get<std::string>();
+                            // Strip leading dot: ".png" -> "png"
+                            if (!ext.empty() && ext[0] == '.')
+                                ext = ext.substr(1);
+                            // Skip compound extensions like "webp.static"
+                            if (ext.find('.') != std::string::npos)
+                                continue;
+                            out.push_back(ext);
+                        }
                     }
-                }
-                return out;
-            };
+                    return out;
+                };
 
-            std::lock_guard lock(mutex_);
-            charicon_exts_ = parse_list(j, "charicon_extensions");
-            emote_exts_ = parse_list(j, "emote_extensions");
-            emotions_exts_ = parse_list(j, "emotions_extensions");
-            background_exts_ = parse_list(j, "background_extensions");
-            extensions_loaded_ = true;
+                std::lock_guard lock(mutex_);
+                charicon_exts_ = parse_list(j, "charicon_extensions");
+                emote_exts_ = parse_list(j, "emote_extensions");
+                emotions_exts_ = parse_list(j, "emotions_extensions");
+                background_exts_ = parse_list(j, "background_extensions");
+                extensions_loaded_ = true;
 
-            Log::log_print(DEBUG, "MountHttp: extensions.json loaded (icons=%zu emotes=%zu bg=%zu)",
-                           charicon_exts_.size(), emote_exts_.size(), background_exts_.size());
-        } catch (const std::exception& e) {
-            Log::log_print(WARNING, "MountHttp: failed to parse extensions.json: %s", e.what());
-        }
-    }, HttpPriority::CRITICAL);
+                Log::log_print(DEBUG, "MountHttp: extensions.json loaded (icons=%zu emotes=%zu bg=%zu)",
+                               charicon_exts_.size(), emote_exts_.size(), background_exts_.size());
+            }
+            catch (const std::exception& e) {
+                Log::log_print(WARNING, "MountHttp: failed to parse extensions.json: %s", e.what());
+            }
+        },
+        HttpPriority::CRITICAL);
 }
 
 std::vector<std::string> MountHttp::extensions_for(AssetType type) const {
     std::lock_guard lock(mutex_);
     if (extensions_loaded_) {
         switch (type) {
-        case AssetType::CHARICON: return charicon_exts_;
-        case AssetType::EMOTE: return emote_exts_;
-        case AssetType::EMOTIONS: return emotions_exts_;
-        case AssetType::BACKGROUND: return background_exts_;
+        case AssetType::CHARICON:
+            return charicon_exts_;
+        case AssetType::EMOTE:
+            return emote_exts_;
+        case AssetType::EMOTIONS:
+            return emotions_exts_;
+        case AssetType::BACKGROUND:
+            return background_exts_;
         }
     }
     // Defaults
@@ -191,26 +201,31 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
     std::string http_path = url_encode_path(path_prefix_ + "/" + path);
     std::string captured_path = path;
 
-    pool_.get(host_, http_path, [this, captured_path](HttpResponse resp) {
-        std::lock_guard lock(mutex_);
+    pool_.get(
+        host_, http_path,
+        [this, captured_path](HttpResponse resp) {
+            std::lock_guard lock(mutex_);
 
-        // If not in pending_, fetch_sync already handled this path — skip
-        if (!pending_.count(captured_path))
-            return;
-        pending_.erase(captured_path);
+            // If not in pending_, fetch_sync already handled this path — skip
+            if (!pending_.count(captured_path))
+                return;
+            pending_.erase(captured_path);
 
-        if (resp.status == 200 && !resp.body.empty()) {
-            cache_[captured_path] = std::vector<uint8_t>(resp.body.begin(), resp.body.end());
-            Log::log_print(VERBOSE, "MountHttp: downloaded %s (%zu bytes)",
-                           captured_path.c_str(), resp.body.size());
-        } else if (resp.error == "dropped") {
-            // Request was dropped by priority — don't mark as failed so it can be re-requested
-        } else {
-            failed_.insert(captured_path);
-            Log::log_print(VERBOSE, "MountHttp: failed %s (status=%d err=%s)",
-                           captured_path.c_str(), resp.status, resp.error.c_str());
-        }
-    }, priority);
+            if (resp.status == 200 && !resp.body.empty()) {
+                cache_[captured_path] = std::vector<uint8_t>(resp.body.begin(), resp.body.end());
+                Log::log_print(VERBOSE, "MountHttp: downloaded %s (%zu bytes)", captured_path.c_str(),
+                               resp.body.size());
+            }
+            else if (resp.error == "dropped") {
+                // Request was dropped by priority — don't mark as failed so it can be re-requested
+            }
+            else {
+                failed_.insert(captured_path);
+                Log::log_print(VERBOSE, "MountHttp: failed %s (status=%d err=%s)", captured_path.c_str(), resp.status,
+                               resp.error.c_str());
+            }
+        },
+        priority);
 }
 
 int MountHttp::pending_count() const {
@@ -259,4 +274,3 @@ size_t MountHttp::cached_bytes() const {
         total += data.size();
     return total;
 }
-

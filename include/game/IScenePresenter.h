@@ -23,7 +23,8 @@ class IScenePresenter {
     virtual ~IScenePresenter() = default;
 
     /// Called once on the game thread before the first tick.
-    virtual void init() {}
+    virtual void init() {
+    }
 
     /**
      * @brief Advance the scene and produce a render snapshot.
@@ -38,5 +39,7 @@ class IScenePresenter {
     };
 
     /// Override to expose per-section tick profiling. Returns empty span by default.
-    virtual std::vector<ProfileEntry> tick_profile() const { return {}; }
+    virtual std::vector<ProfileEntry> tick_profile() const {
+        return {};
+    }
 };

@@ -27,8 +27,10 @@ class MountEmbedded : public Mount {
     std::vector<uint8_t> fetch_data(const std::string& path) override;
 
   protected:
-    void load_cache() override {}
-    void save_cache() override {}
+    void load_cache() override {
+    }
+    void save_cache() override {
+    }
 
   private:
     std::unordered_map<std::string, const EmbeddedFile*> index_;

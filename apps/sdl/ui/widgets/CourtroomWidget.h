@@ -6,7 +6,8 @@ class RenderManager;
 
 class CourtroomWidget : public IWidget {
   public:
-    explicit CourtroomWidget(RenderManager& render) : render_(render) {}
+    explicit CourtroomWidget(RenderManager& render) : render_(render) {
+    }
 
     void handle_events() override;
     void render() override;

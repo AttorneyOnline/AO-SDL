@@ -17,10 +17,10 @@
 #include "render/IRenderer.h"
 
 // App — create_gpu_backend() is defined in whichever backend source is linked.
+#include "SDLGameWindow.h"
 #include "render/IGPUBackend.h"
 #include "ui/DebugContext.h"
 #include "ui/ImGuiUIRenderer.h"
-#include "SDLGameWindow.h"
 #include "ui/LogBuffer.h"
 
 #include "asset/MountHttp.h"
@@ -51,7 +51,8 @@ int main(int argc, char* argv[]) {
         if (resp.status == 200) {
             ServerList svlist(resp.body);
             EventManager::instance().get_channel<ServerListEvent>().publish(ServerListEvent(svlist));
-        } else {
+        }
+        else {
             Log::log_print(ERR, "Failed to fetch server list: %s", resp.error.c_str());
         }
     });

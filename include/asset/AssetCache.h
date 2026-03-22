@@ -111,15 +111,15 @@ class AssetCache {
         for (const auto& path : lru) {
             auto it = entries.find(path);
             if (it != entries.end())
-                result.push_back({path, it->second.asset->format(), it->second.asset->memory_size(), it->second.asset.use_count()});
+                result.push_back(
+                    {path, it->second.asset->format(), it->second.asset->memory_size(), it->second.asset.use_count()});
         }
         return result;
     }
 
   private:
-
-    void evict_locked();        /**< evict() without locking (caller holds mutex_). */
-    mutable std::mutex mutex_;  /**< Guards all mutable state below. */
+    void evict_locked();       /**< evict() without locking (caller holds mutex_). */
+    mutable std::mutex mutex_; /**< Guards all mutable state below. */
     size_t max_bytes_;
     size_t used_bytes_ = 0;
 

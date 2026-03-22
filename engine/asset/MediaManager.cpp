@@ -5,8 +5,7 @@
 static constexpr size_t DEFAULT_CACHE_BYTES = 256 * 1024 * 1024; // 256 MB
 
 MediaManager::MediaManager()
-    : mounts(std::make_unique<MountManager>()),
-      library(std::make_unique<AssetLibrary>(*mounts, DEFAULT_CACHE_BYTES)) {
+    : mounts(std::make_unique<MountManager>()), library(std::make_unique<AssetLibrary>(*mounts, DEFAULT_CACHE_BYTES)) {
 }
 
 MediaManager& MediaManager::instance() {

@@ -13,12 +13,7 @@ std::vector<std::string> fallback_font_paths() {
     // fc-list returns all installed fonts; we filter for known wide-coverage families.
     // This avoids linking against libfontconfig directly.
     static const char* families[] = {
-        "Noto Sans CJK",
-        "Noto Sans",
-        "DejaVu Sans",
-        "Liberation Sans",
-        "FreeSans",
-        "Droid Sans Fallback",
+        "Noto Sans CJK", "Noto Sans", "DejaVu Sans", "Liberation Sans", "FreeSans", "Droid Sans Fallback",
     };
 
     for (const char* family : families) {

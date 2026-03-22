@@ -42,28 +42,30 @@ static const char* format_bytes(size_t bytes, char* buf, size_t buf_size) {
 
 static const char* conn_state_str(int s) {
     switch (s) {
-    case 0: return "Disconnected";
-    case 1: return "Connected";
-    case 2: return "Joined";
-    default: return "Unknown";
+    case 0:
+        return "Disconnected";
+    case 1:
+        return "Connected";
+    case 2:
+        return "Joined";
+    default:
+        return "Unknown";
     }
 }
 
 static constexpr ImU32 SLICE_COLORS[] = {
-    IM_COL32(100, 200, 100, 255),
-    IM_COL32(100, 150, 255, 255),
-    IM_COL32(255, 180, 80,  255),
-    IM_COL32(200, 100, 200, 255),
-    IM_COL32(255, 255, 100, 255),
-    IM_COL32(100, 220, 220, 255),
+    IM_COL32(100, 200, 100, 255), IM_COL32(100, 150, 255, 255), IM_COL32(255, 180, 80, 255),
+    IM_COL32(200, 100, 200, 255), IM_COL32(255, 255, 100, 255), IM_COL32(100, 220, 220, 255),
     IM_COL32(255, 100, 100, 255),
 };
 static constexpr int NUM_COLORS = sizeof(SLICE_COLORS) / sizeof(SLICE_COLORS[0]);
 
 void DebugOverlayWidget::draw_pie(const std::vector<std::pair<const char*, float>>& slices) {
     float total = 0;
-    for (const auto& [_, v] : slices) total += v;
-    if (total <= 0) return;
+    for (const auto& [_, v] : slices)
+        total += v;
+    if (total <= 0)
+        return;
 
     constexpr float PI = 3.14159265f;
     constexpr float PI2 = 2.0f * PI;
@@ -193,8 +195,7 @@ void DebugOverlayWidget::render() {
     if (ImGui::CollapsingHeader("HTTP Streaming")) {
         char hbuf[64];
         ImGui::Text("Queue: %d | In-flight: %d | Failed: %d", s.http_pool_pending, s.http_pending, s.http_failed);
-        ImGui::Text("Raw cache: %d files, %s", s.http_cached,
-                    format_bytes(s.http_cached_bytes, hbuf, sizeof(hbuf)));
+        ImGui::Text("Raw cache: %d files, %s", s.http_cached, format_bytes(s.http_cached_bytes, hbuf, sizeof(hbuf)));
     }
 
     // --- Event Stats ---
@@ -207,7 +208,8 @@ void DebugOverlayWidget::render() {
 
             ImGui::BeginChild("##event_stats", ImVec2(0, 150), ImGuiChildFlags_Borders);
             for (const auto& es : s.event_stats) {
-                if (es.count == 0) continue;
+                if (es.count == 0)
+                    continue;
                 ImGui::Text("%6llu  %s", (unsigned long long)es.count, demangle(es.name.c_str()).c_str());
             }
             ImGui::EndChild();
@@ -216,148 +218,149 @@ void DebugOverlayWidget::render() {
 
     // --- Asset Cache ---
     if (ImGui::CollapsingHeader("Asset Cache")) {
-    ImGui::Text("%zu entries | %s / %s", s.cache_entries.size(),
-                format_bytes(s.cache_used_bytes, buf, sizeof(buf)),
-                format_bytes(s.cache_max_bytes, buf2, sizeof(buf2)));
+        ImGui::Text("%zu entries | %s / %s", s.cache_entries.size(), format_bytes(s.cache_used_bytes, buf, sizeof(buf)),
+                    format_bytes(s.cache_max_bytes, buf2, sizeof(buf2)));
 
-    // Sort buttons
-    auto sort_btn = [&](const char* label, CacheSortMode mode) {
-        bool active = (cache_sort_ == mode);
-        if (active)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-        if (ImGui::SmallButton(label))
-            cache_sort_ = mode;
-        if (active)
-            ImGui::PopStyleColor();
-    };
-    ImGui::SameLine();
-    sort_btn("Name", SORT_NAME);
-    ImGui::SameLine();
-    sort_btn("LRU", SORT_LRU);
-    ImGui::SameLine();
-    sort_btn("Refs", SORT_REFS);
-    ImGui::SameLine();
-    sort_btn("Size", SORT_SIZE);
+        // Sort buttons
+        auto sort_btn = [&](const char* label, CacheSortMode mode) {
+            bool active = (cache_sort_ == mode);
+            if (active)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+            if (ImGui::SmallButton(label))
+                cache_sort_ = mode;
+            if (active)
+                ImGui::PopStyleColor();
+        };
+        ImGui::SameLine();
+        sort_btn("Name", SORT_NAME);
+        ImGui::SameLine();
+        sort_btn("LRU", SORT_LRU);
+        ImGui::SameLine();
+        sort_btn("Refs", SORT_REFS);
+        ImGui::SameLine();
+        sort_btn("Size", SORT_SIZE);
 
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    ImGui::InputTextWithHint("##cache_search", "Search...", cache_search_, sizeof(cache_search_));
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        ImGui::InputTextWithHint("##cache_search", "Search...", cache_search_, sizeof(cache_search_));
 
-    // Sort entries (cache_entries arrives in LRU order from snapshot_lru)
-    auto& entries = s.cache_entries;
-    switch (cache_sort_) {
-    case SORT_NAME:
-        std::sort(entries.begin(), entries.end(),
-                  [](const auto& a, const auto& b) { return a.path < b.path; });
-        break;
-    case SORT_LRU:
-        // Already in LRU order from snapshot_lru; alphabetical tiebreaker
-        // isn't possible here since LRU position is the primary key.
-        // Just keep the snapshot order.
-        break;
-    case SORT_REFS:
-        std::sort(entries.begin(), entries.end(),
-                  [](const auto& a, const auto& b) {
-                      if (a.use_count != b.use_count) return a.use_count > b.use_count;
-                      return a.path < b.path;
-                  });
-        break;
-    case SORT_SIZE:
-        std::sort(entries.begin(), entries.end(),
-                  [](const auto& a, const auto& b) {
-                      if (a.bytes != b.bytes) return a.bytes > b.bytes;
-                      return a.path < b.path;
-                  });
-        break;
-    }
+        // Sort entries (cache_entries arrives in LRU order from snapshot_lru)
+        auto& entries = s.cache_entries;
+        switch (cache_sort_) {
+        case SORT_NAME:
+            std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return a.path < b.path; });
+            break;
+        case SORT_LRU:
+            // Already in LRU order from snapshot_lru; alphabetical tiebreaker
+            // isn't possible here since LRU position is the primary key.
+            // Just keep the snapshot order.
+            break;
+        case SORT_REFS:
+            std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
+                if (a.use_count != b.use_count)
+                    return a.use_count > b.use_count;
+                return a.path < b.path;
+            });
+            break;
+        case SORT_SIZE:
+            std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
+                if (a.bytes != b.bytes)
+                    return a.bytes > b.bytes;
+                return a.path < b.path;
+            });
+            break;
+        }
 
-    // Resolve path-based selection to current index
-    selected_cache_entry_ = -1;
-    if (!selected_cache_path_.empty()) {
+        // Resolve path-based selection to current index
+        selected_cache_entry_ = -1;
+        if (!selected_cache_path_.empty()) {
+            for (int i = 0; i < (int)entries.size(); i++) {
+                if (entries[i].path == selected_cache_path_) {
+                    selected_cache_entry_ = i;
+                    break;
+                }
+            }
+        }
+
+        // Two-column layout: list on left, preview on right
+        float avail_w = ImGui::GetContentRegionAvail().x;
+        float preview_w = 140.0f;
+        float list_w = avail_w - preview_w - ImGui::GetStyle().ItemSpacing.x;
+        float section_h = 200.0f;
+
+        ImGui::BeginChild("##cache_list", ImVec2(list_w, section_h), ImGuiChildFlags_Borders);
         for (int i = 0; i < (int)entries.size(); i++) {
-            if (entries[i].path == selected_cache_path_) {
+            const auto& e = entries[i];
+            if (cache_search_[0] != '\0' && e.path.find(cache_search_) == std::string::npos)
+                continue;
+            char label[256];
+            char size_buf2[64];
+            format_bytes(e.bytes, size_buf2, sizeof(size_buf2));
+            std::snprintf(label, sizeof(label), "%s [%s] %s (refs:%ld)", e.path.c_str(), e.format.c_str(), size_buf2,
+                          e.use_count);
+            if (ImGui::Selectable(label, selected_cache_entry_ == i)) {
                 selected_cache_entry_ = i;
-                break;
+                selected_cache_path_ = e.path;
             }
-        }
-    }
-
-    // Two-column layout: list on left, preview on right
-    float avail_w = ImGui::GetContentRegionAvail().x;
-    float preview_w = 140.0f;
-    float list_w = avail_w - preview_w - ImGui::GetStyle().ItemSpacing.x;
-    float section_h = 200.0f;
-
-    ImGui::BeginChild("##cache_list", ImVec2(list_w, section_h), ImGuiChildFlags_Borders);
-    for (int i = 0; i < (int)entries.size(); i++) {
-        const auto& e = entries[i];
-        if (cache_search_[0] != '\0' && e.path.find(cache_search_) == std::string::npos)
-            continue;
-        char label[256];
-        char size_buf2[64];
-        format_bytes(e.bytes, size_buf2, sizeof(size_buf2));
-        std::snprintf(label, sizeof(label), "%s [%s] %s (refs:%ld)", e.path.c_str(), e.format.c_str(), size_buf2, e.use_count);
-        if (ImGui::Selectable(label, selected_cache_entry_ == i)) {
-            selected_cache_entry_ = i;
-            selected_cache_path_ = e.path;
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-
-    ImGui::BeginChild("##cache_preview", ImVec2(preview_w, section_h), ImGuiChildFlags_Borders);
-    if (selected_cache_entry_ >= 0 && selected_cache_entry_ < (int)s.cache_entries.size()) {
-        const auto& e = s.cache_entries[selected_cache_entry_];
-
-        if (e.texture_id != 0 && e.width > 0 && e.height > 0) {
-            float aspect = (float)e.width / (float)e.height;
-            float img_w = preview_w - 8.0f;
-            float img_h = img_w / aspect;
-            if (img_h > section_h * 0.6f) {
-                img_h = section_h * 0.6f;
-                img_w = img_h * aspect;
-            }
-            ImTextureID tex = (ImTextureID)e.texture_id;
-            ImVec2 uv0(0, 1);
-            ImVec2 uv1(1, 0);
-            ImGui::Image(tex, ImVec2(img_w, img_h), uv0, uv1);
-
-            // Hover: show at native resolution in a tooltip
-            if (ImGui::IsItemHovered()) {
-                ImGui::BeginTooltip();
-                ImGui::Image(tex, ImVec2((float)e.width, (float)e.height), uv0, uv1);
-                ImGui::EndTooltip();
-            }
-        } else {
-            ImGui::TextDisabled("(no preview)");
-        }
-
-        ImGui::Separator();
-        ImGui::TextWrapped("%s", e.path.c_str());
-        ImGui::Text("Format: %s", e.format.c_str());
-        if (e.width > 0)
-            ImGui::Text("Size: %dx%d", e.width, e.height);
-        if (e.frame_count > 1)
-            ImGui::Text("Frames: %d", e.frame_count);
-        char sb[64];
-        format_bytes(e.bytes, sb, sizeof(sb));
-        ImGui::Text("Memory: %s", sb);
-        ImGui::Text("Refs: %ld", e.use_count);
-    } else {
-        ImGui::TextDisabled("Select an entry");
-    }
-    ImGui::EndChild();
-
-    if (!s.http_cache_entries.empty() && ImGui::TreeNode("HTTP Raw Cache")) {
-        ImGui::BeginChild("##http_cache_list", ImVec2(0, 150), ImGuiChildFlags_Borders);
-        for (const auto& e : s.http_cache_entries) {
-            char sb[64];
-            format_bytes(e.bytes, sb, sizeof(sb));
-            ImGui::Text("%s  %s", sb, e.path.c_str());
         }
         ImGui::EndChild();
-        ImGui::TreePop();
-    }
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##cache_preview", ImVec2(preview_w, section_h), ImGuiChildFlags_Borders);
+        if (selected_cache_entry_ >= 0 && selected_cache_entry_ < (int)s.cache_entries.size()) {
+            const auto& e = s.cache_entries[selected_cache_entry_];
+
+            if (e.texture_id != 0 && e.width > 0 && e.height > 0) {
+                float aspect = (float)e.width / (float)e.height;
+                float img_w = preview_w - 8.0f;
+                float img_h = img_w / aspect;
+                if (img_h > section_h * 0.6f) {
+                    img_h = section_h * 0.6f;
+                    img_w = img_h * aspect;
+                }
+                ImTextureID tex = (ImTextureID)e.texture_id;
+                ImVec2 uv0(0, 1);
+                ImVec2 uv1(1, 0);
+                ImGui::Image(tex, ImVec2(img_w, img_h), uv0, uv1);
+
+                // Hover: show at native resolution in a tooltip
+                if (ImGui::IsItemHovered()) {
+                    ImGui::BeginTooltip();
+                    ImGui::Image(tex, ImVec2((float)e.width, (float)e.height), uv0, uv1);
+                    ImGui::EndTooltip();
+                }
+            }
+            else {
+                ImGui::TextDisabled("(no preview)");
+            }
+
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", e.path.c_str());
+            ImGui::Text("Format: %s", e.format.c_str());
+            if (e.width > 0)
+                ImGui::Text("Size: %dx%d", e.width, e.height);
+            if (e.frame_count > 1)
+                ImGui::Text("Frames: %d", e.frame_count);
+            char sb[64];
+            format_bytes(e.bytes, sb, sizeof(sb));
+            ImGui::Text("Memory: %s", sb);
+            ImGui::Text("Refs: %ld", e.use_count);
+        }
+        else {
+            ImGui::TextDisabled("Select an entry");
+        }
+        ImGui::EndChild();
+
+        if (!s.http_cache_entries.empty() && ImGui::TreeNode("HTTP Raw Cache")) {
+            ImGui::BeginChild("##http_cache_list", ImVec2(0, 150), ImGuiChildFlags_Borders);
+            for (const auto& e : s.http_cache_entries) {
+                char sb[64];
+                format_bytes(e.bytes, sb, sizeof(sb));
+                ImGui::Text("%s  %s", sb, e.path.c_str());
+            }
+            ImGui::EndChild();
+            ImGui::TreePop();
+        }
     } // Asset Cache
 
     // --- Log ---
@@ -377,7 +380,8 @@ void DebugOverlayWidget::draw_history() {
     float max_us = 1.0f;
     for (const auto& sec : s.tick_sections) {
         auto it = tick_history_.find(sec.name);
-        if (it == tick_history_.end()) continue;
+        if (it == tick_history_.end())
+            continue;
         const auto& ring = it->second;
         float smoothed = 0;
         for (int i = 0; i < ring.count; i++) {
@@ -391,7 +395,8 @@ void DebugOverlayWidget::draw_history() {
     int color_idx = 0;
     for (const auto& sec : s.tick_sections) {
         ImU32 col = SLICE_COLORS[color_idx % NUM_COLORS];
-        if (color_idx > 0) ImGui::SameLine();
+        if (color_idx > 0)
+            ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Text, col);
         float avg = tick_avg_.count(sec.name) ? tick_avg_[sec.name].average() : 0;
         ImGui::Text("%s: %.0f us", sec.name, avg);
@@ -420,9 +425,13 @@ void DebugOverlayWidget::draw_history() {
     color_idx = 0;
     for (const auto& sec : s.tick_sections) {
         auto it = tick_history_.find(sec.name);
-        if (it == tick_history_.end()) continue;
+        if (it == tick_history_.end())
+            continue;
         const auto& ring = it->second;
-        if (ring.count < 2) { color_idx++; continue; }
+        if (ring.count < 2) {
+            color_idx++;
+            continue;
+        }
 
         ImU32 col = SLICE_COLORS[color_idx % NUM_COLORS];
         color_idx++;
@@ -446,13 +455,20 @@ void DebugOverlayWidget::draw_history() {
 
 static ImVec4 log_level_color(LogLevel level) {
     switch (level) {
-    case VERBOSE: return {0.5f, 0.5f, 0.5f, 1.0f};
-    case DEBUG:   return {0.6f, 0.6f, 0.6f, 1.0f};
-    case INFO:    return {0.8f, 0.8f, 0.8f, 1.0f};
-    case WARNING: return {1.0f, 0.8f, 0.2f, 1.0f};
-    case ERR:     return {1.0f, 0.3f, 0.3f, 1.0f};
-    case FATAL:   return {1.0f, 0.0f, 0.0f, 1.0f};
-    default:      return {1.0f, 1.0f, 1.0f, 1.0f};
+    case VERBOSE:
+        return {0.5f, 0.5f, 0.5f, 1.0f};
+    case DEBUG:
+        return {0.6f, 0.6f, 0.6f, 1.0f};
+    case INFO:
+        return {0.8f, 0.8f, 0.8f, 1.0f};
+    case WARNING:
+        return {1.0f, 0.8f, 0.2f, 1.0f};
+    case ERR:
+        return {1.0f, 0.3f, 0.3f, 1.0f};
+    case FATAL:
+        return {1.0f, 0.0f, 0.0f, 1.0f};
+    default:
+        return {1.0f, 1.0f, 1.0f, 1.0f};
     }
 }
 
@@ -460,7 +476,8 @@ void DebugOverlayWidget::draw_log() {
     // Level filter buttons
     static const char* filter_names[] = {"", "VRB", "DBG", "INF", "WRN", "ERR", "FTL"};
     for (int i = VERBOSE; i < COUNT; i++) {
-        if (i > VERBOSE) ImGui::SameLine();
+        if (i > VERBOSE)
+            ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Text, log_level_color((LogLevel)i));
         ImGui::Checkbox(filter_names[i], &log_filter_[i]);
         ImGui::PopStyleColor();
@@ -476,8 +493,10 @@ void DebugOverlayWidget::draw_log() {
     if (ImGui::SmallButton("Copy")) {
         std::string text;
         for (const auto& entry : log_local_) {
-            if (!log_filter_[entry.level]) continue;
-            if (log_search_[0] != '\0' && entry.message.find(log_search_) == std::string::npos) continue;
+            if (!log_filter_[entry.level])
+                continue;
+            if (log_search_[0] != '\0' && entry.message.find(log_search_) == std::string::npos)
+                continue;
             text += '[';
             text += entry.timestamp;
             text += "][";
@@ -504,8 +523,7 @@ void DebugOverlayWidget::draw_log() {
             continue;
 
         ImGui::PushStyleColor(ImGuiCol_Text, log_level_color(entry.level));
-        ImGui::TextWrapped("[%s][%s] %s", entry.timestamp.c_str(),
-                          log_level_name(entry.level), entry.message.c_str());
+        ImGui::TextWrapped("[%s][%s] %s", entry.timestamp.c_str(), log_level_name(entry.level), entry.message.c_str());
         ImGui::PopStyleColor();
     }
 

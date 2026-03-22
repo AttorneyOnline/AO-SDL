@@ -73,15 +73,19 @@ class MountHttp : public Mount {
     bool has_extensions() const;
 
     /// Access the underlying HttpPool (for drop_below, pending count, etc.).
-    HttpPool& pool() { return pool_; }
+    HttpPool& pool() {
+        return pool_;
+    }
 
   protected:
-    void load_cache() override {}
-    void save_cache() override {}
+    void load_cache() override {
+    }
+    void save_cache() override {
+    }
 
   private:
-    std::string base_url_;  // e.g. "https://server.com/assets"
-    std::string host_;      // e.g. "https://server.com"
+    std::string base_url_;    // e.g. "https://server.com/assets"
+    std::string host_;        // e.g. "https://server.com"
     std::string path_prefix_; // e.g. "/assets"
     HttpPool& pool_;
 

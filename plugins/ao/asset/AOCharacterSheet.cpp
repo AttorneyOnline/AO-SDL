@@ -8,8 +8,8 @@
 const std::vector<std::pair<int, std::string>> AOCharacterSheet::empty_frame_sfx_;
 const std::vector<int> AOCharacterSheet::empty_frame_ints_;
 
-const std::unordered_map<std::string, std::string>*
-AOCharacterSheet::find_section(const IniDocument& ini, const std::string& name) {
+const std::unordered_map<std::string, std::string>* AOCharacterSheet::find_section(const IniDocument& ini,
+                                                                                   const std::string& name) {
     auto it = ini.find(name);
     if (it != ini.end())
         return &it->second;
@@ -88,22 +88,34 @@ void AOCharacterSheet::parse_emotes(const IniDocument& ini) {
         size_t prev = 0;
         size_t pos = line.find('#');
         entry.comment = line.substr(prev, pos - prev);
-        if (pos == std::string::npos) { emotes_.push_back(entry); continue; }
+        if (pos == std::string::npos) {
+            emotes_.push_back(entry);
+            continue;
+        }
 
         prev = pos + 1;
         pos = line.find('#', prev);
         entry.pre_anim = line.substr(prev, pos == std::string::npos ? pos : pos - prev);
-        if (pos == std::string::npos) { emotes_.push_back(entry); continue; }
+        if (pos == std::string::npos) {
+            emotes_.push_back(entry);
+            continue;
+        }
 
         prev = pos + 1;
         pos = line.find('#', prev);
         entry.anim_name = line.substr(prev, pos == std::string::npos ? pos : pos - prev);
-        if (pos == std::string::npos) { emotes_.push_back(entry); continue; }
+        if (pos == std::string::npos) {
+            emotes_.push_back(entry);
+            continue;
+        }
 
         prev = pos + 1;
         pos = line.find('#', prev);
         entry.mod = std::atoi(line.substr(prev, pos == std::string::npos ? pos : pos - prev).c_str());
-        if (pos == std::string::npos) { emotes_.push_back(entry); continue; }
+        if (pos == std::string::npos) {
+            emotes_.push_back(entry);
+            continue;
+        }
 
         prev = pos + 1;
         entry.desk_mod = std::atoi(line.substr(prev).c_str());
@@ -201,8 +213,7 @@ int AOCharacterSheet::preanim_duration_ms(const std::string& pre_anim) const {
     return it != preanim_durations_.end() ? it->second : 0;
 }
 
-const std::vector<std::pair<int, std::string>>&
-AOCharacterSheet::frame_sfx(const std::string& anim_name) const {
+const std::vector<std::pair<int, std::string>>& AOCharacterSheet::frame_sfx(const std::string& anim_name) const {
     auto it = frame_sfx_.find(anim_name);
     return it != frame_sfx_.end() ? it->second : empty_frame_sfx_;
 }

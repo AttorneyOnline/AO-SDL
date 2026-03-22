@@ -4,10 +4,7 @@
 
 #include <string>
 
-enum UIEventType {
-    CHAR_LOADING_DONE,
-    ENTERED_COURTROOM
-};
+enum UIEventType { CHAR_LOADING_DONE, ENTERED_COURTROOM };
 
 class UIEvent : public Event {
   public:

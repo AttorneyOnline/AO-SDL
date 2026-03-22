@@ -20,7 +20,8 @@ void TimerWidget::handle_events() {
             if (ev->time_ms() < 0) {
                 t.running = false;
                 t.remaining_ms = 0;
-            } else {
+            }
+            else {
                 t.remaining_ms = ev->time_ms();
                 t.running = true;
                 t.last_tick = std::chrono::steady_clock::now();

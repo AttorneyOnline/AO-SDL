@@ -1,13 +1,13 @@
 #include "platform/HardwareId.h"
 
+#include <CommonCrypto/CommonDigest.h>
 #import <Foundation/Foundation.h>
 #import <IOKit/IOKitLib.h>
-#include <CommonCrypto/CommonDigest.h>
 
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
-static std::string sha256_hex(const std::string& input) {
+static std::string sha256_hex(const std::string &input) {
     unsigned char hash[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(input.data(), (CC_LONG)input.size(), hash);
 
@@ -25,12 +25,12 @@ std::string hardware_id() {
         // OS reinstalls (tied to hardware, not the OS installation).
         // This is more stable than the serial number and doesn't change
         // if the user replaces a drive.
-        io_service_t platform = IOServiceGetMatchingService(
-            kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"));
+        io_service_t platform =
+            IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"));
 
         if (platform) {
-            CFStringRef uuid_cf = (CFStringRef)IORegistryEntryCreateCFProperty(
-                platform, CFSTR(kIOPlatformUUIDKey), kCFAllocatorDefault, 0);
+            CFStringRef uuid_cf = (CFStringRef)IORegistryEntryCreateCFProperty(platform, CFSTR(kIOPlatformUUIDKey),
+                                                                               kCFAllocatorDefault, 0);
             IOObjectRelease(platform);
 
             if (uuid_cf) {

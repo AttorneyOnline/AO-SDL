@@ -7,7 +7,9 @@
 
 class WebPImageDecoder : public ImageDecoder {
   public:
-    std::vector<std::string> extensions() const override { return {"webp"}; }
+    std::vector<std::string> extensions() const override {
+        return {"webp"};
+    }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
         std::vector<ImageFrame> frames;
@@ -46,18 +48,26 @@ class WebPImageDecoder : public ImageDecoder {
 
                         if (iter.blend_method == WEBP_MUX_NO_BLEND) {
                             std::memcpy(&canvas[dst_idx], &rgba[src_idx], 4);
-                        } else {
+                        }
+                        else {
                             // Alpha-blend (WEBP_MUX_BLEND)
                             uint8_t sa = rgba[src_idx + 3];
                             if (sa == 255) {
                                 std::memcpy(&canvas[dst_idx], &rgba[src_idx], 4);
-                            } else if (sa > 0) {
+                            }
+                            else if (sa > 0) {
                                 uint8_t da = canvas[dst_idx + 3];
                                 uint16_t oa = sa + da * (255 - sa) / 255;
                                 if (oa > 0) {
-                                    canvas[dst_idx + 0] = (uint8_t)((rgba[src_idx + 0] * sa + canvas[dst_idx + 0] * da * (255 - sa) / 255) / oa);
-                                    canvas[dst_idx + 1] = (uint8_t)((rgba[src_idx + 1] * sa + canvas[dst_idx + 1] * da * (255 - sa) / 255) / oa);
-                                    canvas[dst_idx + 2] = (uint8_t)((rgba[src_idx + 2] * sa + canvas[dst_idx + 2] * da * (255 - sa) / 255) / oa);
+                                    canvas[dst_idx + 0] = (uint8_t)((rgba[src_idx + 0] * sa +
+                                                                     canvas[dst_idx + 0] * da * (255 - sa) / 255) /
+                                                                    oa);
+                                    canvas[dst_idx + 1] = (uint8_t)((rgba[src_idx + 1] * sa +
+                                                                     canvas[dst_idx + 1] * da * (255 - sa) / 255) /
+                                                                    oa);
+                                    canvas[dst_idx + 2] = (uint8_t)((rgba[src_idx + 2] * sa +
+                                                                     canvas[dst_idx + 2] * da * (255 - sa) / 255) /
+                                                                    oa);
                                     canvas[dst_idx + 3] = (uint8_t)oa;
                                 }
                             }

@@ -4,8 +4,8 @@
 #include "net/ProtocolHandler.h"
 
 #include <chrono>
-#include <string>
 #include <cstring>
+#include <string>
 #include <vector>
 
 enum AOConnectionState { NOT_CONNECTED, CONNECTED, JOINED };

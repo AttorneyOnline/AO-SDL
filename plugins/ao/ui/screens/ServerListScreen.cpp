@@ -1,9 +1,9 @@
 #include "ao/ui/screens/ServerListScreen.h"
 
+#include "ao/ui/screens/CharSelectScreen.h"
 #include "event/EventManager.h"
 #include "event/ServerConnectEvent.h"
 #include "event/ServerListEvent.h"
-#include "ao/ui/screens/CharSelectScreen.h"
 
 void ServerListScreen::enter(ScreenController& ctrl) {
     controller = &ctrl;

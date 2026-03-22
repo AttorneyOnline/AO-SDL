@@ -85,7 +85,8 @@ void MountManager::prefetch(const std::string& relative_path, int priority) {
             // First HTTP mount is the primary — always try it
             primary = http;
             http->request(relative_path, static_cast<HttpPriority>(priority));
-        } else if (primary->has_failed(relative_path)) {
+        }
+        else if (primary->has_failed(relative_path)) {
             // Primary failed — try fallback mounts
             http->request(relative_path, static_cast<HttpPriority>(priority));
         }

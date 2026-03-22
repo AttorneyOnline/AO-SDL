@@ -8,7 +8,8 @@ struct ICMessageState;
 /// When the player is judge (side_index == 3), shows +/- controls.
 class HealthBarWidget : public IWidget {
   public:
-    explicit HealthBarWidget(ICMessageState* state) : state_(state) {}
+    explicit HealthBarWidget(ICMessageState* state) : state_(state) {
+    }
 
     void handle_events() override;
     void render() override;

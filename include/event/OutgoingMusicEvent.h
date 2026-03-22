@@ -9,14 +9,19 @@
 class OutgoingMusicEvent : public Event {
   public:
     OutgoingMusicEvent(std::string name, std::string showname = "")
-        : name_(std::move(name)), showname_(std::move(showname)) {}
+        : name_(std::move(name)), showname_(std::move(showname)) {
+    }
 
     std::string to_string() const override {
         return "MC: " + name_;
     }
 
-    const std::string& name() const { return name_; }
-    const std::string& showname() const { return showname_; }
+    const std::string& name() const {
+        return name_;
+    }
+    const std::string& showname() const {
+        return showname_;
+    }
 
   private:
     std::string name_;

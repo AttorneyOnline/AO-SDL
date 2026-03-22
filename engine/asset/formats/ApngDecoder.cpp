@@ -334,7 +334,9 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
 
 class ApngImageDecoder : public ImageDecoder {
   public:
-    std::vector<std::string> extensions() const override { return {"apng", "png"}; }
+    std::vector<std::string> extensions() const override {
+        return {"apng", "png"};
+    }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
         auto apng_frames = ApngDecoder::decode(data, size, true);

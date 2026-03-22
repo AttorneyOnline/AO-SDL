@@ -18,7 +18,9 @@ class ShaderEffect : public ISceneEffect {
     ShaderEffect(std::string shader_path, float duration_s, int layer_id = -1);
 
     void trigger() override;
-    void stop() override { active_ = false; }
+    void stop() override {
+        active_ = false;
+    }
     void tick(int delta_ms) override;
     void apply(LayerGroup& scene) override;
     bool is_active() const override;

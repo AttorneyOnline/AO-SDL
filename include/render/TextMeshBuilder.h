@@ -25,13 +25,8 @@ namespace TextMeshBuilder {
 /// Only glyphs with char_index < chars_visible are emitted.
 /// offset_x/offset_y are pixel offsets for the text origin (e.g. message rect position).
 /// scroll_y is the vertical scroll offset in pixels (for auto-scrolling text).
-void build(GlyphCache& cache,
-           const std::vector<TextRenderer::GlyphLayout>& layout,
-           int chars_visible,
-           int offset_x, int offset_y,
-           int scroll_y, int max_height,
-           int base_w, int base_h,
-           std::vector<MeshVertex>& out_vertices,
+void build(GlyphCache& cache, const std::vector<TextRenderer::GlyphLayout>& layout, int chars_visible, int offset_x,
+           int offset_y, int scroll_y, int max_height, int base_w, int base_h, std::vector<MeshVertex>& out_vertices,
            std::vector<uint32_t>& out_indices);
 
 } // namespace TextMeshBuilder

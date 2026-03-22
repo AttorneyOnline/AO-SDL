@@ -74,7 +74,9 @@ class AssetLibrary {
 
     /// Set the GPU backend name (e.g. "OpenGL", "Metal"). Called once at
     /// startup so shader() knows which subdirectory to probe.
-    void set_shader_backend(const std::string& backend) { shader_backend_ = backend; }
+    void set_shader_backend(const std::string& backend) {
+        shader_backend_ = backend;
+    }
 
     /**
      * @brief Load a shader pair (vertex + fragment) by virtual path.
@@ -178,7 +180,7 @@ class AssetLibrary {
     std::optional<std::pair<std::string, std::vector<uint8_t>>> probe(const std::string& path,
                                                                       const std::vector<std::string>& extensions);
 
-    MountManager& mounts;          /**< Filesystem mount manager. */
-    AssetCache cache_;             /**< Internal LRU asset cache. */
-    std::string shader_backend_;   /**< GPU backend name for shader path probing. */
+    MountManager& mounts;        /**< Filesystem mount manager. */
+    AssetCache cache_;           /**< Internal LRU asset cache. */
+    std::string shader_backend_; /**< GPU backend name for shader path probing. */
 };

@@ -16,7 +16,9 @@ class SDLGameWindow {
     ~SDLGameWindow();
 
     /// Set a callback invoked once per frame before UI rendering.
-    void set_frame_callback(std::function<void()> cb) { frame_callback_ = std::move(cb); }
+    void set_frame_callback(std::function<void()> cb) {
+        frame_callback_ = std::move(cb);
+    }
 
     void start_loop(RenderManager& render, IUIRenderer& ui_renderer);
 

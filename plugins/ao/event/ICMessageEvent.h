@@ -49,8 +49,8 @@ class ICMessageEvent : public Event {
   public:
     ICMessageEvent(std::string character, std::string emote, std::string pre_emote, std::string message,
                    std::string showname, std::string side, EmoteMod emote_mod, DeskMod desk_mod, bool flip, int char_id,
-                   int text_color, int objection_mod, bool screenshake, bool realization,
-                   bool additive, std::string frame_screenshake);
+                   int text_color, int objection_mod, bool screenshake, bool realization, bool additive,
+                   std::string frame_screenshake);
 
     std::string to_string() const override;
 

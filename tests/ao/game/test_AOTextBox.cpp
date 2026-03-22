@@ -63,7 +63,8 @@ TEST_F(AOTextBoxTest, TickReturnsFalseWhenInactive) {
 TEST_F(AOTextBoxTest, TickReturnsFalseWhenDone) {
     box.start_message("Phoenix", "x", 0);
     // Tick until done
-    for (int i = 0; i < 100; i++) box.tick(100);
+    for (int i = 0; i < 100; i++)
+        box.tick(100);
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::DONE);
     EXPECT_FALSE(box.tick(16));
 }
@@ -101,7 +102,8 @@ TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenInactive) {
 
 TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenDone) {
     box.start_message("Phoenix", "x", 0);
-    for (int i = 0; i < 100; i++) box.tick(100);
+    for (int i = 0; i < 100; i++)
+        box.tick(100);
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::DONE);
     EXPECT_FALSE(box.is_talking());
 }

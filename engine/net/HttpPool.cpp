@@ -48,7 +48,8 @@ void HttpPool::drop_below(HttpPriority threshold) {
                 dropped_requests.push_back(std::move(*it));
                 it = work_queue_.erase(it);
                 pending_.fetch_sub(1, std::memory_order_relaxed);
-            } else {
+            }
+            else {
                 ++it;
             }
         }
@@ -105,10 +106,12 @@ void HttpPool::worker_loop() {
                 if (res) {
                     resp.status = res->status;
                     resp.body = std::move(res->body);
-                } else {
+                }
+                else {
                     resp.error = httplib::to_string(res.error());
                 }
-            } catch (const std::exception& e) {
+            }
+            catch (const std::exception& e) {
                 resp.error = e.what();
             }
         }

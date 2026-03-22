@@ -48,8 +48,12 @@ class EventChannelWrapper : public BaseEventChannel {
     }
     std::unique_ptr<EventChannel<T>> channel; /**< Owned EventChannel instance. */
 
-    uint64_t publish_count() const override { return channel->publish_count(); }
-    const char* raw_type_name() const override { return typeid(T).name(); }
+    uint64_t publish_count() const override {
+        return channel->publish_count();
+    }
+    const char* raw_type_name() const override {
+        return typeid(T).name();
+    }
 };
 
 /**
@@ -141,8 +145,7 @@ class EventManager {
         out.reserve(channels_.size());
         for (const auto& [idx, ch] : channels_)
             out.push_back({ch->raw_type_name(), ch->publish_count()});
-        std::sort(out.begin(), out.end(),
-                  [](const auto& a, const auto& b) { return a.count > b.count; });
+        std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.count > b.count; });
         return out;
     }
 

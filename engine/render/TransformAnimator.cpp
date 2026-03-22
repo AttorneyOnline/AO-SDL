@@ -6,8 +6,7 @@
 
 void TransformAnimator::add_keyframe(const TransformKeyframe& kf) {
     keyframes_.push_back(kf);
-    std::sort(keyframes_.begin(), keyframes_.end(),
-              [](const auto& a, const auto& b) { return a.time_ms < b.time_ms; });
+    std::sort(keyframes_.begin(), keyframes_.end(), [](const auto& a, const auto& b) { return a.time_ms < b.time_ms; });
 }
 
 void TransformAnimator::clear_keyframes() {
@@ -66,7 +65,8 @@ bool TransformAnimator::tick(int delta_ms) {
     if (elapsed_ms_ >= total) {
         if (looping_) {
             elapsed_ms_ %= total;
-        } else {
+        }
+        else {
             elapsed_ms_ = total;
             current_ = keyframes_.back();
             finished_ = true;
@@ -88,9 +88,7 @@ bool TransformAnimator::tick(int delta_ms) {
     const auto& kf0 = keyframes_[prev];
     const auto& kf1 = keyframes_[next];
     int segment_len = kf1.time_ms - kf0.time_ms;
-    float t = (segment_len > 0)
-        ? static_cast<float>(elapsed_ms_ - kf0.time_ms) / segment_len
-        : 1.0f;
+    float t = (segment_len > 0) ? static_cast<float>(elapsed_ms_ - kf0.time_ms) / segment_len : 1.0f;
     t = ease(t);
 
     current_.translation = lerp_vec2(kf0.translation, kf1.translation, t);

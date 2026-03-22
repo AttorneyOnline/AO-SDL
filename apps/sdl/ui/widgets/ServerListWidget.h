@@ -7,8 +7,8 @@ class RenderManager;
 
 class ServerListWidget : public IWidget {
   public:
-    ServerListWidget(ServerListScreen& screen, RenderManager& render)
-        : screen_(screen), render_(render) {}
+    ServerListWidget(ServerListScreen& screen, RenderManager& render) : screen_(screen), render_(render) {
+    }
 
     void handle_events() override;
     void render() override;

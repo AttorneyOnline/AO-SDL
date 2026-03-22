@@ -3,9 +3,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <windows.h>
 #include <bcrypt.h>
 #include <sddl.h>
+#include <windows.h>
 
 #include <iomanip>
 #include <sstream>
@@ -48,14 +48,13 @@ std::string hardware_id() {
     // This is a per-installation GUID that persists across reboots and user
     // changes. It's reset on OS reinstall, which is acceptable behavior.
     HKEY key = nullptr;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-                      "SOFTWARE\\Microsoft\\Cryptography", 0,
-                      KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ | KEY_WOW64_64KEY, &key) ==
+        ERROR_SUCCESS) {
         char buf[256] = {};
         DWORD size = sizeof(buf);
         DWORD type = 0;
-        if (RegQueryValueExA(key, "MachineGuid", nullptr, &type,
-                             (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ) {
+        if (RegQueryValueExA(key, "MachineGuid", nullptr, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS &&
+            type == REG_SZ) {
             RegCloseKey(key);
             return sha256_hex(std::string("ao-sdl:win:") + buf);
         }
