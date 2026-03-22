@@ -7,38 +7,134 @@ on:
     types: [run_build]
 
 jobs:
-#  formatting-check:
-#    name: check-clang-format
-#    runs-on: ubuntu-latest
-#    steps:
-#    - uses: actions/checkout@v4
-#    - name: Run clang-format style check.
-#      uses: jidicula/clang-format-action@v4.5.0
-#      with:
-#        clang-format-version: '14'
-#        check-path: './src/'
-        
-  test-linux:
+  # ---- Formatting check (fast, Linux-only) ----
+  formatting:
+    name: clang-format
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jidicula/clang-format-action@v4.14.0
+        with:
+          clang-format-version: '14'
+          check-path: |
+            engine
+            plugins
+            apps/sdl
+            include
+            platform
+            tests
+
+  # ---- Build, test, and package per OS ----
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            cmake_args: -DCMAKE_BUILD_TYPE=Release
+            coverage: true
+
+          - name: macOS
+            os: macos-latest
+            cmake_args: -DCMAKE_BUILD_TYPE=Release
+
+          - name: Windows
+            os: windows-latest
+            cmake_args: -DCMAKE_BUILD_TYPE=Release
+            cmake_generator: -G "Visual Studio 17 2022" -A x64
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      
-      - name: Install dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libsdl2-dev libglew-dev
-          version: 1.0
 
-      - name: Build with tests
+      # ---- Platform dependencies ----
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
-          mkdir build
-          cd build
-          cmake .. aosdl_tests
-          make
-          
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libglew-dev libssl-dev
+
+      - name: Install dependencies (Linux, coverage)
+        if: matrix.coverage
+        run: sudo apt-get install -y lcov
+
+      # ---- Configure ----
+      - name: Configure
+        run: cmake -B build ${{ matrix.cmake_generator }} ${{ matrix.cmake_args }}
+
+      - name: Configure (coverage)
+        if: matrix.coverage
+        run: cmake -B build-coverage -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage"
+
+      # ---- Build ----
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Build (coverage)
+        if: matrix.coverage
+        run: cmake --build build-coverage --target aosdl_tests --config Debug --parallel
+
+      # ---- Test ----
       - name: Run tests
-        working-directory: build/tests
-        run: ./aosdl_tests
+        working-directory: build
+        run: ctest --output-on-failure --build-config Release
+
+      - name: Run tests (coverage)
+        if: matrix.coverage
+        working-directory: build-coverage
+        run: ctest --output-on-failure --build-config Debug
+
+      # ---- Coverage report ----
+      - name: Generate coverage report
+        if: matrix.coverage
+        run: |
+          lcov --capture --directory build-coverage --output-file coverage.info \
+               --ignore-errors mismatch
+          lcov --remove coverage.info \
+               '/usr/*' '*/third-party/*' '*/tests/*' '*/build-coverage/*' \
+               --output-file coverage.info \
+               --ignore-errors unused
+          lcov --list coverage.info
+
+      - name: Upload coverage to Codecov
+        if: matrix.coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.info
+          fail_ci_if_error: false
+
+      # ---- Package artifacts ----
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p artifact
+          cp build/apps/sdl/aosdl artifact/
+          tar czf aosdl-linux-x64.tar.gz -C artifact .
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p artifact
+          cp build/apps/sdl/aosdl artifact/
+          tar czf aosdl-macos-x64.tar.gz -C artifact .
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p artifact
+          cp build/apps/sdl/Release/aosdl.exe artifact/
+          cp build/apps/sdl/Release/*.dll artifact/ 2>/dev/null || true
+          cp third-party/glew/bin/Release/x64/glew32.dll artifact/ 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aosdl-${{ runner.os }}
+          path: |
+            aosdl-*.tar.gz
+            artifact/
