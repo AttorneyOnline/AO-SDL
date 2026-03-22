@@ -21,9 +21,12 @@ class IGPUBackend {
     virtual void pre_init() {
     }
 
-    /// Create the GPU context and initialise the ImGui backend for @p window.
-    /// @p renderer is available for backends that need device/queue handles.
-    virtual void init(SDL_Window* window, IRenderer& renderer) = 0;
+    /// Create the GPU context for @p window. Called right after window creation,
+    /// before the renderer is constructed (so GLEW can initialize).
+    virtual void create_context(SDL_Window* window) = 0;
+
+    /// Initialise the ImGui rendering backend. Called after the renderer exists.
+    virtual void init_imgui(SDL_Window* window, IRenderer& renderer) = 0;
 
     /// Tear down the ImGui backend and release the GPU context.
     virtual void shutdown() = 0;

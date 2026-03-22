@@ -21,6 +21,8 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
         Log::log_print(LogLevel::FATAL, "Failed to create window: %s", SDL_GetError());
     }
 
+    gpu->create_context(window); // GL context / Metal view — must exist before renderer
+
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui::GetStyle().WindowPadding = ImVec2(0, 0);
@@ -87,7 +89,7 @@ SDLGameWindow::~SDLGameWindow() {
 }
 
 void SDLGameWindow::start_loop(RenderManager& render, IUIRenderer& ui_renderer) {
-    gpu->init(window, render.get_renderer());
+    gpu->init_imgui(window, render.get_renderer());
 
     SDL_Event event;
     while (running) {

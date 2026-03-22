@@ -13,10 +13,12 @@ class MetalBackend : public IGPUBackend {
   public:
     uint32_t window_flags() const override { return SDL_WINDOW_METAL; }
 
-    void init(SDL_Window *window, IRenderer &renderer) override {
+    void create_context(SDL_Window *window) override {
         window_ = window;
         metal_view_ = SDL_Metal_CreateView(window);
+    }
 
+    void init_imgui(SDL_Window *window, IRenderer &renderer) override {
         device_ = (__bridge id<MTLDevice>)renderer.get_device_ptr();
         queue_ = (__bridge id<MTLCommandQueue>)renderer.get_command_queue_ptr();
 

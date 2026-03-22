@@ -17,14 +17,20 @@ class GLBackend : public IGPUBackend {
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     }
 
-    void init(SDL_Window* window, IRenderer& /*renderer*/) override {
+    void create_context(SDL_Window* window) override {
         window_ = window;
-
         gl_context_ = SDL_GL_CreateContext(window);
+        if (!gl_context_) {
+            fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+            return;
+        }
+        SDL_GL_MakeCurrent(window, gl_context_);
         SDL_GL_SetSwapInterval(1);
+    }
 
+    void init_imgui(SDL_Window* window, IRenderer& /*renderer*/) override {
         ImGui_ImplSDL2_InitForOpenGL(window, gl_context_);
-        ImGui_ImplOpenGL3_Init();
+        ImGui_ImplOpenGL3_Init("#version 330");
     }
 
     void shutdown() override {
