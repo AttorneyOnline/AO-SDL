@@ -23,8 +23,10 @@ void AOBlipPlayer::tick(AOAssetLibrary& ao_assets, int prev_chars, int cur_chars
 
     for (int i = prev_chars; i < cur_chars; ++i) {
         size_t byte_pos = UTF8::byte_offset(message, i);
-        if (byte_pos < message.size() && is_blip_skip(message[byte_pos]))
+        if (byte_pos < message.size() && is_whitespace(message[byte_pos])) {
+            blip_ticker_ = 0; // reset cadence after whitespace
             continue;
+        }
 
         if (blip_ticker_ % BLIP_RATE == 0) {
             EventManager::instance().get_channel<PlayBlipEvent>().publish(PlayBlipEvent(blip_asset_, 1.0f));
@@ -33,8 +35,6 @@ void AOBlipPlayer::tick(AOAssetLibrary& ao_assets, int prev_chars, int cur_chars
     }
 }
 
-bool AOBlipPlayer::is_blip_skip(char c) {
-    // Skip spaces and punctuation — matches AO2-client behavior
-    return c == ' ' || c == '.' || c == ',' || c == '?' || c == '!' || c == ':' || c == ';' || c == '\n' || c == '\r' ||
-           c == '{' || c == '}' || c == '\\';
+bool AOBlipPlayer::is_whitespace(char c) {
+    return c == ' ' || c == '\n' || c == '\r' || c == '\t';
 }

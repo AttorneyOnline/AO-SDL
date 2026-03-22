@@ -7,8 +7,8 @@
 #include <string>
 
 /// Manages blip sound scheduling during text advancement.
-/// Plays a blip every N non-space, non-punctuation characters,
-/// matching AO2-client behavior.
+/// Plays a blip every N non-whitespace characters, resetting
+/// the cadence after whitespace runs.
 class AOBlipPlayer {
   public:
     /// Reset state for a new message and load the character's blip sound.
@@ -24,7 +24,7 @@ class AOBlipPlayer {
               bool active);
 
   private:
-    static bool is_blip_skip(char c);
+    static bool is_whitespace(char c);
 
     std::shared_ptr<SoundAsset> blip_asset_;
     std::string character_; // for retry loading

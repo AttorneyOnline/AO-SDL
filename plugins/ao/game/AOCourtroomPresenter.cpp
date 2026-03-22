@@ -246,10 +246,12 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
     // ---- Textbox ----
     int cur_chars;
+    bool text_advanced;
     {
         auto _ = profiler_.scope(prof_textbox_);
         textbox.tick(delta_ms);
         cur_chars = textbox.chars_visible_count();
+        text_advanced = cur_chars > prev_chars_visible_;
     }
 
     // ---- Audio (music + blips) ----
@@ -258,8 +260,10 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
         music_player_.tick(active);
 
-        blip_player_.tick(*ao_assets, prev_chars_visible_, cur_chars, textbox.current_msg(), textbox.is_talking(),
-                          active);
+        // Use text_advanced instead of is_talking(): the textbox may have
+        // already transitioned to DONE (e.g. single-char message) by the
+        // time we get here, but blips should still play for the new chars.
+        blip_player_.tick(*ao_assets, prev_chars_visible_, cur_chars, textbox.current_msg(), text_advanced, active);
         prev_chars_visible_ = cur_chars;
     }
 

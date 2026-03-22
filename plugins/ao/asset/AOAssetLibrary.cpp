@@ -125,7 +125,16 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::emote_icon(const std::string& charac
 }
 
 std::optional<AOCharacterSheet> AOAssetLibrary::character_sheet(const std::string& character) {
-    return AOCharacterSheet::load(assets, character);
+    auto sheet = AOCharacterSheet::load(assets, character);
+    if (sheet) {
+        const auto& blip_name = sheet->blips();
+        // Start HTTP download if not already cached
+        assets.prefetch_audio("sounds/blips/" + blip_name);
+        assets.prefetch_audio("blips/" + blip_name);
+        // Decode into asset cache if download is already complete
+        blip_sound(blip_name);
+    }
+    return sheet;
 }
 
 // ---- Background ------------------------------------------------------------
@@ -422,6 +431,9 @@ void AOAssetLibrary::prefetch_own_character(const std::string& character) {
         if (!emo.pre_anim.empty() && emo.pre_anim != "-")
             assets.prefetch_image(base + emo.pre_anim, 1, 2);
     }
+
+    // Eagerly load our blip sound into the asset cache
+    blip_sound(sheet->blips());
 }
 
 void AOAssetLibrary::prefetch_theme() {
