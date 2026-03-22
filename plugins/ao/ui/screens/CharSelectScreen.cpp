@@ -95,6 +95,8 @@ void CharSelectScreen::load_icons() {
 void CharSelectScreen::retry_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
+    // Limit texture uploads per frame to avoid GPU stalls on GL backends
+    int uploaded = 0;
     for (auto& entry : chars) {
         if (entry.icon.has_value())
             continue;
@@ -106,5 +108,7 @@ void CharSelectScreen::retry_icons() {
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
+        if (++uploaded >= 8)
+            break;
     }
 }

@@ -26,11 +26,10 @@ GLTexture2D::GLTexture2D(int width, int height, const uint8_t* pixels, GLint int
 
     set_parameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     set_parameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    set_parameter(GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+    set_parameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     set_parameter(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, source_format, GL_UNSIGNED_BYTE, pixels);
-    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void GLTexture2D::set_parameter(GLenum param_name, GLint value) {
