@@ -76,6 +76,8 @@ void AOAssetLibrary::ensure_configs() {
     if (configs_loaded)
         return;
 
+    // Try to load configs — returns nullopt if HTTP download is still pending.
+    // fetch_data auto-prefetches .ini files, so they'll arrive eventually.
     cached_design = assets.config("themes/" + active_theme + "/courtroom_design.ini");
     if (!cached_design)
         cached_design = assets.config("themes/default/courtroom_design.ini");

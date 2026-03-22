@@ -5,6 +5,9 @@
 #include "asset/MountManager.h"
 #include "utils/Log.h"
 
+#include <chrono>
+#include <thread>
+
 CourtroomScreen::CourtroomScreen(std::string character_name, int char_id)
     : character_name_(std::move(character_name)), char_id_(char_id) {
     // Drop low-priority char icon downloads — we're entering the courtroom now
@@ -18,7 +21,19 @@ void CourtroomScreen::load_character_data() {
     Log::log_print(DEBUG, "CourtroomScreen: loading character data for '%s'", character_name_.c_str());
 
     AOAssetLibrary ao_assets(MediaManager::instance().assets());
-    auto sheet = ao_assets.character_sheet(character_name_);
+
+    // Prefetch char.ini — triggers async HTTP download
+    ao_assets.prefetch_character(character_name_, "", "");
+
+    // Poll until char.ini arrives or timeout (5 seconds)
+    std::optional<AOCharacterSheet> sheet;
+    for (int i = 0; i < 50; ++i) {
+        sheet = ao_assets.character_sheet(character_name_);
+        if (sheet)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
     if (sheet)
         char_sheet_ = std::make_shared<AOCharacterSheet>(std::move(*sheet));
 

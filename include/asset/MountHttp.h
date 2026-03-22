@@ -31,11 +31,6 @@ class MountHttp : public Mount {
     /// cached, pending, or previously failed (404).
     void request(const std::string& path, HttpPriority priority = HttpPriority::NORMAL);
 
-    /// Synchronous (blocking) download. Returns the data immediately.
-    /// Use for small critical files like char.ini that must be available
-    /// before proceeding. Returns empty vector on failure.
-    std::vector<uint8_t> fetch_sync(const std::string& path);
-
     /// Streaming download. Calls on_chunk with each received chunk.
     /// Returns true if the download succeeded (200), false on error/404.
     /// Blocks until the full download completes or fails.

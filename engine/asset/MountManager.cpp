@@ -176,18 +176,14 @@ std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& 
         }
     }
 
-    // Sync fallback: try HTTP mounts for config files that must be available
-    // immediately (e.g. char.ini needed before emotes can load).
-    // Audio files are NOT included — the AudioThread handles those via
-    // background download + streaming to avoid blocking the game thread.
+    // If a config file wasn't found in any mount (including HTTP cache),
+    // trigger an async prefetch so it'll be available on a future call.
     if (relative_path.ends_with(".ini") || relative_path.ends_with(".json")) {
         for (auto& mount : loaded_mounts) {
             auto* http = dynamic_cast<MountHttp*>(mount.get());
-            if (!http)
-                continue;
-            auto data = http->fetch_sync(relative_path);
-            if (!data.empty())
-                return data;
+            if (http && !http->has_failed(relative_path)) {
+                http->request(relative_path, HttpPriority::HIGH);
+            }
         }
     }
 

@@ -55,7 +55,10 @@ AOCourtroomPresenter::AOCourtroomPresenter() {
 void AOCourtroomPresenter::init() {
     auto& engine = MediaManager::instance().assets();
 
+    // Try to detect theme — if config isn't cached yet, use default.
+    // Theme configs will be retried via textbox.load() on each tick.
     std::string theme = "default";
+    engine.prefetch_config("themes/AceAttorney DS/courtroom_fonts.ini");
     if (engine.config("themes/AceAttorney DS/courtroom_fonts.ini")) {
         theme = "AceAttorney DS";
     }

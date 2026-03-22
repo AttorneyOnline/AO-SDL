@@ -153,42 +153,6 @@ std::vector<uint8_t> MountHttp::fetch_data(const std::string& path) {
     return {};
 }
 
-std::vector<uint8_t> MountHttp::fetch_sync(const std::string& raw_path) {
-    std::string path = lowercase_path(raw_path);
-    // Check cache first
-    {
-        std::lock_guard lock(mutex_);
-        auto it = cache_.find(path);
-        if (it != cache_.end())
-            return it->second;
-        if (failed_.count(path))
-            return {};
-    }
-
-    // Blocking HTTP GET — short timeouts to avoid stalling the game
-    std::string http_path = url_encode_path(path_prefix_ + "/" + path);
-    httplib::Client cli(host_);
-    cli.set_connection_timeout(2);
-    cli.set_read_timeout(3);
-    cli.set_follow_location(false); // Don't follow redirects (301s waste time)
-    auto res = cli.Get(http_path);
-
-    if (res && res->status == 200 && !res->body.empty()) {
-        std::vector<uint8_t> data(res->body.begin(), res->body.end());
-        Log::log_print(VERBOSE, "MountHttp: sync downloaded %s (%zu bytes)", path.c_str(), data.size());
-        std::lock_guard lock(mutex_);
-        cache_[path] = data;
-        // Remove from pending so any async request in-flight won't re-store
-        pending_.erase(path);
-        return data;
-    }
-
-    std::lock_guard lock(mutex_);
-    failed_.insert(path);
-    pending_.erase(path);
-    return {};
-}
-
 bool MountHttp::fetch_streaming(const std::string& raw_path, std::function<bool(const uint8_t*, size_t)> on_chunk) {
     std::string path = lowercase_path(raw_path);
     {
@@ -242,7 +206,7 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
         [this, captured_path](HttpResponse resp) {
             std::lock_guard lock(mutex_);
 
-            // If not in pending_, fetch_sync already handled this path — skip
+            // If not in pending_, this request was cancelled or superseded — skip
             if (!pending_.count(captured_path))
                 return;
             pending_.erase(captured_path);
