@@ -13,6 +13,11 @@
 
 void CharSelectScreen::enter(ScreenController& ctrl) {
     controller = &ctrl;
+    // Re-entering from courtroom: re-prefetch and reload icons.
+    // The courtroom drops low-priority downloads on entry, so icons
+    // that were still in-flight need to be re-requested.
+    if (!chars.empty())
+        load_icons();
 }
 
 void CharSelectScreen::exit() {
@@ -56,8 +61,16 @@ void CharSelectScreen::handle_events() {
 void CharSelectScreen::select_character(int index) {
     if (index < 0 || index >= (int)chars.size())
         return;
-    if (chars[index].taken)
+    // Allow re-selecting our own character (already selected), reject others' taken chars
+    if (chars[index].taken && index != selected)
         return;
+
+    // If re-selecting the same character, just go back to courtroom without a state change
+    if (index == selected && controller) {
+        controller->push_screen(
+            std::make_unique<CourtroomScreen>(chars[index].folder, index));
+        return;
+    }
 
     selected = index;
     EventManager::instance().get_channel<CharSelectRequestEvent>().publish(CharSelectRequestEvent(index));
