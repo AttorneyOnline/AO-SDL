@@ -10,7 +10,7 @@
 #include <shared_mutex>
 
 MountManager::MountManager() {
-    // Always load embedded assets (compiled into the binary)
+    // Embedded assets always available, even before load_mounts is called
     auto embedded = std::make_unique<MountEmbedded>();
     embedded->load();
     loaded_mounts.push_back(std::move(embedded));
@@ -19,17 +19,33 @@ MountManager::MountManager() {
 void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_mount_path) {
     std::unique_lock<std::shared_mutex> locker(lock);
 
-    // Preserve the embedded mount (always first), clear everything else
-    std::vector<std::unique_ptr<Mount>> keep;
-    for (auto& m : loaded_mounts) {
-        if (dynamic_cast<MountEmbedded*>(m.get()))
-            keep.push_back(std::move(m));
-    }
-    loaded_mounts = std::move(keep);
+    loaded_mounts.clear();
 
-    // EXPERIMENT: skip local mounts entirely, rely on HTTP only
-    Log::log_print(INFO, "MountManager: skipping local mounts (HTTP-only experiment)");
-    (void)target_mount_path;
+    // Priority: disk → archive → embedded → (HTTP added later via add_mount)
+    for (const std::filesystem::path& mount_path : target_mount_path) {
+        try {
+            std::unique_ptr<Mount> mount;
+
+            if (std::filesystem::is_directory(mount_path)) {
+                mount = std::make_unique<MountDirectory>(mount_path);
+            }
+            else {
+                mount = std::make_unique<MountArchive>(mount_path);
+            }
+
+            mount->load();
+            loaded_mounts.push_back(std::move(mount));
+        }
+        catch (const std::exception& e) {
+            Log::log_print(WARNING,
+                           std::format("Failed to create mount at {}: {}", mount_path.string(), e.what()).c_str());
+        }
+    }
+
+    // Embedded assets after local mounts, before HTTP
+    auto embedded = std::make_unique<MountEmbedded>();
+    embedded->load();
+    loaded_mounts.push_back(std::move(embedded));
 }
 
 void MountManager::add_mount(std::unique_ptr<Mount> mount) {
