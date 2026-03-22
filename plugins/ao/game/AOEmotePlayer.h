@@ -44,6 +44,8 @@ class AOEmotePlayer {
   private:
     State current_state = State::NONE;
     bool needs_retry_ = false;
+    int retry_count_ = 0;
+    bool fallback_prefetched_ = false;
 
     // Stored for retry
     std::string character_;

@@ -55,6 +55,7 @@ void AOCourtroomPresenter::init() {
     }
 
     ao_assets = std::make_unique<AOAssetLibrary>(engine, theme);
+    ao_assets->prefetch_theme();
     textbox.load(*ao_assets);
     Log::log_print(DEBUG, "AOCourtroomPresenter: using theme '%s'", theme.c_str());
 }
@@ -153,6 +154,11 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
     // ---- Assets (HTTP retries, sync fetches) ----
     auto assets_start = Clock::now();
+
+    // Retry loading theme assets if they weren't available at init time.
+    if (!textbox.loaded()) {
+        textbox.load(*ao_assets);
+    }
 
     background.reload_if_needed(*ao_assets);
     emote_player.retry_load(*ao_assets);

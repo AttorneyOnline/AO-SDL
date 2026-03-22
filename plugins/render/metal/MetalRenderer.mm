@@ -9,10 +9,20 @@
 #include "asset/ImageAsset.h"
 #include "utils/Log.h"
 
+#include "asset/MediaManager.h"
 #include "asset/ShaderAsset.h"
 
 #include <algorithm>
 #include <unordered_map>
+
+static std::string load_metal_source(const std::string& path) {
+    auto data = MediaManager::instance().assets().raw(path);
+    if (!data) {
+        Log::log_print(FATAL, "MetalRenderer: missing shader: %s", path.c_str());
+        return "";
+    }
+    return {data->begin(), data->end()};
+}
 
 // ---- GPU-side uniform structs (must match embedded MSL) ---------------------
 
@@ -137,29 +147,9 @@ struct MetalRendererImpl {
     }
 
     void build_pipeline() {
-        NSString* src = @
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct VertexIn { float2 position [[attribute(0)]]; float2 texcoord [[attribute(1)]]; };\n"
-            "struct VertexOut { float4 position [[position]]; float2 texcoord; };\n"
-            "struct VertexUniforms { float4x4 local; float aspect; };\n"
-            "struct FragmentUniforms { int frame_index; float opacity; };\n"
-            "vertex VertexOut vertex_main(VertexIn in [[stage_in]],\n"
-            "                             constant VertexUniforms& u [[buffer(1)]]) {\n"
-            "    VertexOut out;\n"
-            "    out.position = u.local * float4(in.position, 0.0, 1.0);\n"
-            "    out.texcoord = in.texcoord;\n"
-            "    return out;\n"
-            "}\n"
-            "fragment float4 fragment_main(VertexOut in [[stage_in]],\n"
-            "                              texture2d_array<float> tex [[texture(0)]],\n"
-            "                              sampler samp [[sampler(0)]],\n"
-            "                              constant FragmentUniforms& u [[buffer(0)]]) {\n"
-            "    float4 color = tex.sample(samp, in.texcoord, u.frame_index);\n"
-            "    color.a *= u.opacity;\n"
-            "    if (color.a < 0.001) discard_fragment();\n"
-            "    return color;\n"
-            "}\n";
+        auto vert_src = load_metal_source("shaders/main/metal/vertex.metal");
+        auto frag_src = load_metal_source("shaders/main/metal/fragment.metal");
+        NSString* src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
 
         NSError* err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
@@ -201,23 +191,9 @@ struct MetalRendererImpl {
     }
 
     void build_blit_pipeline() {
-        NSString* src = @
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct VertexOut { float4 position [[position]]; float2 texcoord; };\n"
-            "vertex VertexOut blit_vertex(uint vid [[vertex_id]]) {\n"
-            "    float2 pos[4] = { {-1,-1}, {1,-1}, {-1,1}, {1,1} };\n"
-            "    float2 uv[4]  = { {0,1}, {1,1}, {0,0}, {1,0} };\n"
-            "    VertexOut out;\n"
-            "    out.position = float4(pos[vid], 0, 1);\n"
-            "    out.texcoord = uv[vid];\n"
-            "    return out;\n"
-            "}\n"
-            "fragment float4 blit_fragment(VertexOut in [[stage_in]],\n"
-            "                              texture2d<float> tex [[texture(0)]],\n"
-            "                              sampler samp [[sampler(0)]]) {\n"
-            "    return tex.sample(samp, in.texcoord);\n"
-            "}\n";
+        auto vert_src = load_metal_source("shaders/blit/metal/vertex.metal");
+        auto frag_src = load_metal_source("shaders/blit/metal/fragment.metal");
+        NSString* src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
 
         NSError* err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];
@@ -240,20 +216,9 @@ struct MetalRendererImpl {
     }
 
     void build_wireframe_pipeline() {
-        NSString* src = @
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct WFIn { float2 position [[attribute(0)]]; float2 texcoord [[attribute(1)]]; };\n"
-            "struct WFOut { float4 position [[position]]; };\n"
-            "struct WFUniforms { float4x4 local; float aspect; };\n"
-            "vertex WFOut wf_vertex(WFIn in [[stage_in]], constant WFUniforms& u [[buffer(1)]]) {\n"
-            "    WFOut out;\n"
-            "    out.position = u.local * float4(in.position, 0.0, 1.0);\n"
-            "    return out;\n"
-            "}\n"
-            "fragment float4 wf_fragment(WFOut in [[stage_in]]) {\n"
-            "    return float4(0.0, 1.0, 0.0, 1.0);\n"
-            "}\n";
+        auto vert_src = load_metal_source("shaders/wireframe/metal/vertex.metal");
+        auto frag_src = load_metal_source("shaders/wireframe/metal/fragment.metal");
+        NSString* src = [NSString stringWithUTF8String:(vert_src + "\n" + frag_src).c_str()];
 
         NSError* err = nil;
         id<MTLLibrary> lib = [device newLibraryWithSource:src options:nil error:&err];

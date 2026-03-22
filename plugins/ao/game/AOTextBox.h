@@ -25,6 +25,9 @@ class AOTextBox {
     /// Load chatbox assets from AOAssetLibrary.
     void load(AOAssetLibrary& ao_assets);
 
+    /// Returns true if essential assets (font + chatbox image) are loaded.
+    bool loaded() const { return font_loaded && chatbox_bg; }
+
     void start_message(const std::string& showname, const std::string& message, int color_idx,
                        bool additive = false);
     bool tick(int delta_ms);

@@ -9,6 +9,8 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
     emote_ = emote;
     pre_emote_ = pre_emote;
     emote_mod_ = emote_mod;
+    retry_count_ = 0;
+    fallback_prefetched_ = false;
 
     // Preanim: direct name, no prefix
     std::shared_ptr<ImageAsset> preanim_asset;
@@ -58,6 +60,16 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
 bool AOEmotePlayer::retry_load(AOAssetLibrary& ao_assets) {
     if (!needs_retry_)
         return false;
+
+    // If server-advertised extensions all failed, re-prefetch with default
+    // extensions so formats the server didn't list can still be found.
+    if (retry_count_++ > 5 && !fallback_prefetched_) {
+        fallback_prefetched_ = true;
+        std::string base = "characters/" + character_ + "/";
+        ao_assets.engine_assets().prefetch_image(base + "(a)" + emote_);
+        ao_assets.engine_assets().prefetch_image(base + "(b)" + emote_);
+        ao_assets.engine_assets().prefetch_image(base + emote_);
+    }
 
     auto idle_asset = ao_assets.character_emote(character_, emote_, "(a)");
     if (!idle_asset)

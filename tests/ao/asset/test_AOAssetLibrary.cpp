@@ -76,26 +76,26 @@ TEST_F(AOAssetLibraryTest, DeskOverlayReturnsNullptrWithNoMounts) {
 // Theme / UI — nullptr / nullopt with no mounts
 // ---------------------------------------------------------------------------
 
-TEST_F(AOAssetLibraryTest, ThemeImageReturnsNullptrWithNoMounts) {
+TEST_F(AOAssetLibraryTest, ThemeImageLoadsFromEmbeddedAssets) {
     auto result = ao_assets.theme_image("chat");
-    EXPECT_EQ(result, nullptr);
+    // Embedded assets include themes/default/chat.png
+    EXPECT_NE(result, nullptr);
 }
 
-TEST_F(AOAssetLibraryTest, ThemeConfigReturnsNulloptWithNoMounts) {
+TEST_F(AOAssetLibraryTest, ThemeConfigLoadsFromEmbeddedAssets) {
     auto result = ao_assets.theme_config("courtroom_design.ini");
-    EXPECT_FALSE(result.has_value());
+    EXPECT_TRUE(result.has_value());
 }
 
 // ---------------------------------------------------------------------------
-// design_rect — zeroed rect with no config
+// design_rect — reads from embedded courtroom_design.ini
 // ---------------------------------------------------------------------------
 
-TEST_F(AOAssetLibraryTest, DesignRectReturnsZeroedRectWithNoConfig) {
+TEST_F(AOAssetLibraryTest, DesignRectReadsFromEmbeddedConfig) {
     AORect rect = ao_assets.design_rect("ao2_chatbox");
-    EXPECT_EQ(rect.x, 0);
-    EXPECT_EQ(rect.y, 0);
-    EXPECT_EQ(rect.w, 0);
-    EXPECT_EQ(rect.h, 0);
+    // Embedded courtroom_design.ini has non-zero chatbox dimensions
+    EXPECT_GT(rect.w, 0);
+    EXPECT_GT(rect.h, 0);
 }
 
 // ---------------------------------------------------------------------------

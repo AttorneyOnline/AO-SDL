@@ -57,6 +57,7 @@ class AOCourtroomPresenter : public IScenePresenter {
     bool current_flip = false;
 
     int evict_timer_ms = 0;
+    int theme_retry_ms_ = 0;
 
     // Scene effects
     ScreenshakeEffect screenshake_;

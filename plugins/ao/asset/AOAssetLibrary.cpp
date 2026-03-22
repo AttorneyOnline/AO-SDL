@@ -75,7 +75,6 @@ std::string AOAssetLibrary::normalize_font_name(const std::string& name) {
 void AOAssetLibrary::ensure_configs() {
     if (configs_loaded)
         return;
-    configs_loaded = true;
 
     cached_design = assets.config("themes/" + active_theme + "/courtroom_design.ini");
     if (!cached_design)
@@ -88,6 +87,9 @@ void AOAssetLibrary::ensure_configs() {
     cached_chat_config = assets.config("themes/" + active_theme + "/chat_config.ini");
     if (!cached_chat_config)
         cached_chat_config = assets.config("themes/default/chat_config.ini");
+
+    // Only mark loaded once all essential configs are available
+    configs_loaded = cached_design.has_value() && cached_fonts.has_value();
 }
 
 // ---- Character sprites -----------------------------------------------------
@@ -376,5 +378,15 @@ void AOAssetLibrary::prefetch_own_character(const std::string& character) {
         assets.prefetch_image(base + emo.anim_name, 1, 2); // bare name fallback
         if (!emo.pre_anim.empty() && emo.pre_anim != "-")
             assets.prefetch_image(base + emo.pre_anim, 1, 2);
+    }
+}
+
+void AOAssetLibrary::prefetch_theme() {
+    std::string base = "themes/" + active_theme + "/";
+    assets.prefetch_image(base + "chat");
+    assets.prefetch_image(base + "chatbox");
+    if (active_theme != "default") {
+        assets.prefetch_image("themes/default/chat");
+        assets.prefetch_image("themes/default/chatbox");
     }
 }

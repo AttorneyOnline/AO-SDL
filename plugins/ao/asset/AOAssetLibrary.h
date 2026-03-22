@@ -117,6 +117,9 @@ class AOAssetLibrary {
     /// Uses HIGH priority since these are needed immediately.
     void prefetch_own_character(const std::string& character);
 
+    /// Prefetch essential theme assets (chatbox images, etc.) via HTTP.
+    void prefetch_theme();
+
   private:
     AssetLibrary& assets;
     std::string active_theme;

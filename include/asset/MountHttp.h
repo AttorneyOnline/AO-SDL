@@ -41,6 +41,8 @@ class MountHttp : public Mount {
     int cached_count() const;
     /// Number of paths that returned 404 or error.
     int failed_count() const;
+    /// Check if a specific path has been tried and failed (404/error).
+    bool has_failed(const std::string& path) const;
     /// Total bytes stored in the raw download cache.
     size_t cached_bytes() const;
 

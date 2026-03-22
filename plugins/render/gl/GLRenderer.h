@@ -13,11 +13,9 @@
 
 class GLRenderer : public IRenderer {
   public:
-    /// @param vertex_source   GLSL vertex shader source.
-    /// @param fragment_source GLSL fragment shader source.
-    /// @param width           Render framebuffer width in pixels.
-    /// @param height          Render framebuffer height in pixels.
-    GLRenderer(const std::string& vertex_source, const std::string& fragment_source, int width, int height);
+    /// @param width  Render framebuffer width in pixels.
+    /// @param height Render framebuffer height in pixels.
+    GLRenderer(int width, int height);
     ~GLRenderer();
 
     static void init_gl();
@@ -73,8 +71,4 @@ class GLRenderer : public IRenderer {
 };
 
 /// Factory: creates a GLRenderer after initializing GLEW.
-std::unique_ptr<IRenderer> create_gl_renderer(const std::string& vertex_source, const std::string& fragment_source,
-                                              int width, int height);
-
-/// Factory with embedded shaders — matches the common create_renderer signature.
 std::unique_ptr<IRenderer> create_renderer(int width, int height);

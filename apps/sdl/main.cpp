@@ -89,11 +89,20 @@ int main(int argc, char* argv[]) {
         http_pool.poll();
 
         // When the server sends an asset URL (ASS packet), create an HTTP mount
+        // then add the default fallback mount after it so the server's assets take priority
         auto& asset_ch = EventManager::instance().get_channel<AssetUrlEvent>();
         while (auto ev = asset_ch.get_event()) {
             auto mount = std::make_unique<MountHttp>(ev->url(), http_pool);
             MediaManager::instance().mounts_ref().add_mount(std::move(mount));
             Log::log_print(INFO, "Added HTTP asset mount: %s", ev->url().c_str());
+
+            static bool default_mount_added = false;
+            if (!default_mount_added) {
+                default_mount_added = true;
+                auto fallback = std::make_unique<MountHttp>("https://attorneyoffline.de/base/", http_pool);
+                MediaManager::instance().mounts_ref().add_mount(std::move(fallback));
+                Log::log_print(INFO, "Added fallback HTTP asset mount: https://attorneyoffline.de/base/");
+            }
         }
     });
 

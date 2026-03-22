@@ -57,6 +57,21 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
                        font.size_px, font.sharp);
     }
 
+    // System font fallback if no AO theme font was found
+    if (!font_loaded) {
+#ifdef __APPLE__
+        font_loaded = text_renderer.load_font("/System/Library/Fonts/Helvetica.ttc", font.size_px);
+#elif defined(_WIN32)
+        font_loaded = text_renderer.load_font("C:\\Windows\\Fonts\\arial.ttf", font.size_px);
+#else
+        font_loaded = text_renderer.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font.size_px);
+#endif
+        if (font_loaded) {
+            text_renderer.set_sharp(font.sharp);
+            Log::log_print(DEBUG, "AOTextBox: using system font fallback (%dpx)", font.size_px);
+        }
+    }
+
     if (!font_loaded) {
         Log::log_print(WARNING, "AOTextBox: no font loaded, text will not render");
     }
@@ -74,6 +89,17 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
         showname_renderer.set_sharp(sn_font.sharp);
         Log::log_print(DEBUG, "AOTextBox: showname_font='%s' %dpt (%dpx) sharp=%d", sn_font.name.c_str(),
                        sn_font.size_pt, sn_font.size_px, sn_font.sharp);
+    }
+    if (!showname_font_loaded) {
+#ifdef __APPLE__
+        showname_font_loaded = showname_renderer.load_font("/System/Library/Fonts/Helvetica.ttc", sn_font.size_px);
+#elif defined(_WIN32)
+        showname_font_loaded = showname_renderer.load_font("C:\\Windows\\Fonts\\arial.ttf", sn_font.size_px);
+#else
+        showname_font_loaded = showname_renderer.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", sn_font.size_px);
+#endif
+        if (showname_font_loaded)
+            showname_renderer.set_sharp(sn_font.sharp);
     }
 
     Log::log_print(DEBUG, "AOTextBox: chatbox=%d,%d,%dx%d message=%d,%d,%dx%d", chatbox_rect.x, chatbox_rect.y,

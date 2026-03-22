@@ -218,6 +218,11 @@ int MountHttp::failed_count() const {
     return (int)failed_.size();
 }
 
+bool MountHttp::has_failed(const std::string& path) const {
+    std::lock_guard lock(mutex_);
+    return failed_.count(path) > 0;
+}
+
 void MountHttp::release(const std::string& path) {
     std::lock_guard lock(mutex_);
     cache_.erase(path);

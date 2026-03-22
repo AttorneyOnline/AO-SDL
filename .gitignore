@@ -399,7 +399,6 @@ FodyWeavers.xsd
 *.sln.iml
 
 out/
-assets/
 CMakeFiles/
 
 # Generated documentation

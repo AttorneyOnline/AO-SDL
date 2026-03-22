@@ -1,11 +1,21 @@
 #include "GLRenderer.h"
 
 #include "GLSprite.h"
+#include "asset/MediaManager.h"
 #include "asset/ShaderAsset.h"
 #include "render/Transform.h"
 #include "utils/Log.h"
 
 #include <algorithm>
+
+static std::string load_shader_source(const std::string& path) {
+    auto data = MediaManager::instance().assets().raw(path);
+    if (!data) {
+        Log::log_print(FATAL, "GLRenderer: missing shader: %s", path.c_str());
+        return "";
+    }
+    return {data->begin(), data->end()};
+}
 
 void GLRenderer::init_gl() {
     glewExperimental = GL_TRUE;
@@ -15,10 +25,13 @@ void GLRenderer::init_gl() {
     }
 }
 
-GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& fragment_source, int width, int height)
+GLRenderer::GLRenderer(int width, int height)
     : fb_width(width), fb_height(height) {
-    GLShader vert(ShaderType::Vertex, vertex_source, true);
-    GLShader frag(ShaderType::Fragment, fragment_source, true);
+    // Load main scene shader from embedded assets
+    auto vert_src = load_shader_source("shaders/main/glsl/vertex.glsl");
+    auto frag_src = load_shader_source("shaders/main/glsl/fragment.glsl");
+    GLShader vert(ShaderType::Vertex, vert_src, true);
+    GLShader frag(ShaderType::Fragment, frag_src, true);
     program.link_shaders({vert, frag});
 
     glEnable(GL_DEPTH_TEST);
@@ -27,22 +40,12 @@ GLRenderer::GLRenderer(const std::string& vertex_source, const std::string& frag
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
 
-    // Wireframe shader: solid green, no texturing
+    // Wireframe shader
     {
-        static const char* wf_vert = R"glsl(
-#version 450
-layout (location = 0) in vec2 vertex_pos;
-layout (location = 1) in vec2 vertex_tex_coord;
-uniform mat4 local;
-void main() { gl_Position = local * vec4(vertex_pos, 0.0, 1.0); }
-)glsl";
-        static const char* wf_frag = R"glsl(
-#version 450
-layout (location = 0) out vec4 frag_color;
-void main() { frag_color = vec4(0.0, 1.0, 0.0, 1.0); }
-)glsl";
-        GLShader wv(ShaderType::Vertex, wf_vert, true);
-        GLShader wf(ShaderType::Fragment, wf_frag, true);
+        auto wf_vert_src = load_shader_source("shaders/wireframe/glsl/vertex.glsl");
+        auto wf_frag_src = load_shader_source("shaders/wireframe/glsl/fragment.glsl");
+        GLShader wv(ShaderType::Vertex, wf_vert_src, true);
+        GLShader wf(ShaderType::Fragment, wf_frag_src, true);
         wireframe_program_.link_shaders({wv, wf});
     }
 
@@ -320,51 +323,9 @@ uintptr_t GLRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
     return (uintptr_t)tex;
 }
 
-std::unique_ptr<IRenderer> create_gl_renderer(const std::string& vertex_source, const std::string& fragment_source,
-                                              int width, int height) {
-    GLRenderer::init_gl();
-    return std::make_unique<GLRenderer>(vertex_source, fragment_source, width, height);
-}
-
-// Embedded shaders for the common factory signature
-static const char* embedded_vertex_glsl = R"glsl(
-#version 450
-layout (location = 0) in vec2 vertex_pos;
-layout (location = 1) in vec2 vertex_tex_coord;
-
-out vec2 vert_texcoord;
-
-uniform mat4 local;
-uniform float aspect;
-
-void main() {
-    gl_Position = local * vec4(vertex_pos.x, vertex_pos.y, 0.0f, 1.0f);
-    vert_texcoord = vertex_tex_coord;
-}
-)glsl";
-
-static const char* embedded_fragment_glsl = R"glsl(
-#version 450
-layout (location = 0) out vec4 frag_color;
-
-in vec2 vert_texcoord;
-
-uniform sampler2DArray texture_sample;
-uniform int frame_index;
-uniform float opacity;
-
-void main() {
-    vec4 tex_color = texture(texture_sample, vec3(vert_texcoord, float(frame_index)));
-    tex_color.a *= opacity;
-    if (tex_color.a < 0.001f) {
-        discard;
-    }
-    frag_color = tex_color;
-}
-)glsl";
-
 std::unique_ptr<IRenderer> create_renderer(int width, int height) {
-    return create_gl_renderer(embedded_vertex_glsl, embedded_fragment_glsl, width, height);
+    GLRenderer::init_gl();
+    return std::make_unique<GLRenderer>(width, height);
 }
 
 void GLRenderer::resize(int width, int height) {

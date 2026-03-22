@@ -108,6 +108,15 @@ configure_file(
 message(STATUS "AO-SDL version: ${AO_SDL_VERSION}")
 
 # =============================================================================
+# Embed assets/ directory into the binary
+# =============================================================================
+include(cmake/EmbedAssets.cmake)
+embed_assets(EMBEDDED_ASSETS_SRC
+    "${CMAKE_SOURCE_DIR}/assets"
+    "${CMAKE_BINARY_DIR}/generated/EmbeddedAssets.cpp"
+)
+
+# =============================================================================
 # aoengine — core engine library (no GL, no SDL)
 #
 # Public include root: engine/
@@ -143,6 +152,8 @@ add_library(aoengine STATIC
     engine/asset/MountManager.cpp
     engine/asset/MountArchive.cpp
     engine/asset/MountDirectory.cpp
+    engine/asset/MountEmbedded.cpp
+    ${EMBEDDED_ASSETS_SRC}
     engine/asset/stb_image_impl.cpp
 
     engine/net/WebSocket.cpp

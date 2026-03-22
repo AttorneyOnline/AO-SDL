@@ -2,6 +2,7 @@
 
 #include "asset/MountArchive.h"
 #include "asset/MountDirectory.h"
+#include "asset/MountEmbedded.h"
 #include "asset/MountHttp.h"
 #include "utils/Log.h"
 
@@ -9,32 +10,26 @@
 #include <shared_mutex>
 
 MountManager::MountManager() {
+    // Always load embedded assets (compiled into the binary)
+    auto embedded = std::make_unique<MountEmbedded>();
+    embedded->load();
+    loaded_mounts.push_back(std::move(embedded));
 }
 
 void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_mount_path) {
     std::unique_lock<std::shared_mutex> locker(lock);
 
-    loaded_mounts.clear();
-
-    for (const std::filesystem::path& mount_path : target_mount_path) {
-        try {
-            std::unique_ptr<Mount> mount;
-
-            if (std::filesystem::is_directory(mount_path)) {
-                mount = std::make_unique<MountDirectory>(mount_path);
-            }
-            else {
-                mount = std::make_unique<MountArchive>(mount_path);
-            }
-
-            mount->load();
-            loaded_mounts.push_back(std::move(mount));
-        }
-        catch (const std::exception& e) {
-            Log::log_print(WARNING,
-                           std::format("Failed to create mount at {}: {}", mount_path.string(), e.what()).c_str());
-        }
+    // Preserve the embedded mount (always first), clear everything else
+    std::vector<std::unique_ptr<Mount>> keep;
+    for (auto& m : loaded_mounts) {
+        if (dynamic_cast<MountEmbedded*>(m.get()))
+            keep.push_back(std::move(m));
     }
+    loaded_mounts = std::move(keep);
+
+    // EXPERIMENT: skip local mounts entirely, rely on HTTP only
+    Log::log_print(INFO, "MountManager: skipping local mounts (HTTP-only experiment)");
+    (void)target_mount_path;
 }
 
 void MountManager::add_mount(std::unique_ptr<Mount> mount) {
@@ -63,11 +58,21 @@ void MountManager::prefetch(const std::string& relative_path, int priority) {
             return;
     }
 
-    // Trigger HTTP downloads
+    // Trigger HTTP downloads — only hit fallback mounts if the primary
+    // mount already failed for this path (avoids duplicate 404 floods).
+    MountHttp* primary = nullptr;
     for (auto& mount : loaded_mounts) {
         auto* http = dynamic_cast<MountHttp*>(mount.get());
-        if (http)
+        if (!http)
+            continue;
+        if (!primary) {
+            // First HTTP mount is the primary — always try it
+            primary = http;
             http->request(relative_path, static_cast<HttpPriority>(priority));
+        } else if (primary->has_failed(relative_path)) {
+            // Primary failed — try fallback mounts
+            http->request(relative_path, static_cast<HttpPriority>(priority));
+        }
     }
 }
 
@@ -143,7 +148,7 @@ std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& 
 
     // Sync fallback: try HTTP mounts for config/ini files that must be
     // available immediately (e.g. char.ini needed before emotes can load).
-    // Images use the async prefetch path instead.
+    // Theme configs and fonts are served from the embedded mount instead.
     if (relative_path.ends_with(".ini") || relative_path.ends_with(".json")) {
         for (auto& mount : loaded_mounts) {
             auto* http = dynamic_cast<MountHttp*>(mount.get());
