@@ -92,11 +92,11 @@ jobs:
         if: matrix.coverage
         run: |
           lcov --capture --directory build-coverage --output-file coverage.info \
-               --ignore-errors mismatch
+               --ignore-errors mismatch,gcov,negative
           lcov --remove coverage.info \
                '/usr/*' '*/third-party/*' '*/tests/*' '*/build-coverage/*' \
                --output-file coverage.info \
-               --ignore-errors unused
+               --ignore-errors unused,negative
           lcov --list coverage.info
 
       - name: Upload coverage to Codecov
