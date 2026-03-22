@@ -161,6 +161,9 @@ void AOAssetLibrary::prefetch_background(const std::string& name, const std::str
     assets.prefetch_image(base + legacy, 3, priority);
     if (legacy != position)
         assets.prefetch_image(base + position, 3, priority);
+    // Prefetch desk overlay (e.g. "stand", "defensedesk")
+    std::string desk = desk_filename(position);
+    assets.prefetch_image(base + desk, 3, priority);
 }
 
 // ---- Theme / UI ------------------------------------------------------------

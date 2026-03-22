@@ -18,16 +18,22 @@ void AOBackground::set_position(const std::string& position) {
 }
 
 void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
-    // Retry if background was requested but not yet available (HTTP pending)
-    if (!dirty && !bg && !bg_name.empty()) {
-        bg = ao_assets.background(bg_name, pos);
+    // Retry if background or desk was requested but not yet available (HTTP pending)
+    if (!dirty && !bg_name.empty()) {
         if (!bg) {
-            ao_assets.prefetch_background(bg_name, pos);
+            bg = ao_assets.background(bg_name, pos);
+            if (!bg) {
+                ao_assets.prefetch_background(bg_name, pos);
+            }
+            else {
+                desk = ao_assets.desk_overlay(bg_name, pos);
+            }
+            return;
         }
-        else {
+        if (!desk) {
             desk = ao_assets.desk_overlay(bg_name, pos);
+            return;
         }
-        return;
     }
 
     if (!dirty)
