@@ -6,6 +6,10 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
 endif()
 
+if(WIN32)
+    add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =============================================================================

@@ -3,12 +3,6 @@
 // Platform network byte-order functions (htonl/htons/ntohs) must come before
 // any header that uses them (e.g. sha1.h).
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 #include <winsock2.h>
 #else
 #include <arpa/inet.h>

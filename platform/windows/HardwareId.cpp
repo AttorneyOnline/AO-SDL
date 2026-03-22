@@ -1,11 +1,5 @@
 #include "platform/HardwareId.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 // clang-format off
 #include <windows.h>  // must precede bcrypt.h
 #include <bcrypt.h>
