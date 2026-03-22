@@ -119,7 +119,8 @@ jobs:
         run: |
           mkdir -p artifact
           cp build/apps/sdl/aosdl artifact/
-          tar czf aosdl-macos-x64.tar.gz -C artifact .
+          codesign --force --sign - artifact/aosdl
+          tar czf aosdl-macos-arm64.tar.gz -C artifact .
 
       - name: Package (Windows)
         if: runner.os == 'Windows'

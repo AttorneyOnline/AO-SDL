@@ -9,12 +9,14 @@ class AOClient;
 
 class PacketFormatException : public std::invalid_argument {
   public:
-    explicit PacketFormatException(const std::string& message) : std::invalid_argument(message) {};
+    explicit PacketFormatException(const std::string& message) : std::invalid_argument(message) {
+    }
 };
 
 class ProtocolStateException : public std::runtime_error {
   public:
-    explicit ProtocolStateException(const std::string& message) : std::runtime_error(message) {};
+    explicit ProtocolStateException(const std::string& message) : std::runtime_error(message) {
+    }
 };
 
 class AOPacket {
