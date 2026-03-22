@@ -77,19 +77,13 @@ void CharSelectScreen::select_character(int index) {
 void CharSelectScreen::load_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
+    // Prefetch all icons via HTTP (queued at LOW priority, doesn't block)
     for (auto& entry : chars) {
         std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
-
-        // Trigger HTTP prefetch for missing icons (0=CHARICON, LOW priority)
         lib.prefetch_image(icon_path, 0, 0);
-
-        auto asset = lib.image(icon_path);
-        if (!asset || asset->frame_count() == 0)
-            continue;
-
-        const ImageFrame& frame = asset->frame(0);
-        entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
     }
+
+    // Upload to GPU is batched — actual loading happens in retry_icons()
 }
 
 void CharSelectScreen::retry_icons() {
