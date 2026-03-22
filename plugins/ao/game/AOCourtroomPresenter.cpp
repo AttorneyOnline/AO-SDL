@@ -28,6 +28,18 @@ class TextColorProvider : public ShaderUniformProvider {
     float r_, g_, b_;
 };
 
+class RainbowTextProvider : public ShaderUniformProvider {
+  public:
+    RainbowTextProvider(float time) : time_(time) {
+    }
+    std::unordered_map<std::string, UniformValue> get_uniforms() const override {
+        return {{"u_time", time_}};
+    }
+
+  private:
+    float time_;
+};
+
 AOCourtroomPresenter::AOCourtroomPresenter() {
     // Register profiler sections
     prof_events_ = profiler_.add_section("Events");
@@ -178,6 +190,8 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         delta_ms = 16;
     if (delta_ms > 200)
         delta_ms = 200;
+
+    scene_time_s_ += delta_ms / 1000.0f;
 
     bool active = courtroom_active_.load(std::memory_order_acquire);
 
@@ -336,11 +350,14 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             auto mesh = textbox.message_mesh();
             auto shader = textbox.text_shader();
             if (atlas && mesh && mesh->index_count() > 0 && shader) {
-                float r, g, b;
-                textbox.message_color_rgb(r, g, b);
-
-                auto provider = std::make_shared<TextColorProvider>(r, g, b);
-                shader->set_uniform_provider(provider);
+                if (textbox.is_rainbow()) {
+                    shader->set_uniform_provider(std::make_shared<RainbowTextProvider>(scene_time_s_));
+                }
+                else {
+                    float r, g, b;
+                    textbox.message_color_rgb(r, g, b);
+                    shader->set_uniform_provider(std::make_shared<TextColorProvider>(r, g, b));
+                }
 
                 Layer text_layer(atlas, 0, 21);
                 text_layer.set_mesh(mesh);

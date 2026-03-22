@@ -123,6 +123,7 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
         engine_assets_->register_asset(msg_glyph_cache_->atlas_asset());
 
         text_shader_ = engine_assets_->shader("shaders/text");
+        text_rainbow_shader_ = engine_assets_->shader("shaders/text_rainbow");
         if (text_shader_) {
             Log::log_print(DEBUG, "AOTextBox: text shader loaded for GPU rendering");
         }

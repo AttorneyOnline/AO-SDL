@@ -76,9 +76,15 @@ class AOTextBox {
         return msg_glyph_cache_ ? msg_glyph_cache_->atlas_asset() : nullptr;
     }
 
-    /// Text shader.
+    /// Text shader (normal or rainbow depending on current color).
     std::shared_ptr<ShaderAsset> text_shader() const {
-        return text_shader_;
+        return is_rainbow() ? text_rainbow_shader_ : text_shader_;
+    }
+
+    /// Whether the current message uses rainbow text color.
+    /// AO2 protocol: color index 6 is labeled "rainbow" in the client UI.
+    bool is_rainbow() const {
+        return current_color_idx == 6;
     }
 
     /// Current message color (for shader uniform).
@@ -146,6 +152,7 @@ class AOTextBox {
     std::unique_ptr<GlyphCache> msg_glyph_cache_;
     std::shared_ptr<MeshAsset> msg_mesh_;
     std::shared_ptr<ShaderAsset> text_shader_;
+    std::shared_ptr<ShaderAsset> text_rainbow_shader_;
     int last_chars_visible_ = -1; // track when mesh needs rebuild
 
     // Cached layout (computed once in start_message, reused every tick)

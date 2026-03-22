@@ -58,6 +58,7 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     int evict_timer_ms = 0;
     int theme_retry_ms_ = 0;
+    float scene_time_s_ = 0; // monotonic time for shader effects
 
     // Scene effects
     ScreenshakeEffect screenshake_;
