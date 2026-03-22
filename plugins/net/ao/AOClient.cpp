@@ -1,7 +1,7 @@
 #include "AOClient.h"
 
 #include "ao/event/OutgoingICMessageEvent.h"
-#include "ao/net/PacketTypes.h"
+#include "PacketTypes.h"
 #include "event/CharSelectRequestEvent.h"
 #include "event/EventManager.h"
 #include "event/OutgoingChatEvent.h"

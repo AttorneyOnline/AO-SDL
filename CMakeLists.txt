@@ -285,10 +285,24 @@ else()
     endif()
 endif()
 
-# --- ao_protocol — AO2 protocol plugin ---------------------------------------
+# --- ao_net — AO2 network protocol (packet parsing, serialization) -----------
 
-add_library(ao_protocol STATIC
-    plugins/ao/ao_plugin.cpp
+add_library(ao_net STATIC
+    plugins/net/ao/AOClient.cpp
+    plugins/net/ao/AOPacket.cpp
+    plugins/net/ao/PacketTypes.cpp
+    plugins/net/ao/PacketBehavior.cpp
+)
+set_property(TARGET ao_net PROPERTY CXX_STANDARD 20)
+target_include_directories(ao_net
+    PUBLIC  plugins
+    PRIVATE plugins/net/ao   # bare includes within the net plugin
+)
+target_link_libraries(ao_net PUBLIC aoengine)
+
+# --- ao_game — AO2 game logic (courtroom, emotes, textbox, effects) ---------
+
+add_library(ao_game STATIC
     plugins/ao/event/ICMessageEvent.cpp
     plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/asset/AOCharacterSheet.cpp
@@ -300,18 +314,22 @@ add_library(ao_protocol STATIC
     plugins/ao/game/effects/ScreenshakeEffect.cpp
     plugins/ao/game/effects/FlashEffect.cpp
     plugins/ao/game/effects/ShaderEffect.cpp
-    plugins/ao/net/AOClient.cpp
-    plugins/ao/net/AOPacket.cpp
-    plugins/ao/net/PacketTypes.cpp
-    plugins/ao/net/PacketBehavior.cpp
+)
+set_property(TARGET ao_game PROPERTY CXX_STANDARD 20)
+target_include_directories(ao_game PUBLIC plugins)
+target_link_libraries(ao_game PUBLIC aoengine)
+
+# --- ao_protocol — thin glue linking net + game + UI screens -----------------
+
+add_library(ao_protocol STATIC
+    plugins/ao/ao_plugin.cpp
     plugins/ao/ui/screens/ServerListScreen.cpp
     plugins/ao/ui/screens/CharSelectScreen.cpp
     plugins/ao/ui/screens/CourtroomScreen.cpp
 )
 set_property(TARGET ao_protocol PROPERTY CXX_STANDARD 20)
-
 target_include_directories(ao_protocol PUBLIC plugins)
-target_link_libraries(ao_protocol PUBLIC aoengine)
+target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 
 # =============================================================================
 # Applications — one per backend

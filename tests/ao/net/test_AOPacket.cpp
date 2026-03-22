@@ -1,7 +1,7 @@
-#include "ao/net/AOPacket.h"
+#include "net/ao/AOPacket.h"
 // Include PacketTypes so all registrars run (needed for deserialization to
 // produce the correct derived type rather than a bare AOPacket).
-#include "ao/net/PacketTypes.h"
+#include "net/ao/PacketTypes.h"
 
 #include <gtest/gtest.h>
 #include <stdexcept>

@@ -1,7 +1,7 @@
 #include "ao/event/ICMessageEvent.h"
-#include "ao/net/AOClient.h"
-#include "ao/net/AOPacket.h"
-#include "ao/net/PacketTypes.h"
+#include "net/ao/AOClient.h"
+#include "net/ao/AOPacket.h"
+#include "net/ao/PacketTypes.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
 

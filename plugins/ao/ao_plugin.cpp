@@ -1,7 +1,7 @@
 #include "ao_plugin.h"
 
 #include "ao/game/AOCourtroomPresenter.h"
-#include "ao/net/AOClient.h"
+#include "net/ao/AOClient.h"
 
 namespace ao {
 
