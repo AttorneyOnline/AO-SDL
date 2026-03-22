@@ -137,6 +137,8 @@ jobs:
           cp build/apps/sdl/aosdl.exe artifact/
           cp build/apps/sdl/*.dll artifact/ 2>/dev/null || true
           cp third-party/glew/bin/Release/x64/glew32.dll artifact/ 2>/dev/null || true
+          cp "/c/Program Files/OpenSSL/bin/libssl-3-x64.dll" artifact/ 2>/dev/null || true
+          cp "/c/Program Files/OpenSSL/bin/libcrypto-3-x64.dll" artifact/ 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
