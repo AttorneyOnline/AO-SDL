@@ -95,8 +95,8 @@ class MountHttp : public Mount {
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::vector<uint8_t>> cache_;
     std::unordered_set<std::string> pending_;
-    std::unordered_set<std::string> failed_;                       // Permanent (404)
-    std::unordered_map<std::string, int> transient_failures_;      // Retryable (SSL/timeout), value = attempt count
+    std::unordered_set<std::string> failed_;                  // Permanent (404)
+    std::unordered_map<std::string, int> transient_failures_; // Retryable (SSL/timeout), value = attempt count
     static constexpr int max_retries_ = 3;
 
     // extensions.json data (guarded by mutex_)

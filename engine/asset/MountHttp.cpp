@@ -193,8 +193,8 @@ bool MountHttp::fetch_streaming(const std::string& raw_path, std::function<bool(
                     failed_.insert(path);
                 else
                     ++transient_failures_[path];
-                Log::log_print(VERBOSE, "MountHttp: stream failed %s (status=%d err=%s)",
-                               path.c_str(), resp.status, resp.error.c_str());
+                Log::log_print(VERBOSE, "MountHttp: stream failed %s (status=%d err=%s)", path.c_str(), resp.status,
+                               resp.error.c_str());
                 done.set_value(false);
             }
         },
@@ -252,8 +252,8 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
             else {
                 // Transient (SSL error, timeout, server error) — allow retry
                 int attempt = ++transient_failures_[captured_path];
-                Log::log_print(VERBOSE, "MountHttp: failed %s attempt %d/%d (status=%d err=%s)",
-                               captured_path.c_str(), attempt, max_retries_, resp.status, resp.error.c_str());
+                Log::log_print(VERBOSE, "MountHttp: failed %s attempt %d/%d (status=%d err=%s)", captured_path.c_str(),
+                               attempt, max_retries_, resp.status, resp.error.c_str());
             }
         },
         priority);

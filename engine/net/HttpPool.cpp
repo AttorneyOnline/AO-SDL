@@ -42,8 +42,8 @@ void HttpPool::get(const std::string& host, const std::string& path, HttpCallbac
     work_cv_.notify_one();
 }
 
-void HttpPool::get_streaming(const std::string& host, const std::string& path,
-                             HttpChunkCallback on_chunk, HttpCallback cb, HttpPriority priority) {
+void HttpPool::get_streaming(const std::string& host, const std::string& path, HttpChunkCallback on_chunk,
+                             HttpCallback cb, HttpPriority priority) {
     pending_.fetch_add(1, std::memory_order_relaxed);
     {
         std::lock_guard lock(work_mutex_);

@@ -60,8 +60,7 @@ class HttpPool {
     /// Submit a streaming HTTP GET. The on_chunk callback is invoked on a worker
     /// thread for each received chunk. The completion callback follows the normal
     /// path (delivered via poll()). Use for large downloads like music.
-    void get_streaming(const std::string& host, const std::string& path,
-                       HttpChunkCallback on_chunk, HttpCallback cb,
+    void get_streaming(const std::string& host, const std::string& path, HttpChunkCallback on_chunk, HttpCallback cb,
                        HttpPriority priority = HttpPriority::NORMAL);
 
     /// Drop all queued (not yet started) requests at or below the given priority.
