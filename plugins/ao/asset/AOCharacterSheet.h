@@ -60,6 +60,15 @@ class AOCharacterSheet : public ICharacterSheet {
     const AOEmoteEntry& ao_emote(int index) const {
         return emotes_.at(index);
     }
+
+    /// Find an emote entry by animation name. Returns nullptr if not found.
+    const AOEmoteEntry* find_emote(const std::string& anim_name) const {
+        for (const auto& e : emotes_) {
+            if (e.anim_name == anim_name)
+                return &e;
+        }
+        return nullptr;
+    }
     const std::vector<AOEmoteEntry>& emotes() const {
         return emotes_;
     }

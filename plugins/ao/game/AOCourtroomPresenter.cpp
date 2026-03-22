@@ -95,15 +95,40 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (showname.empty())
         showname = sheet ? sheet->showname() : msg.character;
 
-    textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
+    // Check if message text is blank (whitespace-only)
+    bool blank = true;
+    for (char c : msg.message) {
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            blank = false;
+            break;
+        }
+    }
 
     // Blank messages skip pre-anim and go straight to idle
-    if (textbox.text_state() == AOTextBox::TextState::INACTIVE) {
+    if (msg.message.empty() || blank) {
+        textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
         emote_player.start(*ao_assets, msg.character, msg.emote, "", EmoteMod::IDLE);
         emote_player.transition_to_idle();
+        preanim_blocking_ = false;
     }
     else {
         emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
+
+        // Blocking preanim: defer textbox until preanim finishes
+        if (emote_player.state() == AOEmotePlayer::State::PREANIM && !msg.immediate) {
+            preanim_blocking_ = true;
+            pending_showname_ = showname;
+            pending_message_ = msg.message;
+            pending_text_color_ = msg.text_color;
+            pending_additive_ = msg.additive;
+            // Keep textbox inactive during preanim
+            textbox.start_message("", "", 0);
+        }
+        else {
+            // Immediate (no-int-pre) or no preanim: start text right away
+            preanim_blocking_ = false;
+            textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
+        }
     }
 
     if (msg.screenshake)
@@ -117,12 +142,22 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (msg.message.find("cube") != std::string::npos)
         cube_.trigger();
 
-    // Load SFX (warms cache even if courtroom isn't active yet)
-    if (!msg.sfx_name.empty() && msg.sfx_name != "0" && msg.sfx_name != "1") {
-        auto sfx_asset = ao_assets->sound_effect(msg.sfx_name);
+    // Resolve SFX: use packet sfx_name, fall back to char.ini emote SFX
+    std::string sfx_name = msg.sfx_name;
+    bool sfx_looping = msg.sfx_looping;
+    if ((sfx_name.empty() || sfx_name == "0" || sfx_name == "1") && sheet) {
+        auto* emote_entry = sheet->find_emote(msg.emote);
+        if (emote_entry && !emote_entry->sfx_name.empty() && emote_entry->sfx_name != "0") {
+            sfx_name = emote_entry->sfx_name;
+            sfx_looping = emote_entry->sfx_looping;
+        }
+    }
+
+    // Load and play SFX
+    if (!sfx_name.empty() && sfx_name != "0" && sfx_name != "1") {
+        auto sfx_asset = ao_assets->sound_effect(sfx_name);
         if (sfx_asset && courtroom_active_.load(std::memory_order_acquire)) {
-            EventManager::instance().get_channel<PlaySFXEvent>().publish(
-                PlaySFXEvent(sfx_asset, msg.sfx_looping, 1.0f));
+            EventManager::instance().get_channel<PlaySFXEvent>().publish(PlaySFXEvent(sfx_asset, sfx_looping, 1.0f));
         }
     }
 
@@ -155,6 +190,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             textbox.start_message("", "", 0);
             message_queue_.clear();
             emote_player.stop();
+            preanim_blocking_ = false;
             for_each_effect([](auto& e) { e.stop(); });
         }
 
@@ -163,9 +199,10 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             message_queue_.enqueue(ICMessage::from_event(*ev));
         }
 
-        // Advance queue — dequeue next message when current one finishes
-        bool text_done = textbox.text_state() == AOTextBox::TextState::DONE ||
-                         textbox.text_state() == AOTextBox::TextState::INACTIVE;
+        // Advance queue — dequeue next message when current one finishes.
+        // Don't advance during a blocking preanim (textbox is INACTIVE but message isn't done).
+        bool text_done = !preanim_blocking_ && (textbox.text_state() == AOTextBox::TextState::DONE ||
+                                                textbox.text_state() == AOTextBox::TextState::INACTIVE);
         message_queue_.tick(delta_ms, text_done);
 
         if (auto msg = message_queue_.next()) {
@@ -190,7 +227,16 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     {
         auto _ = profiler_.scope(prof_animation_);
 
+        auto prev_emote_state = emote_player.state();
         emote_player.tick(delta_ms);
+
+        // Blocking preanim just finished → start the deferred textbox
+        if (preanim_blocking_ && prev_emote_state == AOEmotePlayer::State::PREANIM &&
+            emote_player.state() == AOEmotePlayer::State::TALKING) {
+            preanim_blocking_ = false;
+            textbox.start_message(pending_showname_, pending_message_, pending_text_color_, pending_additive_);
+            prev_chars_visible_ = 0;
+        }
 
         if (textbox.text_state() == AOTextBox::TextState::DONE &&
             emote_player.state() == AOEmotePlayer::State::TALKING) {

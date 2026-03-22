@@ -35,22 +35,17 @@ void AOEmotePlayer::start(AOAssetLibrary& ao_assets, const std::string& characte
     talk.load(talk_asset, true);
     preanim.clear();
 
-    switch (emote_mod) {
-    case EmoteMod::PREANIM:
-    case EmoteMod::PREANIM_ZOOM:
-        if (preanim_asset && preanim_asset->frame_count() > 0) {
-            preanim.load(preanim_asset, false);
-            current_state = State::PREANIM;
-        }
-        else {
-            current_state = State::TALKING;
-        }
-        break;
-    case EmoteMod::ZOOM:
-    case EmoteMod::IDLE:
-    default:
+    // Play preanim if the asset exists AND emote_mod requests it.
+    // The sender decides whether to use preanim via the "Pre" checkbox
+    // (emote_mod PREANIM/PREANIM_ZOOM). The presenter handles blocking vs
+    // concurrent based on the immediate flag.
+    bool wants_preanim = (emote_mod == EmoteMod::PREANIM || emote_mod == EmoteMod::PREANIM_ZOOM);
+    if (wants_preanim && preanim_asset && preanim_asset->frame_count() > 0) {
+        preanim.load(preanim_asset, false);
+        current_state = State::PREANIM;
+    }
+    else {
         current_state = State::TALKING;
-        break;
     }
 
     Log::log_print(VERBOSE, "Emote: char=%s emote=%s pre=%s state=%d", character.c_str(), emote.c_str(),

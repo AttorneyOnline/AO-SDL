@@ -25,6 +25,10 @@ void ICChatWidget::send() {
         data.emote = emo.anim_name;
         data.pre_emote = emo.pre_anim;
         data.desk_mod = emo.desk_mod;
+        if (!emo.sfx_name.empty() && emo.sfx_name != "0") {
+            data.sfx_name = emo.sfx_name;
+            data.sfx_delay = emo.sfx_delay;
+        }
     }
 
     data.emote_mod = state_->pre_anim ? 1 : 0;

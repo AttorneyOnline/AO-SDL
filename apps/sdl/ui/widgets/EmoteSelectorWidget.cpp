@@ -47,8 +47,14 @@ void EmoteSelectorWidget::render() {
             if (is_selected)
                 ImGui::PopStyleColor();
 
-            if (clicked)
+            if (clicked) {
                 state_->selected_emote = i;
+                // Auto-set Pre checkbox based on whether the emote has a pre-animation
+                if (state_->char_sheet && i < state_->char_sheet->emote_count()) {
+                    const auto& emo = state_->char_sheet->emote(i);
+                    state_->pre_anim = !emo.pre_anim.empty() && emo.pre_anim != "-";
+                }
+            }
 
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", entry.comment.c_str());

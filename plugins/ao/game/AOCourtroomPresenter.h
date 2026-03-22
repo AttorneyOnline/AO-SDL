@@ -49,6 +49,13 @@ class AOCourtroomPresenter : public IScenePresenter {
     int prev_chars_visible_ = 0;
     std::atomic<bool> courtroom_active_{false};
 
+    // Blocking preanim: text is deferred until preanim finishes
+    bool preanim_blocking_ = false;
+    std::string pending_showname_;
+    std::string pending_message_;
+    int pending_text_color_ = 0;
+    bool pending_additive_ = false;
+
     int evict_timer_ms = 0;
     int theme_retry_ms_ = 0;
 

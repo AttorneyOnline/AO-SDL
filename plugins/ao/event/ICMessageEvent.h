@@ -51,7 +51,7 @@ class ICMessageEvent : public Event {
                    std::string showname, std::string side, EmoteMod emote_mod, DeskMod desk_mod, bool flip, int char_id,
                    int text_color, int objection_mod, bool screenshake, bool realization, bool additive,
                    std::string frame_screenshake, std::string sfx_name, int sfx_delay, bool sfx_looping,
-                   std::string frame_sfx);
+                   std::string frame_sfx, bool immediate = false);
 
     std::string to_string() const override;
 
@@ -115,6 +115,9 @@ class ICMessageEvent : public Event {
     const std::string& get_frame_sfx() const {
         return frame_sfx;
     }
+    bool get_immediate() const {
+        return immediate;
+    }
 
   private:
     std::string character;
@@ -137,4 +140,5 @@ class ICMessageEvent : public Event {
     int sfx_delay;
     bool sfx_looping;
     std::string frame_sfx;
+    bool immediate;
 };

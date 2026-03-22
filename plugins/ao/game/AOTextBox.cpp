@@ -159,6 +159,11 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
     state = blank ? TextState::INACTIVE : (total_chars > 0 ? TextState::TICKING : TextState::DONE);
     last_chars_visible_ = -1; // force mesh rebuild on next tick
 
+    // Clear GPU mesh when going inactive so stale text doesn't flash
+    if (state == TextState::INACTIVE && msg_mesh_) {
+        msg_mesh_->update({}, {});
+    }
+
     // Pre-compute layout once — it doesn't change as characters appear
     cached_display_text_ = previous_message + current_message;
     cached_prev_chars_ = UTF8::length(previous_message);

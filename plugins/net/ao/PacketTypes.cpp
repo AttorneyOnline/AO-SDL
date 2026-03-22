@@ -287,6 +287,11 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         // Showname (optional field 15)
         showname = fields.size() > 15 ? ao_decode(fields[15]) : character;
 
+        // 2.6 extensions (server→client echo format)
+        // 22: immediate (no-int-pre)
+        if (fields.size() > 22)
+            immediate = fields[22] == "1";
+
         // 2.8 extensions (server→client echo format)
         // 23: looping_sfx, 24: screenshake, 25: frame_screenshake,
         // 26: frame_realization, 27: frame_sfx, 28: additive, 29: effects

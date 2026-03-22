@@ -78,6 +78,13 @@ void CourtroomController::apply_character_data() {
         ic_state_.emote_icons.push_back(std::move(icon));
     }
 
+    // Auto-set Pre checkbox for the default emote
+    ic_state_.selected_emote = 0;
+    if (sheet && emote_count > 0) {
+        const auto& emo = sheet->emote(0);
+        ic_state_.pre_anim = !emo.pre_anim.empty() && emo.pre_anim != "-";
+    }
+
     last_load_gen_ = screen_.load_generation();
 }
 
