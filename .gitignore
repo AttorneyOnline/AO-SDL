@@ -404,5 +404,9 @@ CMakeFiles/
 # Generated documentation
 docs/
 
-# Claude Code context
+# IDE / OS / tool files
+.DS_Store
+.vscode/
+.claude/
+imgui.ini
 CLAUDE.md
