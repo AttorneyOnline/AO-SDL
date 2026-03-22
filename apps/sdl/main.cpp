@@ -44,7 +44,6 @@ int main(int argc, char* argv[]) {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     LogBuffer::instance(); // Install log sink before anything logs
-    MediaManager::instance().init(std::filesystem::path(std::getenv("HOME")) / "Documents" / "AO2" / "base");
 
     // HTTP thread pool — used for all HTTP downloads
     HttpPool http_pool(50);

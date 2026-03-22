@@ -5,8 +5,16 @@
 #include <httplib.h>
 #include <json.hpp>
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
+
+/// Lowercase a path — AO2 asset servers store files lowercase.
+static std::string lowercase_path(const std::string& path) {
+    std::string out = path;
+    std::transform(out.begin(), out.end(), out.begin(), ::tolower);
+    return out;
+}
 
 /// Percent-encode a URL path component (spaces, parens, unicode, etc.).
 static std::string url_encode_path(const std::string& path) {
@@ -124,18 +132,19 @@ bool MountHttp::has_extensions() const {
 
 bool MountHttp::seek_file(const std::string& path) const {
     std::lock_guard lock(mutex_);
-    return cache_.find(path) != cache_.end();
+    return cache_.find(lowercase_path(path)) != cache_.end();
 }
 
 std::vector<uint8_t> MountHttp::fetch_data(const std::string& path) {
     std::lock_guard lock(mutex_);
-    auto it = cache_.find(path);
+    auto it = cache_.find(lowercase_path(path));
     if (it != cache_.end())
         return it->second;
     return {};
 }
 
-std::vector<uint8_t> MountHttp::fetch_sync(const std::string& path) {
+std::vector<uint8_t> MountHttp::fetch_sync(const std::string& raw_path) {
+    std::string path = lowercase_path(raw_path);
     // Check cache first
     {
         std::lock_guard lock(mutex_);
@@ -169,7 +178,8 @@ std::vector<uint8_t> MountHttp::fetch_sync(const std::string& path) {
     return {};
 }
 
-void MountHttp::request(const std::string& path, HttpPriority priority) {
+void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
+    std::string path = lowercase_path(raw_path);
     {
         std::lock_guard lock(mutex_);
         // Already have it, downloading it, or know it doesn't exist
@@ -220,12 +230,12 @@ int MountHttp::failed_count() const {
 
 bool MountHttp::has_failed(const std::string& path) const {
     std::lock_guard lock(mutex_);
-    return failed_.count(path) > 0;
+    return failed_.count(lowercase_path(path)) > 0;
 }
 
 void MountHttp::release(const std::string& path) {
     std::lock_guard lock(mutex_);
-    cache_.erase(path);
+    cache_.erase(lowercase_path(path));
 }
 
 void MountHttp::release_all() {

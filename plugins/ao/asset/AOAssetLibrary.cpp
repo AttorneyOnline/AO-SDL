@@ -92,6 +92,10 @@ void AOAssetLibrary::ensure_configs() {
     configs_loaded = cached_design.has_value() && cached_fonts.has_value();
 }
 
+/// Emote names may start with '/' (e.g. "/emotes/Standard Usual/normal1").
+/// This is part of the path — don't strip it. The HTTP mount handles
+/// double slashes and lowercasing internally.
+
 // ---- Character sprites -----------------------------------------------------
 
 std::shared_ptr<ImageAsset> AOAssetLibrary::character_emote(const std::string& character, const std::string& emote,

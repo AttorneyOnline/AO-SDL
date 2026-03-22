@@ -65,10 +65,7 @@ bool AOEmotePlayer::retry_load(AOAssetLibrary& ao_assets) {
     // extensions so formats the server didn't list can still be found.
     if (retry_count_++ > 5 && !fallback_prefetched_) {
         fallback_prefetched_ = true;
-        std::string base = "characters/" + character_ + "/";
-        ao_assets.engine_assets().prefetch_image(base + "(a)" + emote_);
-        ao_assets.engine_assets().prefetch_image(base + "(b)" + emote_);
-        ao_assets.engine_assets().prefetch_image(base + emote_);
+        ao_assets.prefetch_character(character_, emote_, pre_emote_);
     }
 
     auto idle_asset = ao_assets.character_emote(character_, emote_, "(a)");
