@@ -13,6 +13,7 @@ set(TEST_SOURCES
     ao/net/test_AOPacket.cpp
     ao/net/test_PacketTypes.cpp
     ao/net/test_NewPackets.cpp
+    ao/net/test_AOClient.cpp
     ao/event/test_ICMessageEvent.cpp
     ao/game/test_AOEmotePlayer.cpp
     ao/asset/test_AOAssetLibrary.cpp
@@ -21,10 +22,13 @@ set(TEST_SOURCES
     ao/game/test_AOBackground.cpp
     ao/game/test_ICMessageQueue.cpp
     ao/game/test_SceneEffects.cpp
+    asset/test_AssetLibrary.cpp
     asset/test_AssetCache.cpp
     asset/test_ApngDecoder.cpp
+    asset/test_ImageDecoders.cpp
     asset/test_MountDirectory.cpp
     asset/test_MountHttp.cpp
+    asset/test_MountManager.cpp
     event/test_EventChannel.cpp
     event/test_EventManager.cpp
     event/test_BackgroundEvent.cpp
@@ -41,7 +45,12 @@ set(TEST_SOURCES
     utils/test_BlendOps.cpp
     utils/test_JsonValidation.cpp
     utils/test_UTF8.cpp
+    utils/test_Log.cpp
+    net/test_NetworkThread.cpp
     ui/test_UIManager.cpp
+    audio/test_AudioStream.cpp
+    ao/ui/test_Screens.cpp
+    render/test_TextMeshBuilder.cpp
 )
 
 add_executable(aosdl_tests ${TEST_SOURCES})
@@ -52,7 +61,11 @@ target_include_directories(aosdl_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine      # Access to engine internals (WebSocket.h, etc.)
 )
 
-target_link_libraries(aosdl_tests PRIVATE ao_protocol GTest::gtest_main)
+target_compile_definitions(aosdl_tests PRIVATE
+    AO_TEST_FONT_PATH="${CMAKE_SOURCE_DIR}/third-party/imgui/misc/fonts/ProggyClean.ttf"
+)
+
+target_link_libraries(aosdl_tests PRIVATE ao_protocol aorender_gl GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(aosdl_tests)
