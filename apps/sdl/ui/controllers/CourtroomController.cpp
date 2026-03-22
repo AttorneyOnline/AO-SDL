@@ -132,9 +132,18 @@ void CourtroomController::update_debug_stats() {
                 entry.height = img->height();
                 entry.frame_count = img->frame_count();
                 entry.image = img;
-                entry.texture_id = render_->get_renderer().get_texture_id(img);
+                // Don't upload textures here — done lazily for the selected entry only
             }
             s.cache_entries.push_back(std::move(entry));
+        }
+    }
+
+    // Lazily upload GPU texture only for the selected cache entry (avoids
+    // uploading hundreds of textures at once which freezes Windows for seconds)
+    auto selected_path = debug_.selected_cache_path();
+    for (auto& e : s.cache_entries) {
+        if (e.texture_id == 0 && e.image && e.path == selected_path) {
+            e.texture_id = render_->get_renderer().get_texture_id(e.image);
         }
     }
 

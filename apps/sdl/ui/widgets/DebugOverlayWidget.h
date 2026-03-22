@@ -93,6 +93,9 @@ class DebugOverlayWidget : public IWidget {
     DebugStats& stats() {
         return stats_;
     }
+    const std::string& selected_cache_path() const {
+        return selected_cache_path_;
+    }
 
   private:
     void draw_pie(const std::vector<std::pair<const char*, float>>& slices);
