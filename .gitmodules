@@ -22,3 +22,12 @@
 [submodule "third-party/libwebp"]
 	path = third-party/libwebp
 	url = https://chromium.googlesource.com/webm/libwebp
+[submodule "third-party/opus"]
+	path = third-party/opus
+	url = https://github.com/xiph/opus.git
+[submodule "third-party/opusfile"]
+	path = third-party/opusfile
+	url = https://github.com/xiph/opusfile.git
+[submodule "third-party/ogg"]
+	path = third-party/ogg
+	url = https://github.com/xiph/ogg.git

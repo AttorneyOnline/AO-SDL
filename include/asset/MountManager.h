@@ -12,6 +12,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -81,6 +82,11 @@ class MountManager {
      * @param relative_path The virtual path to prefetch.
      */
     void prefetch(const std::string& relative_path, int priority = 1);
+
+    /// Stream a file from the first HTTP mount that has it.
+    /// Calls on_chunk with each received chunk. Returns true on success.
+    /// Blocks until download completes. For use from background threads.
+    bool fetch_streaming(const std::string& relative_path, std::function<bool(const uint8_t*, size_t)> on_chunk);
 
     /// Release raw bytes from HTTP mount caches after the data has been
     /// decoded and stored in AssetCache. Frees the duplicate memory.

@@ -4,6 +4,7 @@
 #include "game/ICharacterSheet.h"
 #include "ui/Screen.h"
 
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,6 +30,11 @@ class CourtroomScreen : public Screen {
         return char_id_;
     }
 
+    /// True while character data is still being loaded asynchronously.
+    bool is_loading() const {
+        return loading_;
+    }
+
     /// Character sheet loaded from the protocol plugin. May be null.
     const std::shared_ptr<ICharacterSheet>& get_character_sheet() const {
         return char_sheet_;
@@ -39,9 +45,20 @@ class CourtroomScreen : public Screen {
         return emote_icons_;
     }
 
+    /// Incremented each time loaded data changes. Controller watches this
+    /// to know when to reinitialize emote icons, etc.
+    int load_generation() const {
+        return load_generation_;
+    }
+
   private:
+    void load_character_data();
+
     std::string character_name_;
     int char_id_;
+    bool loading_ = true;
+    int load_generation_ = 0;
     std::shared_ptr<ICharacterSheet> char_sheet_;
     std::vector<std::shared_ptr<ImageAsset>> emote_icons_;
+    std::future<void> load_future_;
 };

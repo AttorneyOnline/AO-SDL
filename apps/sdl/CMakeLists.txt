@@ -22,6 +22,7 @@ set(SDL_APP_SOURCES
     ui/controllers/ServerListController.cpp
     ui/controllers/CharSelectController.cpp
     ui/controllers/CourtroomController.cpp
+    audio/SDLAudioDevice.cpp
 )
 
 if(APPLE)

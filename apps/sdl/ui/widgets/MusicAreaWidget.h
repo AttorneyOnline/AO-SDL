@@ -23,6 +23,10 @@ class MusicAreaWidget : public IWidget {
   private:
     ICMessageState* state_;
 
+    int music_vol_ = 50;
+    int sfx_vol_ = 50;
+    int blip_vol_ = 50;
+
     std::vector<std::string> areas_;
     std::vector<std::string> tracks_;
     std::vector<std::string> tracks_lower_; // pre-lowercased for filtering

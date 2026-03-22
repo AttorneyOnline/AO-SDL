@@ -3,6 +3,7 @@
 #include "asset/Mount.h"
 #include "net/HttpPool.h"
 
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -34,6 +35,11 @@ class MountHttp : public Mount {
     /// Use for small critical files like char.ini that must be available
     /// before proceeding. Returns empty vector on failure.
     std::vector<uint8_t> fetch_sync(const std::string& path);
+
+    /// Streaming download. Calls on_chunk with each received chunk.
+    /// Returns true if the download succeeded (200), false on error/404.
+    /// Blocks until the full download completes or fails.
+    bool fetch_streaming(const std::string& path, std::function<bool(const uint8_t*, size_t)> on_chunk);
 
     /// Number of downloads currently in-flight.
     int pending_count() const;

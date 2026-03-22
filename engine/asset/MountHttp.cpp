@@ -165,11 +165,12 @@ std::vector<uint8_t> MountHttp::fetch_sync(const std::string& raw_path) {
             return {};
     }
 
-    // Blocking HTTP GET
+    // Blocking HTTP GET — short timeouts to avoid stalling the game
     std::string http_path = url_encode_path(path_prefix_ + "/" + path);
     httplib::Client cli(host_);
-    cli.set_connection_timeout(5);
-    cli.set_read_timeout(10);
+    cli.set_connection_timeout(2);
+    cli.set_read_timeout(3);
+    cli.set_follow_location(false); // Don't follow redirects (301s waste time)
     auto res = cli.Get(http_path);
 
     if (res && res->status == 200 && !res->body.empty()) {
@@ -186,6 +187,41 @@ std::vector<uint8_t> MountHttp::fetch_sync(const std::string& raw_path) {
     failed_.insert(path);
     pending_.erase(path);
     return {};
+}
+
+bool MountHttp::fetch_streaming(const std::string& raw_path, std::function<bool(const uint8_t*, size_t)> on_chunk) {
+    std::string path = lowercase_path(raw_path);
+    {
+        std::lock_guard lock(mutex_);
+        if (failed_.count(path))
+            return false;
+        // If already cached, deliver it all at once
+        auto it = cache_.find(path);
+        if (it != cache_.end()) {
+            on_chunk(it->second.data(), it->second.size());
+            return true;
+        }
+    }
+
+    std::string http_path = url_encode_path(path_prefix_ + "/" + path);
+    httplib::Client cli(host_);
+    cli.set_connection_timeout(5);
+    cli.set_read_timeout(30);
+
+    bool success = false;
+    auto res = cli.Get(http_path, [&](const char* data, size_t len) -> bool {
+        success = true;
+        return on_chunk(reinterpret_cast<const uint8_t*>(data), len);
+    });
+
+    if (!res || res->status != 200) {
+        std::lock_guard lock(mutex_);
+        failed_.insert(path);
+        return false;
+    }
+
+    Log::log_print(VERBOSE, "MountHttp: streamed %s", path.c_str());
+    return success;
 }
 
 void MountHttp::request(const std::string& raw_path, HttpPriority priority) {

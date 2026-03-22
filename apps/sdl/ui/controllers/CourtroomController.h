@@ -26,13 +26,17 @@ class RenderManager;
 class CourtroomController : public IScreenController {
   public:
     CourtroomController(CourtroomScreen& screen, RenderManager& render);
+    ~CourtroomController() override;
     void render() override;
     IUIRenderer::NavAction nav_action() override;
 
   private:
     void update_debug_stats();
     void retry_emote_icons();
+    void apply_character_data();
 
+    CourtroomScreen& screen_;
+    int last_load_gen_ = -1;
     ChatWidget chat_;
     ICMessageState ic_state_;
     IUIRenderer::NavAction nav_action_ = IUIRenderer::NavAction::NONE;

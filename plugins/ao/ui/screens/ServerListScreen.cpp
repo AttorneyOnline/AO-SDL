@@ -38,3 +38,8 @@ void ServerListScreen::select_server(int index) {
     pending_connect = true;
     EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(s.hostname, *port));
 }
+
+void ServerListScreen::direct_connect(const std::string& host, uint16_t port) {
+    pending_connect = true;
+    EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(host, port));
+}

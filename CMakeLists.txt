@@ -35,6 +35,34 @@ set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
 add_subdirectory(third-party/freetype)
 
+# Ogg container library
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(INSTALL_DOCS OFF CACHE BOOL "" FORCE)
+set(INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(INSTALL_CMAKE_PACKAGE_MODULE OFF CACHE BOOL "" FORCE)
+add_subdirectory(third-party/ogg)
+
+# Opus codec library
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+add_subdirectory(third-party/opus)
+
+# Opusfile — built manually since its CMakeLists uses find_package()
+# which doesn't work with our source-built ogg/opus.
+add_library(opusfile STATIC
+    third-party/opusfile/src/info.c
+    third-party/opusfile/src/internal.c
+    third-party/opusfile/src/opusfile.c
+    third-party/opusfile/src/stream.c
+)
+target_include_directories(opusfile
+    PUBLIC third-party/opusfile/include
+)
+target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
+target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
+
 # ImGui (static lib — backend-specific sources selected below)
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
 set(IMGUI_SOURCES
@@ -180,6 +208,12 @@ add_library(aoengine STATIC
     engine/asset/formats/WebPDecoder.cpp
     engine/asset/formats/GifDecoder.cpp
     engine/asset/formats/StbiDecoder.cpp
+    engine/asset/miniaudio_impl.cpp
+    engine/asset/AudioDecoders.cpp
+    engine/asset/formats/MiniaudioDecoder.cpp
+    engine/asset/formats/OpusDecoder.cpp
+    engine/audio/AudioThread.cpp
+    engine/audio/AudioStream.cpp
 )
 
 # Platform-specific implementations (selected at build time)
@@ -216,9 +250,9 @@ target_include_directories(aoengine
 find_package(OpenSSL)
 if(OPENSSL_FOUND)
     target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv OpenSSL::SSL OpenSSL::Crypto)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv opusfile OpenSSL::SSL OpenSSL::Crypto)
 else()
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp sharpyuv opusfile)
 endif()
 target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 

@@ -12,6 +12,7 @@
 #include "AssetCache.h"
 #include "ImageAsset.h"
 #include "ShaderAsset.h"
+#include "SoundAsset.h"
 
 #include <memory>
 #include <optional>
@@ -63,7 +64,18 @@ class AssetLibrary {
      * @param path Virtual path without extension.
      * @return Shared pointer to the audio Asset, or nullptr if not found.
      */
-    std::shared_ptr<Asset> audio(const std::string& path);
+    std::shared_ptr<SoundAsset> audio(const std::string& path);
+
+    /**
+     * @brief Load an audio asset at an exact path (including extension).
+     *
+     * Unlike audio(), this does not probe extensions. Use when the full
+     * filename is known (e.g. from a server packet that includes the extension).
+     *
+     * @param path Virtual path including extension (e.g. "music/track.opus").
+     * @return Shared pointer to the decoded SoundAsset, or nullptr.
+     */
+    std::shared_ptr<SoundAsset> audio_exact(const std::string& path);
 
     /**
      * @brief Load and parse an INI config file at the given virtual path.
@@ -130,6 +142,9 @@ class AssetLibrary {
 
     /// Convenience: prefetch an image path with default image extensions.
     void prefetch_image(const std::string& path);
+
+    /// Convenience: prefetch an audio path with default audio extensions.
+    void prefetch_audio(const std::string& path);
 
     /// Prefetch an image using server-advertised extensions for the given type.
     /// asset_type maps to MountHttp::AssetType (0=charicon, 1=emote, 2=emotions, 3=background).

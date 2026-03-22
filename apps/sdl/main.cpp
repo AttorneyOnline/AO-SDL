@@ -1,6 +1,7 @@
 // Engine
 #include "asset/AssetLibrary.h"
 #include "asset/MediaManager.h"
+#include "audio/AudioThread.h"
 #include "event/EventManager.h"
 #include "event/ServerListEvent.h"
 #include "game/GameThread.h"
@@ -18,6 +19,7 @@
 
 // App — create_gpu_backend() is defined in whichever backend source is linked.
 #include "SDLGameWindow.h"
+#include "audio/SDLAudioDevice.h"
 #include "render/IGPUBackend.h"
 #include "ui/DebugContext.h"
 #include "ui/ImGuiUIRenderer.h"
@@ -57,6 +59,16 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    // Mount local base/ directory relative to the binary
+    {
+        auto exe_dir = std::filesystem::path(argv[0]).parent_path();
+        auto base_dir = exe_dir / "base";
+        if (std::filesystem::is_directory(base_dir)) {
+            MediaManager::instance().init(base_dir);
+            Log::log_print(INFO, "Mounted local content: %s", base_dir.c_str());
+        }
+    }
+
     UIManager ui_mgr;
     ui_mgr.push_screen(std::make_unique<ServerListScreen>());
     SDLGameWindow game_window(ui_mgr, create_gpu_backend());
@@ -77,12 +89,18 @@ int main(int argc, char* argv[]) {
     RenderManager renderer(buffer, create_renderer(render_w, render_h));
     MediaManager::instance().assets().set_shader_backend(renderer.get_renderer().backend_name());
 
+    // Audio device — SDL-based, opened before game logic starts
+    SDLAudioDevice audio_device;
+    audio_device.open();
+    AudioThread audio_thread(audio_device, MediaManager::instance().mounts_ref());
+
     // Scene presenter — swap this to change game logic
     auto presenter = ao::create_presenter();
     GameThread game_logic(buffer, *presenter);
 
     debug_ctx.game_thread = &game_logic;
     debug_ctx.presenter = presenter.get();
+    debug_ctx.audio_device = &audio_device;
 
     // Poll HTTP responses and handle asset URL events on the main thread
     game_window.set_frame_callback([&http_pool]() {
@@ -116,6 +134,9 @@ int main(int argc, char* argv[]) {
     Log::log_print(DEBUG, "main: network thread stopped");
     game_logic.stop();
     Log::log_print(DEBUG, "main: game thread stopped");
+    audio_thread.stop();
+    audio_device.close();
+    Log::log_print(DEBUG, "main: audio thread stopped");
 
     MediaManager::instance().shutdown();
     Log::log_print(INFO, "main: shutdown complete");

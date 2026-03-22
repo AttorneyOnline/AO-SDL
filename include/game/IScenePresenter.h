@@ -33,6 +33,11 @@ class IScenePresenter {
      */
     virtual RenderState tick(uint64_t delta_ms) = 0;
 
+    /// Signal whether the courtroom view is actively displayed.
+    /// Implementations may suppress audio until this is true.
+    virtual void set_courtroom_active(bool) {
+    }
+
     struct ProfileEntry {
         const char* name;
         const std::atomic<int>* us;

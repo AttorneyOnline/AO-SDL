@@ -75,6 +75,9 @@ class ServerListScreen : public Screen {
      */
     void select_server(int index);
 
+    /// Direct connect to a host:port without going through the server list.
+    void direct_connect(const std::string& host, uint16_t port);
+
   private:
     ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
     std::vector<ServerEntry> servers;       ///< Cached list of available servers.

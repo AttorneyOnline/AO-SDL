@@ -259,6 +259,10 @@ class AOPacketMS : public AOPacket {
     bool realization = false;
     bool additive = false;
     std::string frame_screenshake;
+    std::string sfx_name;
+    int sfx_delay = 0;
+    bool sfx_looping = false;
+    std::string frame_sfx;
 
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 15;
@@ -293,6 +297,9 @@ class AOPacketMC : public AOPacket {
     std::string name;
     int char_id = -1;
     std::string showname;
+    int looping = -1;     // -1=unknown, 0=no, 1=yes
+    int channel = 0;      // 0=music, 1+=ambience
+    int effect_flags = 0; // bitmask: bit0=fade_in, bit1=fade_out, bit2=sync
 
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 2;

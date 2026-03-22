@@ -7,6 +7,11 @@
 #include "asset/ShaderAsset.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
+#include "event/MusicChangeEvent.h"
+#include "event/NowPlayingEvent.h"
+#include "event/PlayMusicRequestEvent.h"
+#include "event/PlaySFXEvent.h"
+#include "event/StopAudioEvent.h"
 #include "render/Layer.h"
 #include "render/RenderState.h"
 #include "utils/Log.h"
@@ -114,6 +119,18 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     if (msg.message.find("cube") != std::string::npos)
         cube_.trigger();
 
+    // Load SFX (warms cache even if courtroom isn't active yet)
+    if (!msg.sfx_name.empty() && msg.sfx_name != "0" && msg.sfx_name != "1") {
+        auto sfx_asset = ao_assets->sound_effect(msg.sfx_name);
+        if (sfx_asset && courtroom_active_.load(std::memory_order_acquire)) {
+            EventManager::instance().get_channel<PlaySFXEvent>().publish(
+                PlaySFXEvent(sfx_asset, msg.sfx_looping, 1.0f));
+        }
+    }
+
+    // Pre-load the blip sound for this character (warms cache)
+    current_blip_ = ao_assets->character_blip(msg.character);
+
     EventManager::instance().get_channel<ICLogEvent>().publish(ICLogEvent(showname, msg.message, msg.text_color));
 }
 
@@ -144,6 +161,42 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     while (auto ev = ic_ch.get_event()) {
         message_queue_.enqueue(ICMessage::from_event(*ev));
     }
+
+    // ---- Music ----
+    bool active = courtroom_active_.load(std::memory_order_acquire);
+    auto& music_ch = EventManager::instance().get_channel<MusicChangeEvent>();
+    while (auto ev = music_ch.get_event()) {
+        const auto& track = ev->track();
+        EventManager::instance().get_channel<NowPlayingEvent>().publish(NowPlayingEvent(track));
+
+        // Always store the latest music state
+        pending_music_track_ = track;
+        pending_music_channel_ = ev->channel();
+        pending_music_loop_ = (ev->looping() != 0);
+
+        if (!active)
+            continue; // Buffer the request but don't play until courtroom is visible
+
+        if (track.empty() || track == "~stop.mp3") {
+            EventManager::instance().get_channel<StopAudioEvent>().publish(
+                StopAudioEvent(ev->channel(), StopAudioEvent::Type::MUSIC));
+            continue;
+        }
+
+        EventManager::instance().get_channel<PlayMusicRequestEvent>().publish(
+            PlayMusicRequestEvent(track, ev->channel(), pending_music_loop_, 1.0f));
+    }
+
+    // When courtroom first becomes active, start the pending music from the beginning
+    if (active && !was_courtroom_active_) {
+        was_courtroom_active_ = true;
+        if (!pending_music_track_.empty() && pending_music_track_ != "~stop.mp3") {
+            EventManager::instance().get_channel<PlayMusicRequestEvent>().publish(
+                PlayMusicRequestEvent(pending_music_track_, pending_music_channel_, pending_music_loop_, 1.0f));
+        }
+    }
+    if (!active)
+        was_courtroom_active_ = false;
 
     // Advance queue — dequeue next message when current one finishes
     bool text_done =

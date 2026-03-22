@@ -9,6 +9,7 @@
 #include "ao/game/effects/ScreenshakeEffect.h"
 #include "ao/game/effects/ShaderEffect.h"
 #include "asset/ImageAsset.h"
+#include "asset/SoundAsset.h"
 #include "game/IScenePresenter.h"
 
 #include <atomic>
@@ -33,6 +34,10 @@ class AOCourtroomPresenter : public IScenePresenter {
     void init() override;
     RenderState tick(uint64_t t) override;
 
+    void set_courtroom_active(bool active) override {
+        courtroom_active_.store(active, std::memory_order_release);
+    }
+
     std::vector<ProfileEntry> tick_profile() const override {
         return {
             {"Events", &profile_.events_us},   {"Assets", &profile_.assets_us},   {"Animation", &profile_.animation_us},
@@ -51,6 +56,12 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     bool show_desk = true;
     bool current_flip = false;
+    std::shared_ptr<SoundAsset> current_blip_;
+    std::atomic<bool> courtroom_active_{false};
+    bool was_courtroom_active_ = false;
+    std::string pending_music_track_;
+    int pending_music_channel_ = 0;
+    bool pending_music_loop_ = true;
 
     int evict_timer_ms = 0;
     int theme_retry_ms_ = 0;

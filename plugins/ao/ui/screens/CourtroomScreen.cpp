@@ -3,13 +3,19 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
+#include "utils/Log.h"
 
 CourtroomScreen::CourtroomScreen(std::string character_name, int char_id)
     : character_name_(std::move(character_name)), char_id_(char_id) {
-    // Load character data here in the plugin layer so the app/UI layer
-    // doesn't need to know about AOAssetLibrary.
     // Drop low-priority char icon downloads — we're entering the courtroom now
     MediaManager::instance().mounts_ref().drop_http_below(1);
+
+    // Kick off async loading so the UI thread isn't blocked
+    load_future_ = std::async(std::launch::async, &CourtroomScreen::load_character_data, this);
+}
+
+void CourtroomScreen::load_character_data() {
+    Log::log_print(DEBUG, "CourtroomScreen: loading character data for '%s'", character_name_.c_str());
 
     AOAssetLibrary ao_assets(MediaManager::instance().assets());
     auto sheet = ao_assets.character_sheet(character_name_);
@@ -23,12 +29,19 @@ CourtroomScreen::CourtroomScreen(std::string character_name, int char_id)
     for (int i = 0; i < count; i++) {
         emote_icons_.push_back(ao_assets.emote_icon(character_name_, i));
     }
+
+    Log::log_print(DEBUG, "CourtroomScreen: character data loaded (%d emotes)", count);
+    load_generation_++;
+    loading_ = false;
 }
 
 void CourtroomScreen::enter(ScreenController&) {
 }
 
 void CourtroomScreen::exit() {
+    // Ensure the async load has completed before destruction
+    if (load_future_.valid())
+        load_future_.wait();
 }
 
 void CourtroomScreen::handle_events() {

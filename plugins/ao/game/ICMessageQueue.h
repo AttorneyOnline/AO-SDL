@@ -24,12 +24,17 @@ struct ICMessage {
     bool realization;
     bool additive;
     int objection_mod;
+    std::string sfx_name;
+    int sfx_delay = 0;
+    bool sfx_looping = false;
+    std::string frame_sfx;
 
     static ICMessage from_event(const ICMessageEvent& ev) {
-        return {ev.get_character(),   ev.get_emote(),    ev.get_pre_emote(),    ev.get_message(),
-                ev.get_showname(),    ev.get_side(),     ev.get_emote_mod(),    ev.get_desk_mod(),
-                ev.get_flip(),        ev.get_char_id(),  ev.get_text_color(),   ev.get_screenshake(),
-                ev.get_realization(), ev.get_additive(), ev.get_objection_mod()};
+        return {ev.get_character(),   ev.get_emote(),       ev.get_pre_emote(),     ev.get_message(),
+                ev.get_showname(),    ev.get_side(),        ev.get_emote_mod(),     ev.get_desk_mod(),
+                ev.get_flip(),        ev.get_char_id(),     ev.get_text_color(),    ev.get_screenshake(),
+                ev.get_realization(), ev.get_additive(),    ev.get_objection_mod(), ev.get_sfx_name(),
+                ev.get_sfx_delay(),   ev.get_sfx_looping(), ev.get_frame_sfx()};
     }
 
     bool is_objection() const {

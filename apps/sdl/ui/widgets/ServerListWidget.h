@@ -16,4 +16,5 @@ class ServerListWidget : public IWidget {
   private:
     ServerListScreen& screen_;
     RenderManager& render_;
+    char direct_connect_buf_[256] = "";
 };

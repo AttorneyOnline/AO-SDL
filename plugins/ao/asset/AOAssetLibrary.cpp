@@ -349,6 +349,37 @@ std::optional<std::vector<uint8_t>> AOAssetLibrary::find_font(const std::string&
     return std::nullopt;
 }
 
+// ---- Audio ------------------------------------------------------------------
+
+std::shared_ptr<SoundAsset> AOAssetLibrary::sound_effect(const std::string& sfx_name) {
+    if (sfx_name.empty())
+        return nullptr;
+
+    // Try sounds/general/ first (standard AO2 path)
+    auto result = assets.audio("sounds/general/" + sfx_name);
+    if (!result)
+        result = assets.audio("sounds/" + sfx_name);
+    return result;
+}
+
+std::shared_ptr<SoundAsset> AOAssetLibrary::blip_sound(const std::string& blip_name) {
+    if (blip_name.empty())
+        return nullptr;
+
+    auto result = assets.audio("sounds/blips/" + blip_name);
+    if (!result)
+        result = assets.audio("blips/" + blip_name);
+    return result;
+}
+
+std::shared_ptr<SoundAsset> AOAssetLibrary::character_blip(const std::string& character) {
+    auto sheet = character_sheet(character);
+    std::string blip_name = sheet ? sheet->blips() : "male";
+    return blip_sound(blip_name);
+}
+
+// ---- Prefetch ---------------------------------------------------------------
+
 void AOAssetLibrary::prefetch_character(const std::string& character, const std::string& emote,
                                         const std::string& pre_emote, int priority) {
     std::string base = "characters/" + character + "/";

@@ -9,7 +9,7 @@
 SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend> backend)
     : window(nullptr), ui_manager(ui_manager), gpu(std::move(backend)), running(true) {
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         Log::log_print(LogLevel::FATAL, "Failed to initialize SDL2: %s", SDL_GetError());
     }
 

@@ -66,6 +66,22 @@ struct DebugStats {
         uint64_t count;
     };
     std::vector<EventStat> event_stats;
+
+    // Audio stats
+    struct AudioChannelInfo {
+        int id;
+        bool active;
+        bool is_stream;
+        bool stream_ready;
+        bool stream_finished;
+        bool looping;
+        int64_t loop_start;
+        int64_t loop_end;
+        float volume;
+        size_t ring_available;
+    };
+    std::vector<AudioChannelInfo> audio_channels;
+    std::string now_playing;
 };
 
 class DebugOverlayWidget : public IWidget {

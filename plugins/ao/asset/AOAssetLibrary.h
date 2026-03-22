@@ -3,6 +3,7 @@
 #include "ao/asset/AOCharacterSheet.h"
 #include "asset/AssetLibrary.h"
 #include "asset/ImageAsset.h"
+#include "asset/SoundAsset.h"
 
 #include <cstdint>
 #include <memory>
@@ -103,6 +104,21 @@ class AOAssetLibrary {
 
     /// Find a font file by normalized name. Searches all theme dirs + fonts/.
     std::optional<std::vector<uint8_t>> find_font(const std::string& normalized_name);
+
+    // -------------------------------------------------------------------------
+    // Audio
+    // -------------------------------------------------------------------------
+
+    /// Load a sound effect by name (from [SoundN] in char.ini).
+    /// Probes: sounds/general/{name}, sounds/{name}.
+    std::shared_ptr<SoundAsset> sound_effect(const std::string& sfx_name);
+
+    /// Load a blip sound by name (from [Options] blips= in char.ini).
+    /// Probes: sounds/blips/{name}.
+    std::shared_ptr<SoundAsset> blip_sound(const std::string& blip_name);
+
+    /// Load the blip for a character (reads char.ini blips field → calls blip_sound).
+    std::shared_ptr<SoundAsset> character_blip(const std::string& character);
 
     AssetLibrary& engine_assets() {
         return assets;

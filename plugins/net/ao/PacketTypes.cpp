@@ -274,10 +274,10 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         emote = ao_decode(fields[3]);
         message = ao_decode(fields[4]);
         side = ao_decode(fields[5]);
-        // fields[6] = sfx_name (skipped for now)
+        sfx_name = ao_decode(fields[6]);
         emote_mod = std::stoi(fields[7]);
         char_id = std::stoi(fields[8]);
-        // fields[9] = sfx_delay (skipped)
+        sfx_delay = std::stoi(fields[9]);
         objection_mod = std::stoi(fields[10]);
         // fields[11] = evidence_id (skipped)
         flip = fields[12] == "1";
@@ -290,10 +290,14 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
         // 2.8 extensions (server→client echo format)
         // 23: looping_sfx, 24: screenshake, 25: frame_screenshake,
         // 26: frame_realization, 27: frame_sfx, 28: additive, 29: effects
+        if (fields.size() > 23)
+            sfx_looping = fields[23] == "1";
         if (fields.size() > 24)
             screenshake = fields[24] == "1";
         if (fields.size() > 25)
             frame_screenshake = ao_decode(fields[25]);
+        if (fields.size() > 27)
+            frame_sfx = ao_decode(fields[27]);
         if (fields.size() > 28)
             additive = fields[28] == "1";
 
@@ -327,6 +331,12 @@ AOPacketMC::AOPacketMC(const std::vector<std::string>& fields) : AOPacket("MC", 
         char_id = std::stoi(fields[1]);
         if (fields.size() > 2)
             showname = ao_decode(fields[2]);
+        if (fields.size() > 3)
+            looping = std::stoi(fields[3]);
+        if (fields.size() > 4)
+            channel = std::stoi(fields[4]);
+        if (fields.size() > 5)
+            effect_flags = std::stoi(fields[5]);
     }
 }
 

@@ -1,5 +1,6 @@
 #include "asset/AssetLibrary.h"
 
+#include "asset/AudioDecoder.h"
 #include "asset/ImageDecoder.h"
 #include "asset/MountManager.h"
 #include "asset/RawAsset.h"
@@ -55,14 +56,91 @@ decoded:
     return asset;
 }
 
-std::shared_ptr<Asset> AssetLibrary::audio(const std::string& path) {
-    // todo: decode audio into an AudioAsset once that type exists
-    auto result = probe(path, {"opus", "ogg", "mp3", "wav"});
-    if (!result)
+std::shared_ptr<SoundAsset> AssetLibrary::audio(const std::string& path) {
+    auto cached = cache_.get(path);
+    if (cached)
+        return std::static_pointer_cast<SoundAsset>(cached);
+
+    auto result = probe(path, supported_audio_extensions());
+    if (!result) {
+        Log::log_print(DEBUG, "AssetLibrary::audio: not found: %s", path.c_str());
+        return nullptr;
+    }
+
+    auto& [resolved, data] = *result;
+
+    // Try each decoder that claims the resolved extension
+    std::string format = resolved.substr(resolved.rfind('.') + 1);
+    std::unique_ptr<SoundAsset> asset;
+    for (const auto& decoder : audio_decoders()) {
+        for (const auto& ext : decoder->extensions()) {
+            if (ext == format) {
+                asset = decoder->decode(path, data.data(), data.size());
+                if (asset)
+                    goto decoded;
+            }
+        }
+    }
+
+    // Extension didn't match or matched decoder failed — try all decoders
+    for (const auto& decoder : audio_decoders()) {
+        asset = decoder->decode(path, data.data(), data.size());
+        if (asset)
+            break;
+    }
+
+decoded:
+    if (!asset)
         return nullptr;
 
-    // placeholder: return nullptr until AudioAsset is implemented
-    return nullptr;
+    Log::log_print(INFO, "AssetLibrary::audio: decoded '%s' (%.1fs, %u Hz, %u ch)", path.c_str(),
+                   asset->duration_seconds(), asset->sample_rate(), asset->channels());
+    auto shared = std::shared_ptr<SoundAsset>(std::move(asset));
+    cache_.insert(shared);
+    for (const auto& ext : supported_audio_extensions())
+        mounts.release_http(path + "." + ext);
+    return shared;
+}
+
+std::shared_ptr<SoundAsset> AssetLibrary::audio_exact(const std::string& path) {
+    // Strip extension for cache key (so audio() and audio_exact() share cache entries)
+    std::string cache_key = path;
+    auto dot = cache_key.rfind('.');
+    if (dot != std::string::npos)
+        cache_key = cache_key.substr(0, dot);
+
+    auto cached = cache_.get(cache_key);
+    if (cached)
+        return std::static_pointer_cast<SoundAsset>(cached);
+
+    auto data = mounts.fetch_data(path);
+    if (!data) {
+        Log::log_print(DEBUG, "AssetLibrary::audio_exact: not found: %s", path.c_str());
+        return nullptr;
+    }
+
+    std::string format = path.substr(path.rfind('.') + 1);
+
+    // Try each decoder
+    std::unique_ptr<SoundAsset> asset;
+    for (const auto& decoder : audio_decoders()) {
+        asset = decoder->decode(cache_key, data->data(), data->size());
+        if (asset)
+            break;
+    }
+
+    if (!asset) {
+        Log::log_print(WARNING, "AssetLibrary::audio_exact: decode failed for '%s' (%zu bytes)", path.c_str(),
+                       data->size());
+        return nullptr;
+    }
+
+    Log::log_print(INFO, "AssetLibrary::audio_exact: decoded '%s' (%.1fs, %u Hz, %u ch)", path.c_str(),
+                   asset->duration_seconds(), asset->sample_rate(), asset->channels());
+    auto shared = std::shared_ptr<SoundAsset>(std::move(asset));
+    cache_.insert(shared);
+    mounts.release_http(path);
+    return shared;
 }
 
 std::optional<IniDocument> AssetLibrary::config(const std::string& path) {
@@ -203,6 +281,12 @@ void AssetLibrary::prefetch_image(const std::string& path, int asset_type, int p
     if (exts.empty())
         exts = {"webp", "apng", "gif", "png"};
     prefetch(path, exts, priority);
+}
+
+void AssetLibrary::prefetch_audio(const std::string& path) {
+    if (cache_.get(path))
+        return;
+    prefetch(path, supported_audio_extensions());
 }
 
 void AssetLibrary::prefetch_config(const std::string& path) {

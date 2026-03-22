@@ -198,6 +198,34 @@ void DebugOverlayWidget::render() {
         ImGui::Text("Raw cache: %d files, %s", s.http_cached, format_bytes(s.http_cached_bytes, hbuf, sizeof(hbuf)));
     }
 
+    // --- Audio ---
+    if (ImGui::CollapsingHeader("Audio")) {
+        if (s.audio_channels.empty()) {
+            ImGui::TextDisabled("No active channels");
+        }
+        else {
+            static const char* ch_names[] = {"Music", "Ambience", "SFX 0",  "SFX 1",  "SFX 2",  "SFX 3",
+                                             "SFX 4", "Blip 0",   "Blip 1", "Blip 2", "Blip 3", "Blip 4"};
+            for (const auto& ch : s.audio_channels) {
+                const char* name = (ch.id < 12) ? ch_names[ch.id] : "???";
+                if (ch.is_stream) {
+                    float buf_sec = ch.ring_available / (48000.0f * 2.0f);
+                    ImGui::BulletText("ch%d [%s] STREAM %s%s %s buf=%.2fs vol=%.0f%%", ch.id, name,
+                                      ch.stream_ready ? "PLAYING" : "BUFFERING", ch.stream_finished ? " EOF" : "",
+                                      ch.looping ? "LOOP" : "ONCE", buf_sec, ch.volume * 100);
+                    if (ch.loop_start > 0 || ch.loop_end > 0) {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("pts %lld-%lld", (long long)ch.loop_start, (long long)ch.loop_end);
+                    }
+                }
+                else {
+                    ImGui::BulletText("ch%d [%s] ASSET %s vol=%.0f%%", ch.id, name, ch.looping ? "LOOP" : "ONCE",
+                                      ch.volume * 100);
+                }
+            }
+        }
+    }
+
     // --- Event Stats ---
     if (!s.event_stats.empty()) {
         if (ImGui::CollapsingHeader("Event Stats")) {

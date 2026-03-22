@@ -4,6 +4,7 @@
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
+#include "audio/SDLAudioDevice.h"
 #include "event/EventManager.h"
 #include "event/PlayerCountEvent.h"
 #include "event/ServerInfoEvent.h"
@@ -24,19 +25,46 @@ static int side_to_index(const std::string& side) {
     return 2; // default: wit
 }
 
-CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager& render) : render_(&render) {
+CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager& render)
+    : render_(&render), screen_(screen) {
     ic_state_ = {};
     ic_state_.character = screen.get_character_name();
     ic_state_.char_id = screen.get_char_id();
 
-    auto sheet = screen.get_character_sheet();
+    // Character data may not be ready yet (async loading).
+    // apply_character_data() will be called from render() once it's available.
+    if (!screen.is_loading()) {
+        apply_character_data();
+        auto& ctx = DebugContext::instance();
+        if (ctx.presenter)
+            ctx.presenter->set_courtroom_active(true);
+    }
+
+    courtroom_ = std::make_unique<CourtroomWidget>(render);
+    ic_chat_ = std::make_unique<ICChatWidget>(&ic_state_);
+    emote_selector_ = std::make_unique<EmoteSelectorWidget>(&ic_state_);
+    interjection_ = std::make_unique<InterjectionWidget>(&ic_state_);
+    side_select_ = std::make_unique<SideSelectWidget>(&ic_state_);
+    message_options_ = std::make_unique<MessageOptionsWidget>(&ic_state_);
+    music_area_ = std::make_unique<MusicAreaWidget>(&ic_state_);
+}
+
+CourtroomController::~CourtroomController() {
+    auto& ctx = DebugContext::instance();
+    if (ctx.presenter)
+        ctx.presenter->set_courtroom_active(false);
+}
+
+void CourtroomController::apply_character_data() {
+    auto sheet = screen_.get_character_sheet();
     if (sheet) {
         ic_state_.char_sheet = sheet;
         ic_state_.side_index = side_to_index(sheet->side());
         std::strncpy(ic_state_.showname, sheet->showname().c_str(), sizeof(ic_state_.showname) - 1);
     }
 
-    const auto& icons = screen.get_emote_icons();
+    ic_state_.emote_icons.clear();
+    const auto& icons = screen_.get_emote_icons();
     int emote_count = sheet ? sheet->emote_count() : 0;
     for (int i = 0; i < emote_count; i++) {
         EmoteIcon icon;
@@ -50,13 +78,7 @@ CourtroomController::CourtroomController(CourtroomScreen& screen, RenderManager&
         ic_state_.emote_icons.push_back(std::move(icon));
     }
 
-    courtroom_ = std::make_unique<CourtroomWidget>(render);
-    ic_chat_ = std::make_unique<ICChatWidget>(&ic_state_);
-    emote_selector_ = std::make_unique<EmoteSelectorWidget>(&ic_state_);
-    interjection_ = std::make_unique<InterjectionWidget>(&ic_state_);
-    side_select_ = std::make_unique<SideSelectWidget>(&ic_state_);
-    message_options_ = std::make_unique<MessageOptionsWidget>(&ic_state_);
-    music_area_ = std::make_unique<MusicAreaWidget>(&ic_state_);
+    last_load_gen_ = screen_.load_generation();
 }
 
 void CourtroomController::update_debug_stats() {
@@ -147,6 +169,15 @@ void CourtroomController::update_debug_stats() {
     s.event_stats.reserve(channel_stats.size());
     for (const auto& cs : channel_stats)
         s.event_stats.push_back({cs.raw_name, cs.count});
+
+    // Audio channel stats
+    s.audio_channels.clear();
+    if (ctx.audio_device) {
+        for (const auto& ci : ctx.audio_device->channel_snapshot()) {
+            s.audio_channels.push_back({ci.id, ci.active, ci.is_stream, ci.stream_ready, ci.stream_finished,
+                                        ci.stream_looping, ci.loop_start, ci.loop_end, ci.volume, ci.ring_available});
+        }
+    }
 }
 
 void CourtroomController::retry_emote_icons() {
@@ -174,6 +205,31 @@ void CourtroomController::retry_emote_icons() {
 }
 
 void CourtroomController::render() {
+    // Check if async character data loading has finished
+    if (screen_.load_generation() != last_load_gen_ && !screen_.is_loading()) {
+        apply_character_data();
+        // Signal presenter that the courtroom is now visible — start audio
+        auto& ctx = DebugContext::instance();
+        if (ctx.presenter)
+            ctx.presenter->set_courtroom_active(true);
+    }
+
+    // Show loading overlay while character data is being fetched
+    if (screen_.is_loading()) {
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->WorkPos);
+        ImGui::SetNextWindowSize(vp->WorkSize);
+        ImGui::Begin("##loading", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImVec2 center(vp->WorkSize.x * 0.5f, vp->WorkSize.y * 0.5f);
+        const char* text = "Loading character data...";
+        ImVec2 text_size = ImGui::CalcTextSize(text);
+        ImGui::SetCursorPos(ImVec2(center.x - text_size.x * 0.5f, center.y - text_size.y * 0.5f));
+        ImGui::Text("%s", text);
+        ImGui::End();
+        return;
+    }
+
     retry_emote_icons();
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();

@@ -140,6 +140,19 @@ void MountManager::release_all_http() {
     }
 }
 
+bool MountManager::fetch_streaming(const std::string& relative_path,
+                                   std::function<bool(const uint8_t*, size_t)> on_chunk) {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (!http)
+            continue;
+        if (http->fetch_streaming(relative_path, on_chunk))
+            return true;
+    }
+    return false;
+}
+
 void MountManager::release_http(const std::string& relative_path) {
     std::shared_lock<std::shared_mutex> locker(lock);
     for (auto& mount : loaded_mounts) {
@@ -163,9 +176,10 @@ std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& 
         }
     }
 
-    // Sync fallback: try HTTP mounts for config/ini files that must be
-    // available immediately (e.g. char.ini needed before emotes can load).
-    // Theme configs and fonts are served from the embedded mount instead.
+    // Sync fallback: try HTTP mounts for config files that must be available
+    // immediately (e.g. char.ini needed before emotes can load).
+    // Audio files are NOT included — the AudioThread handles those via
+    // background download + streaming to avoid blocking the game thread.
     if (relative_path.ends_with(".ini") || relative_path.ends_with(".json")) {
         for (auto& mount : loaded_mounts) {
             auto* http = dynamic_cast<MountHttp*>(mount.get());

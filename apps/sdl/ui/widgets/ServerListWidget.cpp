@@ -5,6 +5,10 @@
 
 #include <imgui.h>
 
+#include <cstdlib>
+#include <cstring>
+#include <string>
+
 void ServerListWidget::handle_events() {
 }
 
@@ -16,6 +20,24 @@ void ServerListWidget::render() {
     if (servers.empty()) {
         ImGui::Text("Fetching server list...");
         return;
+    }
+
+    // Direct connect bar
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 80);
+    bool enter_pressed = ImGui::InputTextWithHint("##direct", "host:port", direct_connect_buf_,
+                                                  sizeof(direct_connect_buf_), ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    if (ImGui::Button("Connect", ImVec2(72, 0)) || enter_pressed) {
+        std::string addr(direct_connect_buf_);
+        if (!addr.empty()) {
+            uint16_t port = 27016; // AO2 default WS port
+            auto colon = addr.rfind(':');
+            if (colon != std::string::npos) {
+                port = static_cast<uint16_t>(std::atoi(addr.c_str() + colon + 1));
+                addr = addr.substr(0, colon);
+            }
+            screen_.direct_connect(addr, port);
+        }
     }
 
     if (ImGui::BeginTable("servers", 3,

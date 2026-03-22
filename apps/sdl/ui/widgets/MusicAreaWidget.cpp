@@ -4,9 +4,10 @@
 
 #include "event/AreaUpdateEvent.h"
 #include "event/EventManager.h"
-#include "event/MusicChangeEvent.h"
 #include "event/MusicListEvent.h"
+#include "event/NowPlayingEvent.h"
 #include "event/OutgoingMusicEvent.h"
+#include "event/VolumeChangeEvent.h"
 
 #include <imgui.h>
 
@@ -71,8 +72,8 @@ void MusicAreaWidget::handle_events() {
         }
     }
 
-    auto& change_ch = EventManager::instance().get_channel<MusicChangeEvent>();
-    while (auto ev = change_ch.get_event()) {
+    auto& now_ch = EventManager::instance().get_channel<NowPlayingEvent>();
+    while (auto ev = now_ch.get_event()) {
         now_playing_ = ev->track();
     }
 }
@@ -179,6 +180,32 @@ void MusicAreaWidget::render() {
             }
 
             ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Volume")) {
+            // Cubic curve: slider 50% → amplitude 0.125 (≈ -18dB).
+            auto to_amplitude = [](int pct) -> float {
+                float t = pct / 100.0f;
+                return t * t * t;
+            };
+
+            float w = ImGui::GetContentRegionAvail().x - 50;
+            ImGui::SetNextItemWidth(w);
+            if (ImGui::SliderInt("Music", &music_vol_, 0, 100)) {
+                EventManager::instance().get_channel<VolumeChangeEvent>().publish(
+                    VolumeChangeEvent(VolumeChangeEvent::Category::MUSIC, to_amplitude(music_vol_)));
+            }
+            ImGui::SetNextItemWidth(w);
+            if (ImGui::SliderInt("SFX", &sfx_vol_, 0, 100)) {
+                EventManager::instance().get_channel<VolumeChangeEvent>().publish(
+                    VolumeChangeEvent(VolumeChangeEvent::Category::SFX, to_amplitude(sfx_vol_)));
+            }
+            ImGui::SetNextItemWidth(w);
+            if (ImGui::SliderInt("Blips", &blip_vol_, 0, 100)) {
+                EventManager::instance().get_channel<VolumeChangeEvent>().publish(
+                    VolumeChangeEvent(VolumeChangeEvent::Category::BLIP, to_amplitude(blip_vol_)));
+            }
             ImGui::EndTabItem();
         }
 
