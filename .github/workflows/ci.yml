@@ -131,8 +131,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifact
-          cp build/apps/sdl/Release/aosdl.exe artifact/
-          cp build/apps/sdl/Release/*.dll artifact/ 2>/dev/null || true
+          cp build/apps/sdl/aosdl.exe artifact/
+          cp build/apps/sdl/*.dll artifact/ 2>/dev/null || true
           cp third-party/glew/bin/Release/x64/glew32.dll artifact/ 2>/dev/null || true
 
       - name: Upload artifact
