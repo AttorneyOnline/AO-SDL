@@ -13,6 +13,8 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
         Log::log_print(LogLevel::FATAL, "Failed to initialize SDL2: %s", SDL_GetError());
     }
 
+    gpu->pre_init(); // Set GL/Metal attributes before window creation
+
     uint32_t flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | gpu->window_flags();
     window = SDL_CreateWindow("SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, flags);
     if (!window) {

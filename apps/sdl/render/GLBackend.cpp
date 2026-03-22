@@ -11,12 +11,14 @@ class GLBackend : public IGPUBackend {
         return SDL_WINDOW_OPENGL;
     }
 
-    void init(SDL_Window* window, IRenderer& /*renderer*/) override {
-        window_ = window;
-
+    void pre_init() override {
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    }
+
+    void init(SDL_Window* window, IRenderer& /*renderer*/) override {
+        window_ = window;
 
         gl_context_ = SDL_GL_CreateContext(window);
         SDL_GL_SetSwapInterval(1);

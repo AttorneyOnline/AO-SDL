@@ -17,6 +17,10 @@ class IGPUBackend {
     /// SDL window flags this backend requires (e.g. SDL_WINDOW_OPENGL, SDL_WINDOW_METAL).
     virtual uint32_t window_flags() const = 0;
 
+    /// Set SDL attributes that must be configured before window creation.
+    virtual void pre_init() {
+    }
+
     /// Create the GPU context and initialise the ImGui backend for @p window.
     /// @p renderer is available for backends that need device/queue handles.
     virtual void init(SDL_Window* window, IRenderer& renderer) = 0;
