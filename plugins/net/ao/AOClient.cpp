@@ -60,7 +60,7 @@ std::vector<std::string> AOClient::flush_outgoing() {
 
     auto& music_channel = EventManager::instance().get_channel<OutgoingMusicEvent>();
     while (auto optev = music_channel.get_event()) {
-        AOPacketMC mc(optev->name(), player_number, optev->showname());
+        AOPacketMC mc(optev->name(), char_id, optev->showname());
         add_message(mc);
     }
 
