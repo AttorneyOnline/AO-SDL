@@ -104,10 +104,11 @@ jobs:
           lcov --list coverage.info
 
       - name: Upload coverage to Codecov
-        if: matrix.coverage
+        if: matrix.coverage && github.event_name != 'pull_request'
         uses: codecov/codecov-action@v5
         with:
           files: coverage.info
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
       # ---- Package artifacts ----
