@@ -27,6 +27,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # =============================================================================
 
 # --- SDL2 — only need window, events, audio, video, timers, threads ---------
+# Static link so the binary has no SDL2 runtime dependency
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
 # Disable subsystems we don't use
 set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
 set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
@@ -290,7 +293,8 @@ target_include_directories(aoengine
             third-party/bit7z
 )
 
-# OpenSSL for HTTPS support in httplib
+# OpenSSL for HTTPS support in httplib (prefer static to avoid runtime deps)
+set(OPENSSL_USE_STATIC_LIBS ON)
 find_package(OpenSSL)
 if(OPENSSL_FOUND)
     target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
