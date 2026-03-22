@@ -1,32 +1,23 @@
 #pragma once
 
 #include "AOBackground.h"
+#include "AOBlipPlayer.h"
 #include "AOEmotePlayer.h"
+#include "AOMusicPlayer.h"
 #include "AOTextBox.h"
 #include "ICMessageQueue.h"
 #include "ao/asset/AOAssetLibrary.h"
 #include "ao/game/effects/FlashEffect.h"
 #include "ao/game/effects/ScreenshakeEffect.h"
 #include "ao/game/effects/ShaderEffect.h"
-#include "asset/ImageAsset.h"
-#include "asset/SoundAsset.h"
 #include "game/IScenePresenter.h"
+#include "game/TickProfiler.h"
 
 #include <atomic>
 #include <memory>
 #include <vector>
 
 class ISceneEffect;
-
-struct TickProfile {
-    std::atomic<int> events_us{0};
-    std::atomic<int> assets_us{0};
-    std::atomic<int> animation_us{0};
-    std::atomic<int> textbox_us{0};
-    std::atomic<int> effects_us{0};
-    std::atomic<int> compose_us{0};
-    std::atomic<int> total_us{0};
-};
 
 class AOCourtroomPresenter : public IScenePresenter {
   public:
@@ -39,10 +30,7 @@ class AOCourtroomPresenter : public IScenePresenter {
     }
 
     std::vector<ProfileEntry> tick_profile() const override {
-        return {
-            {"Events", &profile_.events_us},   {"Assets", &profile_.assets_us},   {"Animation", &profile_.animation_us},
-            {"Textbox", &profile_.textbox_us}, {"Effects", &profile_.effects_us}, {"Compose", &profile_.compose_us},
-        };
+        return profiler_.entries();
     }
 
   private:
@@ -56,12 +44,10 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     bool show_desk = true;
     bool current_flip = false;
-    std::shared_ptr<SoundAsset> current_blip_;
+    AOBlipPlayer blip_player_;
+    AOMusicPlayer music_player_;
+    int prev_chars_visible_ = 0;
     std::atomic<bool> courtroom_active_{false};
-    bool was_courtroom_active_ = false;
-    std::string pending_music_track_;
-    int pending_music_channel_ = 0;
-    bool pending_music_loop_ = true;
 
     int evict_timer_ms = 0;
     int theme_retry_ms_ = 0;
@@ -82,7 +68,15 @@ class AOCourtroomPresenter : public IScenePresenter {
         fn(cube_);
     }
 
-    TickProfile profile_;
+    // Profiler sections (indices set in constructor)
+    mutable TickProfiler profiler_;
+    int prof_events_ = 0;
+    int prof_assets_ = 0;
+    int prof_animation_ = 0;
+    int prof_textbox_ = 0;
+    int prof_audio_ = 0;
+    int prof_effects_ = 0;
+    int prof_compose_ = 0;
 
     // Base resolution for CPU-side rendering (textbox overlay, etc.)
     // GPU render texture resolution is controlled by DebugContext::internal_scale.

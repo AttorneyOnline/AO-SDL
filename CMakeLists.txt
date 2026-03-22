@@ -340,7 +340,9 @@ add_library(ao_game STATIC
     plugins/ao/event/ICMessageEvent.cpp
     plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/asset/AOCharacterSheet.cpp
+    plugins/ao/game/AOBlipPlayer.cpp
     plugins/ao/game/AOCourtroomPresenter.cpp
+    plugins/ao/game/AOMusicPlayer.cpp
     plugins/ao/game/ICMessageQueue.cpp
     plugins/ao/game/AOBackground.cpp
     plugins/ao/game/AOEmotePlayer.cpp

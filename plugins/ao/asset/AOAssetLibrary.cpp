@@ -392,6 +392,14 @@ void AOAssetLibrary::prefetch_character(const std::string& character, const std:
     if (!pre_emote.empty() && pre_emote != "-")
         assets.prefetch_image(base + pre_emote, 1, priority);
     assets.prefetch_config(base + "char.ini");
+
+    // Prefetch blip sound if char.ini is already cached
+    auto sheet = character_sheet(character);
+    std::string blip_name = sheet ? sheet->blips() : "male";
+    if (!blip_name.empty()) {
+        assets.prefetch_audio("sounds/blips/" + blip_name);
+        assets.prefetch_audio("blips/" + blip_name);
+    }
 }
 
 void AOAssetLibrary::prefetch_own_character(const std::string& character) {

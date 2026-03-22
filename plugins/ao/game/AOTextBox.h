@@ -48,6 +48,16 @@ class AOTextBox {
     }
     bool is_talking() const;
 
+    /// Number of UTF-8 characters currently visible in the message.
+    int chars_visible_count() const {
+        return chars_visible;
+    }
+
+    /// The current message text (for blip character checking).
+    const std::string& current_msg() const {
+        return current_message;
+    }
+
     // --- GPU assets for the presenter ---
 
     /// Chatbox background image (positioned at chatbox_rect by presenter).

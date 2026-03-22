@@ -3,6 +3,7 @@
 
 #include "asset/MountManager.h"
 #include "event/EventManager.h"
+#include "event/PlayBlipEvent.h"
 #include "event/PlayMusicEvent.h"
 #include "event/PlayMusicRequestEvent.h"
 #include "event/PlaySFXEvent.h"
@@ -189,6 +190,7 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
 
 void AudioThread::audio_loop() {
     int sfx_slot = 0;
+    int blip_slot = 0;
 
     // Per-category master volumes (0.0 - 1.0).
     // Default 0.125 matches the UI slider default of 50% with cubic curve.
@@ -206,6 +208,13 @@ void AudioThread::audio_loop() {
             Log::log_print(DEBUG, "AudioThread: play SFX on ch%d (%.1fs)", channel,
                            ev->asset() ? ev->asset()->duration_seconds() : 0.0f);
             device_.play(channel, ev->asset(), ev->loop(), ev->volume() * sfx_volume);
+        }
+
+        // --- Play Blips (pre-decoded, round-robin on blip channels) ---
+        auto& play_blip_ch = EventManager::instance().get_channel<PlayBlipEvent>();
+        while (auto ev = play_blip_ch.get_event()) {
+            int channel = CH_BLIP_BASE + (blip_slot++ % CH_BLIP_COUNT);
+            device_.play(channel, ev->asset(), false, ev->volume() * blip_volume);
         }
 
         // --- Play Music (pre-decoded, legacy path) ---
