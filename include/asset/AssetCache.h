@@ -91,6 +91,9 @@ class AssetCache {
         std::string format;
         size_t bytes;
         long use_count;
+        int width = 0;
+        int height = 0;
+        int frame_count = 0;
     };
 
     /// Snapshot in insertion order (unordered).

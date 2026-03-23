@@ -123,27 +123,24 @@ void CourtroomController::update_debug_stats() {
         std::chrono::duration_cast<std::chrono::milliseconds>(now - cache_sample_time_).count() >= 2000) {
         cache_sample_time_ = now;
         s.cache_entries.clear();
+        auto selected_path = debug_.selected_cache_path();
         for (const auto& e : cache.snapshot_lru()) {
             DebugStats::CacheEntry entry{e.path, e.format, e.bytes, e.use_count};
-            auto cached = cache.peek(e.path);
-            auto img = std::dynamic_pointer_cast<ImageAsset>(cached);
-            if (img) {
-                entry.width = img->width();
-                entry.height = img->height();
-                entry.frame_count = img->frame_count();
-                entry.image = img;
-                // Don't upload textures here — done lazily for the selected entry only
+            // Only fetch the ImageAsset for the selected entry (for preview).
+            // Holding shared_ptrs to all entries would pin them and prevent eviction.
+            if (e.path == selected_path) {
+                auto cached = cache.peek(e.path);
+                auto img = std::dynamic_pointer_cast<ImageAsset>(cached);
+                if (img) {
+                    entry.width = img->width();
+                    entry.height = img->height();
+                    entry.frame_count = img->frame_count();
+                    entry.image = img;
+                    if (entry.texture_id == 0)
+                        entry.texture_id = render_->get_renderer().get_texture_id(img);
+                }
             }
             s.cache_entries.push_back(std::move(entry));
-        }
-    }
-
-    // Lazily upload GPU texture only for the selected cache entry (avoids
-    // uploading hundreds of textures at once which freezes Windows for seconds)
-    auto selected_path = debug_.selected_cache_path();
-    for (auto& e : s.cache_entries) {
-        if (e.texture_id == 0 && e.image && e.path == selected_path) {
-            e.texture_id = render_->get_renderer().get_texture_id(e.image);
         }
     }
 

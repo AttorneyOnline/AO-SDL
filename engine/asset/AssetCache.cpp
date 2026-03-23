@@ -1,5 +1,7 @@
 #include "asset/AssetCache.h"
 
+#include "utils/Log.h"
+
 AssetCache::AssetCache(size_t max_bytes) : max_bytes_(max_bytes) {
 }
 
@@ -48,15 +50,36 @@ void AssetCache::evict() {
 }
 
 void AssetCache::evict_locked() {
+    if (used_bytes_ <= max_bytes_)
+        return;
+
+    size_t before = used_bytes_;
+    int evicted = 0;
+    int skipped = 0;
+
     // Walk LRU from back (least recently used), evicting only unpinned entries.
     auto it = lru.end();
     while (used_bytes_ > max_bytes_ && it != lru.begin()) {
         --it;
         auto entry_it = entries.find(*it);
-        if (entry_it != entries.end() && entry_it->second.asset.use_count() == 1) {
-            used_bytes_ -= entry_it->second.asset->memory_size();
-            it = lru.erase(it);
-            entries.erase(entry_it);
+        if (entry_it != entries.end()) {
+            long refs = entry_it->second.asset.use_count();
+            if (refs == 1) {
+                Log::log_print(DEBUG, "AssetCache: evict '%s' (%zu bytes, refs=%ld)", it->c_str(),
+                               entry_it->second.asset->memory_size(), refs);
+                used_bytes_ -= entry_it->second.asset->memory_size();
+                it = lru.erase(it);
+                entries.erase(entry_it);
+                evicted++;
+            }
+            else {
+                skipped++;
+            }
         }
+    }
+
+    if (evicted > 0 || skipped > 0) {
+        Log::log_print(DEBUG, "AssetCache: eviction pass: %d evicted, %d pinned, %zuMB -> %zuMB (limit %zuMB)", evicted,
+                       skipped, before / (1024 * 1024), used_bytes_ / (1024 * 1024), max_bytes_ / (1024 * 1024));
     }
 }
