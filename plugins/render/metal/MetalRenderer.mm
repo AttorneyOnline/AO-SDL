@@ -2,6 +2,7 @@
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <TargetConditionals.h>
 #import <simd/simd.h>
 
 #include "asset/ImageAsset.h"
@@ -470,6 +471,13 @@ struct MetalRendererImpl {
     /// so this works for both single-frame and multi-frame assets.
     /// Requires bytesPerRow aligned to device minimum.
     bool can_zero_copy(const std::shared_ptr<ImageAsset> &asset) const {
+#if TARGET_OS_SIMULATOR
+        // The iOS Simulator's Metal driver (MTLSimDriver) does not support
+        // newBufferWithBytesNoCopy — it crashes with _xpc_api_misuse instead
+        // of returning nil. Always use the fallback copy path on simulator.
+        (void)asset;
+        return false;
+#else
         if (min_tex_align == 0)
             return false;
         // Never zero-copy mutable assets. The glyph atlas starts at generation 0
@@ -480,6 +488,7 @@ struct MetalRendererImpl {
             return false;
         NSUInteger bytes_per_row = (NSUInteger)asset->width() * 4;
         return (bytes_per_row % min_tex_align) == 0;
+#endif
     }
 
     /// Create a buffer-backed texture that shares the asset's pixel memory.

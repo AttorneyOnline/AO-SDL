@@ -21,14 +21,6 @@ class _CourtroomViewportState extends State<CourtroomViewport> {
   }
 
   Future<void> _createTexture() async {
-    // TODO: The Metal renderer's zero-copy texture path uses
-    // newBufferWithBytesNoCopy which crashes on the iOS Simulator
-    // (MTLSimDriver doesn't support shared memory buffers).
-    // This will work on real devices. For now, show a placeholder.
-    debugPrint('Courtroom viewport: native texture disabled on simulator');
-    return;
-
-    // ignore: dead_code
     try {
       final id = await _channel.invokeMethod<int>('create', {
         'width': 1024,
