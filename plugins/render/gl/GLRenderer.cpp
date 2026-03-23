@@ -119,6 +119,15 @@ void GLRenderer::evict_expired_textures() {
             ++it;
         }
     }
+    for (auto it = preview_cache_.begin(); it != preview_cache_.end();) {
+        if (it->second.asset.expired()) {
+            glDeleteTextures(1, &it->second.texture);
+            it = preview_cache_.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
 }
 
 GLProgram& GLRenderer::resolve_program(const ShaderAsset* shader) {
@@ -324,8 +333,26 @@ void GLRenderer::set_wireframe(bool enabled) {
 uintptr_t GLRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
     if (!asset || asset->frame_count() == 0)
         return 0;
-    // Upload on demand if not cached
-    GLuint tex = get_texture_array(asset);
+
+    // ImGui expects GL_TEXTURE_2D, but our render cache uses GL_TEXTURE_2D_ARRAY.
+    // Maintain a separate preview cache with GL_TEXTURE_2D (frame 0 only).
+    auto it = preview_cache_.find(asset.get());
+    if (it != preview_cache_.end() && !it->second.asset.expired())
+        return (uintptr_t)it->second.texture;
+
+    const auto& frame = asset->frame(0);
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, frame.width, frame.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 frame.pixels.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    preview_cache_[asset.get()] = {asset, tex, asset->generation()};
     return (uintptr_t)tex;
 }
 

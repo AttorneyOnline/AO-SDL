@@ -60,6 +60,10 @@ class GLRenderer : public IRenderer {
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
     std::unordered_map<const class ShaderAsset*, std::unique_ptr<GLProgram>> shader_cache_;
 
+    // Preview textures: GL_TEXTURE_2D (frame 0 only) for ImGui display.
+    // Separate from texture_cache which uses GL_TEXTURE_2D_ARRAY.
+    std::unordered_map<const ImageAsset*, TextureCacheEntry> preview_cache_;
+
     struct MeshCacheEntry {
         std::weak_ptr<MeshAsset> asset;
         GLuint vao = 0, vbo = 0, ebo = 0;
