@@ -9,6 +9,7 @@
 struct VertexData {
     Vec2 position;
     Vec2 texcoord;
+    Vec3 color = {1.0f, 1.0f, 1.0f};
 };
 
 class GLMesh {

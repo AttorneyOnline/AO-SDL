@@ -194,6 +194,8 @@ GLRenderer::MeshCacheEntry& GLRenderer::get_mesh_entry(const std::shared_ptr<Mes
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)0);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)(4 * sizeof(float)));
     glBindVertexArray(0);
 
     entry.asset = mesh;

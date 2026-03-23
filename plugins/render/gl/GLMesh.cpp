@@ -23,6 +23,11 @@ GLMesh::GLMesh(std::vector<VertexData> verts, std::vector<unsigned int> indices)
                           (void*)(offsetof(VertexData, texcoord)));
     glEnableVertexAttribArray(glsl_vertex_tex_coord);
 
+    GLint glsl_vertex_color = 2;
+    glVertexAttribPointer(glsl_vertex_color, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData),
+                          (void*)(offsetof(VertexData, color)));
+    glEnableVertexAttribArray(glsl_vertex_color);
+
     glBindVertexArray(0);
 }
 
