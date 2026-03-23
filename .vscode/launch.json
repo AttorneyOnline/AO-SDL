@@ -28,6 +28,21 @@
             "program": "${workspaceFolder}/build/apps/sdl/aosdl",
             "MIMode": "lldb",
             "processId": "${command:pickProcess}"
+        },
+        {
+            "name": "Flutter (iOS Sim)",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib/main.dart",
+            "cwd": "${workspaceFolder}/apps/flutter",
+            "preLaunchTask": "Flutter: Build Native Bridge (iOS Sim)"
+        },
+        {
+            "name": "Flutter (iOS Sim, skip native)",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib/main.dart",
+            "cwd": "${workspaceFolder}/apps/flutter"
         }
     ]
 }

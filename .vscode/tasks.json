@@ -29,6 +29,17 @@
                 "-DCMAKE_BUILD_TYPE=Debug"
             ],
             "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Build Native Bridge (iOS Sim)",
+            "type": "shell",
+            "command": "${workspaceFolder}/apps/flutter/scripts/build_native.sh",
+            "args": ["sim"],
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "silent",
+                "revealProblems": "onProblem"
+            }
         }
     ]
 }

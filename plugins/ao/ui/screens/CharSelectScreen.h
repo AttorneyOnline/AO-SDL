@@ -4,9 +4,11 @@
  */
 #pragma once
 
+#include "asset/ImageAsset.h"
 #include "render/Texture.h"
 #include "ui/Screen.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -31,9 +33,10 @@ class CharSelectScreen : public Screen {
      * @brief A single entry in the character roster.
      */
     struct CharEntry {
-        std::string folder;            ///< Character asset folder name.
-        std::optional<Texture2D> icon; ///< Character icon texture (absent if not yet loaded).
-        bool taken = false;            ///< True if another player has claimed this character.
+        std::string folder;                     ///< Character asset folder name.
+        std::optional<Texture2D> icon;          ///< Character icon texture (absent if not yet loaded).
+        std::shared_ptr<ImageAsset> icon_asset; ///< Retained for pixel access (Flutter FFI).
+        bool taken = false;                     ///< True if another player has claimed this character.
     };
 
     /**

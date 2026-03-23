@@ -27,7 +27,7 @@ void CharSelectScreen::handle_events() {
     while (auto optev = char_list_channel.get_event()) {
         chars.clear();
         for (const auto& folder : optev->get_characters()) {
-            chars.push_back({folder, std::nullopt, false});
+            chars.push_back({folder, std::nullopt, nullptr, false});
         }
         prefetch_cursor_ = 0;
     }
@@ -111,6 +111,7 @@ void CharSelectScreen::retry_icons() {
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, asset->frame_pixels(0), 4);
+        entry.icon_asset = asset; // Retain for pixel access (Flutter FFI)
         if (++uploaded >= 8)
             break;
     }

@@ -377,13 +377,12 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# VS Code files for those working on multiple tools
+# VS Code — track shared configs, ignore the rest
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-*.code-workspace
 
 # Local History for Visual Studio Code
 .history/
@@ -406,7 +405,48 @@ docs/
 
 # IDE / OS / tool files
 .DS_Store
-.vscode/
 .claude/
 imgui.ini
 CLAUDE.md
+*.code-workspace
+
+# =============================================================================
+# Flutter (apps/flutter/)
+# =============================================================================
+
+# Dart/Flutter generated
+apps/flutter/.dart_tool/
+apps/flutter/.flutter-plugins
+apps/flutter/.flutter-plugins-dependencies
+apps/flutter/.packages
+apps/flutter/pubspec.lock
+
+# iOS generated
+apps/flutter/ios/Pods/
+apps/flutter/ios/.symlinks/
+apps/flutter/ios/libs/
+apps/flutter/ios/Flutter/Flutter.framework
+apps/flutter/ios/Flutter/Flutter.podspec
+apps/flutter/ios/Flutter/Generated.xcconfig
+apps/flutter/ios/Flutter/app.flx
+apps/flutter/ios/Flutter/app.zip
+apps/flutter/ios/Flutter/flutter_assets/
+apps/flutter/ios/Flutter/flutter_export_environment.sh
+apps/flutter/ios/Flutter/.last_build_id
+apps/flutter/ios/Runner.xcworkspace/xcshareddata/
+apps/flutter/ios/ServiceDefinitions.json
+apps/flutter/ios/Podfile.lock
+
+# Android generated
+apps/flutter/android/.gradle/
+apps/flutter/android/local.properties
+apps/flutter/android/app/build/
+apps/flutter/android/build/
+
+# Flutter build output
+apps/flutter/build/
+apps/flutter/.pub-cache/
+apps/flutter/.pub/
+
+# Flutter sub-project VS Code (use root .vscode instead)
+apps/flutter/.vscode/

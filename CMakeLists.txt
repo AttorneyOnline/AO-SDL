@@ -26,39 +26,44 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Third-party dependencies
 # =============================================================================
 
-# --- SDL2 — only need window, events, audio, video, timers, threads ---------
-# Static link so the binary has no SDL2 runtime dependency
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-set(SDL_STATIC ON CACHE BOOL "" FORCE)
-# Disable subsystems we don't use
-set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
-set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
-set(SDL_HIDAPI OFF CACHE BOOL "" FORCE)
-set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
-set(SDL_LOCALE OFF CACHE BOOL "" FORCE)
-# Disable audio/video drivers we don't need
-set(SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
-set(SDL_DUMMYAUDIO OFF CACHE BOOL "" FORCE)
-set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
-set(SDL_OFFSCREEN OFF CACHE BOOL "" FORCE)
-set(SDL_DIRECTFB OFF CACHE BOOL "" FORCE)
-set(SDL_RPI OFF CACHE BOOL "" FORCE)
-set(SDL_VIVANTE OFF CACHE BOOL "" FORCE)
-# Disable rendering backends we don't use (we have our own renderer)
-set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
-set(SDL_RENDER_D3D OFF CACHE BOOL "" FORCE)
-# Don't build SDL test library or install
-set(SDL_TEST OFF CACHE BOOL "" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "" FORCE)
-set(SDL2_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
-set(SDL2_DISABLE_UNINSTALL ON CACHE BOOL "" FORCE)
-add_subdirectory(third-party/SDL)
+# --- SDL2 — only needed for the desktop SDL app, not for Flutter/mobile ------
+if(NOT AO_BUILD_FLUTTER)
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
+    set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
+    set(SDL_HIDAPI OFF CACHE BOOL "" FORCE)
+    set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
+    set(SDL_LOCALE OFF CACHE BOOL "" FORCE)
+    set(SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
+    set(SDL_DUMMYAUDIO OFF CACHE BOOL "" FORCE)
+    set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
+    set(SDL_OFFSCREEN OFF CACHE BOOL "" FORCE)
+    set(SDL_DIRECTFB OFF CACHE BOOL "" FORCE)
+    set(SDL_RPI OFF CACHE BOOL "" FORCE)
+    set(SDL_VIVANTE OFF CACHE BOOL "" FORCE)
+    set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
+    set(SDL_RENDER_D3D OFF CACHE BOOL "" FORCE)
+    set(SDL_TEST OFF CACHE BOOL "" FORCE)
+    set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDL2_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+    set(SDL2_DISABLE_UNINSTALL ON CACHE BOOL "" FORCE)
+    add_subdirectory(third-party/SDL)
+endif()
 
 # --- bit7z — archive extraction only ----------------------------------------
 set(BIT7Z_AUTO_FORMAT ON CACHE BOOL "" FORCE)
 set(BIT7Z_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BIT7Z_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 add_subdirectory(third-party/bit7z)
+# bit7z's OutputOptions.cmake writes its library to third-party/bit7z/lib/arm64/
+# using PROJECT_SOURCE_DIR, which means iOS and macOS builds clobber each other.
+# Override the target's output directory to go into the build tree instead.
+set_target_properties(bit7z64 PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
 
 # --- libwebp — decode only, no tools or encoding features -------------------
 set(WEBP_NEAR_LOSSLESS OFF CACHE BOOL "" FORCE)
@@ -110,41 +115,43 @@ target_include_directories(opusfile
 target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
 target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
 
-# ImGui (static lib — backend-specific sources selected below)
-set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
-set(IMGUI_SOURCES
-    ${IMGUI_DIR}/imgui.cpp
-    ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-)
-
-if(APPLE)
-    list(APPEND IMGUI_SOURCES ${IMGUI_DIR}/backends/imgui_impl_metal.mm)
-else()
-    find_package(OpenGL REQUIRED)
-    list(APPEND IMGUI_SOURCES ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
-endif()
-
-add_library(imgui STATIC ${IMGUI_SOURCES})
-target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32) # 32-bit ImWchar for emoji (U+1Fxxx)
-target_include_directories(imgui PUBLIC
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-)
-target_link_libraries(imgui PRIVATE SDL2::SDL2)
-
-if(APPLE)
-    target_link_libraries(imgui PRIVATE
-        "-framework Metal"
-        "-framework MetalKit"
-        "-framework QuartzCore"
+# ImGui (static lib — desktop only, not needed for Flutter)
+if(NOT AO_BUILD_FLUTTER)
+    set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
+    set(IMGUI_SOURCES
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
     )
-else()
-    target_link_libraries(imgui PRIVATE ${OPENGL_LIBRARIES})
-    if(WIN32)
-        target_include_directories(imgui PRIVATE third-party/glew/include)
+
+    if(APPLE)
+        list(APPEND IMGUI_SOURCES ${IMGUI_DIR}/backends/imgui_impl_metal.mm)
+    else()
+        find_package(OpenGL REQUIRED)
+        list(APPEND IMGUI_SOURCES ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
+    endif()
+
+    add_library(imgui STATIC ${IMGUI_SOURCES})
+    target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)
+    target_include_directories(imgui PUBLIC
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+    )
+    target_link_libraries(imgui PRIVATE SDL2::SDL2)
+
+    if(APPLE)
+        target_link_libraries(imgui PRIVATE
+            "-framework Metal"
+            "-framework MetalKit"
+            "-framework QuartzCore"
+        )
+    else()
+        target_link_libraries(imgui PRIVATE ${OPENGL_LIBRARIES})
+        if(WIN32)
+            target_include_directories(imgui PRIVATE third-party/glew/include)
+        endif()
     endif()
 endif()
 
@@ -424,15 +431,48 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 # Applications — one per backend
 # =============================================================================
 
-add_subdirectory(apps/sdl)
-# add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+if(NOT AO_BUILD_FLUTTER)
+    add_subdirectory(apps/sdl)
+    # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+endif()
+
+# --- ao_bridge — C API for Flutter/Dart FFI (mobile) -------------------------
+# Built as a static library; the Flutter runner links it in.
+# Only included when AO_BUILD_FLUTTER is ON (set by the ios-flutter preset).
+
+option(AO_BUILD_FLUTTER "Build the Flutter FFI bridge library" OFF)
+if(AO_BUILD_FLUTTER)
+    add_library(ao_bridge STATIC
+        apps/flutter/native/bridge.cpp
+    )
+    set_property(TARGET ao_bridge PROPERTY CXX_STANDARD 20)
+    target_include_directories(ao_bridge PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugins
+        ${CMAKE_BINARY_DIR}/generated
+    )
+    target_link_libraries(ao_bridge PRIVATE ao_protocol)
+    if(APPLE)
+        target_link_libraries(ao_bridge PRIVATE aorender_metal)
+    else()
+        target_link_libraries(ao_bridge PRIVATE aorender_gl)
+    endif()
+
+    # flutter-build: build the native bridge for Flutter
+    add_custom_target(flutter-build
+        DEPENDS ao_bridge
+        COMMENT "Building native bridge for Flutter"
+    )
+endif()
 
 # =============================================================================
 # Tests
 # =============================================================================
 
-enable_testing()
-add_subdirectory(tests)
+if(NOT AO_BUILD_FLUTTER)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # =============================================================================
 # API Documentation (Doxygen)

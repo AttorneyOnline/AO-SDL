@@ -1,0 +1,11 @@
+// Link the pre-built AO-SDL native bridge and all its dependencies.
+// The libs/ios-sim symlink is created by scripts/build_native.sh.
+
+AO_LIB_DIR = $(SRCROOT)/libs/ios-sim
+AO_THIRDPARTY_DIR = $(AO_LIB_DIR)/third-party
+
+// -force_load on ao_bridge only — this ensures all ao_* symbols survive
+// dead-stripping (Dart FFI resolves them at runtime via dlsym).
+// The remaining libs are linked normally; the bridge's references pull them in.
+OTHER_LDFLAGS = $(inherited) -force_load $(AO_LIB_DIR)/libao_bridge.a -lao_protocol -lao_game -lao_net -laoengine -laorender_metal -lopusfile -lbit7z64_d -lfreetyped -lwebp -lwebpdecoder -lwebpdemux -lsharpyuv -logg -lopus -lz -lc++ -framework Metal -framework MetalKit -framework QuartzCore -framework CoreText -framework Foundation -framework IOKit
+LIBRARY_SEARCH_PATHS = $(inherited) $(AO_LIB_DIR) $(AO_LIB_DIR)/lib $(AO_THIRDPARTY_DIR)/freetype $(AO_THIRDPARTY_DIR)/libwebp $(AO_THIRDPARTY_DIR)/ogg $(AO_THIRDPARTY_DIR)/opus
