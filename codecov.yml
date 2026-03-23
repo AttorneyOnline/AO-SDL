@@ -1,0 +1,5 @@
+ignore:
+  - "third-party/**"
+  - "tests/**"
+  - "build/**"
+  - "out/**"
