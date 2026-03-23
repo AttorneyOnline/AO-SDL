@@ -21,8 +21,9 @@ void main() {
         discard;
     }
 
-    // Rainbow: hue scrolls across the text based on horizontal position and time
-    float hue = fract(vert_texcoord.x * 0.8 + u_time * 0.4);
+    // Rainbow: hue based on screen-space X (not texcoord, which maps to the font atlas)
+    float screen_x = gl_FragCoord.x / 512.0; // normalize to ~[0,1] across viewport
+    float hue = fract(screen_x * 0.8 + u_time * 0.4);
     vec3 rainbow = hsv2rgb(hue, 0.8, 1.0);
 
     frag_color = vec4(rainbow, alpha);
