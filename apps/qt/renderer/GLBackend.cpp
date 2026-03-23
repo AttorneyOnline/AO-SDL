@@ -4,6 +4,7 @@
 #include <QtQuick/QQuickWindow>
 
 #include "render/IRenderer.h"
+#include "utils/Log.h"
 
 class GLBackend : public IGPUBackend {
   public:
@@ -19,6 +20,13 @@ class GLBackend : public IGPUBackend {
                 QSGRendererInterface* rif = window_->rendererInterface();
                 gl_context_ = reinterpret_cast<QOpenGLContext*>(
                     rif->getResource(window_, QSGRendererInterface::OpenGLContextResource));
+
+                const QSurfaceFormat fmt = gl_context_->format();
+                const char* profile =
+                    QMetaEnum::fromType<QSurfaceFormat::OpenGLContextProfile>().valueToKey(fmt.profile());
+
+                Log::log_print(DEBUG, "Obtained GLContext from QQuickView SceneGraph: OpenGL %i.%i - %s",
+                               fmt.majorVersion(), fmt.minorVersion(), profile);
             },
             Qt::DirectConnection);
     }

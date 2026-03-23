@@ -2,7 +2,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick OpenGL)
 
 set(QT_APP_SOURCES
     main.cpp
-    qtgamewindow.cpp
+    QtGameWindow.cpp
     renderer/GLBackend.cpp
 )
 
