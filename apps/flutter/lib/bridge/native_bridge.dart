@@ -7,21 +7,35 @@ library;
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io' show Platform;
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-/// Safely convert a native C string to Dart, replacing invalid UTF-8 bytes.
+/// Safely convert a native C string to Dart.
+/// Tries UTF-8 first; falls back to Latin-1 (ISO 8859-1) for char.ini
+/// strings that use Windows-1252/Latin-1 encoding.
 String _safeString(Pointer<Utf8> ptr) {
-  if (ptr == nullptr) return '';
-  // Walk to find the null terminator
-  final charPtr = ptr.cast<Uint8>();
-  var len = 0;
-  while (charPtr[len] != 0) {
-    len++;
+  if (ptr == nullptr || ptr.address == 0) return '';
+  try {
+    final charPtr = ptr.cast<Uint8>();
+    var len = 0;
+    while (len < 4096 && charPtr[len] != 0) {
+      len++;
+    }
+    if (len == 0) return '';
+    final bytes = Uint8List(len);
+    for (var i = 0; i < len; i++) {
+      bytes[i] = charPtr[i];
+    }
+    // Try UTF-8 first; if it fails, treat as Latin-1
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      return latin1.decode(bytes);
+    }
+  } catch (_) {
+    return '';
   }
-  if (len == 0) return '';
-  final bytes = charPtr.asTypedList(len);
-  return utf8.decode(bytes, allowMalformed: true);
 }
 
 // ---------------------------------------------------------------------------

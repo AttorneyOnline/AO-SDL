@@ -9,6 +9,7 @@
 #include "bridge.h"
 
 // Engine
+#include "ao/asset/AOAssetLibrary.h"
 #include "asset/AssetLibrary.h"
 #include "asset/MediaManager.h"
 #include "asset/MountHttp.h"
@@ -16,6 +17,7 @@
 #include "audio/AudioThread.h"
 #include "event/AssetUrlEvent.h"
 #include "event/EventManager.h"
+#include "event/OutgoingICMessageEvent.h"
 #include "event/ServerListEvent.h"
 #include "game/GameThread.h"
 #include "game/ServerList.h"
@@ -70,6 +72,27 @@ struct ChatMsg {
 };
 std::vector<ChatMsg> g_ooc_msgs;
 std::vector<ChatMsg> g_ic_log;
+
+// Scratch buffer for returning strings from functions that return by value.
+// Keeps the string alive until the next call to the same function.
+std::string g_scratch;
+
+// Emote icon cache — retries loading icons that were null during initial load.
+// Indexed by emote index; populated lazily.
+std::vector<std::shared_ptr<ImageAsset>> g_emote_icon_cache;
+std::string g_emote_icon_character; // character these icons belong to
+
+// IC chat state — mirrors ICMessageState from the SDL app
+struct ICState {
+    int selected_emote = 0;
+    int side_index = 2; // default: wit
+    std::string showname;
+    bool pre_anim = false;
+    bool flip = false;
+    int objection_mod = 0;
+    int text_color = 0;
+};
+ICState g_ic_state;
 
 } // namespace
 
@@ -183,6 +206,33 @@ void ao_tick() {
     }
 
     g_engine->ui_mgr.handle_events();
+
+    // Retry loading emote icons that were null during initial courtroom load.
+    auto* cr = as_courtroom();
+    if (cr && !cr->is_loading() && cr->get_character_sheet()) {
+        const auto& name = cr->get_character_name();
+        int count = cr->get_character_sheet()->emote_count();
+
+        // Reset cache if character changed
+        if (name != g_emote_icon_character) {
+            g_emote_icon_cache.clear();
+            g_emote_icon_cache.resize(count);
+            g_emote_icon_character = name;
+        }
+
+        // Try to load a few missing icons per tick
+        AOAssetLibrary ao_assets(MediaManager::instance().assets());
+        int loaded = 0;
+        for (int i = 0; i < count && loaded < 4; i++) {
+            if (g_emote_icon_cache[i])
+                continue;
+            auto asset = ao_assets.emote_icon(name, i);
+            if (asset && asset->frame_count() > 0) {
+                g_emote_icon_cache[i] = asset;
+                loaded++;
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -387,86 +437,106 @@ int ao_courtroom_emote_count() {
 
 const char* ao_courtroom_emote_comment(int index) {
     auto* cr = as_courtroom();
-    if (!cr || !cr->get_character_sheet())
+    if (!cr || cr->is_loading() || !cr->get_character_sheet())
         return "";
     if (index < 0 || index >= cr->get_character_sheet()->emote_count())
         return "";
-    return cr->get_character_sheet()->emote(index).comment.c_str();
+    // emote() returns by value — the temporary is destroyed at the semicolon.
+    // Copy into a scratch buffer so the pointer survives until Dart reads it.
+    g_scratch = cr->get_character_sheet()->emote(index).comment;
+    return g_scratch.c_str();
 }
 
 bool ao_courtroom_emote_icon_ready(int index) {
-    auto* cr = as_courtroom();
-    if (!cr)
+    if (index < 0 || index >= (int)g_emote_icon_cache.size())
         return false;
-    const auto& icons = cr->get_emote_icons();
-    if (index < 0 || index >= (int)icons.size())
-        return false;
-    return icons[index] && icons[index]->frame_count() > 0;
+    return g_emote_icon_cache[index] && g_emote_icon_cache[index]->frame_count() > 0;
 }
 
 int ao_courtroom_emote_icon_width(int index) {
-    auto* cr = as_courtroom();
-    if (!cr)
+    if (index < 0 || index >= (int)g_emote_icon_cache.size() || !g_emote_icon_cache[index])
         return 0;
-    const auto& icons = cr->get_emote_icons();
-    if (index < 0 || index >= (int)icons.size() || !icons[index])
-        return 0;
-    return icons[index]->width();
+    return g_emote_icon_cache[index]->width();
 }
 
 int ao_courtroom_emote_icon_height(int index) {
-    auto* cr = as_courtroom();
-    if (!cr)
+    if (index < 0 || index >= (int)g_emote_icon_cache.size() || !g_emote_icon_cache[index])
         return 0;
-    const auto& icons = cr->get_emote_icons();
-    if (index < 0 || index >= (int)icons.size() || !icons[index])
-        return 0;
-    return icons[index]->height();
+    return g_emote_icon_cache[index]->height();
 }
 
 const uint8_t* ao_courtroom_emote_icon_pixels(int index) {
-    auto* cr = as_courtroom();
-    if (!cr)
+    if (index < 0 || index >= (int)g_emote_icon_cache.size() || !g_emote_icon_cache[index] ||
+        g_emote_icon_cache[index]->frame_count() == 0)
         return nullptr;
-    const auto& icons = cr->get_emote_icons();
-    if (index < 0 || index >= (int)icons.size() || !icons[index] || icons[index]->frame_count() == 0)
-        return nullptr;
-    return icons[index]->frame_pixels(0);
+    return g_emote_icon_cache[index]->frame_pixels(0);
 }
 
 // --- IC Chat (send) ---
 
+static constexpr const char* SIDES[] = {"def", "pro", "wit", "jud", "jur", "sea", "hlp"};
+
 void ao_ic_send(const char* message) {
-    // TODO: Publish ICMessageSendEvent with current IC state
-    (void)message;
+    auto* cr = as_courtroom();
+    if (!cr || !message)
+        return;
+
+    ICMessageData data;
+    data.character = cr->get_character_name();
+    data.char_id = cr->get_char_id();
+    data.message = message;
+    data.showname = g_ic_state.showname;
+
+    auto sheet = cr->get_character_sheet();
+    if (sheet && g_ic_state.selected_emote >= 0 && g_ic_state.selected_emote < sheet->emote_count()) {
+        const auto& emo = sheet->emote(g_ic_state.selected_emote);
+        data.emote = emo.anim_name;
+        data.pre_emote = emo.pre_anim;
+        data.desk_mod = emo.desk_mod;
+        if (!emo.sfx_name.empty() && emo.sfx_name != "0") {
+            data.sfx_name = emo.sfx_name;
+            data.sfx_delay = emo.sfx_delay;
+        }
+    }
+
+    data.emote_mod = g_ic_state.pre_anim ? 1 : 0;
+    data.side = SIDES[std::clamp(g_ic_state.side_index, 0, 6)];
+    data.objection_mod = g_ic_state.objection_mod;
+    data.flip = g_ic_state.flip ? 1 : 0;
+    data.text_color = g_ic_state.text_color;
+
+    EventManager::instance().get_channel<OutgoingICMessageEvent>().publish(OutgoingICMessageEvent(std::move(data)));
+
+    // Reset one-shot state
+    g_ic_state.objection_mod = 0;
 }
 
 void ao_ic_set_emote(int index) {
-    (void)index;
+    g_ic_state.selected_emote = index;
 }
 
 void ao_ic_set_side(int index) {
-    (void)index;
+    g_ic_state.side_index = std::clamp(index, 0, 6);
 }
 
 void ao_ic_set_showname(const char* name) {
-    (void)name;
+    g_ic_state.showname = name ? name : "";
 }
 
 void ao_ic_set_pre(bool enabled) {
-    (void)enabled;
+    g_ic_state.pre_anim = enabled;
 }
 
 void ao_ic_set_flip(bool enabled) {
-    (void)enabled;
+    g_ic_state.flip = enabled;
 }
 
 void ao_ic_set_interjection(int type) {
-    (void)type;
+    g_ic_state.objection_mod = type;
 }
 
 void ao_ic_set_color(int color) {
-    (void)color;
+    g_ic_state.text_color = color;
 }
 
 // --- OOC Chat ---

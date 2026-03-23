@@ -293,7 +293,7 @@ struct MetalRendererImpl {
         pd.vertexFunction = vert;
         pd.fragmentFunction = frag;
         pd.vertexDescriptor = vd;
-        pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        pd.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         pd.colorAttachments[0].blendingEnabled = YES;
         pd.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
         pd.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
@@ -322,7 +322,7 @@ struct MetalRendererImpl {
         MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
         pd.vertexFunction = [lib newFunctionWithName:@"blit_vertex"];
         pd.fragmentFunction = [lib newFunctionWithName:@"blit_fragment"];
-        pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        pd.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
 
         blit_pipeline = [device newRenderPipelineStateWithDescriptor:pd error:&err];
         if (!blit_pipeline) {
@@ -356,7 +356,7 @@ struct MetalRendererImpl {
         pd.vertexFunction = [lib newFunctionWithName:@"wf_vertex"];
         pd.fragmentFunction = [lib newFunctionWithName:@"wf_fragment"];
         pd.vertexDescriptor = vd;
-        pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        pd.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         pd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
 
         wireframe_pipeline = [device newRenderPipelineStateWithDescriptor:pd error:&err];
@@ -366,7 +366,7 @@ struct MetalRendererImpl {
         if (display_texture && display_width == w && display_height == h)
             return;
 
-        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
                                                                                       width:w
                                                                                      height:h
                                                                                   mipmapped:NO];
@@ -440,7 +440,7 @@ struct MetalRendererImpl {
     }
 
     void build_render_targets() {
-        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
                                                                                       width:fb_width
                                                                                      height:fb_height
                                                                                   mipmapped:NO];
@@ -680,7 +680,7 @@ struct MetalRendererImpl {
         pd.vertexFunction = vert;
         pd.fragmentFunction = frag;
         pd.vertexDescriptor = vd;
-        pd.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        pd.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         pd.colorAttachments[0].blendingEnabled = YES;
         pd.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
         pd.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;

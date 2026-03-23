@@ -42,7 +42,6 @@ void *ao_renderer_get_metal_command_queue(void);
     _width = width;
     _height = height;
 
-    // Create the renderer — this sets up the Metal device and offscreen FBO
     ao_renderer_create(width, height, true);
     _rendererReady = true;
 
@@ -72,6 +71,7 @@ void *ao_renderer_get_metal_command_queue(void);
         (__bridge NSString *)kCVPixelBufferIOSurfacePropertiesKey : @{},
     };
 
+    // BGRA matches the Metal renderer's render target format (MTLPixelFormatBGRA8Unorm).
     CVPixelBufferCreate(kCFAllocatorDefault, _width, _height, kCVPixelFormatType_32BGRA,
                         (__bridge CFDictionaryRef)attrs, &_pixelBuffer);
 }
@@ -80,7 +80,6 @@ void *ao_renderer_get_metal_command_queue(void);
     if (!_rendererReady || !_device || !_commandQueue || !_textureCache)
         return NULL;
 
-    // Draw the courtroom scene to the offscreen Metal texture
     ao_renderer_draw();
 
     uintptr_t texId = ao_renderer_get_texture();
@@ -93,7 +92,7 @@ void *ao_renderer_get_metal_command_queue(void);
     if (!_pixelBuffer)
         return NULL;
 
-    // Wrap the CVPixelBuffer as a Metal texture so we can blit into it
+    // Wrap CVPixelBuffer as a Metal texture for GPU blit
     CVMetalTextureRef cvTex = NULL;
     CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, _textureCache, _pixelBuffer, NULL,
                                               MTLPixelFormatBGRA8Unorm, _width, _height, 0, &cvTex);
@@ -103,7 +102,7 @@ void *ao_renderer_get_metal_command_queue(void);
 
     id<MTLTexture> dstTex = CVMetalTextureGetTexture(cvTex);
 
-    // Blit from render texture to the CVPixelBuffer-backed texture
+    // GPU blit — both textures are BGRA, no swizzle needed
     id<MTLCommandBuffer> cmdBuf = [_commandQueue commandBuffer];
     id<MTLBlitCommandEncoder> blit = [cmdBuf blitCommandEncoder];
     [blit copyFromTexture:renderTex
@@ -170,7 +169,6 @@ void *ao_renderer_get_metal_command_queue(void);
         [_texture setupWithWidth:width height:height];
         _textureId = [_registry registerTexture:_texture];
 
-        // Start a display link to notify Flutter of new frames
         _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(_onFrame)];
         [_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 
