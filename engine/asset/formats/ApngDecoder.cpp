@@ -339,6 +339,8 @@ class ApngImageDecoder : public ImageDecoder {
     }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+        if (!data || size == 0)
+            return {};
         auto apng_frames = ApngDecoder::decode(data, size, true);
         if (apng_frames && !apng_frames->empty())
             return std::move(*apng_frames);

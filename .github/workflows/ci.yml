@@ -16,12 +16,13 @@ jobs:
       - name: Install clang-format
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format-14
+          sudo apt-get install -y clang-format-19 || sudo apt-get install -y clang-format
       - name: Check formatting
         run: |
+          CF=$(command -v clang-format-19 || command -v clang-format)
           find engine plugins apps/sdl include platform tests \
             -name '*.cpp' -o -name '*.h' -o -name '*.mm' | \
-            xargs clang-format-14 --dry-run --Werror
+            xargs "$CF" --dry-run --Werror
 
   # ---- Build, test, and package per OS ----
   build:

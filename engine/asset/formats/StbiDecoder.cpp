@@ -9,6 +9,9 @@ class StbiImageDecoder : public ImageDecoder {
     }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+        if (!data || size == 0)
+            return {};
+
         int width, height, channels;
         stbi_set_flip_vertically_on_load(true);
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);

@@ -9,6 +9,9 @@ class GifImageDecoder : public ImageDecoder {
     }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+        if (!data || size == 0)
+            return {};
+
         int* delays = nullptr;
         int width, height, frame_count, channels;
 
