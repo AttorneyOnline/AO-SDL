@@ -146,10 +146,6 @@ class AssetLibrary {
     /// Convenience: prefetch an audio path with default audio extensions.
     void prefetch_audio(const std::string& path);
 
-    /// Prefetch an image using server-advertised extensions for the given type.
-    /// asset_type maps to MountHttp::AssetType (0=charicon, 1=emote, 2=emotions, 3=background).
-    void prefetch_image(const std::string& path, int asset_type, int priority = 1);
-
     /// Convenience: prefetch a config file (exact path with extension).
     void prefetch_config(const std::string& path);
 

@@ -136,6 +136,12 @@ class AOAssetLibrary {
     /// Prefetch essential theme assets (chatbox images, etc.) via HTTP.
     void prefetch_theme();
 
+    /// Prefetch an image using server-advertised extensions for the given AO
+    /// asset type. Falls back to default image extensions if the server hasn't
+    /// provided an extensions.json.
+    /// asset_type: 0=charicon, 1=emote, 2=emotions, 3=background
+    void prefetch_image(const std::string& path, int asset_type, int priority = 1);
+
   private:
     AssetLibrary& assets;
     std::string active_theme;

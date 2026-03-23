@@ -274,15 +274,6 @@ void AssetLibrary::prefetch_image(const std::string& path) {
     prefetch(path, {"webp", "apng", "gif", "png"});
 }
 
-void AssetLibrary::prefetch_image(const std::string& path, int asset_type, int priority) {
-    if (cache_.get(path))
-        return;
-    auto exts = mounts.http_extensions(asset_type);
-    if (exts.empty())
-        exts = {"webp", "apng", "gif", "png"};
-    prefetch(path, exts, priority);
-}
-
 void AssetLibrary::prefetch_audio(const std::string& path) {
     if (cache_.get(path))
         return;

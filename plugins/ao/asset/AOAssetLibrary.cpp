@@ -114,6 +114,14 @@ std::shared_ptr<ImageAsset> AOAssetLibrary::character_emote(const std::string& c
     if (!result && !prefix.empty()) {
         result = assets.image(base + emote);
     }
+    if (!result) {
+        // Server-advertised extensions all 404'd — re-prefetch with the full
+        // default set so formats the server doesn't list get tried. The emote
+        // player's retry loop will pick up the result on a future tick.
+        assets.prefetch_image(base + prefix + emote);
+        if (!prefix.empty())
+            assets.prefetch_image(base + emote);
+    }
     return result;
 }
 
@@ -169,12 +177,12 @@ void AOAssetLibrary::prefetch_background(const std::string& name, const std::str
     std::string base = "background/" + name + "/";
     std::string legacy = bg_filename(position);
     // Prefetch both legacy name (e.g. "prosecutorempty") and modern name (e.g. "pro")
-    assets.prefetch_image(base + legacy, 3, priority);
+    prefetch_image(base + legacy, 3, priority);
     if (legacy != position)
-        assets.prefetch_image(base + position, 3, priority);
+        prefetch_image(base + position, 3, priority);
     // Prefetch desk overlay (e.g. "stand", "defensedesk")
     std::string desk = desk_filename(position);
-    assets.prefetch_image(base + desk, 3, priority);
+    prefetch_image(base + desk, 3, priority);
 }
 
 // ---- Theme / UI ------------------------------------------------------------
@@ -394,14 +402,24 @@ std::shared_ptr<SoundAsset> AOAssetLibrary::character_blip(const std::string& ch
 
 // ---- Prefetch ---------------------------------------------------------------
 
+void AOAssetLibrary::prefetch_image(const std::string& path, int asset_type, int priority) {
+    if (assets.get_cached(path))
+        return;
+    auto& mm = MediaManager::instance().mounts_ref();
+    auto exts = mm.http_extensions(asset_type);
+    if (exts.empty())
+        exts = {"webp", "apng", "gif", "png"};
+    assets.prefetch(path, exts, priority);
+}
+
 void AOAssetLibrary::prefetch_character(const std::string& character, const std::string& emote,
                                         const std::string& pre_emote, int priority) {
     std::string base = "characters/" + character + "/";
-    assets.prefetch_image(base + "(a)" + emote, 1, priority);
-    assets.prefetch_image(base + "(b)" + emote, 1, priority);
-    assets.prefetch_image(base + emote, 1, priority); // bare name fallback
+    prefetch_image(base + "(a)" + emote, 1, priority);
+    prefetch_image(base + "(b)" + emote, 1, priority);
+    prefetch_image(base + emote, 1, priority); // bare name fallback
     if (!pre_emote.empty() && pre_emote != "-")
-        assets.prefetch_image(base + pre_emote, 1, priority);
+        prefetch_image(base + pre_emote, 1, priority);
     assets.prefetch_config(base + "char.ini");
 
     // Prefetch blip sound if char.ini is already cached
@@ -424,14 +442,14 @@ void AOAssetLibrary::prefetch_own_character(const std::string& character) {
     int count = sheet->emote_count();
     for (int i = 0; i < count; i++) {
         // Emote button icons (2=EMOTIONS type)
-        assets.prefetch_image(base + "emotions/button" + std::to_string(i + 1) + "_off", 2, 2);
+        prefetch_image(base + "emotions/button" + std::to_string(i + 1) + "_off", 2, 2);
         // Emote sprites (1=EMOTE type)
         const auto& emo = sheet->emote(i);
-        assets.prefetch_image(base + "(a)" + emo.anim_name, 1, 2);
-        assets.prefetch_image(base + "(b)" + emo.anim_name, 1, 2);
-        assets.prefetch_image(base + emo.anim_name, 1, 2); // bare name fallback
+        prefetch_image(base + "(a)" + emo.anim_name, 1, 2);
+        prefetch_image(base + "(b)" + emo.anim_name, 1, 2);
+        prefetch_image(base + emo.anim_name, 1, 2); // bare name fallback
         if (!emo.pre_anim.empty() && emo.pre_anim != "-")
-            assets.prefetch_image(base + emo.pre_anim, 1, 2);
+            prefetch_image(base + emo.pre_anim, 1, 2);
     }
 
     // Eagerly load our blip sound into the asset cache

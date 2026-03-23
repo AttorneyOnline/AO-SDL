@@ -2,6 +2,7 @@
 
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
+#include "asset/MountManager.h"
 #include "event/CharSelectRequestEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
@@ -72,23 +73,26 @@ void CharSelectScreen::retry_icons() {
     AssetLibrary& lib = MediaManager::instance().assets();
 
     // Drip-feed HTTP prefetch requests across frames.
-    // With keep-alive connections this is just queue insertion — cheap.
+    // Use server-advertised charicon extensions for the initial pass.
+    auto exts = MediaManager::instance().mounts_ref().http_extensions(0); // 0 = charicon
+    if (exts.empty())
+        exts = {"webp", "apng", "gif", "png"};
+
     for (int i = 0; i < 32 && prefetch_cursor_ < (int)chars.size(); ++i, ++prefetch_cursor_) {
         std::string icon_path = std::format("characters/{}/char_icon", chars[prefetch_cursor_].folder);
-        lib.prefetch_image(icon_path, 0, 0);
+        lib.prefetch(icon_path, exts, 0);
     }
 
     // Re-request icons that failed transiently (timeout, etc.) on initial pass.
-    // MountHttp::request() is a no-op for cached, pending, or permanently failed
-    // paths, so this is cheap once everything has settled. Reset the cursor on
-    // each complete scan to pick up icons whose transient failures have cleared.
+    // Use the same server-advertised extensions — icons either exist in that
+    // format or don't exist at all (unlike emotes which may use unlisted formats).
     if (prefetch_cursor_ >= (int)chars.size()) {
         if (retry_cursor_ >= (int)chars.size())
             retry_cursor_ = 0;
         for (int i = 0; i < 16 && retry_cursor_ < (int)chars.size(); ++i, ++retry_cursor_) {
             if (!chars[retry_cursor_].icon.has_value()) {
                 std::string icon_path = std::format("characters/{}/char_icon", chars[retry_cursor_].folder);
-                lib.prefetch_image(icon_path, 0, 0);
+                lib.prefetch(icon_path, exts, 0);
             }
         }
     }
