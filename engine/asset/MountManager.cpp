@@ -7,6 +7,7 @@
 #include "utils/Log.h"
 
 #include <format>
+#include <future>
 #include <shared_mutex>
 
 MountManager::MountManager() {
@@ -150,6 +151,55 @@ bool MountManager::fetch_streaming(const std::string& relative_path,
         if (http->fetch_streaming(relative_path, on_chunk))
             return true;
     }
+    return false;
+}
+
+bool MountManager::fetch_streaming_url(const std::string& url, std::function<bool(const uint8_t*, size_t)> on_chunk) {
+    // Parse URL into host + path: "https://example.com/path/to/file.opus"
+    size_t scheme_end = url.find("://");
+    if (scheme_end == std::string::npos)
+        return false;
+    size_t path_start = url.find('/', scheme_end + 3);
+    if (path_start == std::string::npos)
+        return false;
+
+    std::string host = url.substr(0, path_start);
+    std::string path = url.substr(path_start);
+
+    // Find any HTTP mount to borrow its pool for the connection
+    std::shared_lock<std::shared_mutex> locker(lock);
+    for (auto& mount : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(mount.get());
+        if (!http)
+            continue;
+
+        std::promise<bool> done;
+        auto future = done.get_future();
+        bool got_data = false;
+
+        http->pool().get_streaming(
+            host, path,
+            [&](const uint8_t* data, size_t len) -> bool {
+                got_data = true;
+                return on_chunk(data, len);
+            },
+            [&](HttpResponse resp) {
+                if (resp.status == 200 && got_data) {
+                    Log::log_print(VERBOSE, "MountManager: streamed URL %s", url.c_str());
+                    done.set_value(true);
+                }
+                else {
+                    Log::log_print(VERBOSE, "MountManager: URL stream failed %s (status=%d err=%s)", url.c_str(),
+                                   resp.status, resp.error.c_str());
+                    done.set_value(false);
+                }
+            },
+            HttpPriority::HIGH);
+
+        return future.get();
+    }
+
+    Log::log_print(WARNING, "MountManager: no HTTP mount available for URL streaming: %s", url.c_str());
     return false;
 }
 

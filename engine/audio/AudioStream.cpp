@@ -3,6 +3,13 @@
 
 #include <opusfile.h>
 
+#define MA_NO_DEVICE_IO
+#define MA_NO_GENERATION
+#define MA_NO_ENGINE
+#define MA_NO_NODE_GRAPH
+#define MA_NO_RESOURCE_MANAGER
+#include "miniaudio.h"
+
 #include <algorithm>
 #include <cstring>
 
@@ -214,7 +221,46 @@ void AudioStream::decode_thread_func() {
         int error = 0;
         OggOpusFile* of = op_open_callbacks(this, &opus_callbacks, nullptr, 0, &error);
         if (!of) {
-            Log::log_print(WARNING, "AudioStream: op_open_callbacks failed (error %d)", error);
+            Log::log_print(DEBUG, "AudioStream: opus failed (error %d), trying miniaudio fallback", error);
+
+            // Miniaudio fallback for MP3/OGG/WAV/FLAC
+            ma_decoder_config ma_cfg = ma_decoder_config_init(ma_format_f32, 2, 48000);
+            ma_decoder ma_dec;
+            std::vector<uint8_t> raw_copy;
+            {
+                std::lock_guard lock(raw_mutex_);
+                raw_copy = raw_data_;
+            }
+
+            if (ma_decoder_init_memory(raw_copy.data(), raw_copy.size(), &ma_cfg, &ma_dec) != MA_SUCCESS) {
+                Log::log_print(WARNING, "AudioStream: miniaudio also failed (%zu bytes)", raw_copy.size());
+                break;
+            }
+
+            ready_.store(true, std::memory_order_release);
+            Log::log_print(DEBUG, "AudioStream: miniaudio decoder opened");
+
+            constexpr size_t CHUNK_FRAMES = 4096;
+            float ma_buf[CHUNK_FRAMES * 2];
+            while (!cancelled_.load(std::memory_order_acquire)) {
+                ma_uint64 frames_read = 0;
+                ma_decoder_read_pcm_frames(&ma_dec, ma_buf, CHUNK_FRAMES, &frames_read);
+                if (frames_read == 0)
+                    break;
+
+                size_t samples = static_cast<size_t>(frames_read) * 2;
+                size_t written = 0;
+                while (written < samples && !cancelled_.load(std::memory_order_acquire)) {
+                    size_t n = pcm_ring_.write(ma_buf + written, samples - written);
+                    written += n;
+                    if (written < samples)
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+
+            ma_decoder_uninit(&ma_dec);
+
+            // Miniaudio doesn't support seeking for loop, so just finish
             break;
         }
 

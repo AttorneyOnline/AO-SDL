@@ -88,6 +88,10 @@ class MountManager {
     /// Blocks until download completes. For use from background threads.
     bool fetch_streaming(const std::string& relative_path, std::function<bool(const uint8_t*, size_t)> on_chunk);
 
+    /// Stream from a direct HTTP/HTTPS URL (not relative to any mount).
+    /// Blocks until download completes. For use from background threads.
+    bool fetch_streaming_url(const std::string& url, std::function<bool(const uint8_t*, size_t)> on_chunk);
+
     /// Release raw bytes from HTTP mount caches after the data has been
     /// decoded and stored in AssetCache. Frees the duplicate memory.
     void release_http(const std::string& relative_path);

@@ -122,7 +122,23 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
     // Spawn download thread
     auto stream_ref = stream; // capture shared_ptr
     std::lock_guard lock(downloads_mutex_);
-    download_threads_.emplace_back([this, stream_ref, path, loop]() {
+    bool is_url = path.starts_with("http://") || path.starts_with("https://");
+    download_threads_.emplace_back([this, stream_ref, path, loop, is_url]() {
+        // Direct URL: stream from the URL without mount path resolution
+        if (is_url) {
+            Log::log_print(INFO, "AudioThread: streaming from URL: '%s'", path.c_str());
+            bool found = mounts_.fetch_streaming_url(path, [&](const uint8_t* data, size_t len) -> bool {
+                stream_ref->feed(data, len);
+                return !stream_ref->is_cancelled();
+            });
+            stream_ref->mark_complete();
+            if (!found) {
+                Log::log_print(WARNING, "AudioThread: URL stream failed: '%s'", path.c_str());
+                stream_ref->cancel();
+            }
+            return;
+        }
+
         // Try to load loop point metadata (.txt file alongside the music).
         // AO2 convention: "track.opus.txt" or "track.txt" next to the audio file.
         // Only check local mounts — don't block on HTTP for a metadata file.
