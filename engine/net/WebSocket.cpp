@@ -44,12 +44,12 @@ WebSocket::WebSocket(const std::string& host, uint16_t port)
 }
 
 WebSocket::WebSocket(const std::string& host, uint16_t port, std::unique_ptr<ITcpSocket> socket)
-    : socket(std::move(socket)), ready(false), connecting(false) {
-    set_header("Host", std::format("{}:{}", host, port));
-    set_header("Upgrade", "websocket");
-    set_header("Connection", "Upgrade");
-    set_header("Sec-WebSocket-Version", "13");
-    set_header("User-Agent", std::string("AO-SDL/") + ao_sdl_version());
+    : socket(std::move(socket)), ready(false), connecting(false),
+      http_headers({{"Host", std::format("{}:{}", host, port)},
+                    {"Upgrade", "websocket"},
+                    {"Connection", "Upgrade"},
+                    {"Sec-WebSocket-Version", "13"},
+                    {"User-Agent", std::string("AO-SDL/") + ao_sdl_version()}}) {
 }
 
 void WebSocket::set_header(const std::string& header, const std::string& value) {

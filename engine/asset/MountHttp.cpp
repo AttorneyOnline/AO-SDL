@@ -57,13 +57,15 @@ static void split_url(const std::string& url, std::string& host, std::string& pa
     }
 }
 
+static std::string strip_trailing_slash(std::string s) {
+    if (!s.empty() && s.back() == '/')
+        s.pop_back();
+    return s;
+}
+
 MountHttp::MountHttp(const std::string& base_url, HttpPool& pool)
-    : Mount(std::filesystem::path(base_url)), pool_(pool) {
+    : Mount(std::filesystem::path(base_url)), base_url_(strip_trailing_slash(base_url)), pool_(pool) {
     split_url(base_url, host_, path_prefix_);
-    base_url_ = base_url;
-    // Ensure no trailing slash on base_url_
-    if (!base_url_.empty() && base_url_.back() == '/')
-        base_url_.pop_back();
     Log::log_print(DEBUG, "MountHttp: host=%s prefix=%s", host_.c_str(), path_prefix_.c_str());
 }
 

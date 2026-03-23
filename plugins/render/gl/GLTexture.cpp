@@ -1,14 +1,17 @@
 #include "GLTexture.h"
 
-GLTexture::GLTexture(const uint8_t* pixels, GLint internal_format, GLenum source_format)
-    : pixels(pixels), num_channels(0), internal_format(internal_format), source_format(source_format), texture(0) {
-    // Cache this once per process instead of querying the driver every time
-    static int cached_max = [] {
-        int val = 0;
-        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &val);
-        return val;
+static int cached_max_texture_units() {
+    static int val = [] {
+        int v = 0;
+        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &v);
+        return v;
     }();
-    max_texture_units = cached_max;
+    return val;
+}
+
+GLTexture::GLTexture(const uint8_t* pixels, GLint internal_format, GLenum source_format)
+    : pixels(pixels), num_channels(0), internal_format(internal_format), source_format(source_format),
+      max_texture_units(cached_max_texture_units()), texture(0) {
 }
 
 GLTexture::~GLTexture() {

@@ -35,8 +35,8 @@ GLShader::GLShader(ShaderType type, const std::string& path) : shader_type(type)
     id = compile_shader(shader_type, buf.str());
 }
 
-GLShader::GLShader(ShaderType type, const std::string& source, bool /*from_source*/) : shader_type(type) {
-    id = compile_shader(shader_type, source);
+GLShader::GLShader(ShaderType type, const std::string& source, bool /*from_source*/)
+    : shader_type(type), id(compile_shader(type, source)) {
 }
 
 GLShader::~GLShader() {

@@ -17,14 +17,9 @@
 // would double memory for font data.
 
 GlyphCache::GlyphCache(TextRenderer& renderer, int atlas_size)
-    : renderer_(renderer), atlas_w_(atlas_size), atlas_h_(atlas_size) {
-    atlas_pixels_.resize((size_t)atlas_w_ * atlas_h_ * 4, 0);
-
-    ImageFrame frame;
-    frame.width = atlas_w_;
-    frame.height = atlas_h_;
-    frame.duration_ms = 0;
-    frame.pixels = atlas_pixels_;
+    : renderer_(renderer), atlas_w_(atlas_size), atlas_h_(atlas_size),
+      atlas_pixels_((size_t)atlas_size * atlas_size * 4, 0) {
+    ImageFrame frame{atlas_pixels_, atlas_w_, atlas_h_, 0};
 
     atlas_ = std::make_shared<ImageAsset>("_glyph_atlas", "gpu", std::vector<ImageFrame>{std::move(frame)});
 

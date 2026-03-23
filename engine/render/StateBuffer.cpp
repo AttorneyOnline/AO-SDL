@@ -1,18 +1,12 @@
 #include "render/StateBuffer.h"
 
-StateBuffer::StateBuffer() : stale(false) {
-    RenderState initial_buf;
-
-    presenting = new RenderState(initial_buf);
-    ready = new RenderState(initial_buf);
-    preparing = new RenderState(initial_buf);
+StateBuffer::StateBuffer()
+    : presenting(new RenderState()), ready(new RenderState()), preparing(new RenderState()), stale(false) {
 }
 
-StateBuffer::StateBuffer(RenderState initial_buf) : stale(false) {
-    // Copy initial_buf by value into all three buffers here
-    presenting = new RenderState(initial_buf);
-    ready = new RenderState(initial_buf);
-    preparing = new RenderState(initial_buf);
+StateBuffer::StateBuffer(RenderState initial_buf)
+    : presenting(new RenderState(initial_buf)), ready(new RenderState(initial_buf)),
+      preparing(new RenderState(initial_buf)), stale(false) {
 }
 
 StateBuffer::~StateBuffer() {

@@ -40,17 +40,11 @@ class RainbowTextProvider : public ShaderUniformProvider {
     float time_;
 };
 
-AOCourtroomPresenter::AOCourtroomPresenter() {
-    // Register profiler sections
-    prof_events_ = profiler_.add_section("Events");
-    prof_assets_ = profiler_.add_section("Assets");
-    prof_animation_ = profiler_.add_section("Animation");
-    prof_textbox_ = profiler_.add_section("Textbox");
-    prof_audio_ = profiler_.add_section("Audio");
-    prof_effects_ = profiler_.add_section("Effects");
-    prof_compose_ = profiler_.add_section("Compose");
-    prof_cache_ = profiler_.add_section("Cache management");
-
+AOCourtroomPresenter::AOCourtroomPresenter()
+    : prof_events_(profiler_.add_section("Events")), prof_assets_(profiler_.add_section("Assets")),
+      prof_animation_(profiler_.add_section("Animation")), prof_textbox_(profiler_.add_section("Textbox")),
+      prof_audio_(profiler_.add_section("Audio")), prof_effects_(profiler_.add_section("Effects")),
+      prof_compose_(profiler_.add_section("Compose")), prof_cache_(profiler_.add_section("Cache management")) {
     // Prefetch assets for queued messages so they're cache-warm when played
     message_queue_.set_prefetch([this](const ICMessage& msg) {
         if (!ao_assets)
