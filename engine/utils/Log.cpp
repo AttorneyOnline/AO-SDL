@@ -1,19 +1,34 @@
 #include "utils/Log.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
-#include <ctime>
+#include <format>
+#include <functional>
 #include <mutex>
 
-static const char* LOG_STRINGS[] = {"INVALID", "VERBOSE", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL"};
+// ---- Timestamp formatting via std::chrono ----------------------------------
 
-const char* log_level_name(LogLevel level) {
-    if (level >= LogLevel::COUNT || level <= LogLevel::INVALID)
-        return "UNKNOWN";
-    return LOG_STRINGS[level];
+std::string LogEvent::timestamp() const {
+    auto local = std::chrono::current_zone()->to_local(time);
+    auto dp = std::chrono::floor<std::chrono::days>(local);
+    auto tod = std::chrono::hh_mm_ss(std::chrono::floor<std::chrono::seconds>(local - dp));
+
+    int h = tod.hours().count();
+    int m = tod.minutes().count();
+    int s = tod.seconds().count();
+    const char* ampm = (h >= 12) ? "PM" : "AM";
+    if (h == 0)
+        h = 12;
+    else if (h > 12)
+        h -= 12;
+
+    return std::format("{:02d}:{:02d}:{:02d} {}", h, m, s, ampm);
 }
+
+// ---- Sink management -------------------------------------------------------
 
 static std::mutex sink_mutex;
 static Log::Sink log_sink;
@@ -23,41 +38,40 @@ void Log::set_sink(Sink sink) {
     log_sink = std::move(sink);
 }
 
-void Log::log_print(LogLevel log_level, const char* fmt, ...) {
-    if (log_level >= LogLevel::COUNT || log_level <= LogLevel::INVALID) {
-        fprintf(stderr, "Logger error: invalid log level %d\n", log_level);
+// ---- Core log implementation -----------------------------------------------
+
+void Log::log_impl(LogLevel level, std::string message) {
+    if (level >= LogLevel::COUNT || level <= LogLevel::INVALID)
         return;
+
+    LogEvent event{level, std::chrono::system_clock::now(), std::move(message)};
+    auto ts = event.timestamp();
+
+    // stdout
+    std::printf("[%s][%s] %s\n", ts.c_str(), log_level_name(level), event.message.c_str());
+
+    // Callback sink (thread-safe)
+    {
+        std::lock_guard lock(sink_mutex);
+        if (log_sink)
+            log_sink(level, ts, event.message);
     }
 
-    char timebuf[16];
+    if (level >= LogLevel::FATAL)
+        std::exit(1);
+}
+
+// ---- Legacy printf API (compatibility) -------------------------------------
+
+void Log::log_print(LogLevel log_level, const char* fmt, ...) {
+    if (log_level >= LogLevel::COUNT || log_level <= LogLevel::INVALID)
+        return;
+
     char messagebuf[4096];
-
-    time_t timer = time(NULL);
-#ifdef _WIN32
-    struct tm tm_storage;
-    localtime_s(&tm_storage, &timer);
-    struct tm* tm_info = &tm_storage;
-#else
-    struct tm* tm_info = localtime(&timer);
-#endif
-
-    strftime(timebuf, sizeof(timebuf), "%I:%M:%S %p", tm_info);
-
     va_list args;
     va_start(args, fmt);
     vsnprintf(messagebuf, sizeof(messagebuf), fmt, args);
     va_end(args);
 
-    printf("[%s][%s] %s\n", timebuf, LOG_STRINGS[log_level], messagebuf);
-
-    // Fire callback sink (thread-safe)
-    {
-        std::lock_guard lock(sink_mutex);
-        if (log_sink)
-            log_sink(log_level, timebuf, messagebuf);
-    }
-
-    if (log_level >= LogLevel::FATAL) {
-        exit(1);
-    }
+    log_impl(log_level, messagebuf);
 }
