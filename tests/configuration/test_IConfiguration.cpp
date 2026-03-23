@@ -70,7 +70,9 @@ class ConfigurationTest : public ::testing::Test {
         cfg().clear();
     }
 
-    static TestConfig& cfg() { return TestConfig::instance(); }
+    static TestConfig& cfg() {
+        return TestConfig::instance();
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -258,13 +260,15 @@ TEST_F(ConfigurationTest, ConcurrentSetAndGet) {
     std::atomic<bool> go{false};
 
     auto writer = [&] {
-        while (!go.load()) {}
+        while (!go.load()) {
+        }
         for (int i = 0; i < iterations; ++i)
             cfg().set_value("counter", std::any{i});
     };
 
     auto reader = [&] {
-        while (!go.load()) {}
+        while (!go.load()) {
+        }
         for (int i = 0; i < iterations; ++i) {
             auto v = cfg().value("counter");
             // Value may or may not be set yet; just ensure no crash.

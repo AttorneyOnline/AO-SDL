@@ -18,7 +18,9 @@ class JsonConfigurationTest : public ::testing::Test {
         cfg().clear();
     }
 
-    static UserConfiguration& cfg() { return UserConfiguration::instance(); }
+    static UserConfiguration& cfg() {
+        return UserConfiguration::instance();
+    }
 };
 
 // ---------------------------------------------------------------------------
