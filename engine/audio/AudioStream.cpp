@@ -240,27 +240,62 @@ void AudioStream::decode_thread_func() {
             ready_.store(true, std::memory_order_release);
             Log::log_print(DEBUG, "AudioStream: miniaudio decoder opened");
 
-            constexpr size_t CHUNK_FRAMES = 4096;
-            float ma_buf[CHUNK_FRAMES * 2];
-            while (!cancelled_.load(std::memory_order_acquire)) {
-                ma_uint64 frames_read = 0;
-                ma_decoder_read_pcm_frames(&ma_dec, ma_buf, CHUNK_FRAMES, &frames_read);
-                if (frames_read == 0)
+            int64_t ma_loop_start = loop_start_.load(std::memory_order_acquire);
+            int64_t ma_loop_end = loop_end_.load(std::memory_order_acquire);
+            bool ma_first_pass = true;
+
+            for (;;) {
+                if (cancelled_.load(std::memory_order_acquire))
                     break;
 
-                size_t samples = static_cast<size_t>(frames_read) * 2;
-                size_t written = 0;
-                while (written < samples && !cancelled_.load(std::memory_order_acquire)) {
-                    size_t n = pcm_ring_.write(ma_buf + written, samples - written);
-                    written += n;
-                    if (written < samples)
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                // On loop passes, seek to loop_start
+                if (!ma_first_pass && looping_.load(std::memory_order_acquire)) {
+                    ma_uint64 seek_frame = ma_loop_start > 0 ? (ma_uint64)ma_loop_start : 0;
+                    ma_decoder_seek_to_pcm_frame(&ma_dec, seek_frame);
+                    Log::log_print(INFO, "AudioStream: miniaudio looping to frame %llu",
+                                   (unsigned long long)seek_frame);
                 }
+                ma_first_pass = false;
+
+                // Decode loop
+                constexpr size_t CHUNK_FRAMES = 4096;
+                float ma_buf[CHUNK_FRAMES * 2];
+                bool reached_end = false;
+                while (!cancelled_.load(std::memory_order_acquire)) {
+                    // Check loop end point
+                    if (ma_loop_end > 0) {
+                        ma_uint64 cursor = 0;
+                        ma_decoder_get_cursor_in_pcm_frames(&ma_dec, &cursor);
+                        if ((int64_t)cursor >= ma_loop_end) {
+                            reached_end = true;
+                            break;
+                        }
+                    }
+
+                    ma_uint64 frames_read = 0;
+                    ma_decoder_read_pcm_frames(&ma_dec, ma_buf, CHUNK_FRAMES, &frames_read);
+                    if (frames_read == 0) {
+                        reached_end = true;
+                        break;
+                    }
+
+                    size_t samples = static_cast<size_t>(frames_read) * 2;
+                    size_t written = 0;
+                    while (written < samples && !cancelled_.load(std::memory_order_acquire)) {
+                        size_t n = pcm_ring_.write(ma_buf + written, samples - written);
+                        written += n;
+                        if (written < samples)
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                }
+
+                if (!reached_end || cancelled_.load(std::memory_order_acquire))
+                    break;
+                if (!looping_.load(std::memory_order_acquire))
+                    break;
             }
 
             ma_decoder_uninit(&ma_dec);
-
-            // Miniaudio doesn't support seeking for loop, so just finish
             break;
         }
 
