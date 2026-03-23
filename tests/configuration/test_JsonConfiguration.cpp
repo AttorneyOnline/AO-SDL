@@ -1,11 +1,13 @@
-#include "configuration/UserConfiguration.h"
-
 #include <gtest/gtest.h>
+
+#include "configuration/JsonConfiguration.h"
 
 #include <any>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+class MockJsonConfiguration : public JsonConfiguration<MockJsonConfiguration> {};
 
 // ---------------------------------------------------------------------------
 // Fixture — resets the UserConfiguration singleton between tests.
@@ -18,8 +20,8 @@ class JsonConfigurationTest : public ::testing::Test {
         cfg().clear();
     }
 
-    static UserConfiguration& cfg() {
-        return UserConfiguration::instance();
+    static MockJsonConfiguration& cfg() {
+        return MockJsonConfiguration::instance();
     }
 };
 
