@@ -1,5 +1,7 @@
 #include "utils/Log.h"
 
+#include "platform/Time.h"
+
 #include <atomic>
 #include <chrono>
 #include <cstdarg>
@@ -12,7 +14,7 @@
 // ---- Timestamp formatting via std::chrono ----------------------------------
 
 std::string LogEvent::timestamp() const {
-    auto local = std::chrono::current_zone()->to_local(time);
+    auto local = platform::to_local(time);
     auto dp = std::chrono::floor<std::chrono::days>(local);
     auto tod = std::chrono::hh_mm_ss(std::chrono::floor<std::chrono::seconds>(local - dp));
 
