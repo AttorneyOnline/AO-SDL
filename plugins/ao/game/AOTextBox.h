@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ao/asset/AOAssetLibrary.h"
+#include "ao/game/AOTextProcessor.h"
 #include "asset/ImageAsset.h"
 #include "asset/MeshAsset.h"
 #include "asset/ShaderAsset.h"
@@ -30,8 +31,9 @@ class AOTextBox {
         return font_loaded && chatbox_bg;
     }
 
-    void start_message(const std::string& showname, const std::string& message, int color_idx, bool additive = false);
-    bool tick(int delta_ms);
+    void start_message(const std::string& showname, const std::string& message, int color_idx,
+                       const std::vector<AOTextColorDef>& color_defs, bool additive = false);
+    TickResult tick(int delta_ms);
 
     /// Render the showname into its own ImageAsset. Returns nullptr if empty.
     std::shared_ptr<ImageAsset> get_nameplate();
@@ -119,12 +121,18 @@ class AOTextBox {
 
     // Current message state
     std::string current_showname;
-    std::string current_message;
+    std::string current_message;  // display text (markup stripped)
     std::string previous_message; // for additive mode
     int current_color_idx = 0;
+    int base_color_idx_ = 0; ///< Original color from MS packet (not modified by inline events).
     int chars_visible = 0;
     int total_chars = 0;
     TextState state = TextState::INACTIVE;
+
+    // Preprocessed text events
+    ProcessedText processed_;
+    size_t next_event_idx_ = 0;
+    int pause_remaining_ms_ = 0;
 
     // Tick timing
     static constexpr int BASE_TICK_MS = 40;

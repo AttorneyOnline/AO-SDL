@@ -116,7 +116,7 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
 
     // Blank messages skip pre-anim and go straight to idle
     if (msg.message.empty() || blank) {
-        textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
+        textbox.start_message(showname, msg.message, msg.text_color, ao_assets->text_colors(), msg.additive);
         emote_player.start(*ao_assets, msg.character, msg.emote, "", EmoteMod::IDLE);
         emote_player.transition_to_idle();
         preanim_blocking_ = false;
@@ -132,12 +132,12 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
             pending_text_color_ = msg.text_color;
             pending_additive_ = msg.additive;
             // Keep textbox inactive during preanim
-            textbox.start_message("", "", 0);
+            textbox.start_message("", "", 0, ao_assets->text_colors());
         }
         else {
             // Immediate (no-int-pre) or no preanim: start text right away
             preanim_blocking_ = false;
-            textbox.start_message(showname, msg.message, msg.text_color, msg.additive);
+            textbox.start_message(showname, msg.message, msg.text_color, ao_assets->text_colors(), msg.additive);
         }
     }
 
@@ -199,7 +199,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
                            ev->get_position().empty() ? background.position() : ev->get_position());
 
             // Area change: clear IC state so only the background shows
-            textbox.start_message("", "", 0);
+            textbox.start_message("", "", 0, ao_assets->text_colors());
             message_queue_.clear();
             emote_player.stop();
             preanim_blocking_ = false;
@@ -246,7 +246,8 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         if (preanim_blocking_ && prev_emote_state == AOEmotePlayer::State::PREANIM &&
             emote_player.state() == AOEmotePlayer::State::TALKING) {
             preanim_blocking_ = false;
-            textbox.start_message(pending_showname_, pending_message_, pending_text_color_, pending_additive_);
+            textbox.start_message(pending_showname_, pending_message_, pending_text_color_, ao_assets->text_colors(),
+                                  pending_additive_);
             prev_chars_visible_ = 0;
         }
 
@@ -261,9 +262,13 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     bool text_advanced;
     {
         auto _ = profiler_.scope(prof_textbox_);
-        textbox.tick(delta_ms);
+        auto tick_result = textbox.tick(delta_ms);
+        if (tick_result.trigger_screenshake)
+            screenshake_.trigger();
+        if (tick_result.trigger_flash)
+            flash_.trigger();
         cur_chars = textbox.chars_visible_count();
-        text_advanced = cur_chars > prev_chars_visible_;
+        text_advanced = tick_result.advanced;
     }
 
     // ---- Audio (music + blips) ----
@@ -344,13 +349,13 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             auto mesh = textbox.message_mesh();
             auto shader = textbox.text_shader();
             if (atlas && mesh && mesh->index_count() > 0 && shader) {
+                // Per-vertex color is baked into the mesh by TextMeshBuilder.
+                // Rainbow text uses a time uniform for the animation.
                 if (textbox.is_rainbow()) {
                     shader->set_uniform_provider(std::make_shared<RainbowTextProvider>(scene_time_s_));
                 }
                 else {
-                    float r, g, b;
-                    textbox.message_color_rgb(r, g, b);
-                    shader->set_uniform_provider(std::make_shared<TextColorProvider>(r, g, b));
+                    shader->set_uniform_provider(nullptr);
                 }
 
                 Layer text_layer(atlas, 0, 21);

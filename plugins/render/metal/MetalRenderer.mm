@@ -50,8 +50,9 @@ static simd_float4x4 mat4_to_simd(const Mat4 &m) {
 // ---- vertex layout (matches GLMesh VertexData) ------------------------------
 
 struct MetalVertex {
-    simd_float2 position;
-    simd_float2 texcoord;
+    float position[2];
+    float texcoord[2];
+    float color[3];
 };
 
 // ---- impl -------------------------------------------------------------------
@@ -282,6 +283,9 @@ struct MetalRendererImpl {
         vd.attributes[1].format = MTLVertexFormatFloat2;
         vd.attributes[1].offset = offsetof(MetalVertex, texcoord);
         vd.attributes[1].bufferIndex = 0;
+        vd.attributes[2].format = MTLVertexFormatFloat3;
+        vd.attributes[2].offset = offsetof(MetalVertex, color);
+        vd.attributes[2].bufferIndex = 0;
         vd.layouts[0].stride = sizeof(MetalVertex);
 
         MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
@@ -342,6 +346,9 @@ struct MetalRendererImpl {
         vd.attributes[1].format = MTLVertexFormatFloat2;
         vd.attributes[1].offset = offsetof(MetalVertex, texcoord);
         vd.attributes[1].bufferIndex = 0;
+        vd.attributes[2].format = MTLVertexFormatFloat3;
+        vd.attributes[2].offset = offsetof(MetalVertex, color);
+        vd.attributes[2].bufferIndex = 0;
         vd.layouts[0].stride = sizeof(MetalVertex);
 
         MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];
@@ -418,11 +425,12 @@ struct MetalRendererImpl {
     }
 
     void build_quad() {
+        static_assert(sizeof(MetalVertex) == sizeof(MeshVertex), "MetalVertex and MeshVertex must match");
         const MetalVertex verts[4] = {
-            {{1.0f, 1.0f}, {1.0f, 1.0f}},
-            {{1.0f, -1.0f}, {1.0f, 0.0f}},
-            {{-1.0f, -1.0f}, {0.0f, 0.0f}},
-            {{-1.0f, 1.0f}, {0.0f, 1.0f}},
+            {{1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}},
+            {{1.0f, -1.0f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
+            {{-1.0f, -1.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
+            {{-1.0f, 1.0f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}},
         };
         const uint32_t indices[6] = {0, 1, 3, 1, 2, 3};
 
@@ -654,6 +662,9 @@ struct MetalRendererImpl {
         vd.attributes[1].format = MTLVertexFormatFloat2;
         vd.attributes[1].offset = offsetof(MetalVertex, texcoord);
         vd.attributes[1].bufferIndex = 0;
+        vd.attributes[2].format = MTLVertexFormatFloat3;
+        vd.attributes[2].offset = offsetof(MetalVertex, color);
+        vd.attributes[2].bufferIndex = 0;
         vd.layouts[0].stride = sizeof(MetalVertex);
 
         MTLRenderPipelineDescriptor *pd = [[MTLRenderPipelineDescriptor alloc] init];

@@ -13,6 +13,7 @@
 struct MeshVertex {
     float position[2];
     float texcoord[2];
+    float color[3] = {1.0f, 1.0f, 1.0f}; ///< Per-vertex color (white default = no tint).
 };
 
 /**

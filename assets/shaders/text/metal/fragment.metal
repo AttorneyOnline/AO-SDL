@@ -1,12 +1,7 @@
-// Uniform fields after frame_index and opacity are packed alphabetically
-// by key name from the ShaderUniformProvider.
 struct TextFragUniforms {
     int frame_index;
     float opacity;
     int frame_count;
-    float u_text_b; // alphabetical: b < g < r
-    float u_text_g;
-    float u_text_r;
 };
 
 fragment float4 fragment_main(VertexOut in [[stage_in]],
@@ -18,5 +13,5 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
     float4 tex_color = tex.sample(samp, atlas_uv);
     float alpha = tex_color.a * u.opacity;
     if (alpha < 0.001) discard_fragment();
-    return float4(u.u_text_r, u.u_text_g, u.u_text_b, alpha);
+    return float4(in.color, alpha);
 }

@@ -42,12 +42,12 @@ TEST_F(AOTextBoxTest, DefaultStateIsInactive) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOTextBoxTest, StartMessageWithEmptyMessageSetsStateToInactive) {
-    box.start_message("Phoenix", "", 0);
+    box.start_message("Phoenix", "", 0, ao_assets.text_colors());
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::INACTIVE);
 }
 
 TEST_F(AOTextBoxTest, StartMessageWithNonEmptyMessageSetsStateToTicking) {
-    box.start_message("Phoenix", "Hello world", 0);
+    box.start_message("Phoenix", "Hello world", 0, ao_assets.text_colors());
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::TICKING);
 }
 
@@ -57,16 +57,16 @@ TEST_F(AOTextBoxTest, StartMessageWithNonEmptyMessageSetsStateToTicking) {
 
 TEST_F(AOTextBoxTest, TickReturnsFalseWhenInactive) {
     AOTextBox fresh;
-    EXPECT_FALSE(fresh.tick(16));
+    EXPECT_FALSE(fresh.tick(16).advanced);
 }
 
 TEST_F(AOTextBoxTest, TickReturnsFalseWhenDone) {
-    box.start_message("Phoenix", "x", 0);
+    box.start_message("Phoenix", "x", 0, ao_assets.text_colors());
     // Tick until done
     for (int i = 0; i < 100; i++)
         box.tick(100);
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::DONE);
-    EXPECT_FALSE(box.tick(16));
+    EXPECT_FALSE(box.tick(16).advanced);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,15 +74,15 @@ TEST_F(AOTextBoxTest, TickReturnsFalseWhenDone) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOTextBoxTest, TickWithEnoughTimeAdvancesTextAndReturnsTrue) {
-    box.start_message("Phoenix", "Hello", 0);
+    box.start_message("Phoenix", "Hello", 0, ao_assets.text_colors());
     // BASE_TICK_MS=40, DEFAULT_SPEED=3, SPEED_MULT[3]=1.0 => delay=40ms
     // Provide enough time for at least one character advance.
-    bool advanced = box.tick(50);
-    EXPECT_TRUE(advanced);
+    auto tick_result = box.tick(50);
+    EXPECT_TRUE(tick_result.advanced);
 }
 
 TEST_F(AOTextBoxTest, TextStateTransitionsFromTickingToDoneAfterEnoughTicks) {
-    box.start_message("Phoenix", "Hi", 0);
+    box.start_message("Phoenix", "Hi", 0, ao_assets.text_colors());
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::TICKING);
 
     // "Hi" is 2 characters. At speed 3, delay=40ms per char.
@@ -101,7 +101,7 @@ TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenInactive) {
 }
 
 TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenDone) {
-    box.start_message("Phoenix", "x", 0);
+    box.start_message("Phoenix", "x", 0, ao_assets.text_colors());
     for (int i = 0; i < 100; i++)
         box.tick(100);
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::DONE);
@@ -110,14 +110,14 @@ TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenDone) {
 
 TEST_F(AOTextBoxTest, IsTalkingReturnsTrueWhenTickingWithTalkingColor) {
     // Color index 0 is white with talking=true
-    box.start_message("Phoenix", "Hello world", 0);
+    box.start_message("Phoenix", "Hello world", 0, ao_assets.text_colors());
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::TICKING);
     EXPECT_TRUE(box.is_talking());
 }
 
 TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenTickingWithNonTalkingColor) {
     // Color index 3 is orange with talking=false
-    box.start_message("Phoenix", "Hello world", 3);
+    box.start_message("Phoenix", "Hello world", 3, ao_assets.text_colors());
     EXPECT_EQ(box.text_state(), AOTextBox::TextState::TICKING);
     EXPECT_FALSE(box.is_talking());
 }
@@ -127,7 +127,7 @@ TEST_F(AOTextBoxTest, IsTalkingReturnsFalseWhenTickingWithNonTalkingColor) {
 // ---------------------------------------------------------------------------
 
 TEST_F(AOTextBoxTest, NameplateBehaviorDependsOnFont) {
-    box.start_message("Phoenix", "Hello", 0);
+    box.start_message("Phoenix", "Hello", 0, ao_assets.text_colors());
     // With system font fallback, nameplate may render even without AO assets.
     // Without any font, nameplate should be nullptr.
     auto nameplate = box.get_nameplate();
@@ -135,7 +135,7 @@ TEST_F(AOTextBoxTest, NameplateBehaviorDependsOnFont) {
 }
 
 TEST_F(AOTextBoxTest, NameplateReturnsNullptrForEmptyShowname) {
-    box.start_message("", "Hello", 0);
+    box.start_message("", "Hello", 0, ao_assets.text_colors());
     EXPECT_EQ(box.get_nameplate(), nullptr);
 }
 
@@ -186,11 +186,11 @@ class AOTextBoxNameplateTest : public ::testing::Test {
 } // namespace
 
 TEST_F(AOTextBoxNameplateTest, LayoutUpdatesWhenShownameChanges) {
-    box.start_message("Alice", "Hello", 0);
+    box.start_message("Alice", "Hello", 0, ao_assets.text_colors());
     box.get_nameplate();
     auto nl1 = box.nameplate_layout();
 
-    box.start_message("Bob", "World", 0);
+    box.start_message("Bob", "World", 0, ao_assets.text_colors());
     box.get_nameplate();
     auto nl2 = box.nameplate_layout();
 
@@ -200,7 +200,7 @@ TEST_F(AOTextBoxNameplateTest, LayoutUpdatesWhenShownameChanges) {
 }
 
 TEST_F(AOTextBoxNameplateTest, LayoutScaleIsOneWhenTextFitsInRect) {
-    box.start_message("A", "Hello", 0);
+    box.start_message("A", "Hello", 0, ao_assets.text_colors());
     box.get_nameplate();
     auto nl = box.nameplate_layout();
     // With embedded config + system font, a short name should fit (scale=1).

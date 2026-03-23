@@ -325,6 +325,18 @@ std::vector<AOTextColorDef> AOAssetLibrary::text_colors() {
                 if (talk != it->second.end()) {
                     colors[i].talking = (talk->second != "0");
                 }
+                auto start = it->second.find(key + "_start");
+                if (start != it->second.end()) {
+                    colors[i].markup_start = start->second;
+                }
+                auto end = it->second.find(key + "_end");
+                if (end != it->second.end()) {
+                    colors[i].markup_end = end->second;
+                }
+                auto remove = it->second.find(key + "_remove");
+                if (remove != it->second.end()) {
+                    colors[i].markup_remove = (remove->second != "0");
+                }
             }
         }
     }

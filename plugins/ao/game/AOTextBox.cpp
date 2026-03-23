@@ -130,7 +130,8 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
     }
 }
 
-void AOTextBox::start_message(const std::string& showname, const std::string& message, int color_idx, bool additive) {
+void AOTextBox::start_message(const std::string& showname, const std::string& message, int color_idx,
+                              const std::vector<AOTextColorDef>& color_defs, bool additive) {
     current_showname = showname;
 
     if (additive) {
@@ -140,14 +141,20 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
         previous_message.clear();
     }
 
-    current_message = message;
-    current_color_idx = std::clamp(color_idx, 0, (int)colors.size() - 1);
+    // Preprocess inline markup: escape sequences, speed modifiers, color markdown
+    processed_ = AOTextProcessor::process(message, color_defs, color_idx);
+    next_event_idx_ = 0;
+    pause_remaining_ms_ = 0;
+
+    current_message = processed_.display;
+    base_color_idx_ = std::clamp(color_idx, 0, (int)colors.size() - 1);
+    current_color_idx = base_color_idx_;
     chars_visible = 0;
     accumulated_ms = 0;
     current_speed = DEFAULT_SPEED;
 
-    // Count UTF-8 characters
-    total_chars = UTF8::length(message);
+    // Count UTF-8 characters in the display text (markup already stripped)
+    total_chars = UTF8::length(current_message);
 
     // Don't show the textbox at all for empty/whitespace-only messages
     bool blank = true;
@@ -171,6 +178,11 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
     if (msg_glyph_cache_) {
         int wrap_w = message_rect.w > 0 ? message_rect.w : 256;
         cached_layout_ = text_renderer.compute_layout(cached_display_text_, wrap_w);
+
+        // Apply text alignment (center/right/justify) from inline prefix
+        if (processed_.alignment != TextAlignment::LEFT) {
+            AOTextProcessor::apply_alignment(cached_layout_, processed_.alignment, wrap_w);
+        }
     }
     else {
         cached_layout_.clear();
@@ -206,18 +218,52 @@ int AOTextBox::current_tick_delay() const {
     return std::max(delay, 1);
 }
 
-bool AOTextBox::tick(int delta_ms) {
+TickResult AOTextBox::tick(int delta_ms) {
+    TickResult result;
     if (state != TextState::TICKING)
-        return false;
+        return result;
+
+    // Handle pause from \p escape sequence
+    if (pause_remaining_ms_ > 0) {
+        pause_remaining_ms_ -= delta_ms;
+        return result;
+    }
 
     accumulated_ms += delta_ms;
     int delay = current_tick_delay();
-    bool advanced = false;
 
     while (accumulated_ms >= delay && chars_visible < total_chars) {
         accumulated_ms -= delay;
         chars_visible++;
-        advanced = true;
+        result.advanced = true;
+
+        // Consume all events at or before the current character position
+        while (next_event_idx_ < processed_.events.size() &&
+               processed_.events[next_event_idx_].char_index <= chars_visible) {
+            const auto& ev = processed_.events[next_event_idx_];
+            switch (ev.type) {
+            case TextEventType::COLOR_CHANGE:
+                current_color_idx = std::clamp(ev.color_idx, 0, (int)colors.size() - 1);
+                break;
+            case TextEventType::SPEED_UP:
+                current_speed = std::max(current_speed - 1, 1);
+                break;
+            case TextEventType::SPEED_DOWN:
+                current_speed = std::min(current_speed + 1, 6);
+                break;
+            case TextEventType::PAUSE:
+                pause_remaining_ms_ = 100;
+                next_event_idx_++;
+                goto done_advancing; // break out of both loops
+            case TextEventType::SCREENSHAKE:
+                result.trigger_screenshake = true;
+                break;
+            case TextEventType::FLASH:
+                result.trigger_flash = true;
+                break;
+            }
+            next_event_idx_++;
+        }
 
         if (chars_visible >= total_chars) {
             state = TextState::DONE;
@@ -225,22 +271,61 @@ bool AOTextBox::tick(int delta_ms) {
         }
         delay = current_tick_delay();
     }
+done_advancing:
 
     // Rebuild GPU text mesh when characters advance (layout is cached from start_message)
-    if (advanced && msg_glyph_cache_ && msg_mesh_ && chars_visible != last_chars_visible_) {
+    if (result.advanced && msg_glyph_cache_ && msg_mesh_ && chars_visible != last_chars_visible_) {
         last_chars_visible_ = chars_visible;
 
         int visible = cached_prev_chars_ + chars_visible;
         int scroll_y = text_renderer.compute_scroll_offset(cached_layout_, visible, message_rect.h);
 
+        // Build per-character color array from processed events.
+        // Walk events up to the current visible character count to determine
+        // the color at each position.
+        std::vector<TextMeshBuilder::CharColor> char_colors;
+        int total_visible = cached_prev_chars_ + total_chars;
+        char_colors.resize(total_visible);
+        {
+            // Use the original base color from the MS packet, not current_color_idx
+            // which gets modified by inline COLOR_CHANGE events during tick.
+            float br = 1.0f, bg = 1.0f, bb = 1.0f;
+            int base_idx = base_color_idx_;
+            br = colors[base_idx].r / 255.0f;
+            bg = colors[base_idx].g / 255.0f;
+            bb = colors[base_idx].b / 255.0f;
+
+            // Fill previous message chars with base color
+            for (int i = 0; i < cached_prev_chars_; i++)
+                char_colors[i] = {br, bg, bb};
+
+            // Walk events to compute color at each position in the current message
+            float cr = br, cg = bg, cb = bb;
+            size_t ev_idx = 0;
+            for (int i = 0; i < total_chars; i++) {
+                // Consume color events at this position
+                while (ev_idx < processed_.events.size() && processed_.events[ev_idx].char_index <= i) {
+                    if (processed_.events[ev_idx].type == TextEventType::COLOR_CHANGE) {
+                        int ci = std::clamp(processed_.events[ev_idx].color_idx, 0, (int)colors.size() - 1);
+                        cr = colors[ci].r / 255.0f;
+                        cg = colors[ci].g / 255.0f;
+                        cb = colors[ci].b / 255.0f;
+                    }
+                    ev_idx++;
+                }
+                char_colors[cached_prev_chars_ + i] = {cr, cg, cb};
+            }
+        }
+
         std::vector<MeshVertex> verts;
         std::vector<uint32_t> indices;
         TextMeshBuilder::build(*msg_glyph_cache_, cached_layout_, visible, chatbox_rect.x + message_rect.x,
-                               chatbox_rect.y + message_rect.y, scroll_y, message_rect.h, 256, 192, verts, indices);
+                               chatbox_rect.y + message_rect.y, scroll_y, message_rect.h, 256, 192, verts, indices,
+                               char_colors);
         msg_mesh_->update(std::move(verts), std::move(indices));
     }
 
-    return advanced;
+    return result;
 }
 
 bool AOTextBox::is_talking() const {

@@ -4,7 +4,7 @@ namespace TextMeshBuilder {
 
 void build(GlyphCache& cache, const std::vector<TextRenderer::GlyphLayout>& layout, int chars_visible, int offset_x,
            int offset_y, int scroll_y, int max_height, int base_w, int base_h, std::vector<MeshVertex>& out_vertices,
-           std::vector<uint32_t>& out_indices) {
+           std::vector<uint32_t>& out_indices, const std::vector<CharColor>& char_colors) {
     out_vertices.clear();
     out_indices.clear();
 
@@ -63,12 +63,20 @@ void build(GlyphCache& cache, const std::vector<TextRenderer::GlyphLayout>& layo
         float x1 = ((px + pw) / bw) * 2.0f - 1.0f;
         float y1 = 1.0f - ((py + ph) / bh) * 2.0f; // bottom
 
+        // Per-character color (default white if no colors provided)
+        float cr = 1.0f, cg = 1.0f, cb = 1.0f;
+        if (gl.char_index >= 0 && gl.char_index < (int)char_colors.size()) {
+            cr = char_colors[gl.char_index].r;
+            cg = char_colors[gl.char_index].g;
+            cb = char_colors[gl.char_index].b;
+        }
+
         uint32_t base = (uint32_t)out_vertices.size();
 
-        out_vertices.push_back({{x0, y0}, {u0, v_top}}); // top-left
-        out_vertices.push_back({{x1, y0}, {u1, v_top}}); // top-right
-        out_vertices.push_back({{x1, y1}, {u1, v_bot}}); // bottom-right
-        out_vertices.push_back({{x0, y1}, {u0, v_bot}}); // bottom-left
+        out_vertices.push_back({{x0, y0}, {u0, v_top}, {cr, cg, cb}}); // top-left
+        out_vertices.push_back({{x1, y0}, {u1, v_top}, {cr, cg, cb}}); // top-right
+        out_vertices.push_back({{x1, y1}, {u1, v_bot}, {cr, cg, cb}}); // bottom-right
+        out_vertices.push_back({{x0, y1}, {u0, v_bot}, {cr, cg, cb}}); // bottom-left
 
         out_indices.push_back(base + 0);
         out_indices.push_back(base + 1);

@@ -28,6 +28,9 @@ struct AOFontSpec {
 struct AOTextColorDef {
     uint8_t r = 247, g = 247, b = 247;
     bool talking = true;
+    std::string markup_start;  ///< Characters that begin this color span (e.g. "*").
+    std::string markup_end;    ///< Characters that end this color span. If empty or == start, toggle mode.
+    bool markup_remove = true; ///< Whether to hide markup characters from display.
 };
 
 /// The AO2-specific asset resolution layer.

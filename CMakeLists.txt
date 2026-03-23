@@ -399,6 +399,7 @@ add_library(ao_game STATIC
     plugins/ao/game/AOBackground.cpp
     plugins/ao/game/AOEmotePlayer.cpp
     plugins/ao/game/AOTextBox.cpp
+    plugins/ao/game/AOTextProcessor.cpp
     plugins/ao/game/effects/ScreenshakeEffect.cpp
     plugins/ao/game/effects/FlashEffect.cpp
     plugins/ao/game/effects/ShaderEffect.cpp
