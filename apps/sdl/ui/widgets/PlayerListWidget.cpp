@@ -1,11 +1,14 @@
 #include "ui/widgets/PlayerListWidget.h"
 
+#include "ui/widgets/CourtroomState.h"
+
 #include "event/EventManager.h"
 #include "event/PlayerListEvent.h"
 
 #include <imgui.h>
 
 void PlayerListWidget::handle_events() {
+    auto& players_ = CourtroomState::instance().players;
     auto& ch = EventManager::instance().get_channel<PlayerListEvent>();
     while (auto ev = ch.get_event()) {
         int id = ev->player_id();
@@ -33,6 +36,7 @@ void PlayerListWidget::handle_events() {
 }
 
 void PlayerListWidget::render() {
+    auto& players_ = CourtroomState::instance().players;
     if (players_.empty()) {
         ImGui::TextDisabled("No players");
         return;

@@ -30,6 +30,10 @@ class CourtroomScreen : public Screen {
         return char_id_;
     }
 
+    /// Update the character without destroying courtroom state.
+    /// Reloads character sheet and emote icons asynchronously.
+    void change_character(const std::string& character_name, int char_id);
+
     /// True while character data is still being loaded asynchronously.
     bool is_loading() const {
         return loading_;

@@ -50,6 +50,23 @@ void CourtroomScreen::load_character_data() {
     loading_ = false;
 }
 
+void CourtroomScreen::change_character(const std::string& character_name, int char_id) {
+    // Wait for any in-flight load to finish before swapping
+    if (load_future_.valid())
+        load_future_.wait();
+
+    character_name_ = character_name;
+    char_id_ = char_id;
+    loading_ = true;
+    char_sheet_.reset();
+    emote_icons_.clear();
+
+    // Drop low-priority downloads from the old character
+    MediaManager::instance().mounts_ref().drop_http_below(1);
+
+    load_future_ = std::async(std::launch::async, &CourtroomScreen::load_character_data, this);
+}
+
 void CourtroomScreen::enter(ScreenController&) {
 }
 

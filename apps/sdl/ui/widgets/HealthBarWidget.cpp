@@ -1,5 +1,7 @@
 #include "ui/widgets/HealthBarWidget.h"
 
+#include "ui/widgets/CourtroomState.h"
+
 #include "event/EventManager.h"
 #include "event/HealthBarEvent.h"
 #include "event/OutgoingHealthBarEvent.h"
@@ -10,17 +12,19 @@
 #include <algorithm>
 
 void HealthBarWidget::handle_events() {
+    auto& cs = CourtroomState::instance();
     auto& ch = EventManager::instance().get_channel<HealthBarEvent>();
     while (auto ev = ch.get_event()) {
         int val = std::clamp(ev->value(), 0, 10);
         if (ev->side() == 1)
-            def_hp_ = val;
+            cs.def_hp = val;
         else if (ev->side() == 2)
-            pro_hp_ = val;
+            cs.pro_hp = val;
     }
 }
 
 void HealthBarWidget::render() {
+    auto& cs = CourtroomState::instance();
     float w = ImGui::GetContentRegionAvail().x;
     float bar_h = 8.0f;
     bool is_judge = state_ && state_->side_index == 3;
@@ -58,6 +62,6 @@ void HealthBarWidget::render() {
         }
     };
 
-    draw_bar("DEF", 1, def_hp_, IM_COL32(80, 180, 80, 255));
-    draw_bar("PRO", 2, pro_hp_, IM_COL32(200, 60, 60, 255));
+    draw_bar("DEF", 1, cs.def_hp, IM_COL32(80, 180, 80, 255));
+    draw_bar("PRO", 2, cs.pro_hp, IM_COL32(200, 60, 60, 255));
 }

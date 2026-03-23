@@ -1,5 +1,6 @@
 #include "ui/widgets/MusicAreaWidget.h"
 
+#include "ui/widgets/CourtroomState.h"
 #include "ui/widgets/ICMessageState.h"
 
 #include "event/AreaUpdateEvent.h"
@@ -14,35 +15,35 @@
 #include <algorithm>
 
 void MusicAreaWidget::handle_events() {
+    auto& cs = CourtroomState::instance();
+
     auto& list_ch = EventManager::instance().get_channel<MusicListEvent>();
     while (auto ev = list_ch.get_event()) {
-        // Partial updates (FA/FM) only replace the non-empty list
         if (ev->partial()) {
             if (!ev->areas().empty()) {
-                areas_ = ev->areas();
-                size_t n = areas_.size();
-                area_players_.assign(n, -1);
-                area_status_.assign(n, "Unknown");
-                area_cm_.assign(n, "Unknown");
-                area_lock_.assign(n, "Unknown");
+                cs.areas = ev->areas();
+                size_t n = cs.areas.size();
+                cs.area_players.assign(n, -1);
+                cs.area_status.assign(n, "Unknown");
+                cs.area_cm.assign(n, "Unknown");
+                cs.area_lock.assign(n, "Unknown");
             }
             if (!ev->tracks().empty()) {
-                tracks_ = ev->tracks();
+                cs.tracks = ev->tracks();
             }
         }
         else {
-            areas_ = ev->areas();
-            tracks_ = ev->tracks();
-            size_t n = areas_.size();
-            area_players_.assign(n, -1);
-            area_status_.assign(n, "Unknown");
-            area_cm_.assign(n, "Unknown");
-            area_lock_.assign(n, "Unknown");
+            cs.areas = ev->areas();
+            cs.tracks = ev->tracks();
+            size_t n = cs.areas.size();
+            cs.area_players.assign(n, -1);
+            cs.area_status.assign(n, "Unknown");
+            cs.area_cm.assign(n, "Unknown");
+            cs.area_lock.assign(n, "Unknown");
         }
-        // Pre-lowercase track names for filtering
-        tracks_lower_.resize(tracks_.size());
-        for (size_t i = 0; i < tracks_.size(); i++) {
-            tracks_lower_[i] = tracks_[i];
+        tracks_lower_.resize(cs.tracks.size());
+        for (size_t i = 0; i < cs.tracks.size(); i++) {
+            tracks_lower_[i] = cs.tracks[i];
             std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
                            [](unsigned char c) { return std::tolower(c); });
         }
@@ -51,30 +52,30 @@ void MusicAreaWidget::handle_events() {
     auto& arup_ch = EventManager::instance().get_channel<AreaUpdateEvent>();
     while (auto ev = arup_ch.get_event()) {
         const auto& vals = ev->values();
-        size_t count = std::min(vals.size(), areas_.size());
+        size_t count = std::min(vals.size(), cs.areas.size());
         switch (ev->type()) {
         case AreaUpdateEvent::PLAYERS:
             for (size_t i = 0; i < count; i++)
-                area_players_[i] = std::atoi(vals[i].c_str());
+                cs.area_players[i] = std::atoi(vals[i].c_str());
             break;
         case AreaUpdateEvent::STATUS:
             for (size_t i = 0; i < count; i++)
-                area_status_[i] = vals[i];
+                cs.area_status[i] = vals[i];
             break;
         case AreaUpdateEvent::CM:
             for (size_t i = 0; i < count; i++)
-                area_cm_[i] = vals[i];
+                cs.area_cm[i] = vals[i];
             break;
         case AreaUpdateEvent::LOCK:
             for (size_t i = 0; i < count; i++)
-                area_lock_[i] = vals[i];
+                cs.area_lock[i] = vals[i];
             break;
         }
     }
 
     auto& now_ch = EventManager::instance().get_channel<NowPlayingEvent>();
     while (auto ev = now_ch.get_event()) {
-        now_playing_ = ev->track();
+        cs.now_playing = ev->track();
     }
 }
 
@@ -99,24 +100,25 @@ static ImVec4 status_color(const std::string& status) {
 }
 
 void MusicAreaWidget::render() {
+    auto& cs = CourtroomState::instance();
+
     if (ImGui::BeginTabBar("##music_area_tabs")) {
         if (ImGui::BeginTabItem("Music")) {
             ImGui::SetNextItemWidth(-1);
             ImGui::InputTextWithHint("##music_search", "Search...", search_buf_, sizeof(search_buf_));
 
-            if (!now_playing_.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", now_playing_.c_str());
+            if (!cs.now_playing.empty()) {
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", cs.now_playing.c_str());
             }
 
-            // Lowercase the filter once per frame
             std::string lower_filter(search_buf_);
             std::transform(lower_filter.begin(), lower_filter.end(), lower_filter.begin(),
                            [](unsigned char c) { return std::tolower(c); });
 
             ImGui::BeginChild("##music_list", ImVec2(0, 0), ImGuiChildFlags_None);
 
-            for (int i = 0; i < (int)tracks_.size(); i++) {
-                const auto& track = tracks_[i];
+            for (int i = 0; i < (int)cs.tracks.size(); i++) {
+                const auto& track = cs.tracks[i];
                 if (i < (int)tracks_lower_.size() && !matches_filter(tracks_lower_[i], lower_filter))
                     continue;
 
@@ -140,39 +142,38 @@ void MusicAreaWidget::render() {
         if (ImGui::BeginTabItem("Areas")) {
             ImGui::BeginChild("##area_list", ImVec2(0, 0), ImGuiChildFlags_None);
 
-            for (int i = 0; i < (int)areas_.size(); i++) {
+            for (int i = 0; i < (int)cs.areas.size(); i++) {
                 ImGui::PushID(i);
                 bool selected = (i == selected_area_);
-                bool locked = (i < (int)area_lock_.size() && area_lock_[i] == "LOCKED");
+                bool locked = (i < (int)cs.area_lock.size() && cs.area_lock[i] == "LOCKED");
 
                 if (locked)
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.4f, 0.4f, 1.0f));
 
-                if (ImGui::Selectable(areas_[i].c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
+                if (ImGui::Selectable(cs.areas[i].c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
                     selected_area_ = i;
                     if (ImGui::IsMouseDoubleClicked(0)) {
                         std::string showname = state_->showname;
                         EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
-                            OutgoingMusicEvent(areas_[i], showname));
+                            OutgoingMusicEvent(cs.areas[i], showname));
                     }
                 }
 
                 if (locked)
                     ImGui::PopStyleColor();
 
-                // Area metadata line
-                if (i < (int)area_status_.size()) {
+                if (i < (int)cs.area_status.size()) {
                     ImGui::SameLine();
-                    ImGui::TextColored(status_color(area_status_[i]), " [%s]", area_status_[i].c_str());
+                    ImGui::TextColored(status_color(cs.area_status[i]), " [%s]", cs.area_status[i].c_str());
 
-                    if (i < (int)area_players_.size() && area_players_[i] >= 0) {
+                    if (i < (int)cs.area_players.size() && cs.area_players[i] >= 0) {
                         ImGui::SameLine();
-                        ImGui::TextDisabled("(%d)", area_players_[i]);
+                        ImGui::TextDisabled("(%d)", cs.area_players[i]);
                     }
 
-                    if (i < (int)area_cm_.size() && area_cm_[i] != "FREE" && area_cm_[i] != "Unknown") {
+                    if (i < (int)cs.area_cm.size() && cs.area_cm[i] != "FREE" && cs.area_cm[i] != "Unknown") {
                         ImGui::SameLine();
-                        ImGui::TextDisabled("CM: %s", area_cm_[i].c_str());
+                        ImGui::TextDisabled("CM: %s", cs.area_cm[i].c_str());
                     }
                 }
 

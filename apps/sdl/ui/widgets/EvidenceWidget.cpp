@@ -1,5 +1,7 @@
 #include "ui/widgets/EvidenceWidget.h"
 
+#include "ui/widgets/CourtroomState.h"
+
 #include "event/EventManager.h"
 #include "event/EvidenceListEvent.h"
 
@@ -8,12 +10,13 @@
 void EvidenceWidget::handle_events() {
     auto& ch = EventManager::instance().get_channel<EvidenceListEvent>();
     while (auto ev = ch.get_event()) {
-        items_ = ev->items();
+        CourtroomState::instance().evidence = ev->items();
         selected_ = -1;
     }
 }
 
 void EvidenceWidget::render() {
+    auto& items_ = CourtroomState::instance().evidence;
     if (items_.empty()) {
         ImGui::TextDisabled("No evidence");
         return;
