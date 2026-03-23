@@ -278,12 +278,12 @@ std::optional<std::vector<DecodedFrame>> decode(const uint8_t* data, size_t size
 
     // Plain PNG
     if (!is_apng || num_frames <= 1) {
-        stbi_set_flip_vertically_on_load(flip_y);
         int w, h, ch;
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &w, &h, &ch, 4);
-        stbi_set_flip_vertically_on_load(false);
         if (!pixels)
             return std::nullopt;
+        if (flip_y)
+            flip_vertical_rgba(pixels, w, h);
 
         DecodedFrame f;
         f.width = w;
@@ -353,13 +353,13 @@ class ApngImageDecoder : public ImageDecoder {
             return {};
 
         int width, height, channels;
-        stbi_set_flip_vertically_on_load(true);
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);
-        stbi_set_flip_vertically_on_load(false);
 
         std::vector<DecodedFrame> frames;
         if (!pixels)
             return frames;
+
+        flip_vertical_rgba(pixels, width, height);
 
         DecodedFrame f;
         f.width = width;

@@ -1,6 +1,7 @@
 #include "asset/ImageDecoder.h"
 
 #include "stb_image.h"
+#include "utils/ImageOps.h"
 
 class GifImageDecoder : public ImageDecoder {
   public:
@@ -19,10 +20,8 @@ class GifImageDecoder : public ImageDecoder {
         int* delays = nullptr;
         int width, height, frame_count, channels;
 
-        stbi_set_flip_vertically_on_load(true);
         uint8_t* pixels =
             stbi_load_gif_from_memory(data, (int)size, &delays, &width, &height, &frame_count, &channels, 4);
-        stbi_set_flip_vertically_on_load(false);
 
         std::vector<DecodedFrame> frames;
         if (!pixels)
@@ -31,7 +30,10 @@ class GifImageDecoder : public ImageDecoder {
         size_t frame_bytes = (size_t)width * height * 4;
         frames.reserve(frame_count);
 
+        // Flip each frame manually instead of using stbi_set_flip_vertically_on_load
+        // (which is global state and not thread-safe).
         for (int i = 0; i < frame_count; i++) {
+            flip_vertical_rgba(pixels + i * frame_bytes, width, height);
             DecodedFrame f;
             f.width = width;
             f.height = height;

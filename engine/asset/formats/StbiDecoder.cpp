@@ -1,6 +1,7 @@
 #include "asset/ImageDecoder.h"
 
 #include "stb_image.h"
+#include "utils/ImageOps.h"
 
 class StbiImageDecoder : public ImageDecoder {
   public:
@@ -13,13 +14,15 @@ class StbiImageDecoder : public ImageDecoder {
             return {};
 
         int width, height, channels;
-        stbi_set_flip_vertically_on_load(true);
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);
-        stbi_set_flip_vertically_on_load(false);
 
         std::vector<DecodedFrame> frames;
         if (!pixels)
             return frames;
+
+        // Flip Y manually instead of using stbi_set_flip_vertically_on_load
+        // (which is global state and not thread-safe).
+        flip_vertical_rgba(pixels, width, height);
 
         DecodedFrame f;
         f.width = width;
