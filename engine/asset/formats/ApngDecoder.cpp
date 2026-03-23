@@ -345,7 +345,13 @@ class ApngImageDecoder : public ImageDecoder {
         if (apng_frames && !apng_frames->empty())
             return std::move(*apng_frames);
 
-        // Fallback: plain PNG via stb_image
+        // Fallback: plain PNG via stb_image.
+        // Only attempt if data has a valid PNG signature to avoid stbi crashes
+        // on completely non-PNG data (observed on macOS).
+        static const uint8_t png_sig[] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+        if (size < 8 || memcmp(data, png_sig, 8) != 0)
+            return {};
+
         int width, height, channels;
         stbi_set_flip_vertically_on_load(true);
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);

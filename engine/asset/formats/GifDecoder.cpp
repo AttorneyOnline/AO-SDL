@@ -9,7 +9,11 @@ class GifImageDecoder : public ImageDecoder {
     }
 
     std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
-        if (!data || size == 0)
+        // stbi_load_gif_from_memory can crash on very short or non-GIF input
+        // (especially on macOS). Validate the GIF87a/GIF89a header first.
+        if (!data || size < 13)
+            return {};
+        if (data[0] != 'G' || data[1] != 'I' || data[2] != 'F')
             return {};
 
         int* delays = nullptr;
