@@ -21,11 +21,12 @@
 ///
 ///   class UserConfiguration : public JsonConfiguration<UserConfiguration> {};
 ///
-template <typename Derived> class JsonConfiguration : public ConfigurationBase<Derived> {
+template <typename Derived>
+class JsonConfiguration : public ConfigurationBase<Derived> {
   protected:
     // -- serialization -------------------------------------------------------
 
-    bool do_deserialize(const std::vector<uint8_t> &data) override {
+    bool do_deserialize(const std::vector<uint8_t>& data) override {
         auto parsed = nlohmann::json::parse(data, nullptr, false);
         if (parsed.is_discarded() || !parsed.is_object())
             return false;
@@ -45,14 +46,14 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
     //
     // Plain keys (no '/') use direct object lookup for efficiency.
 
-    void do_set_value(const std::string &key, const std::any &value) override {
+    void do_set_value(const std::string& key, const std::any& value) override {
         if (is_path(key))
             json_[to_pointer(key)] = any_to_json(value);
         else
             json_[key] = any_to_json(value);
     }
 
-    std::any do_value(const std::string &key, const std::any &default_value) const override {
+    std::any do_value(const std::string& key, const std::any& default_value) const override {
         if (is_path(key)) {
             auto ptr = to_pointer(key);
             if (!json_.contains(ptr))
@@ -65,13 +66,13 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
         return json_to_any(*it, default_value);
     }
 
-    bool do_contains(const std::string &key) const override {
+    bool do_contains(const std::string& key) const override {
         if (is_path(key))
             return json_.contains(to_pointer(key));
         return json_.contains(key);
     }
 
-    void do_remove(const std::string &key) override {
+    void do_remove(const std::string& key) override {
         if (!is_path(key)) {
             json_.erase(key);
             return;
@@ -83,26 +84,33 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
         auto parent_ptr = to_pointer(parent_path);
         if (!json_.contains(parent_ptr))
             return;
-        auto &parent = json_.at(parent_ptr);
+        auto& parent = json_.at(parent_ptr);
         if (parent.is_array()) {
             auto idx = std::stoull(child_seg);
             if (idx < parent.size())
                 parent.erase(parent.begin() + static_cast<ptrdiff_t>(idx));
-        } else if (parent.is_object()) {
+        }
+        else if (parent.is_object()) {
             parent.erase(child_seg);
         }
     }
 
-    void do_clear() override { json_ = nlohmann::json::object(); }
+    void do_clear() override {
+        json_ = nlohmann::json::object();
+    }
 
     /// Direct access for subclasses that need richer JSON manipulation.
-    nlohmann::json &json() { return json_; }
-    const nlohmann::json &json() const { return json_; }
+    nlohmann::json& json() {
+        return json_;
+    }
+    const nlohmann::json& json() const {
+        return json_;
+    }
 
   private:
     // -- std::any  <-->  nlohmann::json conversion helpers -------------------
 
-    static nlohmann::json any_to_json(const std::any &v) {
+    static nlohmann::json any_to_json(const std::any& v) {
         if (!v.has_value())
             return nullptr;
         if (v.type() == typeid(bool))
@@ -117,8 +125,8 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
             return std::any_cast<double>(v);
         if (v.type() == typeid(std::string))
             return std::any_cast<std::string>(v);
-        if (v.type() == typeid(const char *))
-            return std::string(std::any_cast<const char *>(v));
+        if (v.type() == typeid(const char*))
+            return std::string(std::any_cast<const char*>(v));
         if (v.type() == typeid(nlohmann::json))
             return std::any_cast<nlohmann::json>(v);
         // Unsupported type — store null so the key still exists.
@@ -128,7 +136,7 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
     /// Convert a JSON value back to std::any.  When the caller supplied a
     /// typed default we try to honour that type; otherwise we pick the
     /// natural C++ type for the JSON value.
-    static std::any json_to_any(const nlohmann::json &j, const std::any &default_value) {
+    static std::any json_to_any(const nlohmann::json& j, const std::any& default_value) {
         if (j.is_null())
             return default_value;
 
@@ -153,7 +161,7 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
     }
 
     /// Attempt to convert @p j to the same C++ type as @p hint.
-    static std::any json_to_any_typed(const nlohmann::json &j, const std::any &hint) {
+    static std::any json_to_any_typed(const nlohmann::json& j, const std::any& hint) {
         if (hint.type() == typeid(bool) && j.is_boolean())
             return j.get<bool>();
         if (hint.type() == typeid(int) && j.is_number())
@@ -175,10 +183,12 @@ template <typename Derived> class JsonConfiguration : public ConfigurationBase<D
     // -- path helpers --------------------------------------------------------
 
     /// Returns true when @p key contains '/' and should be treated as a path.
-    static bool is_path(const std::string &key) { return key.find('/') != std::string::npos; }
+    static bool is_path(const std::string& key) {
+        return key.find('/') != std::string::npos;
+    }
 
     /// Convert "a/b/0" into a nlohmann::json_pointer "/a/b/0".
-    static nlohmann::json::json_pointer to_pointer(const std::string &key) {
+    static nlohmann::json::json_pointer to_pointer(const std::string& key) {
         return nlohmann::json::json_pointer("/" + key);
     }
 

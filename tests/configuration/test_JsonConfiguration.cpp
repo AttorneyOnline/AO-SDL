@@ -81,7 +81,7 @@ TEST_F(JsonConfigurationTest, SerializeDeserializeRoundTrip) {
 
     // Verify the serialized form is valid JSON.
     std::string json_str(bytes.begin(), bytes.end());
-    EXPECT_NO_THROW((void)nlohmann::json::parse(json_str));
+    EXPECT_NO_THROW(auto parsed = nlohmann::json::parse(json_str));
 
     // Clear and restore.
     cfg().clear();

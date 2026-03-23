@@ -8,6 +8,7 @@
 
 #include <any>
 #include <functional>
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <vector>
@@ -17,17 +18,18 @@ class IConfiguration {
   public:
     virtual ~IConfiguration() = default;
 
-    using ChangeCallback = std::function<void(const std::string &key)>;
+    using ChangeCallback = std::function<void(const std::string& key)>;
 
-    virtual bool deserialize(const std::vector<uint8_t> &data) = 0;
+    virtual bool deserialize(const std::vector<uint8_t>& data) = 0;
     virtual std::vector<uint8_t> serialize() const = 0;
-    virtual void set_value(const std::string &key, const std::any &value) = 0;
-    virtual std::any value(const std::string &key, const std::any &default_value = {}) const = 0;
-    virtual bool contains(const std::string &key) const = 0;
-    virtual void remove(const std::string &key) = 0;
+    virtual void set_value(const std::string& key, const std::any& value) = 0;
+    virtual std::any value(const std::string& key, const std::any& default_value = {}) const = 0;
+    virtual bool contains(const std::string& key) const = 0;
+    virtual void remove(const std::string& key) = 0;
     virtual void clear() = 0;
 
-    template <typename T> T value(const std::string &key, const T &default_value = T{}) const {
+    template <typename T>
+    T value(const std::string& key, const T& default_value = T{}) const {
         const std::any result = value(key, std::any{default_value});
         if (result.has_value() && result.type() == typeid(T))
             return std::any_cast<T>(result);
@@ -54,11 +56,12 @@ class IConfiguration {
 //           return it != map_.end() ? it->second : def;
 //       }
 //   };
-template <typename Derived> class ConfigurationBase : public IConfiguration {
+template <typename Derived>
+class ConfigurationBase : public IConfiguration {
   public:
     using IConfiguration::value; // unhide the value<T> template
 
-    static Derived &instance() {
+    static Derived& instance() {
         static Derived inst;
         return inst;
     }
@@ -70,7 +73,7 @@ template <typename Derived> class ConfigurationBase : public IConfiguration {
 
     // Thread-safe NVI overrides
 
-    bool deserialize(const std::vector<uint8_t> &data) final {
+    bool deserialize(const std::vector<uint8_t>& data) final {
         {
             std::unique_lock lock(mutex_);
             if (!do_deserialize(data))
@@ -85,7 +88,7 @@ template <typename Derived> class ConfigurationBase : public IConfiguration {
         return do_serialize();
     }
 
-    void set_value(const std::string &key, const std::any &value) final {
+    void set_value(const std::string& key, const std::any& value) final {
         {
             std::unique_lock lock(mutex_);
             do_set_value(key, value);
@@ -93,17 +96,17 @@ template <typename Derived> class ConfigurationBase : public IConfiguration {
         notify(key);
     }
 
-    std::any value(const std::string &key, const std::any &default_value = {}) const final {
+    std::any value(const std::string& key, const std::any& default_value = {}) const final {
         std::shared_lock lock(mutex_);
         return do_value(key, default_value);
     }
 
-    bool contains(const std::string &key) const final {
+    bool contains(const std::string& key) const final {
         std::shared_lock lock(mutex_);
         return do_contains(key);
     }
 
-    void remove(const std::string &key) final {
+    void remove(const std::string& key) final {
         {
             std::unique_lock lock(mutex_);
             do_remove(key);
@@ -121,16 +124,16 @@ template <typename Derived> class ConfigurationBase : public IConfiguration {
 
   protected:
     // Subclasses implement these.  The mutex is already held when called.
-    virtual bool do_deserialize(const std::vector<uint8_t> &data) = 0;
+    virtual bool do_deserialize(const std::vector<uint8_t>& data) = 0;
     virtual std::vector<uint8_t> do_serialize() const = 0;
-    virtual void do_set_value(const std::string &key, const std::any &value) = 0;
-    virtual std::any do_value(const std::string &key, const std::any &default_value) const = 0;
-    virtual bool do_contains(const std::string &key) const = 0;
-    virtual void do_remove(const std::string &key) = 0;
+    virtual void do_set_value(const std::string& key, const std::any& value) = 0;
+    virtual std::any do_value(const std::string& key, const std::any& default_value) const = 0;
+    virtual bool do_contains(const std::string& key) const = 0;
+    virtual void do_remove(const std::string& key) = 0;
     virtual void do_clear() = 0;
 
   private:
-    void notify(const std::string &key) {
+    void notify(const std::string& key) {
         ChangeCallback cb;
         {
             std::shared_lock lock(mutex_);
