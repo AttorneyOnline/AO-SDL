@@ -1,5 +1,6 @@
 #include "SDLGameWindow.h"
 
+#include "asset/MountEmbedded.h"
 #include "platform/SystemFonts.h"
 #include "ui/widgets/CourtroomState.h"
 #include "utils/Log.h"
@@ -7,6 +8,7 @@
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
 
+#include <cstring>
 #include <filesystem>
 
 SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend> backend)
@@ -108,6 +110,31 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
             merge_cfg.OversampleH = 1;
             if (io.Fonts->AddFontFromFileTTF(path.c_str(), 15.0f, &merge_cfg, merged_ranges.Data))
                 Log::log_print(DEBUG, "ImGui: merged glyphs from %s", path.c_str());
+        }
+
+        // Merge bundled Noto Emoji font for monochrome emoji support.
+        // This is a lightweight (~860 KB) embedded font that replaces the
+        // 180 MB Apple Color Emoji we filter out above.
+        // Noto Emoji covers Unicode emoji blocks that ImGui's built-in
+        // glyph ranges don't include, so we specify them explicitly.
+        static const ImWchar emoji_ranges[] = {
+            0x2600,  0x27BF,  // Misc Symbols, Dingbats
+            0x2B50,  0x2B55,  // Stars, circles
+            0xFE00,  0xFE0F,  // Variation selectors
+            0x1F300, 0x1F9FF, // Misc Symbols & Pictographs through Supplemental Symbols
+            0,
+        };
+        for (const auto& file : embedded_assets()) {
+            if (std::strcmp(file.path, "fonts/NotoEmoji.ttf") == 0) {
+                ImFontConfig emoji_cfg;
+                emoji_cfg.MergeMode = true;
+                emoji_cfg.OversampleH = 1;
+                emoji_cfg.FontDataOwnedByAtlas = false; // data is in the binary, don't free
+                if (io.Fonts->AddFontFromMemoryTTF(const_cast<void*>(static_cast<const void*>(file.data)),
+                                                   static_cast<int>(file.size), 15.0f, &emoji_cfg, emoji_ranges))
+                    Log::log_print(INFO, "ImGui: merged bundled Noto Emoji (%zu bytes)", file.size);
+                break;
+            }
         }
     }
 }

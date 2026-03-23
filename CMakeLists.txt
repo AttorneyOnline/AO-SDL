@@ -128,6 +128,7 @@ else()
 endif()
 
 add_library(imgui STATIC ${IMGUI_SOURCES})
+target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32) # 32-bit ImWchar for emoji (U+1Fxxx)
 target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
@@ -268,16 +269,19 @@ if(APPLE)
     target_sources(aoengine PRIVATE
         platform/macos/SystemFonts.mm
         platform/macos/HardwareId.mm
+        platform/macos/Time.cpp
     )
 elseif(WIN32)
     target_sources(aoengine PRIVATE
         platform/windows/SystemFonts.cpp
         platform/windows/HardwareId.cpp
+        platform/windows/Time.cpp
     )
 else()
     target_sources(aoengine PRIVATE
         platform/linux/SystemFonts.cpp
         platform/linux/HardwareId.cpp
+        platform/linux/Time.cpp
     )
 endif()
 

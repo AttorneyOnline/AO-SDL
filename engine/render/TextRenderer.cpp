@@ -1,5 +1,6 @@
 #include "render/TextRenderer.h"
 
+#include "asset/MountEmbedded.h"
 #include "platform/SystemFonts.h"
 #include "utils/BlendOps.h"
 #include "utils/Log.h"
@@ -50,6 +51,22 @@ struct TextRenderer::Impl {
             FT_Done_Face(fb);
         fallbacks.clear();
 
+        // Add bundled Noto Emoji FIRST so it takes priority over Apple Color
+        // Emoji. Apple Color Emoji uses color bitmap tables (sbix/COLR) that
+        // FreeType renders as color bitmaps — incompatible with GlyphCache's
+        // grayscale alpha pipeline. Noto Emoji has standard outlines.
+        for (const auto& file : embedded_assets()) {
+            if (std::strcmp(file.path, "fonts/NotoEmoji.ttf") == 0) {
+                FT_Face fb = nullptr;
+                if (!FT_New_Memory_Face(library, file.data, static_cast<FT_Long>(file.size), 0, &fb)) {
+                    FT_Set_Pixel_Sizes(fb, 0, size_px);
+                    fallbacks.push_back(fb);
+                    Log::log_print(VERBOSE, "TextRenderer: fallback [%zu] bundled NotoEmoji", fallbacks.size());
+                }
+                break;
+            }
+        }
+
         auto paths = platform::fallback_font_paths();
         for (const auto& path : paths) {
             FT_Face fb = nullptr;
@@ -59,6 +76,7 @@ struct TextRenderer::Impl {
                 Log::log_print(VERBOSE, "TextRenderer: fallback [%zu] %s", fallbacks.size(), path.c_str());
             }
         }
+
         if (fallbacks.empty())
             Log::log_print(WARNING, "TextRenderer: no fallback fonts found");
     }
@@ -298,6 +316,14 @@ void TextRenderer::blit_glyphs(const std::vector<GlyphLayout>& layout, int char_
             continue;
 
         FT_GlyphSlot g = face->glyph;
+
+        // Skip unsupported bitmap formats (e.g. Apple Color Emoji produces
+        // FT_PIXEL_MODE_BGRA which is 4 bytes/pixel — our pipeline expects
+        // grayscale or mono).
+        if (!g->bitmap.buffer ||
+            (g->bitmap.pixel_mode != FT_PIXEL_MODE_GRAY && g->bitmap.pixel_mode != FT_PIXEL_MODE_MONO))
+            continue;
+
         int gx = x + gl.pen_x + g->bitmap_left;
         int gy = y + impl->ascender + gl.pen_y - scroll_y - g->bitmap_top;
 

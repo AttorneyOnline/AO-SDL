@@ -77,24 +77,130 @@ struct MetalRendererImpl {
     uint64_t frame_counter = 0;
     bool wireframe = false;
 
+    // Metal objects stored as CFTypeRef with manual retain/release to avoid
+    // ARC lifetime issues in C++ containers. When std::unordered_map rehashes,
+    // ARC may not properly retain id<MTLTexture>/id<MTLBuffer> during entry
+    // relocation, causing dangling pointers (e.g. texture becomes 0x6).
     struct TextureCacheEntry {
         std::weak_ptr<ImageAsset> asset;
-        id<MTLBuffer> buffer; // nil for fallback (non-zero-copy) path
-        id<MTLTexture> texture;
+        std::shared_ptr<ImageAsset> pinned_asset;
+        CFTypeRef buffer_ref = nullptr;  // MTLBuffer, manually retained
+        CFTypeRef texture_ref = nullptr; // MTLTexture, manually retained
         uint64_t generation = 0;
         bool zero_copy = false;
+
+        id<MTLBuffer> buffer() const { return (__bridge id<MTLBuffer>)buffer_ref; }
+        id<MTLTexture> texture() const { return (__bridge id<MTLTexture>)texture_ref; }
+
+        void set_buffer(id<MTLBuffer> b) {
+            if (buffer_ref)
+                CFRelease(buffer_ref);
+            buffer_ref = b ? CFRetain((__bridge CFTypeRef)b) : nullptr;
+        }
+        void set_texture(id<MTLTexture> t) {
+            if (texture_ref)
+                CFRelease(texture_ref);
+            texture_ref = t ? CFRetain((__bridge CFTypeRef)t) : nullptr;
+        }
+        void release() {
+            if (texture_ref) {
+                CFRelease(texture_ref);
+                texture_ref = nullptr;
+            }
+            if (buffer_ref) {
+                CFRelease(buffer_ref);
+                buffer_ref = nullptr;
+            }
+            pinned_asset.reset();
+        }
+
+        TextureCacheEntry() = default;
+        ~TextureCacheEntry() { release(); }
+        TextureCacheEntry(const TextureCacheEntry &o)
+            : asset(o.asset), pinned_asset(o.pinned_asset), buffer_ref(o.buffer_ref ? CFRetain(o.buffer_ref) : nullptr),
+              texture_ref(o.texture_ref ? CFRetain(o.texture_ref) : nullptr), generation(o.generation),
+              zero_copy(o.zero_copy) {}
+        TextureCacheEntry &operator=(const TextureCacheEntry &o) {
+            if (this == &o)
+                return *this;
+            release();
+            asset = o.asset;
+            pinned_asset = o.pinned_asset;
+            buffer_ref = o.buffer_ref ? CFRetain(o.buffer_ref) : nullptr;
+            texture_ref = o.texture_ref ? CFRetain(o.texture_ref) : nullptr;
+            generation = o.generation;
+            zero_copy = o.zero_copy;
+            return *this;
+        }
+        TextureCacheEntry(TextureCacheEntry &&o) noexcept
+            : asset(std::move(o.asset)), pinned_asset(std::move(o.pinned_asset)), buffer_ref(o.buffer_ref),
+              texture_ref(o.texture_ref), generation(o.generation), zero_copy(o.zero_copy) {
+            o.buffer_ref = nullptr;
+            o.texture_ref = nullptr;
+        }
+        TextureCacheEntry &operator=(TextureCacheEntry &&o) noexcept {
+            if (this == &o)
+                return *this;
+            release();
+            asset = std::move(o.asset);
+            pinned_asset = std::move(o.pinned_asset);
+            buffer_ref = o.buffer_ref;
+            texture_ref = o.texture_ref;
+            generation = o.generation;
+            zero_copy = o.zero_copy;
+            o.buffer_ref = nullptr;
+            o.texture_ref = nullptr;
+            return *this;
+        }
     };
     std::unordered_map<const ImageAsset *, TextureCacheEntry> texture_cache;
-    // Textures pending release — kept alive for one frame to avoid dangling
-    // pointers in ImGui draw lists that reference them.
-    std::vector<TextureCacheEntry> deferred_release;
     NSUInteger min_tex_align = 0; // cached from device
 
-    // 2D views of array textures for ImGui preview (ImGui can't sample texture2d_array)
+    // 2D preview textures for ImGui display — same CFTypeRef pattern.
     struct PreviewViewEntry {
         std::weak_ptr<ImageAsset> asset;
-        id<MTLTexture> view;
+        CFTypeRef view_ref = nullptr;
         uint64_t generation = 0;
+
+        id<MTLTexture> view() const { return (__bridge id<MTLTexture>)view_ref; }
+        void set_view(id<MTLTexture> v) {
+            if (view_ref)
+                CFRelease(view_ref);
+            view_ref = v ? CFRetain((__bridge CFTypeRef)v) : nullptr;
+        }
+
+        PreviewViewEntry() = default;
+        ~PreviewViewEntry() {
+            if (view_ref)
+                CFRelease(view_ref);
+        }
+        PreviewViewEntry(const PreviewViewEntry &o)
+            : asset(o.asset), view_ref(o.view_ref ? CFRetain(o.view_ref) : nullptr), generation(o.generation) {}
+        PreviewViewEntry &operator=(const PreviewViewEntry &o) {
+            if (this == &o)
+                return *this;
+            if (view_ref)
+                CFRelease(view_ref);
+            asset = o.asset;
+            view_ref = o.view_ref ? CFRetain(o.view_ref) : nullptr;
+            generation = o.generation;
+            return *this;
+        }
+        PreviewViewEntry(PreviewViewEntry &&o) noexcept
+            : asset(std::move(o.asset)), view_ref(o.view_ref), generation(o.generation) {
+            o.view_ref = nullptr;
+        }
+        PreviewViewEntry &operator=(PreviewViewEntry &&o) noexcept {
+            if (this == &o)
+                return *this;
+            if (view_ref)
+                CFRelease(view_ref);
+            asset = std::move(o.asset);
+            view_ref = o.view_ref;
+            generation = o.generation;
+            o.view_ref = nullptr;
+            return *this;
+        }
     };
     std::unordered_map<const ImageAsset *, PreviewViewEntry> preview_views;
 
@@ -358,6 +464,12 @@ struct MetalRendererImpl {
     bool can_zero_copy(const std::shared_ptr<ImageAsset> &asset) const {
         if (min_tex_align == 0)
             return false;
+        // Never zero-copy mutable assets. The glyph atlas starts at generation 0
+        // but gets updated immediately during GlyphCache construction (ASCII
+        // precache). By the time get_texture_array is first called, generation
+        // is already > 0. However, check the path as a belt-and-suspenders guard.
+        if (asset->generation() > 0 || asset->path().starts_with("_"))
+            return false;
         NSUInteger bytes_per_row = (NSUInteger)asset->width() * 4;
         return (bytes_per_row % min_tex_align) == 0;
     }
@@ -367,7 +479,8 @@ struct MetalRendererImpl {
     /// Create a buffer-backed atlas texture (zero-copy).
     /// All frames are tiled vertically into a single texture2d.
     /// The shader computes atlas UVs from frame_index and frame_count.
-    id<MTLTexture> create_zero_copy_texture(const std::shared_ptr<ImageAsset> &asset, id<MTLBuffer> &out_buffer) {
+    // Returns {texture, buffer} pair. Caller must CFRetain if storing.
+    std::pair<id<MTLTexture>, id<MTLBuffer>> create_zero_copy_texture(const std::shared_ptr<ImageAsset> &asset) {
         int w = asset->width();
         int h = asset->height();
         int count = asset->frame_count();
@@ -377,12 +490,13 @@ struct MetalRendererImpl {
         const auto &buf = asset->pixel_data();
 
         // Wrap the page-aligned pixel buffer — no copy, GPU reads same memory.
-        out_buffer = [device newBufferWithBytesNoCopy:(void *)buf.data()
-                                               length:buf.allocated_size()
-                                              options:MTLResourceStorageModeShared
-                                          deallocator:nil];
-        if (!out_buffer)
-            return nil;
+        id<MTLBuffer> out_buffer = [device newBufferWithBytesNoCopy:(void *)buf.data()
+                                                             length:buf.allocated_size()
+                                                            options:MTLResourceStorageModeShared
+                                                        deallocator:nil];
+        if (!out_buffer) {
+            return {(id<MTLTexture>)nil, (id<MTLBuffer>)nil};
+        }
 
         // Create a tall texture2d: width x (height * frame_count).
         // Frames are packed vertically, matching the contiguous AlignedBuffer layout.
@@ -394,7 +508,15 @@ struct MetalRendererImpl {
         td.storageMode = MTLStorageModeShared;
 
         id<MTLTexture> tex = [out_buffer newTextureWithDescriptor:td offset:0 bytesPerRow:bytes_per_row];
-        return tex;
+        if (!tex) {
+            Log::log_print(
+                ERR, "MetalRenderer: newTextureWithDescriptor returned nil for %dx%d buf_size=%zu alloc=%zu bpr=%lu", w,
+                (int)atlas_height, buf.size(), buf.allocated_size(), (unsigned long)bytes_per_row);
+            return {(id<MTLTexture>)nil, (id<MTLBuffer>)nil};
+        }
+        Log::log_print(VERBOSE, "MetalRenderer: zero-copy tex=%p buf=%p for %dx%d", (__bridge void *)tex,
+                       (__bridge void *)out_buffer, w, (int)atlas_height);
+        return {tex, out_buffer};
     }
 
     /// Fallback: allocate a texture2d atlas and copy pixel data into it.
@@ -411,6 +533,11 @@ struct MetalRendererImpl {
         td.storageMode = MTLStorageModeShared;
 
         id<MTLTexture> tex = [device newTextureWithDescriptor:td];
+        if (!tex) {
+            Log::log_print(ERR, "MetalRenderer: failed to create %dx%d atlas texture for %s", w,
+                           (int)((NSUInteger)h * count), asset->path().c_str());
+            return nil;
+        }
 
         // Upload all frames as a single contiguous block
         MTLRegion region = MTLRegionMake2D(0, 0, w, (NSUInteger)h * count);
@@ -422,14 +549,19 @@ struct MetalRendererImpl {
     id<MTLTexture> get_texture_array(const std::shared_ptr<ImageAsset> &asset) {
         auto it = texture_cache.find(asset.get());
         if (it != texture_cache.end()) {
-            if (it->second.generation == asset->generation())
-                return it->second.texture;
-
-            // Generation mismatch — defer-release the old entry so ImGui draw
-            // lists from this frame can still reference the old texture safely.
-            deferred_release.push_back(std::move(it->second));
-            preview_views.erase(it->first); // also invalidate preview
-            texture_cache.erase(it);
+            // Validate the weak_ptr — if a previous asset was freed and a new one
+            // allocated at the same address, the raw pointer key matches but the
+            // texture is stale/freed.
+            if (it->second.asset.expired()) {
+                preview_views.erase(it->first);
+                texture_cache.erase(it);
+            } else if (it->second.generation == asset->generation()) {
+                return it->second.texture();
+            } else {
+                // Generation mismatch — erase and recreate.
+                preview_views.erase(it->first);
+                texture_cache.erase(it);
+            }
         }
 
         int w = asset->width();
@@ -443,29 +575,32 @@ struct MetalRendererImpl {
         entry.generation = asset->generation();
 
         if (can_zero_copy(asset)) {
-            entry.texture = create_zero_copy_texture(asset, entry.buffer);
-            entry.zero_copy = true;
-            Log::log_print(VERBOSE, "MetalRenderer: zero-copy %dx%d x %d frames for %s", w, h, count,
-                           asset->path().c_str());
+            auto [tex, buf] = create_zero_copy_texture(asset);
+            if (tex) {
+                entry.set_texture(tex);
+                entry.set_buffer(buf);
+                entry.zero_copy = true;
+                entry.pinned_asset = asset;
+                Log::log_print(VERBOSE, "MetalRenderer: zero-copy %dx%d x %d frames for %s", w, h, count,
+                               asset->path().c_str());
+            }
         }
 
-        if (!entry.texture) {
-            entry.texture = create_fallback_texture(asset);
+        if (!entry.texture()) {
+            id<MTLTexture> tex = create_fallback_texture(asset);
+            entry.set_texture(tex);
             entry.zero_copy = false;
             Log::log_print(VERBOSE, "MetalRenderer: uploaded %dx%d x %d frames for %s", w, h, count,
                            asset->path().c_str());
         }
 
         texture_cache[asset.get()] = entry;
-        return entry.texture;
+        return entry.texture();
     }
 
     /// Flush deferred releases from previous frame, then sweep for expired entries.
     /// Must be called BEFORE ImGui widget building to avoid dangling texture pointers.
     void evict_expired_textures() {
-        // Flush deferred releases from previous frame — safe now, ImGui has rendered.
-        deferred_release.clear();
-
         for (auto it = texture_cache.begin(); it != texture_cache.end();) {
             if (it->second.asset.expired()) {
                 Log::log_print(VERBOSE, "MetalRenderer: evicting expired texture");
@@ -570,8 +705,7 @@ struct MetalRendererImpl {
             [enc setVertexBuffer:quad_vb offset:0 atIndex:0];
             [enc setFragmentSamplerState:(wireframe ? sampler_linear : sampler) atIndex:0];
 
-            // Evict expired textures/meshes periodically. Deferred releases from
-            // the previous frame are flushed here (ImGui has finished rendering).
+            // Flush deferred texture releases every frame (previous frame's
             if (++frame_counter % 60 == 0) {
                 evict_expired_textures();
                 evict_expired_meshes();
@@ -588,8 +722,15 @@ struct MetalRendererImpl {
                             continue;
 
                         id<MTLTexture> tex = get_texture_array(asset);
-                        if (!tex)
+                        if (!tex) {
                             continue;
+                        }
+                        // Validate texture is a real ObjC object (not a small integer)
+                        if ((uintptr_t)(__bridge void *)tex < 0x10000) {
+                            Log::log_print(ERR, "MetalRenderer: CORRUPT tex=%p for %s", (__bridge void *)tex,
+                                           asset->path().c_str());
+                            continue;
+                        }
 
                         int frame = std::clamp(layer.get_frame_index(), 0, asset->frame_count() - 1);
 
@@ -711,7 +852,7 @@ uintptr_t MetalRenderer::get_texture_id(const std::shared_ptr<ImageAsset> &asset
     // textures must stay alive independently of the main cache.
     auto vit = impl->preview_views.find(asset.get());
     if (vit != impl->preview_views.end() && vit->second.generation == asset->generation())
-        return (uintptr_t)(__bridge void *)vit->second.view;
+        return (uintptr_t)vit->second.view_ref;
 
     int w = asset->width();
     int h = asset->height();
@@ -725,8 +866,13 @@ uintptr_t MetalRenderer::get_texture_id(const std::shared_ptr<ImageAsset> &asset
     MTLRegion region = MTLRegionMake2D(0, 0, w, h);
     [view replaceRegion:region mipmapLevel:0 withBytes:asset->frame_pixels(0) bytesPerRow:w * 4];
 
-    impl->preview_views[asset.get()] = {asset, view, asset->generation()};
-    return (uintptr_t)(__bridge void *)view;
+    MetalRendererImpl::PreviewViewEntry pve;
+    pve.asset = asset;
+    pve.set_view(view);
+    pve.generation = asset->generation();
+    uintptr_t result = (uintptr_t)pve.view_ref;
+    impl->preview_views[asset.get()] = std::move(pve);
+    return result;
 }
 
 void MetalRenderer::resize(int width, int height) {

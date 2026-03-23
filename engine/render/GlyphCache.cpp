@@ -93,9 +93,11 @@ const GlyphInfo& GlyphCache::ensure(uint32_t codepoint) {
     int line_h = renderer_.line_height();
     int asc = renderer_.ascender();
 
-    // Render into a tight buffer
-    int buf_w = std::max(advance, 1);
-    int buf_h = line_h;
+    // Render into a buffer tall enough for glyphs that extend below the
+    // baseline (e.g. emoji from Noto Emoji can be taller than line_h).
+    // Use 2x line height to capture descenders and tall glyphs.
+    int buf_w = std::max(advance, line_h); // emoji can be as wide as tall
+    int buf_h = line_h * 2;
     std::vector<uint8_t> buf(buf_w * buf_h * 4, 0);
     TextColor white = {255, 255, 255};
     renderer_.render(ch, 1, white, 0, 0, buf_w, buf_h, 0, 0, buf.data());
