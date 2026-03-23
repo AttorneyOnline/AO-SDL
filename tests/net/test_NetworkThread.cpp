@@ -3,8 +3,8 @@
 #include "event/EventManager.h"
 #include "event/ServerConnectEvent.h"
 
-#include <gtest/gtest.h>
 #include <chrono>
+#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 

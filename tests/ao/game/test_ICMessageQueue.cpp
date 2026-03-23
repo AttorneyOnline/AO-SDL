@@ -244,9 +244,7 @@ TEST_F(ICMessageQueueTest, ClearResetsLingerTimer) {
 
 TEST_F(ICMessageQueueTest, PrefetchCalledWhenEnqueuedWhilePlaying) {
     std::vector<std::string> prefetched;
-    queue.set_prefetch([&](const ICMessage& msg) {
-        prefetched.push_back(msg.character);
-    });
+    queue.set_prefetch([&](const ICMessage& msg) { prefetched.push_back(msg.character); });
 
     queue.enqueue(make_msg("Phoenix", "First"));
     queue.next(); // start playing
@@ -262,9 +260,7 @@ TEST_F(ICMessageQueueTest, PrefetchCalledWhenEnqueuedWhilePlaying) {
 
 TEST_F(ICMessageQueueTest, PrefetchNotCalledWhenQueueIsIdle) {
     int prefetch_count = 0;
-    queue.set_prefetch([&](const ICMessage&) {
-        prefetch_count++;
-    });
+    queue.set_prefetch([&](const ICMessage&) { prefetch_count++; });
 
     // Nothing is playing, so no prefetch needed
     queue.enqueue(make_msg("Phoenix", "First"));
@@ -537,9 +533,7 @@ TEST_F(ICMessageQueueTest, ObjectionOnEmptyQueueWorks) {
 
 TEST_F(ICMessageQueueTest, PrefetchNotCalledForObjections) {
     int prefetch_count = 0;
-    queue.set_prefetch([&](const ICMessage&) {
-        prefetch_count++;
-    });
+    queue.set_prefetch([&](const ICMessage&) { prefetch_count++; });
 
     queue.enqueue(make_msg("Phoenix", "First"));
     queue.next(); // playing

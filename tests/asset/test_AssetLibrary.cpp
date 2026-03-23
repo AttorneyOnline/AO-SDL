@@ -4,10 +4,10 @@
 #include "asset/RawAsset.h"
 #include "asset/ShaderAsset.h"
 
-#include <gtest/gtest.h>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -65,8 +65,7 @@ class AssetLibraryFSTest : public ::testing::Test {
     void write_file(const fs::path& path, const std::vector<uint8_t>& content) {
         fs::create_directories(path.parent_path());
         std::ofstream out(path, std::ios::binary);
-        out.write(reinterpret_cast<const char*>(content.data()),
-                  static_cast<std::streamsize>(content.size()));
+        out.write(reinterpret_cast<const char*>(content.data()), static_cast<std::streamsize>(content.size()));
     }
 
     /// Write a minimal valid 1x1 PNG file to the given path.
@@ -97,7 +96,7 @@ class AssetLibraryFSTest : public ::testing::Test {
             0x2C, 0x00, 0x00, 0x00, 0x00,       // image descriptor
             0x01, 0x00, 0x01, 0x00, 0x00,       // 1x1, no local CT
             0x02, 0x02, 0x44, 0x01, 0x00,       // LZW min code 2, data
-            0x3B,                                // trailer
+            0x3B,                               // trailer
         };
         write_file(path, std::vector<uint8_t>(gif, gif + sizeof(gif)));
     }
@@ -157,9 +156,8 @@ TEST_F(AssetLibraryTest, ConfigReturnsSameResultOnSecondCall) {
 }
 
 TEST_F(AssetLibraryFSTest, ConfigParsesIniSections) {
-    write_file(temp_dir / "test.ini",
-               "[section1]\nkey1 = value1\nkey2 = value2\n"
-               "[section2]\nkeyA = valueA\n");
+    write_file(temp_dir / "test.ini", "[section1]\nkey1 = value1\nkey2 = value2\n"
+                                      "[section2]\nkeyA = valueA\n");
     auto doc = lib.config("test.ini");
     ASSERT_TRUE(doc.has_value());
     EXPECT_EQ(doc->at("section1").at("key1"), "value1");
@@ -168,12 +166,11 @@ TEST_F(AssetLibraryFSTest, ConfigParsesIniSections) {
 }
 
 TEST_F(AssetLibraryFSTest, ConfigIgnoresCommentsAndBlankLines) {
-    write_file(temp_dir / "comments.ini",
-               "; this is a comment\n"
-               "# this too\n"
-               "\n"
-               "  \n"
-               "key = value\n");
+    write_file(temp_dir / "comments.ini", "; this is a comment\n"
+                                          "# this too\n"
+                                          "\n"
+                                          "  \n"
+                                          "key = value\n");
     auto doc = lib.config("comments.ini");
     ASSERT_TRUE(doc.has_value());
     EXPECT_EQ(doc->at("").at("key"), "value");
@@ -182,16 +179,14 @@ TEST_F(AssetLibraryFSTest, ConfigIgnoresCommentsAndBlankLines) {
 }
 
 TEST_F(AssetLibraryFSTest, ConfigStripsWhitespace) {
-    write_file(temp_dir / "whitespace.ini",
-               "  key_with_spaces  =  value_with_spaces  \n");
+    write_file(temp_dir / "whitespace.ini", "  key_with_spaces  =  value_with_spaces  \n");
     auto doc = lib.config("whitespace.ini");
     ASSERT_TRUE(doc.has_value());
     EXPECT_EQ(doc->at("").at("key_with_spaces"), "value_with_spaces  ");
 }
 
 TEST_F(AssetLibraryFSTest, ConfigHandlesCRLFLineEndings) {
-    write_file(temp_dir / "crlf.ini",
-               "[section]\r\nkey = value\r\n");
+    write_file(temp_dir / "crlf.ini", "[section]\r\nkey = value\r\n");
     auto doc = lib.config("crlf.ini");
     ASSERT_TRUE(doc.has_value());
     EXPECT_EQ(doc->at("section").at("key"), "value");
@@ -261,8 +256,7 @@ TEST_F(AssetLibraryTest, ShaderFormatIsGlsl) {
 TEST_F(AssetLibraryTest, ShaderMemorySizeMatchesSources) {
     auto shader = lib.shader("shaders/main");
     ASSERT_NE(shader, nullptr);
-    EXPECT_EQ(shader->memory_size(),
-              shader->vertex_source().size() + shader->fragment_source().size());
+    EXPECT_EQ(shader->memory_size(), shader->vertex_source().size() + shader->fragment_source().size());
 }
 
 TEST_F(AssetLibraryTest, ShaderCacheKeyIncludesBackend) {
@@ -397,8 +391,7 @@ TEST_F(AssetLibraryFSTest, RawCachesData) {
 // =============================================================================
 
 TEST_F(AssetLibraryTest, RegisterAssetMakesItRetrievable) {
-    auto asset = std::make_shared<RawAsset>("custom/test", "raw",
-                                            std::vector<uint8_t>{1, 2, 3});
+    auto asset = std::make_shared<RawAsset>("custom/test", "raw", std::vector<uint8_t>{1, 2, 3});
     lib.register_asset(asset);
 
     auto retrieved = lib.get_cached("custom/test");
@@ -407,10 +400,8 @@ TEST_F(AssetLibraryTest, RegisterAssetMakesItRetrievable) {
 }
 
 TEST_F(AssetLibraryTest, RegisterAssetOverwritesPreviousEntry) {
-    auto asset1 = std::make_shared<RawAsset>("overwrite/test", "raw",
-                                             std::vector<uint8_t>{1});
-    auto asset2 = std::make_shared<RawAsset>("overwrite/test", "raw",
-                                             std::vector<uint8_t>{2, 3});
+    auto asset1 = std::make_shared<RawAsset>("overwrite/test", "raw", std::vector<uint8_t>{1});
+    auto asset2 = std::make_shared<RawAsset>("overwrite/test", "raw", std::vector<uint8_t>{2, 3});
     lib.register_asset(asset1);
     lib.register_asset(asset2);
 
@@ -457,8 +448,7 @@ TEST(AssetLibraryEviction, EvictRemovesUnpinnedEntries) {
     AssetLibrary lib(mounts, 10);
 
     // Register an asset larger than the budget.
-    auto big = std::make_shared<RawAsset>("big", "raw",
-                                          std::vector<uint8_t>(100, 0));
+    auto big = std::make_shared<RawAsset>("big", "raw", std::vector<uint8_t>(100, 0));
     lib.register_asset(big);
 
     // Drop external reference so it's unpinned.
@@ -474,8 +464,7 @@ TEST(AssetLibraryEviction, EvictKeepsPinnedEntries) {
     MountManager mounts;
     AssetLibrary lib(mounts, 10);
 
-    auto pinned = std::make_shared<RawAsset>("pinned", "raw",
-                                             std::vector<uint8_t>(100, 0));
+    auto pinned = std::make_shared<RawAsset>("pinned", "raw", std::vector<uint8_t>(100, 0));
     lib.register_asset(pinned);
 
     // Keep external reference (pinned).
@@ -488,8 +477,7 @@ TEST(AssetLibraryEviction, EvictDoesNothingWhenUnderBudget) {
     MountManager mounts;
     AssetLibrary lib(mounts, 1024);
 
-    auto small = std::make_shared<RawAsset>("small", "raw",
-                                            std::vector<uint8_t>(10, 0));
+    auto small = std::make_shared<RawAsset>("small", "raw", std::vector<uint8_t>(10, 0));
     lib.register_asset(small);
     small.reset();
 
@@ -607,8 +595,7 @@ TEST_F(AssetLibraryFSTest, ConfigHandlesEmptyFile) {
 }
 
 TEST_F(AssetLibraryFSTest, ConfigHandlesOnlySections) {
-    write_file(temp_dir / "sections_only.ini",
-               "[section1]\n[section2]\n");
+    write_file(temp_dir / "sections_only.ini", "[section1]\n[section2]\n");
     auto doc = lib.config("sections_only.ini");
     ASSERT_TRUE(doc.has_value());
     // Sections exist but have no keys.
@@ -617,8 +604,7 @@ TEST_F(AssetLibraryFSTest, ConfigHandlesOnlySections) {
 }
 
 TEST_F(AssetLibraryFSTest, ConfigKeysBeforeFirstSectionGoToDefault) {
-    write_file(temp_dir / "no_section.ini",
-               "key1 = val1\nkey2 = val2\n");
+    write_file(temp_dir / "no_section.ini", "key1 = val1\nkey2 = val2\n");
     auto doc = lib.config("no_section.ini");
     ASSERT_TRUE(doc.has_value());
     EXPECT_EQ(doc->at("").at("key1"), "val1");
@@ -626,8 +612,7 @@ TEST_F(AssetLibraryFSTest, ConfigKeysBeforeFirstSectionGoToDefault) {
 }
 
 TEST_F(AssetLibraryFSTest, ConfigHandlesEqualsSignInValue) {
-    write_file(temp_dir / "equals.ini",
-               "key = value=with=equals\n");
+    write_file(temp_dir / "equals.ini", "key = value=with=equals\n");
     auto doc = lib.config("equals.ini");
     ASSERT_TRUE(doc.has_value());
     EXPECT_EQ(doc->at("").at("key"), "value=with=equals");

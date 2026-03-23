@@ -152,9 +152,7 @@ TEST(HttpPool, DropBelowOnlyDropsStrictlyBelowThreshold) {
         dropped_count.fetch_add(1);
     };
 
-    auto kept_cb = [&](HttpResponse) {
-        kept_count.fetch_add(1);
-    };
+    auto kept_cb = [&](HttpResponse) { kept_count.fetch_add(1); };
 
     pool.get("host", "/low", dropped_cb, HttpPriority::LOW);
     pool.get("host", "/normal", kept_cb, HttpPriority::NORMAL);
@@ -339,9 +337,7 @@ TEST(HttpPool, GetStreamingIncrementsPending) {
     pool.stop();
 
     pool.get_streaming(
-        "host", "/stream",
-        [](const uint8_t*, size_t) -> bool { return true; },
-        [](HttpResponse) {},
+        "host", "/stream", [](const uint8_t*, size_t) -> bool { return true; }, [](HttpResponse) {},
         HttpPriority::NORMAL);
 
     EXPECT_GE(pool.pending(), 1);
@@ -388,8 +384,7 @@ TEST(HttpPool, DropBelowDropsStreamingRequests) {
 
     std::atomic<bool> callback_fired{false};
     pool.get_streaming(
-        "host", "/stream",
-        [](const uint8_t*, size_t) -> bool { return true; },
+        "host", "/stream", [](const uint8_t*, size_t) -> bool { return true; },
         [&](HttpResponse resp) {
             EXPECT_EQ(resp.status, 0);
             EXPECT_EQ(resp.error, "dropped");
@@ -411,9 +406,7 @@ TEST(HttpPool, DropBelowResponseHasEmptyBody) {
     pool.stop();
 
     HttpResponse received;
-    pool.get("host", "/test", [&](HttpResponse resp) {
-        received = std::move(resp);
-    }, HttpPriority::LOW);
+    pool.get("host", "/test", [&](HttpResponse resp) { received = std::move(resp); }, HttpPriority::LOW);
 
     pool.drop_below(HttpPriority::NORMAL);
 
@@ -530,12 +523,15 @@ TEST(HttpPool, AllSamePriorityMaintainsInsertionOrder) {
 
     for (int i = 0; i < 5; i++) {
         std::string id = std::to_string(i);
-        pool.get("host", "/" + id, [&, id](HttpResponse resp) {
-            if (resp.error == "dropped") {
-                std::lock_guard lock(mu);
-                order.push_back(id);
-            }
-        }, HttpPriority::NORMAL);
+        pool.get(
+            "host", "/" + id,
+            [&, id](HttpResponse resp) {
+                if (resp.error == "dropped") {
+                    std::lock_guard lock(mu);
+                    order.push_back(id);
+                }
+            },
+            HttpPriority::NORMAL);
     }
 
     pool.drop_below(HttpPriority::HIGH);
@@ -556,10 +552,13 @@ TEST(HttpPool, DroppedCallbacksDoNotAppearInPoll) {
     pool.stop();
 
     std::atomic<int> direct_count{0};
-    pool.get("host", "/a", [&](HttpResponse resp) {
-        if (resp.error == "dropped")
-            direct_count.fetch_add(1);
-    }, HttpPriority::LOW);
+    pool.get(
+        "host", "/a",
+        [&](HttpResponse resp) {
+            if (resp.error == "dropped")
+                direct_count.fetch_add(1);
+        },
+        HttpPriority::LOW);
 
     pool.drop_below(HttpPriority::NORMAL);
     EXPECT_EQ(direct_count.load(), 1);
@@ -581,10 +580,13 @@ TEST(HttpPool, LargeBatchDropBelow) {
     std::atomic<int> dropped{0};
 
     for (int i = 0; i < N; i++) {
-        pool.get("host", "/item" + std::to_string(i), [&](HttpResponse resp) {
-            if (resp.error == "dropped")
-                dropped.fetch_add(1);
-        }, HttpPriority::LOW);
+        pool.get(
+            "host", "/item" + std::to_string(i),
+            [&](HttpResponse resp) {
+                if (resp.error == "dropped")
+                    dropped.fetch_add(1);
+            },
+            HttpPriority::LOW);
     }
 
     EXPECT_EQ(pool.pending(), N);

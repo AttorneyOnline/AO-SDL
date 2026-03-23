@@ -15,8 +15,12 @@ class MockScreen : public Screen {
         exited = true;
         exit_count++;
     }
-    void handle_events() override { events_handled++; }
-    const std::string& screen_id() const override { return id; }
+    void handle_events() override {
+        events_handled++;
+    }
+    const std::string& screen_id() const override {
+        return id;
+    }
 
     std::string id = "mock";
     bool entered = false;
@@ -124,11 +128,18 @@ TEST(UIManager, PopScreenCallsExitOnPoppedScreen) {
 
     class ExitTracker : public Screen {
       public:
-        explicit ExitTracker(bool& flag) : flag_(flag) {}
-        void enter(ScreenController&) override {}
-        void exit() override { flag_ = true; }
-        void handle_events() override {}
-        const std::string& screen_id() const override { return id_; }
+        explicit ExitTracker(bool& flag) : flag_(flag) {
+        }
+        void enter(ScreenController&) override {
+        }
+        void exit() override {
+            flag_ = true;
+        }
+        void handle_events() override {
+        }
+        const std::string& screen_id() const override {
+            return id_;
+        }
 
       private:
         bool& flag_;

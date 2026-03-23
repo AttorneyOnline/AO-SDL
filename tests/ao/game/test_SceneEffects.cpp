@@ -1,5 +1,5 @@
-#include "ao/game/effects/ScreenshakeEffect.h"
 #include "ao/game/effects/FlashEffect.h"
+#include "ao/game/effects/ScreenshakeEffect.h"
 #include "ao/game/effects/ShaderEffect.h"
 #include "render/Layer.h"
 #include <gtest/gtest.h>
@@ -397,8 +397,7 @@ TEST(SceneEffectInterface, FlashIsAnISceneEffect) {
 }
 
 TEST(SceneEffectInterface, ShaderIsAnISceneEffect) {
-    std::unique_ptr<ISceneEffect> effect =
-        std::make_unique<ShaderEffect>("shaders/test", 1.0f);
+    std::unique_ptr<ISceneEffect> effect = std::make_unique<ShaderEffect>("shaders/test", 1.0f);
     LayerGroup scene;
 
     EXPECT_FALSE(effect->is_active());

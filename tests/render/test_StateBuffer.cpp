@@ -3,8 +3,8 @@
 #include "render/RenderState.h"
 #include "render/StateBuffer.h"
 
-#include <gtest/gtest.h>
 #include <atomic>
+#include <gtest/gtest.h>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -95,8 +95,7 @@ TEST(StateBuffer, DefaultConstructionProvidesBothBuffers) {
 
 TEST(StateBuffer, ProducerAndConsumerAreDifferentBuffers) {
     StateBuffer buf;
-    EXPECT_NE(buf.get_producer_buf(),
-              static_cast<const RenderState*>(buf.get_consumer_buf()));
+    EXPECT_NE(buf.get_producer_buf(), static_cast<const RenderState*>(buf.get_consumer_buf()));
 }
 
 TEST(StateBuffer, DefaultConstructionBuffersAreEmpty) {

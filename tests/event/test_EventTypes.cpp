@@ -203,11 +203,9 @@ TEST(ServerConnectEvent, IPv6Host) {
 // ===========================================================================
 
 // Helper: build a JSON string with one server that has a ws_port.
-static std::string make_server_json(const std::string& name, const std::string& ip,
-                                    int players, int ws_port) {
-    return R"([{"name":")" + name + R"(","description":"desc","ip":")" + ip +
-           R"(","players":)" + std::to_string(players) +
-           R"(,"ws_port":)" + std::to_string(ws_port) + "}]";
+static std::string make_server_json(const std::string& name, const std::string& ip, int players, int ws_port) {
+    return R"([{"name":")" + name + R"(","description":"desc","ip":")" + ip + R"(","players":)" +
+           std::to_string(players) + R"(,"ws_port":)" + std::to_string(ws_port) + "}]";
 }
 
 TEST(ServerListEvent, ConstructorAndGetter) {

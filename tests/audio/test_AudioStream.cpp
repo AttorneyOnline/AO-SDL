@@ -1,9 +1,9 @@
 #include "audio/AudioStream.h"
 
-#include <gtest/gtest.h>
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 
@@ -269,7 +269,7 @@ TEST(AudioStream, SetLoopPointsStartOnly) {
     AudioStream stream;
     stream.set_loop_points(12345);
     EXPECT_EQ(stream.loop_start(), 12345);
-    EXPECT_EQ(stream.loop_end(), 0);  // Default: loops to end of stream.
+    EXPECT_EQ(stream.loop_end(), 0); // Default: loops to end of stream.
 }
 
 TEST(AudioStream, SetLoopPointsOverwrite) {
@@ -284,7 +284,7 @@ TEST(AudioStream, SetLoopPointsZeroEndMeansFullStream) {
     AudioStream stream;
     stream.set_loop_points(48000, 0);
     EXPECT_EQ(stream.loop_start(), 48000);
-    EXPECT_EQ(stream.loop_end(), 0);  // 0 = end of stream per the API.
+    EXPECT_EQ(stream.loop_end(), 0); // 0 = end of stream per the API.
 }
 
 // ===========================================================================
@@ -326,7 +326,7 @@ TEST(AudioStream, SeekSetNegativeFails) {
     stream.feed(data.data(), data.size());
 
     EXPECT_EQ(stream.stream_seek(-1, SEEK_SET), -1);
-    EXPECT_EQ(stream.stream_tell(), 0);  // Position unchanged.
+    EXPECT_EQ(stream.stream_tell(), 0); // Position unchanged.
 }
 
 TEST(AudioStream, SeekEndAfterComplete) {

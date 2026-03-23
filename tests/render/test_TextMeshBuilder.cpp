@@ -4,8 +4,8 @@
 #include "render/GlyphCache.h"
 #include "render/TextRenderer.h"
 
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
@@ -30,16 +30,11 @@ class TextMeshBuilderTest : public ::testing::Test {
     std::unique_ptr<GlyphCache> cache;
 
     // Convenience: call build() with common defaults
-    void build(const std::vector<TextRenderer::GlyphLayout>& layout,
-               int chars_visible,
-               std::vector<MeshVertex>& verts,
-               std::vector<uint32_t>& indices,
-               int offset_x = 0, int offset_y = 0,
-               int scroll_y = 0, int max_height = 0,
+    void build(const std::vector<TextRenderer::GlyphLayout>& layout, int chars_visible, std::vector<MeshVertex>& verts,
+               std::vector<uint32_t>& indices, int offset_x = 0, int offset_y = 0, int scroll_y = 0, int max_height = 0,
                int base_w = 256, int base_h = 192) {
-        TextMeshBuilder::build(*cache, layout, chars_visible,
-                               offset_x, offset_y, scroll_y, max_height,
-                               base_w, base_h, verts, indices);
+        TextMeshBuilder::build(*cache, layout, chars_visible, offset_x, offset_y, scroll_y, max_height, base_w, base_h,
+                               verts, indices);
     }
 };
 

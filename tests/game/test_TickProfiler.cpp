@@ -1,7 +1,7 @@
 #include "game/TickProfiler.h"
 
-#include <gtest/gtest.h>
 #include <chrono>
+#include <gtest/gtest.h>
 #include <thread>
 
 // ---------------------------------------------------------------------------
@@ -242,8 +242,7 @@ TEST(TickProfiler, ManySectionsAllTrackedIndependently) {
     int indices[N];
     for (int i = 0; i < N; ++i) {
         // Use string literals that persist (static storage)
-        static const char* names[] = {"s0", "s1", "s2", "s3", "s4",
-                                       "s5", "s6", "s7", "s8", "s9"};
+        static const char* names[] = {"s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"};
         indices[i] = profiler.add_section(names[i]);
         EXPECT_EQ(indices[i], i);
     }
@@ -261,7 +260,8 @@ TEST(TickProfiler, ManySectionsAllTrackedIndependently) {
         int us = result[i].us->load(std::memory_order_relaxed);
         if (i == 5) {
             EXPECT_GT(us, 0) << "Section 5 should have been timed";
-        } else {
+        }
+        else {
             EXPECT_EQ(us, 0) << "Section " << i << " should be untouched";
         }
     }

@@ -1,8 +1,8 @@
 #include "render/Transform.h"
 
-#include <gtest/gtest.h>
-#include <cmath>
 #include <climits>
+#include <cmath>
+#include <gtest/gtest.h>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -15,8 +15,7 @@ static constexpr float kPi = 3.14159265358979323846f;
 static void expect_mat4_near(const Mat4& actual, const Mat4& expected, float eps = kEpsilon) {
     for (int col = 0; col < 4; col++) {
         for (int row = 0; row < 4; row++) {
-            EXPECT_NEAR(actual[col][row], expected[col][row], eps)
-                << "Mismatch at [" << col << "][" << row << "]";
+            EXPECT_NEAR(actual[col][row], expected[col][row], eps) << "Mismatch at [" << col << "][" << row << "]";
         }
     }
 }

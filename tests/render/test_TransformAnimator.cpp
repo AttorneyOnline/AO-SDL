@@ -1,8 +1,8 @@
-#include "render/TransformAnimator.h"
 #include "render/Transform.h"
+#include "render/TransformAnimator.h"
 
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -31,9 +31,7 @@ class TransformAnimatorTest : public ::testing::Test {
     }
 
     /// Build a simple two-keyframe animator: kf0 at t=0, kf1 at t=duration_ms.
-    TransformAnimator make_simple(int duration_ms,
-                                  Vec2 start_pos, Vec2 end_pos,
-                                  Vec2 start_scale, Vec2 end_scale,
+    TransformAnimator make_simple(int duration_ms, Vec2 start_pos, Vec2 end_pos, Vec2 start_scale, Vec2 end_scale,
                                   float start_rot, float end_rot) {
         TransformAnimator a;
         a.add_keyframe({0, start_pos, start_scale, start_rot});
@@ -81,21 +79,21 @@ TEST_F(TransformAnimatorTest, TickWithSingleKeyframeReturnsFalse) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, PlaySetsPlaying) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     EXPECT_TRUE(a.is_playing());
     EXPECT_FALSE(a.is_finished());
 }
 
 TEST_F(TransformAnimatorTest, StopClearsPlaying) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.stop();
     EXPECT_FALSE(a.is_playing());
 }
 
 TEST_F(TransformAnimatorTest, ResetClearsPlayingAndFinished) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.tick(200); // finishes
     EXPECT_TRUE(a.is_finished());
@@ -107,7 +105,7 @@ TEST_F(TransformAnimatorTest, ResetClearsPlayingAndFinished) {
 }
 
 TEST_F(TransformAnimatorTest, ResetRestoresFirstKeyframe) {
-    TransformAnimator a = make_simple(100, {5, 7}, {10, 20}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {5, 7}, {10, 20}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.tick(100); // finishes at end keyframe
     a.reset();
@@ -119,7 +117,7 @@ TEST_F(TransformAnimatorTest, ResetRestoresFirstKeyframe) {
 }
 
 TEST_F(TransformAnimatorTest, TickWhileStoppedReturnsFalse) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     // Not yet playing.
     EXPECT_FALSE(a.tick(16));
 }
@@ -129,34 +127,34 @@ TEST_F(TransformAnimatorTest, TickWhileStoppedReturnsFalse) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, TickReturnsTrue) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     EXPECT_TRUE(a.tick(50));
 }
 
 TEST_F(TransformAnimatorTest, TickAdvancesTranslation) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     a.tick(50); // 50% through with LINEAR easing
     expect_vec2_near(a.current_translation(), {5, 0});
 }
 
 TEST_F(TransformAnimatorTest, TickAdvancesScale) {
-    TransformAnimator a = make_simple(100, {0,0}, {0,0}, {1,1}, {3,3}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {0, 0}, {1, 1}, {3, 3}, 0, 0);
     a.play();
     a.tick(50);
     expect_vec2_near(a.current_scale(), {2, 2});
 }
 
 TEST_F(TransformAnimatorTest, TickAdvancesRotation) {
-    TransformAnimator a = make_simple(100, {0,0}, {0,0}, {1,1}, {1,1}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {0, 0}, {1, 1}, {1, 1}, 0, 90);
     a.play();
     a.tick(50);
     EXPECT_NEAR(a.current_rotation(), 45.0f, kEpsilon);
 }
 
 TEST_F(TransformAnimatorTest, MultipleTicks) {
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     a.tick(25);
     expect_vec2_near(a.current_translation(), {25, 0});
@@ -171,7 +169,7 @@ TEST_F(TransformAnimatorTest, MultipleTicks) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, FinishesAtExactDuration) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.tick(100);
     EXPECT_TRUE(a.is_finished());
@@ -179,7 +177,7 @@ TEST_F(TransformAnimatorTest, FinishesAtExactDuration) {
 }
 
 TEST_F(TransformAnimatorTest, FinishesWhenOvershootingDuration) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.tick(200);
     EXPECT_TRUE(a.is_finished());
@@ -187,7 +185,7 @@ TEST_F(TransformAnimatorTest, FinishesWhenOvershootingDuration) {
 }
 
 TEST_F(TransformAnimatorTest, FinalValuesMatchLastKeyframe) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,20}, {1,1}, {3,4}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 20}, {1, 1}, {3, 4}, 0, 90);
     a.play();
     a.tick(100);
     expect_vec2_near(a.current_translation(), {10, 20});
@@ -196,7 +194,7 @@ TEST_F(TransformAnimatorTest, FinalValuesMatchLastKeyframe) {
 }
 
 TEST_F(TransformAnimatorTest, TickAfterFinishedReturnsFalse) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 0);
     a.play();
     a.tick(100);
     EXPECT_TRUE(a.is_finished());
@@ -204,7 +202,7 @@ TEST_F(TransformAnimatorTest, TickAfterFinishedReturnsFalse) {
 }
 
 TEST_F(TransformAnimatorTest, PlayAfterFinishedResumesFromEnd) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 0);
     a.play();
     a.tick(100);
     EXPECT_TRUE(a.is_finished());
@@ -223,7 +221,7 @@ TEST_F(TransformAnimatorTest, PlayAfterFinishedResumesFromEnd) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, LinearInterpolationQuarterPoints) {
-    TransformAnimator a = make_simple(100, {0,0}, {100,200}, {1,1}, {5,5}, 0, 360);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 200}, {1, 1}, {5, 5}, 0, 360);
     a.set_easing(Easing::LINEAR);
     a.play();
 
@@ -236,7 +234,7 @@ TEST_F(TransformAnimatorTest, LinearInterpolationQuarterPoints) {
 TEST_F(TransformAnimatorTest, QuadInEasing) {
     // QUAD_IN: ease(t) = t*t
     // At t=0.5 (50ms of 100ms), ease = 0.25
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_easing(Easing::QUAD_IN);
     a.play();
     a.tick(50);
@@ -247,7 +245,7 @@ TEST_F(TransformAnimatorTest, QuadInEasing) {
 TEST_F(TransformAnimatorTest, QuadOutEasing) {
     // QUAD_OUT: ease(t) = t * (2 - t)
     // At t=0.5, ease = 0.5*(2-0.5) = 0.75
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_easing(Easing::QUAD_OUT);
     a.play();
     a.tick(50);
@@ -257,7 +255,7 @@ TEST_F(TransformAnimatorTest, QuadOutEasing) {
 TEST_F(TransformAnimatorTest, QuadInOutEasingFirstHalf) {
     // QUAD_IN_OUT: t < 0.5 => 2*t*t
     // At t=0.25 (25ms of 100ms): ease = 2*0.25*0.25 = 0.125
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_easing(Easing::QUAD_IN_OUT);
     a.play();
     a.tick(25);
@@ -267,7 +265,7 @@ TEST_F(TransformAnimatorTest, QuadInOutEasingFirstHalf) {
 TEST_F(TransformAnimatorTest, QuadInOutEasingSecondHalf) {
     // QUAD_IN_OUT: t >= 0.5 => -1 + (4 - 2*t)*t
     // At t=0.75 (75ms of 100ms): ease = -1 + (4 - 1.5)*0.75 = -1 + 1.875 = 0.875
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_easing(Easing::QUAD_IN_OUT);
     a.play();
     a.tick(75);
@@ -279,7 +277,7 @@ TEST_F(TransformAnimatorTest, EasingEndpointsAreExact) {
     // At t=0, values should be the start keyframe.
     // At t=total, values should be the end keyframe.
     for (auto easing : {Easing::LINEAR, Easing::QUAD_IN, Easing::QUAD_OUT, Easing::QUAD_IN_OUT}) {
-        TransformAnimator a = make_simple(100, {0,0}, {50,50}, {1,1}, {3,3}, 0, 180);
+        TransformAnimator a = make_simple(100, {0, 0}, {50, 50}, {1, 1}, {3, 3}, 0, 180);
         a.set_easing(easing);
         a.play();
         a.tick(100);
@@ -349,14 +347,14 @@ TEST_F(TransformAnimatorTest, KeyframesAddedOutOfOrderAreSorted) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, ZeroDeltaTick) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     EXPECT_TRUE(a.tick(0));
     expect_vec2_near(a.current_translation(), {0, 0});
 }
 
 TEST_F(TransformAnimatorTest, ClearKeyframesResetsState) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.tick(50);
     a.clear_keyframes();
@@ -369,7 +367,7 @@ TEST_F(TransformAnimatorTest, ClearKeyframesResetsState) {
 }
 
 TEST_F(TransformAnimatorTest, NegativeTranslationValues) {
-    TransformAnimator a = make_simple(100, {-10, -20}, {10, 20}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {-10, -20}, {10, 20}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     a.tick(50);
     expect_vec2_near(a.current_translation(), {0, 0});
@@ -378,14 +376,14 @@ TEST_F(TransformAnimatorTest, NegativeTranslationValues) {
 }
 
 TEST_F(TransformAnimatorTest, NegativeRotation) {
-    TransformAnimator a = make_simple(100, {0,0}, {0,0}, {1,1}, {1,1}, -90, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {0, 0}, {1, 1}, {1, 1}, -90, 90);
     a.play();
     a.tick(50);
     EXPECT_NEAR(a.current_rotation(), 0.0f, kEpsilon);
 }
 
 TEST_F(TransformAnimatorTest, VeryLargeDelta) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {2,2}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {2, 2}, 0, 90);
     a.play();
     a.tick(999999);
     EXPECT_TRUE(a.is_finished());
@@ -397,7 +395,7 @@ TEST_F(TransformAnimatorTest, VeryLargeDelta) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, LoopingDoesNotFinish) {
-    TransformAnimator a = make_simple(100, {0,0}, {10,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {10, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_looping(true);
     a.play();
     a.tick(100);
@@ -406,7 +404,7 @@ TEST_F(TransformAnimatorTest, LoopingDoesNotFinish) {
 }
 
 TEST_F(TransformAnimatorTest, LoopingWrapsElapsedTime) {
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_looping(true);
     a.play();
 
@@ -416,7 +414,7 @@ TEST_F(TransformAnimatorTest, LoopingWrapsElapsedTime) {
 }
 
 TEST_F(TransformAnimatorTest, LoopingMultipleCycles) {
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.set_looping(true);
     a.play();
 
@@ -433,7 +431,7 @@ TEST_F(TransformAnimatorTest, LoopingMultipleCycles) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, ApplyWritesToTransform) {
-    TransformAnimator a = make_simple(100, {0,0}, {5,10}, {1,1}, {2,3}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {5, 10}, {1, 1}, {2, 3}, 0, 0);
     a.play();
     a.tick(100); // land on final keyframe
 
@@ -450,7 +448,7 @@ TEST_F(TransformAnimatorTest, ApplyWritesToTransform) {
 }
 
 TEST_F(TransformAnimatorTest, ApplyWithRotation) {
-    TransformAnimator a = make_simple(100, {0,0}, {0,0}, {1,1}, {1,1}, 0, 90);
+    TransformAnimator a = make_simple(100, {0, 0}, {0, 0}, {1, 1}, {1, 1}, 0, 90);
     a.play();
     a.tick(100);
 
@@ -469,7 +467,7 @@ TEST_F(TransformAnimatorTest, ApplyWithRotation) {
 // ===========================================================================
 
 TEST_F(TransformAnimatorTest, StopThenPlayResumes) {
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     a.tick(30);
     expect_vec2_near(a.current_translation(), {30, 0});
@@ -483,7 +481,7 @@ TEST_F(TransformAnimatorTest, StopThenPlayResumes) {
 }
 
 TEST_F(TransformAnimatorTest, ResetThenPlayRestartsFromBeginning) {
-    TransformAnimator a = make_simple(100, {0,0}, {100,0}, {1,1}, {1,1}, 0, 0);
+    TransformAnimator a = make_simple(100, {0, 0}, {100, 0}, {1, 1}, {1, 1}, 0, 0);
     a.play();
     a.tick(80);
     expect_vec2_near(a.current_translation(), {80, 0});

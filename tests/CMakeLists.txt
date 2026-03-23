@@ -65,7 +65,10 @@ target_compile_definitions(aosdl_tests PRIVATE
     AO_TEST_FONT_PATH="${CMAKE_SOURCE_DIR}/third-party/imgui/misc/fonts/ProggyClean.ttf"
 )
 
-target_link_libraries(aosdl_tests PRIVATE ao_protocol aorender_gl GTest::gtest_main)
+# Stub Texture2D so tests don't need the GL renderer plugin
+target_sources(aosdl_tests PRIVATE stubs/StubTexture.cpp)
+
+target_link_libraries(aosdl_tests PRIVATE ao_protocol GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(aosdl_tests)

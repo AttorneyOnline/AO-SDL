@@ -1,7 +1,7 @@
+#include "event/BackgroundEvent.h"
+#include "event/ChatEvent.h"
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
-#include "event/ChatEvent.h"
-#include "event/BackgroundEvent.h"
 
 #include <gtest/gtest.h>
 #include <thread>
@@ -11,7 +11,8 @@
 // doesn't leak between tests.
 template <typename T>
 void drain(EventChannel<T>& ch) {
-    while (ch.get_event()) {}
+    while (ch.get_event()) {
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -41,9 +42,9 @@ TEST(EventManager, GetChannelReturnsSameReferenceForSameType) {
 // ---------------------------------------------------------------------------
 
 TEST(EventManager, GetChannelReturnsDifferentChannelsForDifferentTypes) {
-    auto& ui_ch   = EventManager::instance().get_channel<UIEvent>();
+    auto& ui_ch = EventManager::instance().get_channel<UIEvent>();
     auto& chat_ch = EventManager::instance().get_channel<ChatEvent>();
-    auto& bg_ch   = EventManager::instance().get_channel<BackgroundEvent>();
+    auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
 
     // The addresses must all differ (they are distinct objects).
     EXPECT_NE(static_cast<void*>(&ui_ch), static_cast<void*>(&chat_ch));
@@ -61,7 +62,7 @@ TEST(EventManager, GetChannelReturnsDifferentChannelsForDifferentTypes) {
 
 TEST(EventManager, PublishingToOneChannelDoesNotAffectAnother) {
     auto& chat_ch = EventManager::instance().get_channel<ChatEvent>();
-    auto& bg_ch   = EventManager::instance().get_channel<BackgroundEvent>();
+    auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
 
     // Drain any leftovers from prior tests.
     drain(chat_ch);
@@ -141,8 +142,7 @@ TEST(EventManager, StatsAreSortedDescending) {
     auto stats = EventManager::instance().snapshot_channel_stats();
 
     for (size_t i = 1; i < stats.size(); ++i) {
-        EXPECT_GE(stats[i - 1].count, stats[i].count)
-            << "Stats not sorted descending at index " << i;
+        EXPECT_GE(stats[i - 1].count, stats[i].count) << "Stats not sorted descending at index " << i;
     }
 }
 
@@ -152,7 +152,7 @@ TEST(EventManager, StatsAreSortedDescending) {
 
 TEST(EventManager, ConcurrentGetChannelDoesNotCrash) {
     constexpr int NUM_THREADS = 8;
-    constexpr int ITERATIONS  = 500;
+    constexpr int ITERATIONS = 500;
 
     std::vector<std::thread> threads;
     threads.reserve(NUM_THREADS);
@@ -161,9 +161,9 @@ TEST(EventManager, ConcurrentGetChannelDoesNotCrash) {
         threads.emplace_back([&] {
             for (int i = 0; i < ITERATIONS; ++i) {
                 // Each iteration touches all three channel types.
-                auto& ui_ch   = EventManager::instance().get_channel<UIEvent>();
+                auto& ui_ch = EventManager::instance().get_channel<UIEvent>();
                 auto& chat_ch = EventManager::instance().get_channel<ChatEvent>();
-                auto& bg_ch   = EventManager::instance().get_channel<BackgroundEvent>();
+                auto& bg_ch = EventManager::instance().get_channel<BackgroundEvent>();
                 (void)ui_ch;
                 (void)chat_ch;
                 (void)bg_ch;

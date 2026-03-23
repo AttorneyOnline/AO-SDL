@@ -2,9 +2,9 @@
 
 #include "asset/MountEmbedded.h"
 
-#include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
@@ -16,8 +16,7 @@ namespace fs = std::filesystem;
 
 class StubMount : public Mount {
   public:
-    explicit StubMount(const std::string& name = "stub://")
-        : Mount(name) {
+    explicit StubMount(const std::string& name = "stub://") : Mount(name) {
     }
 
     void add_file(const std::string& path, const std::vector<uint8_t>& data) {
@@ -483,8 +482,7 @@ TEST_F(MountManagerTest, EmbeddedMountHasPriorityOverLaterAdded) {
 TEST_F(MountManagerLoadTest, DiskMountHasPriorityOverEmbedded) {
     // Create a local file that shadows an embedded asset path
     fs::create_directories(temp_dir / "shaders" / "text" / "glsl");
-    write_file(temp_dir / "shaders" / "text" / "glsl" / "vertex.glsl",
-               "// local override shader");
+    write_file(temp_dir / "shaders" / "text" / "glsl" / "vertex.glsl", "// local override shader");
 
     MountManager manager;
     manager.load_mounts({temp_dir});
@@ -568,7 +566,6 @@ TEST_F(MountManagerTest, DropHttpBelowDoesNotCrashWithNoHttpMount) {
 }
 
 TEST_F(MountManagerTest, FetchStreamingReturnsFalseWithNoHttpMount) {
-    bool result = manager.fetch_streaming("some/path.png",
-                                          [](const uint8_t*, size_t) { return true; });
+    bool result = manager.fetch_streaming("some/path.png", [](const uint8_t*, size_t) { return true; });
     EXPECT_FALSE(result);
 }

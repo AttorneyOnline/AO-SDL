@@ -23,15 +23,15 @@ static std::vector<uint8_t> make_1x1_png() {
 
     // IHDR chunk
     uint8_t ihdr[] = {
-        0x00, 0x00, 0x00, 0x0D,                          // length = 13
-        'I',  'H',  'D',  'R',  0x00, 0x00, 0x00, 0x01,  // width = 1
-        0x00, 0x00, 0x00, 0x01,                           // height = 1
-        0x08,                                             // bit depth = 8
-        0x06,                                             // color type = 6 (RGBA)
-        0x00,                                             // compression = 0
-        0x00,                                             // filter = 0
-        0x00,                                             // interlace = 0
-        0x00, 0x00, 0x00, 0x00,                           // CRC (ignored by stbi)
+        0x00, 0x00, 0x00, 0x0D,                         // length = 13
+        'I',  'H',  'D',  'R',  0x00, 0x00, 0x00, 0x01, // width = 1
+        0x00, 0x00, 0x00, 0x01,                         // height = 1
+        0x08,                                           // bit depth = 8
+        0x06,                                           // color type = 6 (RGBA)
+        0x00,                                           // compression = 0
+        0x00,                                           // filter = 0
+        0x00,                                           // interlace = 0
+        0x00, 0x00, 0x00, 0x00,                         // CRC (ignored by stbi)
     };
     png.insert(png.end(), ihdr, ihdr + sizeof(ihdr));
 
@@ -46,8 +46,7 @@ static std::vector<uint8_t> make_1x1_png() {
         0x00, 0x86, 0x00, 0xA5, // Adler-32
     };
     uint8_t idat_header[] = {
-        0x00, 0x00, 0x00, (uint8_t)sizeof(idat_data),
-        'I',  'D',  'A',  'T',
+        0x00, 0x00, 0x00, (uint8_t)sizeof(idat_data), 'I', 'D', 'A', 'T',
     };
     png.insert(png.end(), idat_header, idat_header + sizeof(idat_header));
     png.insert(png.end(), idat_data, idat_data + sizeof(idat_data));
@@ -129,7 +128,9 @@ static std::vector<uint8_t> make_truncated_gif() {
 
 class StbiDecoderTest : public ::testing::Test {
   protected:
-    void SetUp() override { decoder = create_stbi_decoder(); }
+    void SetUp() override {
+        decoder = create_stbi_decoder();
+    }
     std::unique_ptr<ImageDecoder> decoder;
 };
 
@@ -139,7 +140,8 @@ TEST_F(StbiDecoderTest, ExtensionsIncludeExpectedFormats) {
     // StbiDecoder handles jpg, jpeg, bmp, tga
     bool has_jpg = false;
     for (const auto& e : exts) {
-        if (e == "jpg" || e == "jpeg") has_jpg = true;
+        if (e == "jpg" || e == "jpeg")
+            has_jpg = true;
     }
     EXPECT_TRUE(has_jpg);
 }
@@ -154,7 +156,7 @@ TEST_F(StbiDecoderTest, DecodesValidPng) {
         EXPECT_EQ(frames[0].width, 1);
         EXPECT_EQ(frames[0].height, 1);
         EXPECT_EQ(frames[0].duration_ms, 0);
-        EXPECT_EQ(frames[0].pixels.size(), 4u);  // 1x1 RGBA
+        EXPECT_EQ(frames[0].pixels.size(), 4u); // 1x1 RGBA
     }
     // If stbi rejects the hand-crafted PNG due to checksum, that is acceptable.
 }
@@ -197,7 +199,9 @@ TEST_F(StbiDecoderTest, SingleFrameStaticDuration) {
 
 class GifDecoderTest : public ::testing::Test {
   protected:
-    void SetUp() override { decoder = create_gif_decoder(); }
+    void SetUp() override {
+        decoder = create_gif_decoder();
+    }
     std::unique_ptr<ImageDecoder> decoder;
 };
 
@@ -206,7 +210,8 @@ TEST_F(GifDecoderTest, ExtensionsContainGif) {
     ASSERT_FALSE(exts.empty());
     bool has_gif = false;
     for (const auto& e : exts) {
-        if (e == "gif") has_gif = true;
+        if (e == "gif")
+            has_gif = true;
     }
     EXPECT_TRUE(has_gif);
 }
@@ -220,7 +225,7 @@ TEST_F(GifDecoderTest, DecodesMinimalGif) {
         ASSERT_GE(frames.size(), 1u);
         EXPECT_EQ(frames[0].width, 1);
         EXPECT_EQ(frames[0].height, 1);
-        EXPECT_EQ(frames[0].pixels.size(), 4u);  // 1x1 RGBA
+        EXPECT_EQ(frames[0].pixels.size(), 4u); // 1x1 RGBA
     }
 }
 
@@ -253,7 +258,9 @@ TEST_F(GifDecoderTest, RejectsZeroLengthWithValidPointer) {
 
 class WebPDecoderTest : public ::testing::Test {
   protected:
-    void SetUp() override { decoder = create_webp_decoder(); }
+    void SetUp() override {
+        decoder = create_webp_decoder();
+    }
     std::unique_ptr<ImageDecoder> decoder;
 };
 
@@ -262,7 +269,8 @@ TEST_F(WebPDecoderTest, ExtensionsContainWebp) {
     ASSERT_FALSE(exts.empty());
     bool has_webp = false;
     for (const auto& e : exts) {
-        if (e == "webp") has_webp = true;
+        if (e == "webp")
+            has_webp = true;
     }
     EXPECT_TRUE(has_webp);
 }
@@ -297,7 +305,9 @@ TEST_F(WebPDecoderTest, RejectsTruncatedWebPHeader) {
 
 class ApngDecoderInterfaceTest : public ::testing::Test {
   protected:
-    void SetUp() override { decoder = create_apng_decoder(); }
+    void SetUp() override {
+        decoder = create_apng_decoder();
+    }
     std::unique_ptr<ImageDecoder> decoder;
 };
 
@@ -305,8 +315,10 @@ TEST_F(ApngDecoderInterfaceTest, ExtensionsContainPngAndApng) {
     auto exts = decoder->extensions();
     bool has_png = false, has_apng = false;
     for (const auto& e : exts) {
-        if (e == "png") has_png = true;
-        if (e == "apng") has_apng = true;
+        if (e == "png")
+            has_png = true;
+        if (e == "apng")
+            has_apng = true;
     }
     EXPECT_TRUE(has_png);
     EXPECT_TRUE(has_apng);
@@ -411,7 +423,7 @@ TEST_F(AllDecodersTest, ValidFramesHavePositiveDimensions) {
 
 TEST(ImageDecoderRegistry, ReturnsNonEmptyDecoderList) {
     const auto& decoders = image_decoders();
-    EXPECT_GE(decoders.size(), 4u);  // webp, apng, gif, stbi
+    EXPECT_GE(decoders.size(), 4u); // webp, apng, gif, stbi
 }
 
 TEST(ImageDecoderRegistry, SupportedExtensionsIncludeCommonFormats) {
@@ -420,7 +432,8 @@ TEST(ImageDecoderRegistry, SupportedExtensionsIncludeCommonFormats) {
 
     auto has = [&](const std::string& e) {
         for (const auto& x : exts)
-            if (x == e) return true;
+            if (x == e)
+                return true;
         return false;
     };
     EXPECT_TRUE(has("png"));

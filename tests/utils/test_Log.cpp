@@ -51,16 +51,16 @@ class LogSinkGuard {
 
 TEST(LogLevelName, ReturnsCorrectStrings) {
     EXPECT_STREQ(log_level_name(VERBOSE), "VERBOSE");
-    EXPECT_STREQ(log_level_name(DEBUG),   "DEBUG");
-    EXPECT_STREQ(log_level_name(INFO),    "INFO");
+    EXPECT_STREQ(log_level_name(DEBUG), "DEBUG");
+    EXPECT_STREQ(log_level_name(INFO), "INFO");
     EXPECT_STREQ(log_level_name(WARNING), "WARNING");
-    EXPECT_STREQ(log_level_name(ERR),     "ERROR");
-    EXPECT_STREQ(log_level_name(FATAL),   "FATAL");
+    EXPECT_STREQ(log_level_name(ERR), "ERROR");
+    EXPECT_STREQ(log_level_name(FATAL), "FATAL");
 }
 
 TEST(LogLevelName, InvalidLevelReturnsUnknown) {
     EXPECT_STREQ(log_level_name(INVALID), "UNKNOWN");
-    EXPECT_STREQ(log_level_name(COUNT),   "UNKNOWN");
+    EXPECT_STREQ(log_level_name(COUNT), "UNKNOWN");
     EXPECT_STREQ(log_level_name(static_cast<LogLevel>(-1)), "UNKNOWN");
     EXPECT_STREQ(log_level_name(static_cast<LogLevel>(99)), "UNKNOWN");
 }
@@ -193,9 +193,8 @@ TEST(LogPrint, TimestampIsNonEmpty) {
 TEST(LogSink, SetSinkToNullptrClears) {
     // Install a sink, clear it, log a message — nothing captured.
     std::vector<CapturedMessage> captured;
-    Log::set_sink([&](LogLevel level, const std::string& ts, const std::string& msg) {
-        captured.push_back({level, ts, msg});
-    });
+    Log::set_sink(
+        [&](LogLevel level, const std::string& ts, const std::string& msg) { captured.push_back({level, ts, msg}); });
     Log::set_sink(nullptr);
 
     Log::log_print(INFO, "after clear");
@@ -206,14 +205,12 @@ TEST(LogSink, ReplacingSinkWorks) {
     // First sink captures to vec1, second to vec2.
     std::vector<CapturedMessage> vec1, vec2;
 
-    Log::set_sink([&](LogLevel level, const std::string& ts, const std::string& msg) {
-        vec1.push_back({level, ts, msg});
-    });
+    Log::set_sink(
+        [&](LogLevel level, const std::string& ts, const std::string& msg) { vec1.push_back({level, ts, msg}); });
     Log::log_print(INFO, "to first");
 
-    Log::set_sink([&](LogLevel level, const std::string& ts, const std::string& msg) {
-        vec2.push_back({level, ts, msg});
-    });
+    Log::set_sink(
+        [&](LogLevel level, const std::string& ts, const std::string& msg) { vec2.push_back({level, ts, msg}); });
     Log::log_print(INFO, "to second");
 
     Log::set_sink(nullptr);

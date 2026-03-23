@@ -16,13 +16,15 @@ namespace {
 
 class MemoryMount : public Mount {
   public:
-    MemoryMount() : Mount(std::filesystem::path{}) {}
+    MemoryMount() : Mount(std::filesystem::path{}) {
+    }
 
     void add_file(const std::string& path, const std::string& content) {
         files_[path] = std::vector<uint8_t>(content.begin(), content.end());
     }
 
-    void load() override {}
+    void load() override {
+    }
 
     bool seek_file(const std::string& path) const override {
         return files_.count(path) > 0;
@@ -36,8 +38,10 @@ class MemoryMount : public Mount {
     }
 
   protected:
-    void load_cache() override {}
-    void save_cache() override {}
+    void load_cache() override {
+    }
+    void save_cache() override {
+    }
 
   private:
     std::unordered_map<std::string, std::vector<uint8_t>> files_;

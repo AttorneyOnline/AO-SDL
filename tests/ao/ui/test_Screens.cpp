@@ -12,8 +12,10 @@
 
 class StubScreenController : public ScreenController {
   public:
-    void push_screen(std::unique_ptr<Screen> /*screen*/) override {}
-    void pop_screen() override {}
+    void push_screen(std::unique_ptr<Screen> /*screen*/) override {
+    }
+    void pop_screen() override {
+    }
 };
 
 // ===========================================================================
