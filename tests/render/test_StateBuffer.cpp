@@ -14,9 +14,9 @@
 // ---------------------------------------------------------------------------
 
 static auto make_asset(int frames = 1, int duration_ms = 100) {
-    std::vector<ImageFrame> f;
+    std::vector<DecodedFrame> f;
     for (int i = 0; i < frames; i++) {
-        f.push_back(ImageFrame{std::vector<uint8_t>(4, (uint8_t)i), 1, 1, duration_ms});
+        f.push_back(DecodedFrame{std::vector<uint8_t>(4, (uint8_t)i), 1, 1, duration_ms});
     }
     return std::make_shared<ImageAsset>("test", "png", std::move(f));
 }

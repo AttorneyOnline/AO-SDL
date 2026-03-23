@@ -24,7 +24,7 @@ std::shared_ptr<ImageAsset> AssetLibrary::image(const std::string& path) {
     std::string format = resolved.substr(resolved.rfind('.') + 1);
 
     // Try each decoder that claims this extension
-    std::vector<ImageFrame> frames;
+    std::vector<DecodedFrame> frames;
     for (const auto& decoder : image_decoders()) {
         for (const auto& ext : decoder->extensions()) {
             if (ext == format) {

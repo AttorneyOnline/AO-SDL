@@ -1,6 +1,7 @@
 struct CubeFragUniforms {
     int frame_index;
     float opacity;
+    int frame_count;
     float u_time;
 };
 
@@ -49,7 +50,7 @@ float2 cube_mapUV(float3 p, float3 n, float3 h) {
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]],
-                              texture2d_array<float> tex [[texture(0)]],
+                              texture2d<float> tex [[texture(0)]],
                               sampler samp [[sampler(0)]],
                               constant CubeFragUniforms& u [[buffer(0)]]) {
     float2 screen = in.texcoord * 2.0 - 1.0;
@@ -91,7 +92,9 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
     float lighting = ambient + 0.55 * diffuse + 0.4 * specular;
 
     // Force opaque background on cube faces
-    float4 color = tex.sample(samp, uv, u.frame_index);
+    float inv_count = 1.0 / float(u.frame_count);
+    float2 atlas_uv = float2(uv.x, uv.y * inv_count + float(u.frame_index) * inv_count);
+    float4 color = tex.sample(samp, atlas_uv);
     color.rgb = mix(float3(0.15, 0.15, 0.25), color.rgb, color.a);
     color.a = 1.0;
 

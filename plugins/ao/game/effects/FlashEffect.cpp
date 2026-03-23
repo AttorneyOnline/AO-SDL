@@ -9,13 +9,13 @@ FlashEffect::FlashEffect(int viewport_w, int viewport_h) {
     // Create a 1-frame solid white image asset
     std::vector<uint8_t> pixels(viewport_w * viewport_h * 4, 255);
 
-    ImageFrame frame;
+    DecodedFrame frame;
     frame.width = viewport_w;
     frame.height = viewport_h;
     frame.duration_ms = 0;
     frame.pixels = std::move(pixels);
 
-    overlay_ = std::make_shared<ImageAsset>("_flash_overlay", "raw", std::vector<ImageFrame>{std::move(frame)});
+    overlay_ = std::make_shared<ImageAsset>("_flash_overlay", "raw", std::vector<DecodedFrame>{std::move(frame)});
 }
 
 void FlashEffect::trigger() {

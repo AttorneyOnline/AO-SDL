@@ -24,6 +24,6 @@ namespace ApngDecoder {
 /// Decode an APNG (or plain PNG) buffer into a list of RGBA frames.
 /// Each frame is composited to the full canvas size.
 /// Returns nullopt if the data is not a valid PNG.
-std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, bool flip_y);
+std::optional<std::vector<DecodedFrame>> decode(const uint8_t* data, size_t size, bool flip_y);
 
 } // namespace ApngDecoder

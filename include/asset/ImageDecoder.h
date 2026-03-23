@@ -20,7 +20,7 @@ class ImageDecoder {
 
     /// Attempt to decode raw image data into RGBA frames.
     /// Returns an empty vector if the data is not valid for this format.
-    virtual std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const = 0;
+    virtual std::vector<DecodedFrame> decode(const uint8_t* data, size_t size) const = 0;
 };
 
 /// Returns the global ordered list of image decoders.

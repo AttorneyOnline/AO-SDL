@@ -412,8 +412,8 @@ TEST_F(AssetLibraryTest, RegisterAssetOverwritesPreviousEntry) {
 
 TEST_F(AssetLibraryTest, RegisteredImageRetrievableViaImageCall) {
     // Register a manually-created ImageAsset, then verify image() returns it.
-    std::vector<ImageFrame> frames;
-    frames.push_back(ImageFrame{{0xFF, 0x00, 0x00, 0xFF}, 1, 1, 0});
+    std::vector<DecodedFrame> frames;
+    frames.push_back(DecodedFrame{{0xFF, 0x00, 0x00, 0xFF}, 1, 1, 0});
     auto img = std::make_shared<ImageAsset>("manual/sprite", "png", std::move(frames));
     lib.register_asset(img);
 
@@ -575,8 +575,8 @@ TEST_F(AssetLibraryTest, PrefetchWithExtensionsDoesNotCrash) {
 
 TEST_F(AssetLibraryTest, PrefetchImageSkipsIfAlreadyCached) {
     // Register a fake asset, then prefetch should be a no-op.
-    std::vector<ImageFrame> frames;
-    frames.push_back(ImageFrame{{0xFF, 0x00, 0x00, 0xFF}, 1, 1, 0});
+    std::vector<DecodedFrame> frames;
+    frames.push_back(DecodedFrame{{0xFF, 0x00, 0x00, 0xFF}, 1, 1, 0});
     lib.register_asset(std::make_shared<ImageAsset>("cached/img", "png", std::move(frames)));
 
     // Should not crash or do anything harmful.

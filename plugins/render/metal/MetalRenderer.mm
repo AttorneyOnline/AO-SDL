@@ -34,6 +34,7 @@ struct VertexUniforms {
 struct FragmentUniforms {
     int32_t frame_index;
     float opacity;
+    int32_t frame_count;
 };
 
 // ---- helpers ----------------------------------------------------------------
@@ -78,10 +79,16 @@ struct MetalRendererImpl {
 
     struct TextureCacheEntry {
         std::weak_ptr<ImageAsset> asset;
+        id<MTLBuffer> buffer; // nil for fallback (non-zero-copy) path
         id<MTLTexture> texture;
         uint64_t generation = 0;
+        bool zero_copy = false;
     };
     std::unordered_map<const ImageAsset *, TextureCacheEntry> texture_cache;
+    // Textures pending release — kept alive for one frame to avoid dangling
+    // pointers in ImGui draw lists that reference them.
+    std::vector<TextureCacheEntry> deferred_release;
+    NSUInteger min_tex_align = 0; // cached from device
 
     // 2D views of array textures for ImGui preview (ImGui can't sample texture2d_array)
     struct PreviewViewEntry {
@@ -134,6 +141,7 @@ struct MetalRendererImpl {
 
         device = MTLCreateSystemDefaultDevice();
         command_queue = [device newCommandQueue];
+        min_tex_align = [device minimumLinearTextureAlignmentForPixelFormat:MTLPixelFormatRGBA8Unorm];
 
         @autoreleasepool {
             build_pipeline();
@@ -336,22 +344,79 @@ struct MetalRendererImpl {
 
     // --- texture cache -------------------------------------------------------
 
-    void upload_texture_data(id<MTLTexture> tex, const std::shared_ptr<ImageAsset> &asset) {
+    /// Check if an asset's pixel layout allows zero-copy buffer-backed textures.
+    /// Requires bytesPerRow (width * 4) to be a multiple of the device's
+    /// minimum linear texture alignment.
+    /// Check if an asset's pixel layout allows zero-copy buffer-backed textures.
+    /// Requirements:
+    ///   - Single frame (buffer-backed textures don't support texture2d_array)
+    ///   - bytesPerRow aligned to device minimum
+    /// Check if an asset supports zero-copy buffer-backed textures.
+    /// All frames are packed into a single texture2d atlas (vertically tiled),
+    /// so this works for both single-frame and multi-frame assets.
+    /// Requires bytesPerRow aligned to device minimum.
+    bool can_zero_copy(const std::shared_ptr<ImageAsset> &asset) const {
+        if (min_tex_align == 0)
+            return false;
+        NSUInteger bytes_per_row = (NSUInteger)asset->width() * 4;
+        return (bytes_per_row % min_tex_align) == 0;
+    }
+
+    /// Create a buffer-backed texture that shares the asset's pixel memory.
+    /// No GPU-side copy — the texture reads directly from the AlignedBuffer.
+    /// Create a buffer-backed atlas texture (zero-copy).
+    /// All frames are tiled vertically into a single texture2d.
+    /// The shader computes atlas UVs from frame_index and frame_count.
+    id<MTLTexture> create_zero_copy_texture(const std::shared_ptr<ImageAsset> &asset, id<MTLBuffer> &out_buffer) {
         int w = asset->width();
         int h = asset->height();
         int count = asset->frame_count();
-        for (int i = 0; i < count; i++) {
-            const auto &frame = asset->frame(i);
-            int fw = std::min(frame.width, w);
-            int fh = std::min(frame.height, h);
-            MTLRegion region = MTLRegionMake2D(0, 0, fw, fh);
-            [tex replaceRegion:region
-                   mipmapLevel:0
-                         slice:i
-                     withBytes:frame.pixels.data()
-                   bytesPerRow:fw * 4
-                 bytesPerImage:fw * fh * 4];
-        }
+        NSUInteger bytes_per_row = (NSUInteger)w * 4;
+        NSUInteger atlas_height = (NSUInteger)h * count;
+
+        const auto &buf = asset->pixel_data();
+
+        // Wrap the page-aligned pixel buffer — no copy, GPU reads same memory.
+        out_buffer = [device newBufferWithBytesNoCopy:(void *)buf.data()
+                                               length:buf.allocated_size()
+                                              options:MTLResourceStorageModeShared
+                                          deallocator:nil];
+        if (!out_buffer)
+            return nil;
+
+        // Create a tall texture2d: width x (height * frame_count).
+        // Frames are packed vertically, matching the contiguous AlignedBuffer layout.
+        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                      width:w
+                                                                                     height:atlas_height
+                                                                                  mipmapped:NO];
+        td.usage = MTLTextureUsageShaderRead;
+        td.storageMode = MTLStorageModeShared;
+
+        id<MTLTexture> tex = [out_buffer newTextureWithDescriptor:td offset:0 bytesPerRow:bytes_per_row];
+        return tex;
+    }
+
+    /// Fallback: allocate a texture2d atlas and copy pixel data into it.
+    id<MTLTexture> create_fallback_texture(const std::shared_ptr<ImageAsset> &asset) {
+        int w = asset->width();
+        int h = asset->height();
+        int count = asset->frame_count();
+
+        MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                      width:w
+                                                                                     height:(NSUInteger)h * count
+                                                                                  mipmapped:NO];
+        td.usage = MTLTextureUsageShaderRead;
+        td.storageMode = MTLStorageModeShared;
+
+        id<MTLTexture> tex = [device newTextureWithDescriptor:td];
+
+        // Upload all frames as a single contiguous block
+        MTLRegion region = MTLRegionMake2D(0, 0, w, (NSUInteger)h * count);
+        [tex replaceRegion:region mipmapLevel:0 withBytes:asset->pixel_data().data() bytesPerRow:w * 4];
+
+        return tex;
     }
 
     id<MTLTexture> get_texture_array(const std::shared_ptr<ImageAsset> &asset) {
@@ -360,10 +425,11 @@ struct MetalRendererImpl {
             if (it->second.generation == asset->generation())
                 return it->second.texture;
 
-            // Same texture, new pixel data — update in place
-            upload_texture_data(it->second.texture, asset);
-            it->second.generation = asset->generation();
-            return it->second.texture;
+            // Generation mismatch — defer-release the old entry so ImGui draw
+            // lists from this frame can still reference the old texture safely.
+            deferred_release.push_back(std::move(it->second));
+            preview_views.erase(it->first); // also invalidate preview
+            texture_cache.erase(it);
         }
 
         int w = asset->width();
@@ -372,32 +438,48 @@ struct MetalRendererImpl {
         if (w == 0 || h == 0 || count == 0)
             return nil;
 
-        MTLTextureDescriptor *td = [[MTLTextureDescriptor alloc] init];
-        td.textureType = MTLTextureType2DArray;
-        td.pixelFormat = MTLPixelFormatRGBA8Unorm;
-        td.width = w;
-        td.height = h;
-        td.arrayLength = count;
-        td.usage = MTLTextureUsageShaderRead;
-        td.storageMode = MTLStorageModeShared;
+        TextureCacheEntry entry;
+        entry.asset = asset;
+        entry.generation = asset->generation();
 
-        id<MTLTexture> tex = [device newTextureWithDescriptor:td];
-        upload_texture_data(tex, asset);
+        if (can_zero_copy(asset)) {
+            entry.texture = create_zero_copy_texture(asset, entry.buffer);
+            entry.zero_copy = true;
+            Log::log_print(VERBOSE, "MetalRenderer: zero-copy %dx%d x %d frames for %s", w, h, count,
+                           asset->path().c_str());
+        }
 
-        Log::log_print(VERBOSE, "MetalRenderer: uploaded %dx%d x %d frames for %s", w, h, count, asset->path().c_str());
+        if (!entry.texture) {
+            entry.texture = create_fallback_texture(asset);
+            entry.zero_copy = false;
+            Log::log_print(VERBOSE, "MetalRenderer: uploaded %dx%d x %d frames for %s", w, h, count,
+                           asset->path().c_str());
+        }
 
-        texture_cache[asset.get()] = {asset, tex, asset->generation()};
-        return tex;
+        texture_cache[asset.get()] = entry;
+        return entry.texture;
     }
 
+    /// Flush deferred releases from previous frame, then sweep for expired entries.
+    /// Must be called BEFORE ImGui widget building to avoid dangling texture pointers.
     void evict_expired_textures() {
+        // Flush deferred releases from previous frame — safe now, ImGui has rendered.
+        deferred_release.clear();
+
         for (auto it = texture_cache.begin(); it != texture_cache.end();) {
             if (it->second.asset.expired()) {
                 Log::log_print(VERBOSE, "MetalRenderer: evicting expired texture");
+                preview_views.erase(it->first);
                 it = texture_cache.erase(it);
             } else {
                 ++it;
             }
+        }
+        for (auto it = preview_views.begin(); it != preview_views.end();) {
+            if (it->second.asset.expired())
+                it = preview_views.erase(it);
+            else
+                ++it;
         }
     }
 
@@ -488,6 +570,8 @@ struct MetalRendererImpl {
             [enc setVertexBuffer:quad_vb offset:0 atIndex:0];
             [enc setFragmentSamplerState:(wireframe ? sampler_linear : sampler) atIndex:0];
 
+            // Evict expired textures/meshes periodically. Deferred releases from
+            // the previous frame are flushed here (ImGui has finished rendering).
             if (++frame_counter % 60 == 0) {
                 evict_expired_textures();
                 evict_expired_meshes();
@@ -537,10 +621,12 @@ struct MetalRendererImpl {
                                 struct {
                                     int32_t frame_index;
                                     float opacity;
+                                    int32_t frame_count;
                                     float extras[16];
                                 } fu;
                                 fu.frame_index = frame;
                                 fu.opacity = layer.get_opacity();
+                                fu.frame_count = asset->frame_count();
                                 int ei = 0;
                                 for (const auto &[name, val] : sorted) {
                                     if (auto *f = std::get_if<float>(&val))
@@ -553,6 +639,7 @@ struct MetalRendererImpl {
                                 FragmentUniforms fu;
                                 fu.frame_index = frame;
                                 fu.opacity = layer.get_opacity();
+                                fu.frame_count = asset->frame_count();
                                 [enc setFragmentBytes:&fu length:sizeof(fu) atIndex:0];
                             }
                         } // end !wireframe
@@ -618,16 +705,26 @@ uintptr_t MetalRenderer::get_texture_id(const std::shared_ptr<ImageAsset> &asset
     if (!tex)
         return 0;
 
-    // ImGui expects a regular texture2d, but we store texture2d_array.
-    // Create a 2D view of slice 0 for preview.
+    // Always create a separate preview texture owned by preview_views.
+    // The main texture cache can evict/recreate entries (e.g. glyph atlas grow),
+    // but ImGui draw lists hold raw texture pointers across the frame. Preview
+    // textures must stay alive independently of the main cache.
     auto vit = impl->preview_views.find(asset.get());
     if (vit != impl->preview_views.end() && vit->second.generation == asset->generation())
         return (uintptr_t)(__bridge void *)vit->second.view;
 
-    id<MTLTexture> view = [tex newTextureViewWithPixelFormat:tex.pixelFormat
-                                                 textureType:MTLTextureType2D
-                                                      levels:NSMakeRange(0, 1)
-                                                      slices:NSMakeRange(0, 1)];
+    int w = asset->width();
+    int h = asset->height();
+    MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                  width:w
+                                                                                 height:h
+                                                                              mipmapped:NO];
+    td.usage = MTLTextureUsageShaderRead;
+    td.storageMode = MTLStorageModeShared;
+    id<MTLTexture> view = [impl->device newTextureWithDescriptor:td];
+    MTLRegion region = MTLRegionMake2D(0, 0, w, h);
+    [view replaceRegion:region mipmapLevel:0 withBytes:asset->frame_pixels(0) bytesPerRow:w * 4];
+
     impl->preview_views[asset.get()] = {asset, view, asset->generation()};
     return (uintptr_t)(__bridge void *)view;
 }

@@ -110,7 +110,7 @@ void CharSelectScreen::retry_icons() {
             continue;
 
         const ImageFrame& frame = asset->frame(0);
-        entry.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
+        entry.icon.emplace(frame.width, frame.height, asset->frame_pixels(0), 4);
         if (++uploaded >= 8)
             break;
     }

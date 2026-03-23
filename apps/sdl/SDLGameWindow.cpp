@@ -7,6 +7,8 @@
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
 
+#include <filesystem>
+
 SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend> backend)
     : window(nullptr), ui_manager(ui_manager), gpu(std::move(backend)), running(true) {
 
@@ -29,15 +31,44 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
     ImGui::GetStyle().WindowPadding = ImVec2(0, 0);
 
     // Load system fonts with wide Unicode coverage into ImGui's atlas.
-    // The first font provides the base Latin glyphs; subsequent fonts are
-    // merged to cover CJK, Korean, Thai, Cyrillic, etc.
+    //
+    // ImGui's font system is a static batch: AddFont* reads the entire TTF file
+    // into heap memory that must persist for the atlas lifetime (since ImGui 1.92).
+    // There is no lazy/on-demand glyph loading. macOS returns ~30 cascade fonts
+    // including Apple Color Emoji (180 MB) and PingFang (75 MB), so loading all
+    // of them would waste 300+ MB of heap.
+    //
+    // We skip fonts above a size threshold. The in-game text renderer uses
+    // FreeType with mmap (demand-paged, efficient) and on-demand rasterization
+    // via GlyphCache, so full Unicode coverage is not lost — only the ImGui UI
+    // chrome (menus, settings, debug overlay) is affected.
     auto font_paths = platform::fallback_font_paths();
     if (!font_paths.empty()) {
         ImGuiIO& io = ImGui::GetIO();
 
+        // Skip fonts larger than 30 MB. This excludes:
+        //   - Apple Color Emoji.ttc (~180 MB) — ImGui can't render color emoji
+        //   - PingFang.ttc (~75 MB) — CJK covered by smaller Hiragino/Korean fonts
+        // The remaining ~20 fonts (~80 MB) cover CJK, Korean, Thai, Cyrillic, etc.
+        static constexpr uintmax_t MAX_FONT_FILE_SIZE = 30 * 1024 * 1024;
+
+        std::vector<std::string> filtered_paths;
+        for (const auto& path : font_paths) {
+            std::error_code ec;
+            auto size = std::filesystem::file_size(path, ec);
+            if (ec)
+                continue;
+            if (size > MAX_FONT_FILE_SIZE) {
+                Log::log_print(DEBUG, "ImGui: skipping oversized font (%juMB): %s",
+                               static_cast<uintmax_t>(size / (1024 * 1024)), path.c_str());
+                continue;
+            }
+            filtered_paths.push_back(path);
+        }
+
         // Base font: load the first available system font with default ranges
         bool base_loaded = false;
-        for (const auto& path : font_paths) {
+        for (const auto& path : filtered_paths) {
             if (io.Fonts->AddFontFromFileTTF(path.c_str(), 15.0f, nullptr, io.Fonts->GetGlyphRangesDefault())) {
                 Log::log_print(DEBUG, "ImGui: base UI font from %s", path.c_str());
                 base_loaded = true;
@@ -62,7 +93,7 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
             {"Vietnamese", [](ImFontAtlas* a) { return a->GetGlyphRangesVietnamese(); }},
         };
 
-        // Merge from ALL system fonts so each contributes the glyphs it has.
+        // Merge from filtered system fonts so each contributes the glyphs it has.
         // ImGui's atlas deduplicates — a glyph already covered by an earlier
         // font won't be overwritten.
         ImFontGlyphRangesBuilder builder;
@@ -71,7 +102,7 @@ SDLGameWindow::SDLGameWindow(UIManager& ui_manager, std::unique_ptr<IGPUBackend>
         ImVector<ImWchar> merged_ranges;
         builder.BuildRanges(&merged_ranges);
 
-        for (const auto& path : font_paths) {
+        for (const auto& path : filtered_paths) {
             ImFontConfig merge_cfg;
             merge_cfg.MergeMode = true;
             merge_cfg.OversampleH = 1;

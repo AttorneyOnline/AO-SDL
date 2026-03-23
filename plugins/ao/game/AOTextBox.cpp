@@ -282,13 +282,13 @@ std::shared_ptr<ImageAsset> AOTextBox::get_nameplate() {
 
         flip_vertical_rgba(pixels.data(), text_w, text_h);
 
-        ImageFrame frame;
+        DecodedFrame frame;
         frame.width = text_w;
         frame.height = text_h;
         frame.duration_ms = 0;
         frame.pixels = std::move(pixels);
 
-        nameplate = std::make_shared<ImageAsset>(cache_path, "gpu", std::vector<ImageFrame>{std::move(frame)});
+        nameplate = std::make_shared<ImageAsset>(cache_path, "gpu", std::vector<DecodedFrame>{std::move(frame)});
         engine_assets_->register_asset(nameplate);
     }
 

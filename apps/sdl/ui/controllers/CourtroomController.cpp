@@ -72,7 +72,7 @@ void CourtroomController::apply_character_data() {
 
         if (i < (int)icons.size() && icons[i] && icons[i]->frame_count() > 0) {
             const ImageFrame& frame = icons[i]->frame(0);
-            icon.icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
+            icon.icon.emplace(frame.width, frame.height, icons[i]->frame_pixels(0), 4);
         }
 
         ic_state_.emote_icons.push_back(std::move(icon));
@@ -208,7 +208,7 @@ void CourtroomController::retry_emote_icons() {
         auto asset = ao_assets.emote_icon(ic_state_.character, i);
         if (asset && asset->frame_count() > 0) {
             const ImageFrame& frame = asset->frame(0);
-            ic_state_.emote_icons[i].icon.emplace(frame.width, frame.height, frame.pixels.data(), 4);
+            ic_state_.emote_icons[i].icon.emplace(frame.width, frame.height, asset->frame_pixels(0), 4);
             Log::log_print(DEBUG, "Retry loaded emote icon %d for %s", i, ic_state_.character.c_str());
         }
     }

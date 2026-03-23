@@ -169,10 +169,10 @@ static std::vector<FrameInfo> collect_frames(const std::vector<ChunkRef>& chunks
     return frame_infos;
 }
 
-static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx, const uint8_t* ihdr_body,
-                                              uint32_t ihdr_len, const std::vector<ChunkRef>& ancillary,
-                                              std::vector<uint8_t>& canvas, uint32_t canvas_w, uint32_t canvas_h,
-                                              bool flip_y) {
+static std::optional<DecodedFrame> decode_frame(const FrameInfo& fi, size_t fi_idx, const uint8_t* ihdr_body,
+                                                uint32_t ihdr_len, const std::vector<ChunkRef>& ancillary,
+                                                std::vector<uint8_t>& canvas, uint32_t canvas_w, uint32_t canvas_h,
+                                                bool flip_y) {
     auto& fctl = fi.fctl;
     int duration_ms = fctl_duration_ms(fctl);
 
@@ -218,7 +218,7 @@ static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx
     stbi_image_free(pixels);
 
     // Snapshot canvas, then flip vertically for GL if requested
-    ImageFrame frame;
+    DecodedFrame frame;
     frame.width = (int)canvas_w;
     frame.height = (int)canvas_h;
     frame.duration_ms = duration_ms > 0 ? duration_ms : 100;
@@ -245,7 +245,7 @@ static std::optional<ImageFrame> decode_frame(const FrameInfo& fi, size_t fi_idx
 
 namespace ApngDecoder {
 
-std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, bool flip_y) {
+std::optional<std::vector<DecodedFrame>> decode(const uint8_t* data, size_t size, bool flip_y) {
     static const uint8_t png_sig[] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     if (size < 8 || std::memcmp(data, png_sig, 8) != 0) {
         return std::nullopt;
@@ -285,14 +285,14 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
         if (!pixels)
             return std::nullopt;
 
-        ImageFrame f;
+        DecodedFrame f;
         f.width = w;
         f.height = h;
         f.duration_ms = 0;
         f.pixels.assign(pixels, pixels + w * h * 4);
         stbi_image_free(pixels);
 
-        return std::vector<ImageFrame>{std::move(f)};
+        return std::vector<DecodedFrame>{std::move(f)};
     }
 
     // ---- APNG multi-frame decoding ----
@@ -300,7 +300,7 @@ std::optional<std::vector<ImageFrame>> decode(const uint8_t* data, size_t size, 
     auto frame_infos = collect_frames(chunks, ancillary);
 
     std::vector<uint8_t> canvas(canvas_w * canvas_h * 4, 0);
-    std::vector<ImageFrame> frames;
+    std::vector<DecodedFrame> frames;
     frames.reserve(frame_infos.size());
 
     for (size_t fi_idx = 0; fi_idx < frame_infos.size(); fi_idx++) {
@@ -338,7 +338,7 @@ class ApngImageDecoder : public ImageDecoder {
         return {"apng", "png"};
     }
 
-    std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+    std::vector<DecodedFrame> decode(const uint8_t* data, size_t size) const override {
         if (!data || size == 0)
             return {};
         auto apng_frames = ApngDecoder::decode(data, size, true);
@@ -357,11 +357,11 @@ class ApngImageDecoder : public ImageDecoder {
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);
         stbi_set_flip_vertically_on_load(false);
 
-        std::vector<ImageFrame> frames;
+        std::vector<DecodedFrame> frames;
         if (!pixels)
             return frames;
 
-        ImageFrame f;
+        DecodedFrame f;
         f.width = width;
         f.height = height;
         f.duration_ms = 0;

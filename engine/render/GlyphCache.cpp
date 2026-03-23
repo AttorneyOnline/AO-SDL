@@ -19,9 +19,9 @@
 GlyphCache::GlyphCache(TextRenderer& renderer, int atlas_size)
     : renderer_(renderer), atlas_w_(atlas_size), atlas_h_(atlas_size),
       atlas_pixels_((size_t)atlas_size * atlas_size * 4, 0) {
-    ImageFrame frame{atlas_pixels_, atlas_w_, atlas_h_, 0};
+    DecodedFrame frame{atlas_pixels_, atlas_w_, atlas_h_, 0};
 
-    atlas_ = std::make_shared<ImageAsset>("_glyph_atlas", "gpu", std::vector<ImageFrame>{std::move(frame)});
+    atlas_ = std::make_shared<ImageAsset>("_glyph_atlas", "gpu", std::vector<DecodedFrame>{std::move(frame)});
 
     // Precache printable ASCII (space through tilde)
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++)

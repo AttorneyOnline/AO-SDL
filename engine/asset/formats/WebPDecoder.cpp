@@ -11,11 +11,11 @@ class WebPImageDecoder : public ImageDecoder {
         return {"webp"};
     }
 
-    std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+    std::vector<DecodedFrame> decode(const uint8_t* data, size_t size) const override {
         if (!data || size == 0)
             return {};
 
-        std::vector<ImageFrame> frames;
+        std::vector<DecodedFrame> frames;
 
         WebPData webp_data = {data, size};
         WebPDemuxer* demux = WebPDemux(&webp_data);
@@ -80,7 +80,7 @@ class WebPImageDecoder : public ImageDecoder {
                 WebPFree(rgba);
 
                 // Snapshot canvas as frame
-                ImageFrame f;
+                DecodedFrame f;
                 f.width = (int)canvas_w;
                 f.height = (int)canvas_h;
                 f.duration_ms = iter.duration > 0 ? iter.duration : 100;

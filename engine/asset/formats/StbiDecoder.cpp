@@ -8,7 +8,7 @@ class StbiImageDecoder : public ImageDecoder {
         return {"jpg", "jpeg", "bmp", "tga"};
     }
 
-    std::vector<ImageFrame> decode(const uint8_t* data, size_t size) const override {
+    std::vector<DecodedFrame> decode(const uint8_t* data, size_t size) const override {
         if (!data || size < 4)
             return {};
 
@@ -17,11 +17,11 @@ class StbiImageDecoder : public ImageDecoder {
         uint8_t* pixels = stbi_load_from_memory(data, (int)size, &width, &height, &channels, 4);
         stbi_set_flip_vertically_on_load(false);
 
-        std::vector<ImageFrame> frames;
+        std::vector<DecodedFrame> frames;
         if (!pixels)
             return frames;
 
-        ImageFrame f;
+        DecodedFrame f;
         f.width = width;
         f.height = height;
         f.duration_ms = 0;

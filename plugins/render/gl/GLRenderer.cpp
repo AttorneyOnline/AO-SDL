@@ -72,7 +72,8 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
             const auto& frame = asset->frame(i);
             int fw = std::min(frame.width, asset->width());
             int fh = std::min(frame.height, asset->height());
-            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                            asset->frame_pixels(i));
         }
         it->second.generation = asset->generation();
         return it->second.texture;
@@ -94,7 +95,7 @@ GLuint GLRenderer::get_texture_array(const std::shared_ptr<ImageAsset>& asset) {
         const auto& frame = asset->frame(i);
         int fw = std::min(frame.width, w);
         int fh = std::min(frame.height, h);
-        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, fw, fh, 1, GL_RGBA, GL_UNSIGNED_BYTE, asset->frame_pixels(i));
     }
 
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -345,7 +346,7 @@ uintptr_t GLRenderer::get_texture_id(const std::shared_ptr<ImageAsset>& asset) {
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, frame.width, frame.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                 frame.pixels.data());
+                 asset->frame_pixels(0));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
