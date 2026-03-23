@@ -190,6 +190,8 @@ final _icSetPre = _lib.lookupFunction<_SetBoolNative, _SetBoolDart>('ao_ic_set_p
 final _icSetFlip = _lib.lookupFunction<_SetBoolNative, _SetBoolDart>('ao_ic_set_flip');
 final _icSetInterjection = _lib.lookupFunction<_SetIntNative, _SetIntDart>('ao_ic_set_interjection');
 final _icSetColor = _lib.lookupFunction<_SetIntNative, _SetIntDart>('ao_ic_set_color');
+final _icGetShowname = _lib.lookupFunction<_GetStringNative, _GetStringDart>('ao_ic_get_showname');
+final _icGetSide = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_ic_get_side');
 
 // OOC chat
 final _oocSend = _lib.lookupFunction<_OocSendNative, _OocSendDart>('ao_ooc_send');
@@ -204,10 +206,61 @@ final _icLogShowname = _lib.lookupFunction<_GetStringByIdxNative, _GetStringById
 final _icLogMessage = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_ic_log_message');
 final _icLogConsume = _lib.lookupFunction<_VoidNative, _VoidDart>('ao_ic_log_consume');
 
-// Music
+// Music & Areas
 final _musicCount = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_music_count');
 final _musicName = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_music_name');
 final _musicPlay = _lib.lookupFunction<_SetIntNative, _SetIntDart>('ao_music_play');
+final _musicPlayByName = _lib.lookupFunction<_SendStringNative, _SendStringDart>('ao_music_play_by_name');
+final _areaCount = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_area_count');
+final _areaName = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_area_name');
+final _areaPlayers = _lib.lookupFunction<_GetIntByIdxNative, _GetIntByIdxDart>('ao_area_players');
+final _areaStatus = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_area_status');
+final _areaCm = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_area_cm');
+final _areaLock = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_area_lock');
+final _nowPlaying = _lib.lookupFunction<_GetStringNative, _GetStringDart>('ao_now_playing');
+
+// Disconnect
+final _disconnectPending = _lib.lookupFunction<Bool Function(), bool Function()>('ao_disconnect_pending');
+final _disconnectReason = _lib.lookupFunction<_GetStringNative, _GetStringDart>('ao_disconnect_reason');
+final _disconnectConsume = _lib.lookupFunction<_VoidNative, _VoidDart>('ao_disconnect_consume');
+
+// Player list
+final _playerCount = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_player_count');
+final _playerId = _lib.lookupFunction<_GetIntByIdxNative, _GetIntByIdxDart>('ao_player_id');
+final _playerName = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_player_name');
+final _playerCharacter = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_player_character');
+final _playerCharname = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_player_charname');
+final _playerArea = _lib.lookupFunction<_GetIntByIdxNative, _GetIntByIdxDart>('ao_player_area');
+
+// Evidence
+final _evidenceCount = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_evidence_count');
+final _evidenceName = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_evidence_name');
+final _evidenceDescription = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_evidence_description');
+final _evidenceImage = _lib.lookupFunction<_GetStringByIdxNative, _GetStringByIdxDart>('ao_evidence_image');
+
+// Health bars
+final _hpDefense = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_hp_defense');
+final _hpProsecution = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_hp_prosecution');
+final _hpSet = _lib.lookupFunction<Void Function(Int32, Int32), void Function(int, int)>('ao_hp_set');
+
+// Timers
+final _timerCount = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_timer_count');
+final _timerVisible = _lib.lookupFunction<_GetBoolByIdxNative, _GetBoolByIdxDart>('ao_timer_visible');
+final _timerRunning = _lib.lookupFunction<_GetBoolByIdxNative, _GetBoolByIdxDart>('ao_timer_running');
+final _timerRemainingMs = _lib.lookupFunction<Int64 Function(Int32), int Function(int)>('ao_timer_remaining_ms');
+
+// Server info
+final _serverInfoSoftware = _lib.lookupFunction<_GetStringNative, _GetStringDart>('ao_server_info_software');
+final _serverInfoVersion = _lib.lookupFunction<_GetStringNative, _GetStringDart>('ao_server_info_version');
+final _serverInfoPlayerNum = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_server_info_player_num');
+
+// Player count
+final _playerCountCurrent = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_player_count_current');
+final _playerCountMax = _lib.lookupFunction<_GetIntNative, _GetIntDart>('ao_player_count_max');
+final _playerCountDescription = _lib.lookupFunction<_GetStringNative, _GetStringDart>('ao_player_count_description');
+
+// Volume
+final _volumeSet = _lib.lookupFunction<Void Function(Int32, Float), void Function(int, double)>('ao_volume_set');
 
 // Navigation
 final _navPop = _lib.lookupFunction<_VoidNative, _VoidDart>('ao_nav_pop');
@@ -294,6 +347,8 @@ class AoBridge {
   static void icSetFlip(bool v) => _icSetFlip(v);
   static void icSetInterjection(int t) => _icSetInterjection(t);
   static void icSetColor(int c) => _icSetColor(c);
+  static String icGetShowname() => _safeString(_icGetShowname());
+  static int icGetSide() => _icGetSide();
 
   // OOC chat
   static void oocSend(String name, String message) {
@@ -331,10 +386,67 @@ class AoBridge {
     return entries;
   }
 
-  // Music
+  // Music & Areas
   static int musicCount() => _musicCount();
   static String musicName(int i) => _safeString(_musicName(i));
   static void musicPlay(int i) => _musicPlay(i);
+
+  static void musicPlayByName(String name) {
+    final n = name.toNativeUtf8();
+    _musicPlayByName(n);
+    calloc.free(n);
+  }
+
+  static int areaCount() => _areaCount();
+  static String areaName(int i) => _safeString(_areaName(i));
+  static int areaPlayers(int i) => _areaPlayers(i);
+  static String areaStatus(int i) => _safeString(_areaStatus(i));
+  static String areaCm(int i) => _safeString(_areaCm(i));
+  static String areaLock(int i) => _safeString(_areaLock(i));
+  static String nowPlaying() => _safeString(_nowPlaying());
+
+  // Disconnect
+  static bool disconnectPending() => _disconnectPending();
+  static String disconnectReason() => _safeString(_disconnectReason());
+  static void disconnectConsume() => _disconnectConsume();
+
+  // Player list
+  static int playerCount() => _playerCount();
+  static int playerId(int i) => _playerId(i);
+  static String playerName(int i) => _safeString(_playerName(i));
+  static String playerCharacter(int i) => _safeString(_playerCharacter(i));
+  static String playerCharname(int i) => _safeString(_playerCharname(i));
+  static int playerArea(int i) => _playerArea(i);
+
+  // Evidence
+  static int evidenceCount() => _evidenceCount();
+  static String evidenceName(int i) => _safeString(_evidenceName(i));
+  static String evidenceDescription(int i) => _safeString(_evidenceDescription(i));
+  static String evidenceImage(int i) => _safeString(_evidenceImage(i));
+
+  // Health bars
+  static int hpDefense() => _hpDefense();
+  static int hpProsecution() => _hpProsecution();
+  static void hpSet(int side, int value) => _hpSet(side, value);
+
+  // Timers
+  static int timerCount() => _timerCount();
+  static bool timerVisible(int i) => _timerVisible(i);
+  static bool timerRunning(int i) => _timerRunning(i);
+  static int timerRemainingMs(int i) => _timerRemainingMs(i);
+
+  // Server info
+  static String serverInfoSoftware() => _safeString(_serverInfoSoftware());
+  static String serverInfoVersion() => _safeString(_serverInfoVersion());
+  static int serverInfoPlayerNum() => _serverInfoPlayerNum();
+
+  // Player count
+  static int playerCountCurrent() => _playerCountCurrent();
+  static int playerCountMax() => _playerCountMax();
+  static String playerCountDescription() => _safeString(_playerCountDescription());
+
+  // Volume
+  static void volumeSet(int category, double volume) => _volumeSet(category, volume);
 
   // Navigation
   static void navPop() => _navPop();

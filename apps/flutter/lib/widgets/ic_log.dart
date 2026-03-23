@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
 import '../bridge/native_bridge.dart';
+import '../engine_state.dart';
+import 'platform/platform_widgets.dart';
 
 /// IC message log — mirrors apps/sdl/ui/widgets/ICLogWidget.
 class IcLog extends StatefulWidget {
@@ -13,18 +16,31 @@ class IcLog extends StatefulWidget {
 class _IcLogState extends State<IcLog> {
   final List<({String showname, String message})> _entries = [];
   final _scrollController = ScrollController();
+  EngineState? _engine;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Save reference in didChangeDependencies so it's safe to use in dispose.
+    final engine = context.read<EngineState>();
+    if (_engine != engine) {
+      _engine?.removeListener(_onEngineStateChanged);
+      _engine = engine;
+      _engine!.addListener(_onEngineStateChanged);
+    }
+  }
 
   @override
   void dispose() {
+    _engine?.removeListener(_onEngineStateChanged);
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _pollEntries() {
+  void _onEngineStateChanged() {
     final newEntries = AoBridge.icLog();
     if (newEntries.isNotEmpty) {
       setState(() => _entries.addAll(newEntries));
-      // Auto-scroll to bottom
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -35,10 +51,14 @@ class _IcLogState extends State<IcLog> {
 
   @override
   Widget build(BuildContext context) {
-    _pollEntries();
+    // Watch EngineState so the widget is part of the dependency tree,
+    // but do NOT poll entries here — that happens in _onEngineStateChanged.
+    context.watch<EngineState>();
 
     if (_entries.isEmpty) {
-      return const Center(child: Text('No messages yet'));
+      return Center(
+          child: Text('No messages yet',
+              style: TextStyle(color: PlatformColors.text)));
     }
 
     return ListView.builder(
@@ -56,13 +76,13 @@ class _IcLogState extends State<IcLog> {
                   text: '${entry.showname}: ',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
+                    color: PlatformColors.primary,
                   ),
                 ),
                 TextSpan(
                   text: entry.message,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: PlatformColors.text,
                   ),
                 ),
               ],

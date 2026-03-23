@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
 import '../bridge/native_bridge.dart';
+import '../engine_state.dart';
+import 'platform/platform_widgets.dart';
 
 /// Court position selector — mirrors apps/sdl/ui/widgets/SideSelectWidget.
 class SideSelect extends StatefulWidget {
@@ -12,25 +15,40 @@ class SideSelect extends StatefulWidget {
 
 class _SideSelectState extends State<SideSelect> {
   int _selected = 2; // default: wit
+  String _lastCharacter = '';
 
   static const _sides = ['Def', 'Pro', 'Wit', 'Jud', 'Jur', 'Sea', 'Hlp'];
 
+  /// Sync side selection from native bridge when the character changes.
+  void _syncFromBridge() {
+    final character = AoBridge.courtroomCharacter();
+    if (character != _lastCharacter) {
+      _lastCharacter = character;
+      _selected = AoBridge.icGetSide();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<int>(
-      segments: [
-        for (var i = 0; i < _sides.length; i++)
-          ButtonSegment(value: i, label: Text(_sides[i])),
-      ],
-      selected: {_selected},
-      onSelectionChanged: (selection) {
-        final val = selection.first;
-        setState(() => _selected = val);
-        AoBridge.icSetSide(val);
-      },
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
+    context.watch<EngineState>();
+    _syncFromBridge();
+
+    return SizedBox(
+      width: double.infinity,
+      child: PlatformSegmentedControl<int>(
+        groupValue: _selected,
+        children: {
+          for (var i = 0; i < _sides.length; i++)
+            i: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(_sides[i], style: const TextStyle(fontSize: 12)),
+            ),
+        },
+        onValueChanged: (value) {
+          if (value == null) return;
+          setState(() => _selected = value);
+          AoBridge.icSetSide(value);
+        },
       ),
     );
   }

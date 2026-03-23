@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import 'engine_state.dart';
 import 'screens/server_list_screen.dart';
 import 'screens/char_select_screen.dart';
 import 'screens/courtroom_screen.dart';
+import 'widgets/platform/platform_widgets.dart';
 
 void main() {
   runApp(const AoApp());
@@ -17,16 +18,15 @@ class AoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => EngineState()..start(null),
-      child: MaterialApp(
+      // CupertinoApp stays — it's a platform-level choice, not a widget.
+      child: CupertinoApp(
         title: 'Attorney Online',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
+        theme: CupertinoThemeData(
           brightness: Brightness.dark,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF1A5276),
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
+          primaryColor: PlatformColors.primary,
+          scaffoldBackgroundColor: PlatformColors.background,
+          barBackgroundColor: const Color(0xF01C1C1E),
         ),
         home: const ScreenRouter(),
       ),
@@ -46,8 +46,8 @@ class ScreenRouter extends StatelessWidget {
       'server_list' => const ServerListScreen(),
       'char_select' => const CharSelectScreen(),
       'courtroom' => const CourtroomScreen(),
-      _ => const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
+      _ => const PlatformPageScaffold(
+          child: Center(child: PlatformActivityIndicator()),
         ),
     };
   }

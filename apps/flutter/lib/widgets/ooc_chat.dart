@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../bridge/native_bridge.dart';
+import 'platform/platform_widgets.dart';
 
 /// OOC (out-of-character) chat — mirrors apps/sdl/ui/widgets/ChatWidget.
 class OocChat extends StatefulWidget {
@@ -52,7 +53,9 @@ class _OocChatState extends State<OocChat> {
       children: [
         Expanded(
           child: _messages.isEmpty
-              ? const Center(child: Text('No messages'))
+              ? Center(
+                  child: Text('No messages',
+                      style: TextStyle(color: PlatformColors.text)))
               : ListView.builder(
                   controller: _scrollController,
                   itemCount: _messages.length,
@@ -68,17 +71,13 @@ class _OocChatState extends State<OocChat> {
                               text: '[${msg.name}]: ',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .tertiary,
+                                color: PlatformColors.teal,
                               ),
                             ),
                             TextSpan(
                               text: msg.text,
                               style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface,
+                                color: PlatformColors.text,
                               ),
                             ),
                           ],
@@ -94,33 +93,38 @@ class _OocChatState extends State<OocChat> {
             children: [
               SizedBox(
                 width: 80,
-                child: TextField(
+                child: PlatformTextField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    hintText: 'Name',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  placeholder: 'Name',
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: PlatformColors.surface,
+                    borderRadius: BorderRadius.circular(6),
                   ),
+                  style: TextStyle(
+                      color: PlatformColors.text, fontSize: 14),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: TextField(
+                child: PlatformTextField(
                   controller: _messageController,
-                  decoration: const InputDecoration(
-                    hintText: 'OOC message...',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
+                  placeholder: 'OOC message...',
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
                   onSubmitted: (_) => _send(),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
+              PlatformIconButton(
+                icon: PlatformIcons.send,
                 onPressed: _send,
-                icon: const Icon(Icons.send),
+                color: PlatformColors.text,
+                size: 20,
+                padding: const EdgeInsets.all(8),
+                fillColor: PlatformColors.primary,
+                borderRadius: BorderRadius.circular(20),
               ),
             ],
           ),

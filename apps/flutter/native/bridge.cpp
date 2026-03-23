@@ -15,10 +15,26 @@
 #include "asset/MountHttp.h"
 #include "asset/MountManager.h"
 #include "audio/AudioThread.h"
+#include "event/AreaUpdateEvent.h"
 #include "event/AssetUrlEvent.h"
+#include "event/ChatEvent.h"
+#include "event/DisconnectEvent.h"
 #include "event/EventManager.h"
+#include "event/EvidenceListEvent.h"
+#include "event/HealthBarEvent.h"
+#include "event/ICLogEvent.h"
+#include "event/MusicListEvent.h"
+#include "event/NowPlayingEvent.h"
+#include "event/OutgoingChatEvent.h"
+#include "event/OutgoingHealthBarEvent.h"
 #include "event/OutgoingICMessageEvent.h"
+#include "event/OutgoingMusicEvent.h"
+#include "event/PlayerCountEvent.h"
+#include "event/PlayerListEvent.h"
+#include "event/ServerInfoEvent.h"
 #include "event/ServerListEvent.h"
+#include "event/TimerEvent.h"
+#include "event/VolumeChangeEvent.h"
 #include "game/GameThread.h"
 #include "game/ServerList.h"
 #include "net/HttpPool.h"
@@ -35,8 +51,11 @@
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "ao/ui/screens/ServerListScreen.h"
 
+#include <algorithm>
+#include <chrono>
 #include <csignal>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -59,7 +78,10 @@ struct Engine {
     std::unique_ptr<RenderManager> render_mgr;
     std::unique_ptr<IScenePresenter> presenter;
     std::unique_ptr<GameThread> game_thread;
-    // TODO: AudioThread once we have a mobile audio device impl
+    // TODO: AudioThread + mobile audio device.  The SDL app creates
+    // SDLAudioDevice + AudioThread for blips/sfx/music.  For Flutter/mobile we
+    // need a platform audio device (e.g. AAudio on Android, AVAudioEngine on
+    // iOS) before the AudioThread can be started.  Until then no audio plays.
     bool default_mount_added = false;
 };
 
@@ -72,6 +94,57 @@ struct ChatMsg {
 };
 std::vector<ChatMsg> g_ooc_msgs;
 std::vector<ChatMsg> g_ic_log;
+
+// Music & Area lists (from MusicListEvent)
+std::vector<std::string> g_areas;
+std::vector<std::string> g_tracks;
+std::vector<int> g_area_players;
+std::vector<std::string> g_area_status;
+std::vector<std::string> g_area_cm;
+std::vector<std::string> g_area_lock;
+std::string g_now_playing;
+
+// Disconnect state
+bool g_disconnect_pending = false;
+std::string g_disconnect_reason;
+
+// Player list (from PlayerListEvent)
+struct PlayerInfo {
+    int id;
+    std::string name;
+    std::string character;
+    std::string charname;
+    int area_id = -1;
+};
+std::map<int, PlayerInfo> g_players;
+std::vector<int> g_player_ids_cache; // sorted snapshot for indexed access
+
+// Evidence (from EvidenceListEvent)
+std::vector<EvidenceItem> g_evidence;
+
+// Health bars (from HealthBarEvent)
+int g_def_hp = 0;
+int g_pro_hp = 0;
+
+// Timers (from TimerEvent)
+static constexpr int MAX_TIMERS = 4;
+struct TimerState {
+    bool visible = false;
+    bool running = false;
+    int64_t remaining_ms = 0;
+    std::chrono::steady_clock::time_point last_tick;
+};
+TimerState g_timers[MAX_TIMERS];
+
+// Server info (from ServerInfoEvent)
+std::string g_server_software;
+std::string g_server_version;
+int g_server_player_num = -1;
+
+// Player count (from PlayerCountEvent)
+int g_pcount_current = 0;
+int g_pcount_max = 0;
+std::string g_pcount_description;
 
 // Scratch buffer for returning strings from functions that return by value.
 // Keeps the string alive until the next call to the same function.
@@ -93,6 +166,9 @@ struct ICState {
     int text_color = 0;
 };
 ICState g_ic_state;
+
+constexpr const char* SIDES[] = {"def", "pro", "wit", "jud", "jur", "sea", "hlp"};
+constexpr int SIDES_COUNT = 7;
 
 } // namespace
 
@@ -177,6 +253,28 @@ void ao_shutdown() {
     g_engine.reset();
     g_ooc_msgs.clear();
     g_ic_log.clear();
+    g_areas.clear();
+    g_tracks.clear();
+    g_area_players.clear();
+    g_area_status.clear();
+    g_area_cm.clear();
+    g_area_lock.clear();
+    g_now_playing.clear();
+    g_disconnect_pending = false;
+    g_disconnect_reason.clear();
+    g_players.clear();
+    g_player_ids_cache.clear();
+    g_evidence.clear();
+    g_def_hp = 0;
+    g_pro_hp = 0;
+    for (int i = 0; i < MAX_TIMERS; i++)
+        g_timers[i] = {};
+    g_server_software.clear();
+    g_server_version.clear();
+    g_server_player_num = -1;
+    g_pcount_current = 0;
+    g_pcount_max = 0;
+    g_pcount_description.clear();
 
     Log::log_print(INFO, "ao_shutdown: complete");
 }
@@ -207,17 +305,247 @@ void ao_tick() {
 
     g_engine->ui_mgr.handle_events();
 
+    // --- Consume ChatEvent (OOC messages) ---
+    {
+        auto& ch = EventManager::instance().get_channel<ChatEvent>();
+        while (auto ev = ch.get_event()) {
+            g_ooc_msgs.push_back({ev->get_sender_name(), ev->get_message()});
+        }
+    }
+
+    // --- Consume ICLogEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<ICLogEvent>();
+        while (auto ev = ch.get_event()) {
+            g_ic_log.push_back({ev->get_showname(), ev->get_message()});
+        }
+    }
+
+    // --- Consume DisconnectEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<DisconnectEvent>();
+        while (auto ev = ch.get_event()) {
+            g_disconnect_pending = true;
+            g_disconnect_reason = ev->get_reason();
+        }
+    }
+
+    // --- Consume MusicListEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<MusicListEvent>();
+        while (auto ev = ch.get_event()) {
+            if (ev->partial()) {
+                if (!ev->areas().empty()) {
+                    g_areas = ev->areas();
+                    size_t n = g_areas.size();
+                    g_area_players.assign(n, -1);
+                    g_area_status.assign(n, "Unknown");
+                    g_area_cm.assign(n, "Unknown");
+                    g_area_lock.assign(n, "Unknown");
+                }
+                if (!ev->tracks().empty()) {
+                    g_tracks = ev->tracks();
+                }
+            }
+            else {
+                g_areas = ev->areas();
+                g_tracks = ev->tracks();
+                size_t n = g_areas.size();
+                g_area_players.assign(n, -1);
+                g_area_status.assign(n, "Unknown");
+                g_area_cm.assign(n, "Unknown");
+                g_area_lock.assign(n, "Unknown");
+            }
+        }
+    }
+
+    // --- Consume AreaUpdateEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<AreaUpdateEvent>();
+        while (auto ev = ch.get_event()) {
+            const auto& vals = ev->values();
+            size_t count = std::min(vals.size(), g_areas.size());
+            switch (ev->type()) {
+            case AreaUpdateEvent::PLAYERS:
+                for (size_t i = 0; i < count; i++)
+                    g_area_players[i] = std::atoi(vals[i].c_str());
+                break;
+            case AreaUpdateEvent::STATUS:
+                for (size_t i = 0; i < count; i++)
+                    g_area_status[i] = vals[i];
+                break;
+            case AreaUpdateEvent::CM:
+                for (size_t i = 0; i < count; i++)
+                    g_area_cm[i] = vals[i];
+                break;
+            case AreaUpdateEvent::LOCK:
+                for (size_t i = 0; i < count; i++)
+                    g_area_lock[i] = vals[i];
+                break;
+            }
+        }
+    }
+
+    // --- Consume NowPlayingEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<NowPlayingEvent>();
+        while (auto ev = ch.get_event()) {
+            g_now_playing = ev->track();
+        }
+    }
+
+    // --- Consume PlayerListEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<PlayerListEvent>();
+        bool changed = false;
+        while (auto ev = ch.get_event()) {
+            changed = true;
+            int id = ev->player_id();
+            switch (ev->action()) {
+            case PlayerListEvent::Action::ADD:
+                g_players[id] = {id, {}, {}, {}, -1};
+                break;
+            case PlayerListEvent::Action::REMOVE:
+                g_players.erase(id);
+                break;
+            case PlayerListEvent::Action::UPDATE_NAME:
+                g_players[id].name = ev->data();
+                break;
+            case PlayerListEvent::Action::UPDATE_CHARACTER:
+                g_players[id].character = ev->data();
+                break;
+            case PlayerListEvent::Action::UPDATE_CHARNAME:
+                g_players[id].charname = ev->data();
+                break;
+            case PlayerListEvent::Action::UPDATE_AREA:
+                g_players[id].area_id = std::atoi(ev->data().c_str());
+                break;
+            }
+        }
+        if (changed) {
+            g_player_ids_cache.clear();
+            g_player_ids_cache.reserve(g_players.size());
+            for (const auto& [id, _] : g_players)
+                g_player_ids_cache.push_back(id);
+        }
+    }
+
+    // --- Consume EvidenceListEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<EvidenceListEvent>();
+        while (auto ev = ch.get_event()) {
+            g_evidence = ev->items();
+        }
+    }
+
+    // --- Consume HealthBarEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<HealthBarEvent>();
+        while (auto ev = ch.get_event()) {
+            int val = std::clamp(ev->value(), 0, 10);
+            if (ev->side() == 1)
+                g_def_hp = val;
+            else if (ev->side() == 2)
+                g_pro_hp = val;
+        }
+    }
+
+    // --- Consume TimerEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<TimerEvent>();
+        while (auto ev = ch.get_event()) {
+            int id = ev->timer_id();
+            if (id < 0 || id >= MAX_TIMERS)
+                continue;
+            auto& t = g_timers[id];
+            switch (ev->action()) {
+            case 0: // start/sync
+                if (ev->time_ms() < 0) {
+                    t.running = false;
+                    t.remaining_ms = 0;
+                }
+                else {
+                    t.remaining_ms = ev->time_ms();
+                    t.running = true;
+                    t.last_tick = std::chrono::steady_clock::now();
+                }
+                break;
+            case 1: // pause
+                t.running = false;
+                t.remaining_ms = ev->time_ms();
+                break;
+            case 2: // show
+                t.visible = true;
+                break;
+            case 3: // hide
+                t.visible = false;
+                break;
+            }
+        }
+    }
+
+    // --- Tick down running timers ---
+    {
+        auto now = std::chrono::steady_clock::now();
+        for (int i = 0; i < MAX_TIMERS; i++) {
+            auto& t = g_timers[i];
+            if (t.running) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - t.last_tick).count();
+                t.last_tick = now;
+                t.remaining_ms -= elapsed;
+                if (t.remaining_ms < 0)
+                    t.remaining_ms = 0;
+            }
+        }
+    }
+
+    // --- Consume ServerInfoEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<ServerInfoEvent>();
+        while (auto ev = ch.get_event()) {
+            g_server_software = ev->get_software();
+            g_server_version = ev->get_version();
+            g_server_player_num = ev->get_player_num();
+        }
+    }
+
+    // --- Consume PlayerCountEvent ---
+    {
+        auto& ch = EventManager::instance().get_channel<PlayerCountEvent>();
+        while (auto ev = ch.get_event()) {
+            g_pcount_current = ev->get_current();
+            g_pcount_max = ev->get_max();
+            g_pcount_description = ev->get_description();
+        }
+    }
+
     // Retry loading emote icons that were null during initial courtroom load.
     auto* cr = as_courtroom();
     if (cr && !cr->is_loading() && cr->get_character_sheet()) {
         const auto& name = cr->get_character_name();
         int count = cr->get_character_sheet()->emote_count();
 
-        // Reset cache if character changed
+        // Reset cache and IC state if character changed
         if (name != g_emote_icon_character) {
             g_emote_icon_cache.clear();
             g_emote_icon_cache.resize(count);
             g_emote_icon_character = name;
+
+            // Auto-populate showname from char.ini (Issue 5)
+            g_ic_state.showname = cr->get_character_sheet()->showname();
+
+            // Auto-populate side/position from char.ini (Issue 7)
+            const auto& side_str = cr->get_character_sheet()->side();
+            g_ic_state.side_index = 2; // default: wit
+            for (int i = 0; i < 7; i++) {
+                if (side_str == SIDES[i]) {
+                    g_ic_state.side_index = i;
+                    break;
+                }
+            }
+
+            // Reset emote selection
+            g_ic_state.selected_emote = 0;
         }
 
         // Try to load a few missing icons per tick
@@ -474,8 +802,6 @@ const uint8_t* ao_courtroom_emote_icon_pixels(int index) {
 
 // --- IC Chat (send) ---
 
-static constexpr const char* SIDES[] = {"def", "pro", "wit", "jud", "jur", "sea", "hlp"};
-
 void ao_ic_send(const char* message) {
     auto* cr = as_courtroom();
     if (!cr || !message)
@@ -539,12 +865,21 @@ void ao_ic_set_color(int color) {
     g_ic_state.text_color = color;
 }
 
+const char* ao_ic_get_showname() {
+    return g_ic_state.showname.c_str();
+}
+
+int ao_ic_get_side() {
+    return g_ic_state.side_index;
+}
+
 // --- OOC Chat ---
 
 void ao_ooc_send(const char* name, const char* message) {
-    (void)name;
-    (void)message;
-    // TODO: Publish OOCMessageSendEvent
+    if (!name || !message)
+        return;
+    EventManager::instance().get_channel<OutgoingChatEvent>().publish(
+        OutgoingChatEvent(std::string(name), std::string(message)));
 }
 
 int ao_ooc_message_count() {
@@ -589,21 +924,235 @@ void ao_ic_log_consume() {
     g_ic_log.clear();
 }
 
-// --- Music ---
+// --- Music & Areas ---
 
 int ao_music_count() {
-    // TODO: Read from MusicListEvent
-    return 0;
+    return static_cast<int>(g_tracks.size());
 }
 
 const char* ao_music_name(int index) {
-    (void)index;
-    return "";
+    if (index < 0 || index >= (int)g_tracks.size())
+        return "";
+    return g_tracks[index].c_str();
 }
 
 void ao_music_play(int index) {
-    (void)index;
-    // TODO: Publish MusicPlayEvent
+    if (index < 0 || index >= (int)g_tracks.size())
+        return;
+    EventManager::instance().get_channel<OutgoingMusicEvent>().publish(OutgoingMusicEvent(g_tracks[index]));
+}
+
+void ao_music_play_by_name(const char* name) {
+    if (!name)
+        return;
+    EventManager::instance().get_channel<OutgoingMusicEvent>().publish(OutgoingMusicEvent(std::string(name)));
+}
+
+int ao_area_count() {
+    return static_cast<int>(g_areas.size());
+}
+
+const char* ao_area_name(int index) {
+    if (index < 0 || index >= (int)g_areas.size())
+        return "";
+    return g_areas[index].c_str();
+}
+
+int ao_area_players(int index) {
+    if (index < 0 || index >= (int)g_area_players.size())
+        return -1;
+    return g_area_players[index];
+}
+
+const char* ao_area_status(int index) {
+    if (index < 0 || index >= (int)g_area_status.size())
+        return "";
+    return g_area_status[index].c_str();
+}
+
+const char* ao_area_cm(int index) {
+    if (index < 0 || index >= (int)g_area_cm.size())
+        return "";
+    return g_area_cm[index].c_str();
+}
+
+const char* ao_area_lock(int index) {
+    if (index < 0 || index >= (int)g_area_lock.size())
+        return "";
+    return g_area_lock[index].c_str();
+}
+
+const char* ao_now_playing() {
+    return g_now_playing.c_str();
+}
+
+// --- Disconnect ---
+
+bool ao_disconnect_pending() {
+    return g_disconnect_pending;
+}
+
+const char* ao_disconnect_reason() {
+    return g_disconnect_reason.c_str();
+}
+
+void ao_disconnect_consume() {
+    g_disconnect_pending = false;
+    g_disconnect_reason.clear();
+}
+
+// --- Player List ---
+
+int ao_player_count() {
+    return static_cast<int>(g_player_ids_cache.size());
+}
+
+int ao_player_id(int index) {
+    if (index < 0 || index >= (int)g_player_ids_cache.size())
+        return -1;
+    return g_player_ids_cache[index];
+}
+
+const char* ao_player_name(int index) {
+    if (index < 0 || index >= (int)g_player_ids_cache.size())
+        return "";
+    auto it = g_players.find(g_player_ids_cache[index]);
+    return (it != g_players.end()) ? it->second.name.c_str() : "";
+}
+
+const char* ao_player_character(int index) {
+    if (index < 0 || index >= (int)g_player_ids_cache.size())
+        return "";
+    auto it = g_players.find(g_player_ids_cache[index]);
+    return (it != g_players.end()) ? it->second.character.c_str() : "";
+}
+
+const char* ao_player_charname(int index) {
+    if (index < 0 || index >= (int)g_player_ids_cache.size())
+        return "";
+    auto it = g_players.find(g_player_ids_cache[index]);
+    return (it != g_players.end()) ? it->second.charname.c_str() : "";
+}
+
+int ao_player_area(int index) {
+    if (index < 0 || index >= (int)g_player_ids_cache.size())
+        return -1;
+    auto it = g_players.find(g_player_ids_cache[index]);
+    return (it != g_players.end()) ? it->second.area_id : -1;
+}
+
+// --- Evidence ---
+
+int ao_evidence_count() {
+    return static_cast<int>(g_evidence.size());
+}
+
+const char* ao_evidence_name(int index) {
+    if (index < 0 || index >= (int)g_evidence.size())
+        return "";
+    return g_evidence[index].name.c_str();
+}
+
+const char* ao_evidence_description(int index) {
+    if (index < 0 || index >= (int)g_evidence.size())
+        return "";
+    return g_evidence[index].description.c_str();
+}
+
+const char* ao_evidence_image(int index) {
+    if (index < 0 || index >= (int)g_evidence.size())
+        return "";
+    return g_evidence[index].image.c_str();
+}
+
+// --- Health Bars ---
+
+int ao_hp_defense() {
+    return g_def_hp;
+}
+
+int ao_hp_prosecution() {
+    return g_pro_hp;
+}
+
+void ao_hp_set(int side, int value) {
+    EventManager::instance().get_channel<OutgoingHealthBarEvent>().publish(
+        OutgoingHealthBarEvent(side, std::clamp(value, 0, 10)));
+}
+
+// --- Timers ---
+
+int ao_timer_count() {
+    return MAX_TIMERS;
+}
+
+bool ao_timer_visible(int index) {
+    if (index < 0 || index >= MAX_TIMERS)
+        return false;
+    return g_timers[index].visible;
+}
+
+bool ao_timer_running(int index) {
+    if (index < 0 || index >= MAX_TIMERS)
+        return false;
+    return g_timers[index].running;
+}
+
+int64_t ao_timer_remaining_ms(int index) {
+    if (index < 0 || index >= MAX_TIMERS)
+        return 0;
+    return g_timers[index].remaining_ms;
+}
+
+// --- Server Info ---
+
+const char* ao_server_info_software() {
+    return g_server_software.c_str();
+}
+
+const char* ao_server_info_version() {
+    return g_server_version.c_str();
+}
+
+int ao_server_info_player_num() {
+    return g_server_player_num;
+}
+
+// --- Player Count ---
+
+int ao_player_count_current() {
+    return g_pcount_current;
+}
+
+int ao_player_count_max() {
+    return g_pcount_max;
+}
+
+const char* ao_player_count_description() {
+    return g_pcount_description.c_str();
+}
+
+// --- Volume ---
+
+void ao_volume_set(int category, float volume) {
+    VolumeChangeEvent::Category cat;
+    switch (category) {
+    case 0:
+        cat = VolumeChangeEvent::Category::MUSIC;
+        break;
+    case 1:
+        cat = VolumeChangeEvent::Category::SFX;
+        break;
+    case 2:
+        cat = VolumeChangeEvent::Category::BLIP;
+        break;
+    case 3:
+        cat = VolumeChangeEvent::Category::MASTER;
+        break;
+    default:
+        return;
+    }
+    EventManager::instance().get_channel<VolumeChangeEvent>().publish(VolumeChangeEvent(cat, volume));
 }
 
 // --- Navigation ---

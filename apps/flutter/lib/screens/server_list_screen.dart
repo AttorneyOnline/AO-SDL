@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../bridge/native_bridge.dart';
 import '../engine_state.dart';
+import '../widgets/platform/platform_widgets.dart';
 
 /// Server browser — mirrors apps/sdl/ui/widgets/ServerListWidget.
 class ServerListScreen extends StatefulWidget {
@@ -42,48 +43,49 @@ class _ServerListScreenState extends State<ServerListScreen> {
     context.watch<EngineState>();
     final serverCount = AoBridge.serverCount();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Attorney Online'),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          // Direct connect bar
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _directConnectController,
-                    decoration: const InputDecoration(
-                      hintText: 'host:port',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+    return PlatformPageScaffold(
+      title: 'Attorney Online',
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Direct connect bar
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: PlatformTextField(
+                      controller: _directConnectController,
+                      placeholder: 'host:port',
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      onSubmitted: (_) => _onDirectConnect(),
                     ),
-                    onSubmitted: (_) => _onDirectConnect(),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _onDirectConnect,
-                  child: const Text('Connect'),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  PlatformFilledButton(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    onPressed: _onDirectConnect,
+                    child: const Text('Connect'),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Server list header
-          if (serverCount == 0)
-            const Expanded(
-              child: Center(child: Text('Fetching server list...')),
-            )
-          else
-            Expanded(
-              child: _buildServerList(serverCount),
-            ),
-        ],
+            // Server list header
+            if (serverCount == 0)
+              Expanded(
+                child: Center(
+                    child: Text('Fetching server list...',
+                        style: TextStyle(color: PlatformColors.text))),
+              )
+            else
+              Expanded(
+                child: _buildServerList(serverCount),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -98,29 +100,66 @@ class _ServerListScreenState extends State<ServerListScreen> {
         final hasWs = AoBridge.serverHasWs(index);
         final isSelected = index == _selectedIndex;
 
-        return ListTile(
-          selected: isSelected,
-          enabled: hasWs,
-          title: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            desc,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Text(
-            '$players',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+        return GestureDetector(
           onTap: hasWs
               ? () {
                   setState(() => _selectedIndex = index);
                   AoBridge.serverSelect(index);
                 }
               : null,
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected ? PlatformColors.selectedSurface : null,
+              border: Border(
+                bottom: BorderSide(
+                    color: PlatformColors.separator, width: 0.5),
+              ),
+            ),
+            child: Opacity(
+              opacity: hasWs ? 1.0 : 0.4,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: PlatformColors.text,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          desc,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: PlatformColors.secondaryText,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$players',
+                    style: TextStyle(
+                      color: PlatformColors.text,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

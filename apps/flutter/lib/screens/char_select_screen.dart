@@ -1,11 +1,12 @@
 import 'dart:ffi';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../bridge/native_bridge.dart';
 import '../engine_state.dart';
+import '../widgets/platform/platform_widgets.dart';
 
 /// Character selection grid — mirrors apps/sdl/ui/widgets/CharSelectWidget.
 class CharSelectScreen extends StatelessWidget {
@@ -16,29 +17,32 @@ class CharSelectScreen extends StatelessWidget {
     context.watch<EngineState>();
     final charCount = AoBridge.charCount();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Select Character'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => AoBridge.navPopToRoot(),
-        ),
+    return PlatformPageScaffold(
+      title: 'Select Character',
+      leading: PlatformNavButton(
+        icon: PlatformIcons.back,
+        onPressed: () => AoBridge.navPopToRoot(),
       ),
-      body: charCount == 0
-          ? const Center(child: Text('Loading characters...'))
-          : GridView.builder(
-              padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 100,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: 4,
-                childAspectRatio: 1,
+      child: SafeArea(
+        child: charCount == 0
+            ? Center(
+                child: Text('Loading characters...',
+                    style: TextStyle(color: PlatformColors.text)))
+            : GridView.builder(
+                padding: const EdgeInsets.all(8),
+                gridDelegate:
+                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 100,
+                  mainAxisSpacing: 4,
+                  crossAxisSpacing: 4,
+                  childAspectRatio: 1,
+                ),
+                itemCount: charCount,
+                itemBuilder: (context, index) {
+                  return _CharacterTile(index: index);
+                },
               ),
-              itemCount: charCount,
-              itemBuilder: (context, index) {
-                return _CharacterTile(index: index);
-              },
-            ),
+      ),
     );
   }
 }
@@ -79,14 +83,14 @@ class _CharacterTile extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: selected
-              ? Theme.of(context).colorScheme.primaryContainer
+              ? PlatformColors.selectedSurface
               : taken
-                  ? Colors.grey.shade800
-                  : Theme.of(context).colorScheme.surface,
+                  ? PlatformColors.separator
+                  : PlatformColors.surface,
           border: Border.all(
             color: selected
-                ? Theme.of(context).colorScheme.primary
-                : Colors.grey.shade600,
+                ? PlatformColors.primary
+                : PlatformColors.outline,
             width: selected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(4),
@@ -106,7 +110,9 @@ class _CharacterTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 10,
-          color: taken ? Colors.grey : null,
+          color: taken
+              ? PlatformColors.secondaryText
+              : PlatformColors.text,
         ),
       ),
     );

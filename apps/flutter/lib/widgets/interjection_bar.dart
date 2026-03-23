@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../bridge/native_bridge.dart';
+import 'platform/platform_widgets.dart';
 
 /// Interjection buttons — mirrors apps/sdl/ui/widgets/InterjectionWidget.
 class InterjectionBar extends StatefulWidget {
@@ -27,19 +28,19 @@ class _InterjectionBarState extends State<InterjectionBar> {
         children: [
           _InterjectionButton(
             label: 'Hold It!',
-            color: Colors.orange,
+            color: PlatformColors.orange,
             active: _active == 1,
             onTap: () => _toggle(1),
           ),
           _InterjectionButton(
             label: 'Objection!',
-            color: Colors.red,
+            color: PlatformColors.destructive,
             active: _active == 2,
             onTap: () => _toggle(2),
           ),
           _InterjectionButton(
             label: 'Take That!',
-            color: Colors.blue,
+            color: PlatformColors.primary,
             active: _active == 3,
             onTap: () => _toggle(3),
           ),
@@ -67,17 +68,20 @@ class _InterjectionButton extends StatelessWidget {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: active
-            ? FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: color),
-                onPressed: onTap,
-                child: Text(label, style: const TextStyle(color: Colors.white)),
-              )
-            : OutlinedButton(
-                style: OutlinedButton.styleFrom(foregroundColor: color),
-                onPressed: onTap,
-                child: Text(label),
-              ),
+        child: PlatformButton(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          color: active ? color : null,
+          borderRadius: BorderRadius.circular(8),
+          onPressed: onTap,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? PlatformColors.text : color,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }

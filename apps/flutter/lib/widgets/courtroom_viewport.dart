@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+import 'platform/platform_widgets.dart';
 
 /// Courtroom scene viewport — displays the offscreen Metal texture from IRenderer
 /// via Flutter's Texture widget.
@@ -48,7 +50,7 @@ class _CourtroomViewportState extends State<CourtroomViewport> {
       return Container(
         color: const Color(0xFF1A1A33),
         child: const Center(
-          child: CircularProgressIndicator(),
+          child: PlatformActivityIndicator(),
         ),
       );
     }

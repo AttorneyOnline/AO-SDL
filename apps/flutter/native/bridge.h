@@ -183,6 +183,12 @@ void ao_ic_set_interjection(int type);
 /// Set the text color index.
 void ao_ic_set_color(int color);
 
+/// Get the current showname (may be auto-populated from char.ini).
+const char* ao_ic_get_showname(void);
+
+/// Get the current side index (may be auto-populated from char.ini).
+int ao_ic_get_side(void);
+
 // --- OOC Chat ---
 
 /// Send an OOC (out-of-character) message.
@@ -214,7 +220,7 @@ const char* ao_ic_log_message(int index);
 /// Consume (clear) all IC log entries after reading them.
 void ao_ic_log_consume(void);
 
-// --- Music ---
+// --- Music & Areas ---
 
 /// Number of music tracks available.
 int ao_music_count(void);
@@ -222,8 +228,133 @@ int ao_music_count(void);
 /// Get music track name at index.
 const char* ao_music_name(int index);
 
-/// Play a music track by index.
+/// Play a music track by name (publishes OutgoingMusicEvent).
 void ao_music_play(int index);
+
+/// Play a music track or switch area by name (publishes OutgoingMusicEvent).
+void ao_music_play_by_name(const char* name);
+
+/// Number of areas available.
+int ao_area_count(void);
+
+/// Get area name at index.
+const char* ao_area_name(int index);
+
+/// Get area player count at index (-1 if unknown).
+int ao_area_players(int index);
+
+/// Get area status string at index.
+const char* ao_area_status(int index);
+
+/// Get area CM string at index.
+const char* ao_area_cm(int index);
+
+/// Get area lock status string at index.
+const char* ao_area_lock(int index);
+
+/// Get the currently playing music track name.
+const char* ao_now_playing(void);
+
+// --- Disconnect ---
+
+/// Whether a disconnect event has occurred since last check.
+bool ao_disconnect_pending(void);
+
+/// Get the disconnect reason string.
+const char* ao_disconnect_reason(void);
+
+/// Clear the disconnect state after handling it.
+void ao_disconnect_consume(void);
+
+// --- Player List ---
+
+/// Number of players online.
+int ao_player_count(void);
+
+/// Get player ID at list index.
+int ao_player_id(int index);
+
+/// Get player display name at list index.
+const char* ao_player_name(int index);
+
+/// Get player character name at list index.
+const char* ao_player_character(int index);
+
+/// Get player charname (showname) at list index.
+const char* ao_player_charname(int index);
+
+/// Get player area ID at list index (-1 if unknown).
+int ao_player_area(int index);
+
+// --- Evidence ---
+
+/// Number of evidence items.
+int ao_evidence_count(void);
+
+/// Get evidence name at index.
+const char* ao_evidence_name(int index);
+
+/// Get evidence description at index.
+const char* ao_evidence_description(int index);
+
+/// Get evidence image filename at index.
+const char* ao_evidence_image(int index);
+
+// --- Health Bars ---
+
+/// Get defense HP (0-10).
+int ao_hp_defense(void);
+
+/// Get prosecution HP (0-10).
+int ao_hp_prosecution(void);
+
+/// Set a health bar value (publishes OutgoingHealthBarEvent).
+/// @param side  1 = defense, 2 = prosecution.
+/// @param value 0-10.
+void ao_hp_set(int side, int value);
+
+// --- Timers ---
+
+/// Get the number of timer slots (fixed at 4).
+int ao_timer_count(void);
+
+/// Whether timer at index is visible.
+bool ao_timer_visible(int index);
+
+/// Whether timer at index is running.
+bool ao_timer_running(int index);
+
+/// Get timer remaining time in milliseconds.
+int64_t ao_timer_remaining_ms(int index);
+
+// --- Server Info ---
+
+/// Get server software name (empty if not yet received).
+const char* ao_server_info_software(void);
+
+/// Get server version string.
+const char* ao_server_info_version(void);
+
+/// Get assigned player number.
+int ao_server_info_player_num(void);
+
+// --- Player Count ---
+
+/// Get current player count on connected server.
+int ao_player_count_current(void);
+
+/// Get max player count on connected server.
+int ao_player_count_max(void);
+
+/// Get server description from PN packet.
+const char* ao_player_count_description(void);
+
+// --- Volume ---
+
+/// Set volume for a category (0=music, 1=sfx, 2=blip, 3=master).
+/// @param category Volume category index.
+/// @param volume   0.0 to 1.0 amplitude.
+void ao_volume_set(int category, float volume);
 
 // --- Navigation ---
 
