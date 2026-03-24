@@ -1,6 +1,8 @@
 #include "SDLGameWindow.h"
 
 #include "asset/MountEmbedded.h"
+#include "event/DisconnectRequestEvent.h"
+#include "event/EventManager.h"
 #include "platform/SystemFonts.h"
 #include "ui/widgets/CourtroomState.h"
 #include "utils/Log.h"
@@ -174,6 +176,9 @@ void SDLGameWindow::start_loop(RenderManager& render, IUIRenderer& ui_renderer) 
 
         auto nav = ui_renderer.pending_nav_action();
         if (nav == IUIRenderer::NavAction::POP_TO_ROOT) {
+            // Signal the network thread to disconnect. The resulting SessionEndEvent
+            // triggers Session destruction which handles all resource cleanup.
+            EventManager::instance().get_channel<DisconnectRequestEvent>().publish(DisconnectRequestEvent());
             CourtroomState::instance().reset();
             ui_manager.pop_to_root();
         }

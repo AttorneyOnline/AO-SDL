@@ -227,6 +227,7 @@ add_library(aoengine STATIC
 
     engine/game/GameThread.cpp
     engine/game/ServerList.cpp
+    engine/game/Session.cpp
 
     engine/asset/AssetLibrary.cpp
     engine/asset/formats/ApngDecoder.cpp

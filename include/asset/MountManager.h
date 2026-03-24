@@ -11,6 +11,7 @@
  */
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -33,6 +34,9 @@ class MountHttp;
  */
 class MountManager {
   public:
+    /** @brief Opaque handle returned by add_mount(), used with remove_mount(). */
+    using MountHandle = uint32_t;
+
     /** @brief Construct an empty MountManager with no mounts loaded. */
     MountManager();
 
@@ -52,8 +56,17 @@ class MountManager {
      * @brief Append a mount to the end of the mount list (lowest priority).
      *
      * @note Acquires an exclusive lock on the internal shared_mutex.
+     * @return Handle that can be passed to remove_mount().
      */
-    void add_mount(std::unique_ptr<Mount> mount);
+    MountHandle add_mount(std::unique_ptr<Mount> mount);
+
+    /**
+     * @brief Remove a mount by its handle.
+     *
+     * @note Acquires an exclusive lock on the internal shared_mutex.
+     * @param handle Handle returned by a previous add_mount() call.
+     */
+    void remove_mount(MountHandle handle);
 
     /**
      * @brief Fetch file data by virtual (relative) path from the first matching mount.
@@ -120,5 +133,11 @@ class MountManager {
 
   private:
     mutable std::shared_mutex lock; /**< Protects loaded_mounts. Shared for reads, exclusive for writes. */
-    std::vector<std::unique_ptr<Mount>> loaded_mounts; /**< Ordered list of active mount backends. */
+
+    struct MountEntry {
+        MountHandle handle;
+        std::unique_ptr<Mount> mount;
+    };
+    std::vector<MountEntry> loaded_mounts; /**< Ordered list of active mount backends. */
+    MountHandle next_handle_ = 1;         /**< Monotonically increasing handle counter. */
 };

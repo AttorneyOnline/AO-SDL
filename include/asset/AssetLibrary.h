@@ -173,6 +173,21 @@ class AssetLibrary {
      */
     void evict();
 
+    /// Set the active session ID. New cache entries will be tagged with this ID.
+    void set_active_session(uint32_t session_id) {
+        active_session_id_ = session_id;
+    }
+
+    /// Clear the active session (new entries revert to app-lifetime).
+    void clear_active_session() {
+        active_session_id_ = 0;
+    }
+
+    /// Remove all cache entries belonging to a session.
+    void clear_session(uint32_t session_id) {
+        cache_.clear_session(session_id);
+    }
+
     /**
      * @brief Get a const reference to the internal AssetCache.
      * @return The underlying AssetCache.
@@ -191,7 +206,8 @@ class AssetLibrary {
     std::optional<std::pair<std::string, std::vector<uint8_t>>> probe(const std::string& path,
                                                                       const std::vector<std::string>& extensions);
 
-    MountManager& mounts;        /**< Filesystem mount manager. */
-    AssetCache cache_;           /**< Internal LRU asset cache. */
-    std::string shader_backend_; /**< GPU backend name for shader path probing. */
+    MountManager& mounts;            /**< Filesystem mount manager. */
+    AssetCache cache_;               /**< Internal LRU asset cache. */
+    std::string shader_backend_;     /**< GPU backend name for shader path probing. */
+    uint32_t active_session_id_ = 0; /**< Active session ID for tagging new cache entries. */
 };
