@@ -212,5 +212,8 @@ jobs:
           ls -la libs/ios-sim/libao_bridge.a
 
       - name: Build iOS app (simulator, no codesign)
-        working-directory: apps/flutter
-        run: flutter build ios --simulator --no-codesign
+        working-directory: apps/flutter/ios
+        run: |
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner \
+            -configuration Debug -sdk iphonesimulator -arch arm64 \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -80
