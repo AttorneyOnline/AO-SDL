@@ -3,7 +3,7 @@
 
 AO SDL is a reimplementation of AO2 using SDL2, OpenGL, and imgui. Focus is on correctness, performance, and modularized code.
 
-See [Architecture.md](Architecture.md) for a detailed overview of the design principles, component architecture, and threading model. See [STYLE.md](STYLE.md) for coding conventions and naming rules.
+See [Architecture.md](doc/Architecture.md) for a detailed overview of the design principles, component architecture, and threading model. See [STYLE.md](STYLE.md) for coding conventions and naming rules.
 
 ## Building
 
