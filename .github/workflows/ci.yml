@@ -196,6 +196,21 @@ jobs:
         working-directory: apps/flutter/ios
         run: pod install
 
+      - name: Verify xcconfig linkage
+        working-directory: apps/flutter/ios
+        run: |
+          echo "=== Debug.xcconfig ==="
+          cat Flutter/Debug.xcconfig
+          echo ""
+          echo "=== ao_native.xcconfig ==="
+          cat ao_native.xcconfig
+          echo ""
+          echo "=== Resolved OTHER_LDFLAGS ==="
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Debug -sdk iphonesimulator -showBuildSettings 2>/dev/null | grep -E 'OTHER_LDFLAGS|LIBRARY_SEARCH_PATHS|SRCROOT' || true
+          echo ""
+          echo "=== Symlink target ==="
+          ls -la libs/ios-sim/libao_bridge.a
+
       - name: Build iOS app (simulator, no codesign)
         working-directory: apps/flutter
         run: flutter build ios --simulator --no-codesign
