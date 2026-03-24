@@ -23,6 +23,13 @@
 ///
 template <typename Derived>
 class JsonConfiguration : public ConfigurationBase<Derived> {
+  public:
+    static Derived& instance() {
+        static_assert(std::is_base_of_v<JsonConfiguration, Derived>,
+                      "Derived must inherit from JsonConfiguration");
+        return ConfigurationBase<Derived>::instance();
+    }
+
   protected:
     // -- serialization -------------------------------------------------------
 
@@ -99,6 +106,16 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
         json_ = nlohmann::json::object();
     }
 
+    std::vector<std::string> do_keys() const override {
+        std::vector<std::string> result;
+        flatten_keys(json_, "", result);
+        return result;
+    }
+
+    void do_for_each(const IConfiguration::KeyValueVisitor& visitor) const override {
+        flatten_visit(json_, "", visitor);
+    }
+
     /// Direct access for subclasses that need richer JSON manipulation.
     nlohmann::json& json() {
         return json_;
@@ -117,10 +134,14 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
             return std::any_cast<bool>(v);
         if (v.type() == typeid(int))
             return std::any_cast<int>(v);
+        if (v.type() == typeid(unsigned int))
+            return std::any_cast<unsigned int>(v);
         if (v.type() == typeid(int64_t))
             return std::any_cast<int64_t>(v);
         if (v.type() == typeid(uint64_t))
             return std::any_cast<uint64_t>(v);
+        if (v.type() == typeid(float))
+            return std::any_cast<float>(v);
         if (v.type() == typeid(double))
             return std::any_cast<double>(v);
         if (v.type() == typeid(std::string))
@@ -166,10 +187,14 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
             return j.get<bool>();
         if (hint.type() == typeid(int) && j.is_number())
             return j.get<int>();
+        if (hint.type() == typeid(unsigned int) && j.is_number())
+            return j.get<unsigned int>();
         if (hint.type() == typeid(int64_t) && j.is_number())
             return j.get<int64_t>();
         if (hint.type() == typeid(uint64_t) && j.is_number())
             return j.get<uint64_t>();
+        if (hint.type() == typeid(float) && j.is_number())
+            return j.get<float>();
         if (hint.type() == typeid(double) && j.is_number())
             return j.get<double>();
         if (hint.type() == typeid(std::string) && j.is_string())
@@ -178,6 +203,54 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
             return j;
         // Type mismatch — fall back to natural mapping so the value isn't lost.
         return json_to_any(j, std::any{});
+    }
+
+    // -- iteration helpers ----------------------------------------------------
+
+    /// Recursively collect leaf-node paths from the JSON tree.
+    static void flatten_keys(const nlohmann::json& j, const std::string& prefix,
+                             std::vector<std::string>& out) {
+        if (j.is_object()) {
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                std::string child = prefix.empty() ? it.key() : prefix + "/" + it.key();
+                if (it->is_object() || it->is_array())
+                    flatten_keys(*it, child, out);
+                else
+                    out.push_back(child);
+            }
+        }
+        else if (j.is_array()) {
+            for (size_t i = 0; i < j.size(); ++i) {
+                std::string child = prefix + "/" + std::to_string(i);
+                if (j[i].is_object() || j[i].is_array())
+                    flatten_keys(j[i], child, out);
+                else
+                    out.push_back(child);
+            }
+        }
+    }
+
+    /// Recursively visit leaf-node key-value pairs.
+    static void flatten_visit(const nlohmann::json& j, const std::string& prefix,
+                              const IConfiguration::KeyValueVisitor& visitor) {
+        if (j.is_object()) {
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                std::string child = prefix.empty() ? it.key() : prefix + "/" + it.key();
+                if (it->is_object() || it->is_array())
+                    flatten_visit(*it, child, visitor);
+                else
+                    visitor(child, json_to_any(*it, {}));
+            }
+        }
+        else if (j.is_array()) {
+            for (size_t i = 0; i < j.size(); ++i) {
+                std::string child = prefix + "/" + std::to_string(i);
+                if (j[i].is_object() || j[i].is_array())
+                    flatten_visit(j[i], child, visitor);
+                else
+                    visitor(child, json_to_any(j[i], {}));
+            }
+        }
     }
 
     // -- path helpers --------------------------------------------------------

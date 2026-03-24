@@ -2,8 +2,10 @@
 
 #include "configuration/JsonConfiguration.h"
 
+#include <algorithm>
 #include <any>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -16,7 +18,7 @@ class MockJsonConfiguration : public JsonConfiguration<MockJsonConfiguration> {}
 class JsonConfigurationTest : public ::testing::Test {
   protected:
     void SetUp() override {
-        cfg().set_on_change(nullptr);
+        cfg().clear_on_change();
         cfg().clear();
     }
 
@@ -53,6 +55,16 @@ TEST_F(JsonConfigurationTest, Int64RoundTrip) {
     int64_t big = 1LL << 40;
     cfg().set_value("big", std::any{big});
     EXPECT_EQ(cfg().value<int64_t>("big"), big);
+}
+
+TEST_F(JsonConfigurationTest, UnsignedIntRoundTrip) {
+    cfg().set_value("uint_val", std::any{42u});
+    EXPECT_EQ(cfg().value<unsigned int>("uint_val"), 42u);
+}
+
+TEST_F(JsonConfigurationTest, FloatRoundTrip) {
+    cfg().set_value("fval", std::any{1.5f});
+    EXPECT_FLOAT_EQ(cfg().value<float>("fval"), 1.5f);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +196,7 @@ TEST_F(JsonConfigurationTest, ConstCharStarStoredAsString) {
 
 TEST_F(JsonConfigurationTest, CallbackOnDeserialize) {
     bool fired = false;
-    cfg().set_on_change([&](const std::string&) { fired = true; });
+    cfg().add_on_change([&](const std::string&) { fired = true; });
 
     const std::string json = R"({"k": 1})";
     std::vector<uint8_t> data(json.begin(), json.end());
@@ -295,4 +307,111 @@ TEST_F(JsonConfigurationTest, PathRoundTripThroughSerialize) {
 
     EXPECT_EQ(cfg().value<std::string>("net/server"), "localhost");
     EXPECT_EQ(cfg().value<int>("net/port"), 27016);
+}
+
+// ---------------------------------------------------------------------------
+// keys / for_each — flat
+// ---------------------------------------------------------------------------
+
+TEST_F(JsonConfigurationTest, KeysFlatValues) {
+    cfg().set_value("a", std::any{1});
+    cfg().set_value("b", std::any{std::string("hello")});
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 2u);
+    EXPECT_EQ(k[0], "a");
+    EXPECT_EQ(k[1], "b");
+}
+
+TEST_F(JsonConfigurationTest, KeysEmpty) {
+    EXPECT_TRUE(cfg().keys().empty());
+}
+
+TEST_F(JsonConfigurationTest, ForEachFlatValues) {
+    cfg().set_value("x", std::any{42});
+    cfg().set_value("y", std::any{std::string("hi")});
+
+    std::map<std::string, std::any> visited;
+    cfg().for_each([&](const std::string& key, const std::any& val) { visited[key] = val; });
+
+    ASSERT_EQ(visited.size(), 2u);
+    EXPECT_EQ(std::any_cast<int64_t>(visited["x"]), 42); // natural mapping: int → int64_t
+    EXPECT_EQ(std::any_cast<std::string>(visited["y"]), "hi");
+}
+
+// ---------------------------------------------------------------------------
+// keys / for_each — nested objects and arrays
+// ---------------------------------------------------------------------------
+
+TEST_F(JsonConfigurationTest, KeysNestedObject) {
+    const std::string json = R"({"display": {"width": 1920, "height": 1080}})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 2u);
+    EXPECT_EQ(k[0], "display/height");
+    EXPECT_EQ(k[1], "display/width");
+}
+
+TEST_F(JsonConfigurationTest, KeysArrayElements) {
+    const std::string json = R"({"colors": ["red", "green", "blue"]})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 3u);
+    EXPECT_EQ(k[0], "colors/0");
+    EXPECT_EQ(k[1], "colors/1");
+    EXPECT_EQ(k[2], "colors/2");
+}
+
+TEST_F(JsonConfigurationTest, KeysDeepNesting) {
+    const std::string json = R"({"a": {"b": {"c": 1, "d": 2}}})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 2u);
+    EXPECT_EQ(k[0], "a/b/c");
+    EXPECT_EQ(k[1], "a/b/d");
+}
+
+TEST_F(JsonConfigurationTest, KeysMixedFlatAndNested) {
+    const std::string json = R"({"name": "test", "audio": {"volume": 80}})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 2u);
+    EXPECT_EQ(k[0], "audio/volume");
+    EXPECT_EQ(k[1], "name");
+}
+
+TEST_F(JsonConfigurationTest, ForEachNestedValues) {
+    const std::string json = R"({"servers": [{"name": "alpha"}, {"name": "bravo"}]})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    std::map<std::string, std::string> visited;
+    cfg().for_each([&](const std::string& key, const std::any& val) {
+        visited[key] = std::any_cast<std::string>(val);
+    });
+
+    ASSERT_EQ(visited.size(), 2u);
+    EXPECT_EQ(visited["servers/0/name"], "alpha");
+    EXPECT_EQ(visited["servers/1/name"], "bravo");
+}
+
+TEST_F(JsonConfigurationTest, KeysConsistentWithContains) {
+    cfg().set_value("audio/master", std::any{80});
+    cfg().set_value("video/fullscreen", std::any{true});
+
+    auto k = cfg().keys();
+    for (const auto& key : k)
+        EXPECT_TRUE(cfg().contains(key)) << "keys() returned '" << key << "' but contains() is false";
 }

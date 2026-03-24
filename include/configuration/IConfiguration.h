@@ -6,11 +6,14 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <any>
 #include <functional>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 /// Pure interface for all configurations.
@@ -27,6 +30,14 @@ class IConfiguration {
     virtual bool contains(const std::string& key) const = 0;
     virtual void remove(const std::string& key) = 0;
     virtual void clear() = 0;
+
+    using KeyValueVisitor = std::function<void(const std::string& key, const std::any& value)>;
+
+    /// Return all keys in the configuration.
+    virtual std::vector<std::string> keys() const = 0;
+
+    /// Invoke @p visitor for every key-value pair.
+    virtual void for_each(const KeyValueVisitor& visitor) const = 0;
 
     template <typename T>
     T value(const std::string& key, const T& default_value = T{}) const {
@@ -59,16 +70,40 @@ class IConfiguration {
 template <typename Derived>
 class ConfigurationBase : public IConfiguration {
   public:
+    ConfigurationBase(const ConfigurationBase&) = delete;
+    ConfigurationBase& operator=(const ConfigurationBase&) = delete;
+
     using IConfiguration::value; // unhide the value<T> template
 
     static Derived& instance() {
+        static_assert(std::is_base_of_v<ConfigurationBase, Derived>,
+                      "Derived must inherit from ConfigurationBase");
         static Derived inst;
         return inst;
     }
 
-    void set_on_change(ChangeCallback cb) {
+    /// Register a change callback. Returns an ID that can be passed to
+    /// remove_on_change() to unregister it later.
+    int add_on_change(ChangeCallback cb) {
         std::unique_lock lock(mutex_);
-        on_change_ = std::move(cb);
+        int id = next_cb_id_++;
+        on_change_callbacks_.emplace_back(id, std::move(cb));
+        return id;
+    }
+
+    /// Remove a previously registered callback by its ID.
+    void remove_on_change(int id) {
+        std::unique_lock lock(mutex_);
+        auto& cbs = on_change_callbacks_;
+        cbs.erase(std::remove_if(cbs.begin(), cbs.end(),
+                                 [id](const auto& p) { return p.first == id; }),
+                  cbs.end());
+    }
+
+    /// Remove all registered change callbacks.
+    void clear_on_change() {
+        std::unique_lock lock(mutex_);
+        on_change_callbacks_.clear();
     }
 
     // Thread-safe NVI overrides
@@ -122,7 +157,19 @@ class ConfigurationBase : public IConfiguration {
         notify({});
     }
 
+    std::vector<std::string> keys() const final {
+        std::shared_lock lock(mutex_);
+        return do_keys();
+    }
+
+    void for_each(const KeyValueVisitor& visitor) const final {
+        std::shared_lock lock(mutex_);
+        do_for_each(visitor);
+    }
+
   protected:
+    ConfigurationBase() = default;
+
     // Subclasses implement these.  The mutex is already held when called.
     virtual bool do_deserialize(const std::vector<uint8_t>& data) = 0;
     virtual std::vector<uint8_t> do_serialize() const = 0;
@@ -131,20 +178,25 @@ class ConfigurationBase : public IConfiguration {
     virtual bool do_contains(const std::string& key) const = 0;
     virtual void do_remove(const std::string& key) = 0;
     virtual void do_clear() = 0;
+    virtual std::vector<std::string> do_keys() const = 0;
+    virtual void do_for_each(const KeyValueVisitor& visitor) const = 0;
 
   private:
     void notify(const std::string& key) {
-        ChangeCallback cb;
+        std::vector<std::pair<int, ChangeCallback>> callbacks;
         {
             std::shared_lock lock(mutex_);
-            cb = on_change_;
+            callbacks = on_change_callbacks_;
         }
-        if (cb)
-            cb(key);
+        for (const auto& [id, cb] : callbacks) {
+            if (cb)
+                cb(key);
+        }
     }
 
     mutable std::shared_mutex mutex_;
-    ChangeCallback on_change_;
+    std::vector<std::pair<int, ChangeCallback>> on_change_callbacks_;
+    int next_cb_id_ = 0;
 };
 
 /** @} */

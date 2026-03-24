@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <any>
 #include <atomic>
 #include <cstdint>
@@ -57,6 +58,18 @@ class TestConfig : public ConfigurationBase<TestConfig> {
         store_.clear();
     }
 
+    std::vector<std::string> do_keys() const override {
+        std::vector<std::string> result;
+        for (const auto& [k, v] : store_)
+            result.push_back(k);
+        return result;
+    }
+
+    void do_for_each(const KeyValueVisitor& visitor) const override {
+        for (const auto& [k, v] : store_)
+            visitor(k, v);
+    }
+
   private:
     std::map<std::string, std::any> store_;
 };
@@ -66,7 +79,7 @@ class TestConfig : public ConfigurationBase<TestConfig> {
 class ConfigurationTest : public ::testing::Test {
   protected:
     void SetUp() override {
-        cfg().set_on_change(nullptr);
+        cfg().clear_on_change();
         cfg().clear();
     }
 
@@ -172,6 +185,46 @@ TEST_F(ConfigurationTest, ClearRemovesAllKeys) {
 }
 
 // ---------------------------------------------------------------------------
+// keys / for_each
+// ---------------------------------------------------------------------------
+
+TEST_F(ConfigurationTest, KeysEmptyOnFreshConfig) {
+    EXPECT_TRUE(cfg().keys().empty());
+}
+
+TEST_F(ConfigurationTest, KeysReturnsAllSetKeys) {
+    cfg().set_value("a", std::any{1});
+    cfg().set_value("b", std::any{2});
+    cfg().set_value("c", std::any{3});
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 3u);
+    EXPECT_EQ(k[0], "a");
+    EXPECT_EQ(k[1], "b");
+    EXPECT_EQ(k[2], "c");
+}
+
+TEST_F(ConfigurationTest, ForEachVisitsAllPairs) {
+    cfg().set_value("x", std::any{10});
+    cfg().set_value("y", std::any{20});
+
+    std::map<std::string, int> visited;
+    cfg().for_each([&](const std::string& key, const std::any& val) {
+        visited[key] = std::any_cast<int>(val);
+    });
+
+    EXPECT_EQ(visited.size(), 2u);
+    EXPECT_EQ(visited["x"], 10);
+    EXPECT_EQ(visited["y"], 20);
+}
+
+TEST_F(ConfigurationTest, ForEachEmptyConfig) {
+    int count = 0;
+    cfg().for_each([&](const std::string&, const std::any&) { ++count; });
+    EXPECT_EQ(count, 0);
+}
+
+// ---------------------------------------------------------------------------
 // serialize / deserialize
 // ---------------------------------------------------------------------------
 
@@ -195,7 +248,7 @@ TEST_F(ConfigurationTest, DeserializeEmptyDataReturnsFalse) {
 
 TEST_F(ConfigurationTest, CallbackFiredOnSetValue) {
     std::string notified_key;
-    cfg().set_on_change([&](const std::string& key) { notified_key = key; });
+    cfg().add_on_change([&](const std::string& key) { notified_key = key; });
 
     cfg().set_value("x", std::any{10});
     EXPECT_EQ(notified_key, "x");
@@ -205,7 +258,7 @@ TEST_F(ConfigurationTest, CallbackFiredOnRemove) {
     cfg().set_value("y", std::any{1});
 
     std::string notified_key;
-    cfg().set_on_change([&](const std::string& key) { notified_key = key; });
+    cfg().add_on_change([&](const std::string& key) { notified_key = key; });
 
     cfg().remove("y");
     EXPECT_EQ(notified_key, "y");
@@ -215,7 +268,7 @@ TEST_F(ConfigurationTest, CallbackFiredOnClear) {
     cfg().set_value("z", std::any{1});
 
     bool called = false;
-    cfg().set_on_change([&](const std::string& key) {
+    cfg().add_on_change([&](const std::string& key) {
         called = true;
         EXPECT_TRUE(key.empty()); // clear() notifies with empty key
     });
@@ -226,7 +279,7 @@ TEST_F(ConfigurationTest, CallbackFiredOnClear) {
 
 TEST_F(ConfigurationTest, CallbackFiredOnDeserialize) {
     bool called = false;
-    cfg().set_on_change([&](const std::string& key) {
+    cfg().add_on_change([&](const std::string& key) {
         called = true;
         EXPECT_TRUE(key.empty());
     });
@@ -238,7 +291,7 @@ TEST_F(ConfigurationTest, CallbackFiredOnDeserialize) {
 
 TEST_F(ConfigurationTest, CallbackNotFiredOnFailedDeserialize) {
     bool called = false;
-    cfg().set_on_change([&](const std::string&) { called = true; });
+    cfg().add_on_change([&](const std::string&) { called = true; });
 
     cfg().deserialize({}); // empty → fails
     EXPECT_FALSE(called);
@@ -249,6 +302,39 @@ TEST_F(ConfigurationTest, NoCallbackDoesNotCrash) {
     EXPECT_NO_THROW(cfg().set_value("a", std::any{1}));
     EXPECT_NO_THROW(cfg().remove("a"));
     EXPECT_NO_THROW(cfg().clear());
+}
+
+TEST_F(ConfigurationTest, MultipleCallbacksFired) {
+    int count_a = 0;
+    int count_b = 0;
+    cfg().add_on_change([&](const std::string&) { ++count_a; });
+    cfg().add_on_change([&](const std::string&) { ++count_b; });
+
+    cfg().set_value("x", std::any{1});
+    EXPECT_EQ(count_a, 1);
+    EXPECT_EQ(count_b, 1);
+}
+
+TEST_F(ConfigurationTest, RemoveCallbackById) {
+    int count = 0;
+    int id = cfg().add_on_change([&](const std::string&) { ++count; });
+
+    cfg().set_value("x", std::any{1});
+    EXPECT_EQ(count, 1);
+
+    cfg().remove_on_change(id);
+    cfg().set_value("y", std::any{2});
+    EXPECT_EQ(count, 1); // callback was removed, count unchanged
+}
+
+TEST_F(ConfigurationTest, ClearOnChangeRemovesAll) {
+    int count = 0;
+    cfg().add_on_change([&](const std::string&) { ++count; });
+    cfg().add_on_change([&](const std::string&) { ++count; });
+
+    cfg().clear_on_change();
+    cfg().set_value("x", std::any{1});
+    EXPECT_EQ(count, 0);
 }
 
 // ---------------------------------------------------------------------------
