@@ -148,3 +148,44 @@ jobs:
           path: |
             aosdl-*.tar.gz
             artifact/
+
+  # ---- iOS build verification (no signing) ----
+  ios:
+    name: iOS (Flutter)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Configure native bridge (iOS Simulator)
+        run: cmake --preset ios-sim-debug
+
+      - name: Build native bridge
+        run: cmake --build out/build/ios-sim-debug --target flutter-build -j $(sysctl -n hw.ncpu)
+
+      - name: Set up Flutter project
+        working-directory: apps/flutter
+        run: |
+          flutter pub get
+          mkdir -p ios/libs
+          ln -sfn ${{ github.workspace }}/out/build/ios-sim-debug ios/libs/ios-sim
+
+      - name: Install CocoaPods
+        working-directory: apps/flutter/ios
+        run: pod install
+
+      - name: Build iOS app (simulator, no codesign)
+        working-directory: apps/flutter/ios
+        run: |
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner \
+            -configuration Debug -sdk iphonesimulator -arch arm64 \
+            CODE_SIGNING_ALLOWED=NO build
