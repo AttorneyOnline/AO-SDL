@@ -34,6 +34,7 @@ set(TEST_SOURCES
     event/test_BackgroundEvent.cpp
     event/test_EventTypes.cpp
     game/test_ServerList.cpp
+    game/test_Session.cpp
     game/test_TickProfiler.cpp
     render/test_AnimationPlayer.cpp
     render/test_Layer.cpp

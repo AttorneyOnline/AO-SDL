@@ -152,3 +152,56 @@ TEST(AssetCache, UnusedEntriesStayWarmUnderBudget) {
     // Should still be retrievable from cache.
     EXPECT_NE(cache.get("warm"), nullptr);
 }
+
+// ---------------------------------------------------------------------------
+// Session tagging
+// ---------------------------------------------------------------------------
+
+TEST(AssetCache, InsertWithSessionId) {
+    AssetCache cache(1024);
+    cache.insert(make_asset("a", 100), 1);
+    EXPECT_NE(cache.get("a"), nullptr);
+    EXPECT_EQ(cache.used_bytes(), 100u);
+}
+
+TEST(AssetCache, ClearSessionRemovesTaggedEntries) {
+    AssetCache cache(1024);
+    cache.insert(make_asset("session_a", 100), 1);
+    cache.insert(make_asset("session_b", 100), 1);
+    cache.insert(make_asset("app_c", 100), 0);
+
+    cache.clear_session(1);
+
+    EXPECT_EQ(cache.get("session_a"), nullptr);
+    EXPECT_EQ(cache.get("session_b"), nullptr);
+    EXPECT_NE(cache.get("app_c"), nullptr);
+    EXPECT_EQ(cache.used_bytes(), 100u);
+}
+
+TEST(AssetCache, ClearSessionPreservesOtherSessions) {
+    AssetCache cache(1024);
+    cache.insert(make_asset("s1", 100), 1);
+    cache.insert(make_asset("s2", 100), 2);
+
+    cache.clear_session(1);
+
+    EXPECT_EQ(cache.get("s1"), nullptr);
+    EXPECT_NE(cache.get("s2"), nullptr);
+}
+
+TEST(AssetCache, ClearSessionZeroIsNoop) {
+    AssetCache cache(1024);
+    cache.insert(make_asset("a", 100), 0);
+    cache.clear_session(0);
+    EXPECT_NE(cache.get("a"), nullptr);
+}
+
+TEST(AssetCache, ClearRemovesAllEntries) {
+    AssetCache cache(1024);
+    cache.insert(make_asset("a", 100), 0);
+    cache.insert(make_asset("b", 100), 1);
+    cache.clear();
+    EXPECT_EQ(cache.get("a"), nullptr);
+    EXPECT_EQ(cache.get("b"), nullptr);
+    EXPECT_EQ(cache.used_bytes(), 0u);
+}

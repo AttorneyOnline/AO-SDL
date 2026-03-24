@@ -569,3 +569,67 @@ TEST_F(MountManagerTest, FetchStreamingReturnsFalseWithNoHttpMount) {
     bool result = manager.fetch_streaming("some/path.png", [](const uint8_t*, size_t) { return true; });
     EXPECT_FALSE(result);
 }
+
+// ---------------------------------------------------------------------------
+// Mount handle system
+// ---------------------------------------------------------------------------
+
+TEST_F(MountManagerTest, AddMountReturnsNonZeroHandle) {
+    auto stub = std::make_unique<StubMount>();
+    stub->add_file("test.txt", "data");
+    auto handle = manager.add_mount(std::move(stub));
+    EXPECT_GT(handle, 0u);
+}
+
+TEST_F(MountManagerTest, AddMountReturnsUniqueHandles) {
+    auto s1 = std::make_unique<StubMount>("s1://");
+    auto s2 = std::make_unique<StubMount>("s2://");
+    auto h1 = manager.add_mount(std::move(s1));
+    auto h2 = manager.add_mount(std::move(s2));
+    EXPECT_NE(h1, h2);
+}
+
+TEST_F(MountManagerTest, RemoveMountByHandle) {
+    auto stub = std::make_unique<StubMount>();
+    stub->add_file("removable.txt", "data");
+    auto handle = manager.add_mount(std::move(stub));
+
+    ASSERT_TRUE(manager.fetch_data("removable.txt").has_value());
+
+    manager.remove_mount(handle);
+
+    EXPECT_FALSE(manager.fetch_data("removable.txt").has_value());
+}
+
+TEST_F(MountManagerTest, RemoveMountPreservesOtherMounts) {
+    auto s1 = std::make_unique<StubMount>("s1://");
+    s1->add_file("keep.txt", "keep");
+    auto s2 = std::make_unique<StubMount>("s2://");
+    s2->add_file("remove.txt", "remove");
+
+    auto h1 = manager.add_mount(std::move(s1));
+    auto h2 = manager.add_mount(std::move(s2));
+
+    manager.remove_mount(h2);
+
+    EXPECT_TRUE(manager.fetch_data("keep.txt").has_value());
+    EXPECT_FALSE(manager.fetch_data("remove.txt").has_value());
+    (void)h1;
+}
+
+TEST_F(MountManagerTest, RemoveNonexistentHandleIsNoop) {
+    EXPECT_NO_THROW(manager.remove_mount(9999));
+}
+
+TEST_F(MountManagerTest, RemoveMountPreservesEmbedded) {
+    auto stub = std::make_unique<StubMount>();
+    stub->add_file("temp.txt", "temp");
+    auto handle = manager.add_mount(std::move(stub));
+
+    manager.remove_mount(handle);
+
+    // Embedded assets should still work
+    auto shader = manager.fetch_data("shaders/text/glsl/vertex.glsl");
+    ASSERT_TRUE(shader.has_value());
+    EXPECT_FALSE(shader->empty());
+}
