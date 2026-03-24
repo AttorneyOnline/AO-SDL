@@ -1,6 +1,5 @@
 #include "ao/game/AOTextBox.h"
 
-#include "render/TextMeshBuilder.h"
 #include "utils/ImageOps.h"
 #include "utils/Log.h"
 #include "utils/UTF8.h"
@@ -123,7 +122,6 @@ void AOTextBox::load(AOAssetLibrary& ao_assets) {
         engine_assets_->register_asset(msg_glyph_cache_->atlas_asset());
 
         text_shader_ = engine_assets_->shader("shaders/text");
-        text_rainbow_shader_ = engine_assets_->shader("shaders/text_rainbow");
         if (text_shader_) {
             Log::log_print(DEBUG, "AOTextBox: text shader loaded for GPU rendering");
         }
@@ -139,6 +137,7 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
     }
     else {
         previous_message.clear();
+        char_colors_.clear();
     }
 
     // Preprocess inline markup: escape sequences, speed modifiers, color markdown
@@ -149,6 +148,34 @@ void AOTextBox::start_message(const std::string& showname, const std::string& me
     current_message = processed_.display;
     base_color_idx_ = std::clamp(color_idx, 0, (int)colors.size() - 1);
     current_color_idx = base_color_idx_;
+
+    // Compute per-character colors for the new message from base color + inline events.
+    // In additive mode, previous colors are already in char_colors_; we append.
+    // Color index 6 = rainbow: use sentinel {-1,-1,-1} so the shader applies rainbow per-fragment.
+    {
+        static constexpr int RAINBOW_COLOR_IDX = 6;
+        static constexpr TextMeshBuilder::CharColor RAINBOW_SENTINEL{-1.0f, -1.0f, -1.0f};
+
+        auto color_for_idx = [&](int idx) -> TextMeshBuilder::CharColor {
+            if (idx == RAINBOW_COLOR_IDX)
+                return RAINBOW_SENTINEL;
+            return {colors[idx].r / 255.0f, colors[idx].g / 255.0f, colors[idx].b / 255.0f};
+        };
+
+        int new_chars = UTF8::length(current_message);
+        auto current = color_for_idx(base_color_idx_);
+        size_t ev_idx = 0;
+        for (int i = 0; i < new_chars; i++) {
+            while (ev_idx < processed_.events.size() && processed_.events[ev_idx].char_index <= i) {
+                if (processed_.events[ev_idx].type == TextEventType::COLOR_CHANGE) {
+                    int ci = std::clamp(processed_.events[ev_idx].color_idx, 0, (int)colors.size() - 1);
+                    current = color_for_idx(ci);
+                }
+                ev_idx++;
+            }
+            char_colors_.push_back(current);
+        }
+    }
     chars_visible = 0;
     accumulated_ms = 0;
     current_speed = DEFAULT_SPEED;
@@ -280,48 +307,13 @@ done_advancing:
         int visible = cached_prev_chars_ + chars_visible;
         int scroll_y = text_renderer.compute_scroll_offset(cached_layout_, visible, message_rect.h);
 
-        // Build per-character color array from processed events.
-        // Walk events up to the current visible character count to determine
-        // the color at each position.
-        std::vector<TextMeshBuilder::CharColor> char_colors;
-        int total_visible = cached_prev_chars_ + total_chars;
-        char_colors.resize(total_visible);
-        {
-            // Use the original base color from the MS packet, not current_color_idx
-            // which gets modified by inline COLOR_CHANGE events during tick.
-            float br = 1.0f, bg = 1.0f, bb = 1.0f;
-            int base_idx = base_color_idx_;
-            br = colors[base_idx].r / 255.0f;
-            bg = colors[base_idx].g / 255.0f;
-            bb = colors[base_idx].b / 255.0f;
-
-            // Fill previous message chars with base color
-            for (int i = 0; i < cached_prev_chars_; i++)
-                char_colors[i] = {br, bg, bb};
-
-            // Walk events to compute color at each position in the current message
-            float cr = br, cg = bg, cb = bb;
-            size_t ev_idx = 0;
-            for (int i = 0; i < total_chars; i++) {
-                // Consume color events at this position
-                while (ev_idx < processed_.events.size() && processed_.events[ev_idx].char_index <= i) {
-                    if (processed_.events[ev_idx].type == TextEventType::COLOR_CHANGE) {
-                        int ci = std::clamp(processed_.events[ev_idx].color_idx, 0, (int)colors.size() - 1);
-                        cr = colors[ci].r / 255.0f;
-                        cg = colors[ci].g / 255.0f;
-                        cb = colors[ci].b / 255.0f;
-                    }
-                    ev_idx++;
-                }
-                char_colors[cached_prev_chars_ + i] = {cr, cg, cb};
-            }
-        }
+        // char_colors_ was fully computed in start_message() — just use it.
 
         std::vector<MeshVertex> verts;
         std::vector<uint32_t> indices;
         TextMeshBuilder::build(*msg_glyph_cache_, cached_layout_, visible, chatbox_rect.x + message_rect.x,
                                chatbox_rect.y + message_rect.y, scroll_y, message_rect.h, 256, 192, verts, indices,
-                               char_colors);
+                               char_colors_);
         msg_mesh_->update(std::move(verts), std::move(indices));
     }
 

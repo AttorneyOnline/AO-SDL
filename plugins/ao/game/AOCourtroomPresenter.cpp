@@ -350,13 +350,9 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             auto shader = textbox.text_shader();
             if (atlas && mesh && mesh->index_count() > 0 && shader) {
                 // Per-vertex color is baked into the mesh by TextMeshBuilder.
-                // Rainbow text uses a time uniform for the animation.
-                if (textbox.is_rainbow()) {
-                    shader->set_uniform_provider(std::make_shared<RainbowTextProvider>(scene_time_s_));
-                }
-                else {
-                    shader->set_uniform_provider(nullptr);
-                }
+                // Rainbow characters use a sentinel vertex color; the shader
+                // needs u_time to animate them.
+                shader->set_uniform_provider(std::make_shared<RainbowTextProvider>(scene_time_s_));
 
                 Layer text_layer(atlas, 0, 21);
                 text_layer.set_mesh(mesh);
