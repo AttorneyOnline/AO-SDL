@@ -80,18 +80,21 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
     // Stop all active effects before starting a new message
     for_each_effect([](auto& e) { e.stop(); });
 
+    active_ic_.emplace();
+    auto& ic = *active_ic_;
+
     if (!msg.side.empty())
         background.set_position(msg.side);
 
     if (msg.desk_mod == DeskMod::CHAT) {
         // Default: desk shown for def/pro/wit, hidden for other positions
-        show_desk = (msg.side == "def" || msg.side == "pro" || msg.side == "wit");
+        ic.show_desk = (msg.side == "def" || msg.side == "pro" || msg.side == "wit");
     }
     else {
-        show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
-                     msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
+        ic.show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
+                        msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
     }
-    current_flip = msg.flip;
+    ic.flip = msg.flip;
 
     // Prefetch character assets via HTTP
     ao_assets->prefetch_character(msg.character, msg.emote, msg.pre_emote, 2);
@@ -119,24 +122,22 @@ void AOCourtroomPresenter::play_message(const ICMessage& msg) {
         textbox.start_message(showname, msg.message, msg.text_color, ao_assets->text_colors(), msg.additive);
         emote_player.start(*ao_assets, msg.character, msg.emote, "", EmoteMod::IDLE);
         emote_player.transition_to_idle();
-        preanim_blocking_ = false;
     }
     else {
         emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
 
         // Blocking preanim: defer textbox until preanim finishes
         if (emote_player.state() == AOEmotePlayer::State::PREANIM && !msg.immediate) {
-            preanim_blocking_ = true;
-            pending_showname_ = showname;
-            pending_message_ = msg.message;
-            pending_text_color_ = msg.text_color;
-            pending_additive_ = msg.additive;
+            ic.preanim_blocking = true;
+            ic.pending_showname = showname;
+            ic.pending_message = msg.message;
+            ic.pending_text_color = msg.text_color;
+            ic.pending_additive = msg.additive;
             // Keep textbox inactive during preanim
             textbox.start_message("", "", 0, ao_assets->text_colors());
         }
         else {
             // Immediate (no-int-pre) or no preanim: start text right away
-            preanim_blocking_ = false;
             textbox.start_message(showname, msg.message, msg.text_color, ao_assets->text_colors(), msg.additive);
         }
     }
@@ -202,7 +203,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             textbox.start_message("", "", 0, ao_assets->text_colors());
             message_queue_.clear();
             emote_player.stop();
-            preanim_blocking_ = false;
+            active_ic_.reset();
             for_each_effect([](auto& e) { e.stop(); });
         }
 
@@ -213,8 +214,9 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
         // Advance queue — dequeue next message when current one finishes.
         // Don't advance during a blocking preanim (textbox is INACTIVE but message isn't done).
-        bool text_done = !preanim_blocking_ && (textbox.text_state() == AOTextBox::TextState::DONE ||
-                                                textbox.text_state() == AOTextBox::TextState::INACTIVE);
+        bool preanim_blocking = active_ic_ && active_ic_->preanim_blocking;
+        bool text_done = !preanim_blocking && (textbox.text_state() == AOTextBox::TextState::DONE ||
+                                               textbox.text_state() == AOTextBox::TextState::INACTIVE);
         message_queue_.tick(delta_ms, text_done);
 
         if (auto msg = message_queue_.next()) {
@@ -243,11 +245,12 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         emote_player.tick(delta_ms);
 
         // Blocking preanim just finished → start the deferred textbox
-        if (preanim_blocking_ && prev_emote_state == AOEmotePlayer::State::PREANIM &&
+        if (active_ic_ && active_ic_->preanim_blocking && prev_emote_state == AOEmotePlayer::State::PREANIM &&
             emote_player.state() == AOEmotePlayer::State::TALKING) {
-            preanim_blocking_ = false;
-            textbox.start_message(pending_showname_, pending_message_, pending_text_color_, ao_assets->text_colors(),
-                                  pending_additive_);
+            auto& ic = *active_ic_;
+            ic.preanim_blocking = false;
+            textbox.start_message(ic.pending_showname, ic.pending_message, ic.pending_text_color,
+                                  ao_assets->text_colors(), ic.pending_additive);
             prev_chars_visible_ = 0;
         }
 
@@ -324,7 +327,7 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             scene.add_layer(5, std::move(char_layer));
         }
 
-        if (background.desk_asset() && show_desk) {
+        if (background.desk_asset() && active_ic_ && active_ic_->show_desk) {
             scene.add_layer(10, Layer(background.desk_asset(), 0, 10));
         }
 

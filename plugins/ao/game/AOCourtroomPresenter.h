@@ -15,6 +15,8 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 class ISceneEffect;
@@ -42,19 +44,23 @@ class AOCourtroomPresenter : public IScenePresenter {
     AOTextBox textbox;
     ICMessageQueue message_queue_;
 
-    bool show_desk = true;
-    bool current_flip = false;
+    // Per-IC-message state. Present while a message is active, cleared when
+    // the message queue moves on.
+    struct ActiveICState {
+        bool flip = false;
+        bool show_desk = true;
+        bool preanim_blocking = false;
+        std::string pending_showname;
+        std::string pending_message;
+        int pending_text_color = 0;
+        bool pending_additive = false;
+    };
+    std::optional<ActiveICState> active_ic_;
+
     AOBlipPlayer blip_player_;
     AOMusicPlayer music_player_;
     int prev_chars_visible_ = 0;
     std::atomic<bool> courtroom_active_{false};
-
-    // Blocking preanim: text is deferred until preanim finishes
-    bool preanim_blocking_ = false;
-    std::string pending_showname_;
-    std::string pending_message_;
-    int pending_text_color_ = 0;
-    bool pending_additive_ = false;
 
     int evict_timer_ms = 0;
     int theme_retry_ms_ = 0;
