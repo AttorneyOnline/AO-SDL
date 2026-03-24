@@ -161,13 +161,16 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Install tools
+        run: brew install ninja
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
       - name: Configure native bridge (iOS Simulator)
-        run: cmake --preset ios-sim-debug
+        run: cmake --preset ios-sim-debug -G Ninja
 
       - name: Build native bridge
         run: cmake --build out/build/ios-sim-debug --target flutter-build -j $(sysctl -n hw.ncpu)
