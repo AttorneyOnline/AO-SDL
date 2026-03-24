@@ -408,8 +408,7 @@ AOPacketFL::AOPacketFL(const std::vector<std::string>& fields) : AOPacket("FL", 
 
 PacketRegistrar AOPacketFA::registrar("FA", [](const auto& f) { return std::make_unique<AOPacketFA>(f); });
 
-AOPacketFA::AOPacketFA(const std::vector<std::string>& fields)
-    : AOPacket("FA", fields), areas(ao_decode_list(fields)) {
+AOPacketFA::AOPacketFA(const std::vector<std::string>& fields) : AOPacket("FA", fields), areas(ao_decode_list(fields)) {
 }
 
 // ---------------------------------------------------------------------------
