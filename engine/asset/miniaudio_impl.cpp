@@ -1,5 +1,5 @@
 // Single compilation unit for miniaudio (mirrors stb_image_impl.cpp).
-// Only the decoder is needed — device I/O is handled by SDL.
+// Only the decoder is needed — device I/O is handled by the platform backend.
 #define MA_NO_DEVICE_IO
 #define MA_NO_GENERATION
 #define MA_NO_ENGINE

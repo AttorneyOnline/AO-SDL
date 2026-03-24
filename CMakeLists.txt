@@ -304,14 +304,32 @@ target_include_directories(aoengine
             third-party/bit7z
 )
 
-# OpenSSL for HTTPS support in httplib (prefer static to avoid runtime deps)
-set(OPENSSL_USE_STATIC_LIBS ON)
-find_package(OpenSSL)
-if(OPENSSL_FOUND)
-    target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile OpenSSL::SSL OpenSSL::Crypto)
-else()
+# HTTPS support: OpenSSL on desktop, native Apple TLS on iOS via apple_httplib shim
+if(AO_BUILD_FLUTTER AND APPLE)
+    # Use our NSURLSession-based httplib replacement instead of cpp-httplib+OpenSSL.
+    # The shim header (apple_httplib.h renamed to httplib.h) must shadow the real one.
+    # We achieve this by creating a shim directory with a symlink.
+    set(HTTPLIB_SHIM_DIR "${CMAKE_BINARY_DIR}/httplib_shim")
+    file(MAKE_DIRECTORY "${HTTPLIB_SHIM_DIR}")
+    file(CREATE_LINK
+        "${CMAKE_SOURCE_DIR}/apps/flutter/native/apple_httplib.h"
+        "${HTTPLIB_SHIM_DIR}/httplib.h"
+        SYMBOLIC)
+    # Put the shim dir BEFORE third-party/header-libs so it shadows the real httplib.h
+    target_include_directories(aoengine BEFORE PUBLIC "${HTTPLIB_SHIM_DIR}")
+    # Compile the NSURLSession implementation (requires ARC for ObjC memory management)
+    target_sources(aoengine PRIVATE apps/flutter/native/apple_httplib.mm)
+    set_source_files_properties(apps/flutter/native/apple_httplib.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile)
+else()
+    set(OPENSSL_USE_STATIC_LIBS ON)
+    find_package(OpenSSL)
+    if(OPENSSL_FOUND)
+        target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
+        target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile OpenSSL::SSL OpenSSL::Crypto)
+    else()
+        target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile)
+    endif()
 endif()
 target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 
@@ -444,16 +462,28 @@ option(AO_BUILD_FLUTTER "Build the Flutter FFI bridge library" OFF)
 if(AO_BUILD_FLUTTER)
     add_library(ao_bridge STATIC
         apps/flutter/native/bridge.cpp
+        apps/flutter/native/MiniaudioDevice.cpp
+        apps/flutter/native/miniaudio_device_impl.mm
+    )
+    # ObjC++ files need ARC for proper memory management
+    set_source_files_properties(
+        apps/flutter/native/miniaudio_device_impl.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc"
     )
     set_property(TARGET ao_bridge PROPERTY CXX_STANDARD 20)
     target_include_directories(ao_bridge PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins
+        ${CMAKE_CURRENT_SOURCE_DIR}/apps/flutter/native
         ${CMAKE_BINARY_DIR}/generated
     )
     target_link_libraries(ao_bridge PRIVATE ao_protocol)
     if(APPLE)
-        target_link_libraries(ao_bridge PRIVATE aorender_metal)
+        target_link_libraries(ao_bridge PRIVATE aorender_metal
+            "-framework AudioToolbox"
+            "-framework CoreAudio"
+            "-framework AVFoundation"
+        )
     else()
         target_link_libraries(ao_bridge PRIVATE aorender_gl)
     endif()

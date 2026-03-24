@@ -45,6 +45,9 @@
 #include "ui/UIManager.h"
 #include "utils/Log.h"
 
+// Audio
+#include "MiniaudioDevice.h"
+
 // Plugins
 #include "ao/ao_plugin.h"
 #include "ao/ui/screens/CharSelectScreen.h"
@@ -78,10 +81,8 @@ struct Engine {
     std::unique_ptr<RenderManager> render_mgr;
     std::unique_ptr<IScenePresenter> presenter;
     std::unique_ptr<GameThread> game_thread;
-    // TODO: AudioThread + mobile audio device.  The SDL app creates
-    // SDLAudioDevice + AudioThread for blips/sfx/music.  For Flutter/mobile we
-    // need a platform audio device (e.g. AAudio on Android, AVAudioEngine on
-    // iOS) before the AudioThread can be started.  Until then no audio plays.
+    MiniaudioDevice audio_device;
+    std::unique_ptr<AudioThread> audio_thread;
     bool default_mount_added = false;
 };
 
@@ -235,6 +236,11 @@ void ao_init(const char* base_path) {
     // Scene presenter + game thread (created but renderer may not exist yet)
     g_engine->presenter = ao::create_presenter();
 
+    // Audio — miniaudio backend (CoreAudio on iOS, AAudio on Android)
+    g_engine->audio_device.open();
+    g_engine->audio_thread =
+        std::make_unique<AudioThread>(g_engine->audio_device, MediaManager::instance().mounts_ref());
+
     Log::log_print(INFO, "ao_init: engine initialized");
 }
 
@@ -246,6 +252,9 @@ void ao_shutdown() {
         g_engine->net_thread->stop();
     if (g_engine->game_thread)
         g_engine->game_thread->stop();
+    if (g_engine->audio_thread)
+        g_engine->audio_thread->stop();
+    g_engine->audio_device.close();
     if (g_engine->http_pool)
         g_engine->http_pool->stop();
     MediaManager::instance().shutdown();
@@ -524,6 +533,15 @@ void ao_tick() {
     if (cr && !cr->is_loading() && cr->get_character_sheet()) {
         const auto& name = cr->get_character_name();
         int count = cr->get_character_sheet()->emote_count();
+
+        // Activate courtroom presenter for audio (blips, SFX, music).
+        // The SDL app does this in CourtroomController; we do it here.
+        static bool courtroom_activated = false;
+        if (!courtroom_activated && g_engine->presenter) {
+            g_engine->presenter->set_courtroom_active(true);
+            courtroom_activated = true;
+            Log::log_print(INFO, "ao_tick: courtroom presenter activated for audio");
+        }
 
         // Reset cache and IC state if character changed
         if (name != g_emote_icon_character) {
