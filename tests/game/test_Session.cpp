@@ -36,20 +36,20 @@ TEST(Session, DestructorClearsSessionCache) {
     MountManager mounts;
     AssetLibrary assets(mounts, 1024 * 1024);
 
-    // Load a shader (app-lifetime, embedded)
+    // Load a shader before the session — this is app-lifetime (session_id 0).
     assets.set_shader_backend("glsl");
     auto shader = assets.shader("shaders/text");
     ASSERT_NE(shader, nullptr);
 
     {
         Session session(mounts, assets);
-        // Assets loaded during the session are tagged with the session_id.
-        // We can't easily load an HTTP asset in a unit test, but we can
-        // verify the session sets and clears active_session correctly by
-        // checking that app-lifetime assets survive session teardown.
+        // Assets loaded during the session would be tagged with the session_id
+        // and cleared on destruction. The shader was loaded before the session
+        // so it should survive.
     }
 
-    // App-lifetime asset should still be accessible after session dies
-    auto still_cached = assets.get_cached("shaders/text");
+    // App-lifetime asset should still be accessible after session dies.
+    // Shader cache key includes the backend suffix.
+    auto still_cached = assets.get_cached("shaders/text:glsl");
     EXPECT_NE(still_cached, nullptr);
 }
