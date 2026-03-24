@@ -172,48 +172,20 @@ jobs:
       - name: Build native bridge
         run: cmake --build out/build/ios-sim-debug --target flutter-build -j $(sysctl -n hw.ncpu)
 
-      - name: Inspect build output
-        run: |
-          echo "=== Library locations ==="
-          find out/build/ios-sim-debug -name '*.a' | head -30
-          echo ""
-          echo "=== ao_bridge symbols ==="
-          LIB=$(find out/build/ios-sim-debug -name 'libao_bridge.a' | head -1)
-          echo "Found at: $LIB"
-          nm "$LIB" | grep ao_renderer || echo "ao_renderer symbols NOT found in libao_bridge.a"
-
       - name: Set up Flutter project
         working-directory: apps/flutter
         run: |
           flutter pub get
           mkdir -p ios/libs
-          # Symlink to build root; if Xcode generator, libs may be in a subdirectory
-          BUILD_DIR=$(dirname $(find ${{ github.workspace }}/out/build/ios-sim-debug -name 'libao_bridge.a' | head -1))
-          echo "Linking ios/libs/ios-sim -> $BUILD_DIR"
-          ln -sfn "$BUILD_DIR" ios/libs/ios-sim
+          ln -sfn ${{ github.workspace }}/out/build/ios-sim-debug ios/libs/ios-sim
 
       - name: Install CocoaPods
         working-directory: apps/flutter/ios
         run: pod install
-
-      - name: Verify xcconfig linkage
-        working-directory: apps/flutter/ios
-        run: |
-          echo "=== Debug.xcconfig ==="
-          cat Flutter/Debug.xcconfig
-          echo ""
-          echo "=== ao_native.xcconfig ==="
-          cat ao_native.xcconfig
-          echo ""
-          echo "=== Resolved OTHER_LDFLAGS ==="
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Debug -sdk iphonesimulator -showBuildSettings 2>/dev/null | grep -E 'OTHER_LDFLAGS|LIBRARY_SEARCH_PATHS|SRCROOT' || true
-          echo ""
-          echo "=== Symlink target ==="
-          ls -la libs/ios-sim/libao_bridge.a
 
       - name: Build iOS app (simulator, no codesign)
         working-directory: apps/flutter/ios
         run: |
           xcodebuild -workspace Runner.xcworkspace -scheme Runner \
             -configuration Debug -sdk iphonesimulator -arch arm64 \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -80
+            CODE_SIGNING_ALLOWED=NO build
