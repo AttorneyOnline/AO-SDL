@@ -161,26 +161,36 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Install tools
-        run: brew install ninja
-
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
       - name: Configure native bridge (iOS Simulator)
-        run: cmake --preset ios-sim-debug -G Ninja
+        run: cmake --preset ios-sim-debug
 
       - name: Build native bridge
         run: cmake --build out/build/ios-sim-debug --target flutter-build -j $(sysctl -n hw.ncpu)
+
+      - name: Inspect build output
+        run: |
+          echo "=== Library locations ==="
+          find out/build/ios-sim-debug -name '*.a' | head -30
+          echo ""
+          echo "=== ao_bridge symbols ==="
+          LIB=$(find out/build/ios-sim-debug -name 'libao_bridge.a' | head -1)
+          echo "Found at: $LIB"
+          nm "$LIB" | grep ao_renderer || echo "ao_renderer symbols NOT found in libao_bridge.a"
 
       - name: Set up Flutter project
         working-directory: apps/flutter
         run: |
           flutter pub get
           mkdir -p ios/libs
-          ln -sfn ${{ github.workspace }}/out/build/ios-sim-debug ios/libs/ios-sim
+          # Symlink to build root; if Xcode generator, libs may be in a subdirectory
+          BUILD_DIR=$(dirname $(find ${{ github.workspace }}/out/build/ios-sim-debug -name 'libao_bridge.a' | head -1))
+          echo "Linking ios/libs/ios-sim -> $BUILD_DIR"
+          ln -sfn "$BUILD_DIR" ios/libs/ios-sim
 
       - name: Install CocoaPods
         working-directory: apps/flutter/ios
