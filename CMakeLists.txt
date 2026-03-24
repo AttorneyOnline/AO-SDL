@@ -433,7 +433,7 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 
 if(NOT AO_BUILD_FLUTTER)
     add_subdirectory(apps/sdl)
-    # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+    add_subdirectory(apps/qt)    # ENABLE_THE_HORRORS
 endif()
 
 # --- ao_bridge — C API for Flutter/Dart FFI (mobile) -------------------------

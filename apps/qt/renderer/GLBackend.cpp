@@ -1,4 +1,6 @@
 #include "IGPUBackend.h"
+
+#include <QMetaEnum>
 #include <QOpenGLFunctions>
 #include <QSGRendererInterface>
 #include <QtQuick/QQuickWindow>
@@ -31,12 +33,24 @@ class GLBackend : public IGPUBackend {
             Qt::DirectConnection);
     }
 
-    void init_qml(QQuickWindow* window, IRenderer& /*renderer*/) override {
-        QObject::connect(
-            window_, &QQuickWindow::beforeRendering, window_, [this]() { begin_frame(); }, Qt::DirectConnection);
+    void init_qml(QQuickWindow* window, IRenderer& /*renderer*/,
+                   std::function<void()> render_cb) override {
+        render_cb_ = std::move(render_cb);
 
         QObject::connect(
-            window_, &QQuickWindow::afterRendering, window_, [this]() { present(); }, Qt::DirectConnection);
+            window_, &QQuickWindow::beforeRendering, window_,
+            [this]() {
+                window_->beginExternalCommands();
+                if (render_cb_)
+                    render_cb_();
+                window_->endExternalCommands();
+            },
+            Qt::DirectConnection);
+
+        QObject::connect(
+            window_, &QQuickWindow::afterRendering, window_,
+            [this]() { window_->update(); },
+            Qt::DirectConnection);
     }
 
     void shutdown() override {
@@ -45,17 +59,17 @@ class GLBackend : public IGPUBackend {
     }
 
     void begin_frame() override {
-        window_->beginExternalCommands();
+        // No-op: external commands are bracketed in the beforeRendering callback.
     }
 
     void present() override {
-        window_->endExternalCommands();
-        window_->update();
+        // No-op: Qt's scene graph handles the present/swap.
     }
 
   private:
     QQuickWindow* window_ = nullptr;
     QOpenGLContext* gl_context_ = nullptr;
+    std::function<void()> render_cb_;
 };
 
 void IGPUBackend::pre_init() {
