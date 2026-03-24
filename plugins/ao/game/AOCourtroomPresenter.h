@@ -1,22 +1,24 @@
 #pragma once
 
 #include "AOBackground.h"
-#include "AOBlipPlayer.h"
-#include "AOEmotePlayer.h"
+#include "AOMessagePlayer.h"
 #include "AOMusicPlayer.h"
+#include "AOSceneCompositor.h"
 #include "AOTextBox.h"
+#include "ActiveICState.h"
 #include "ICMessageQueue.h"
 #include "ao/asset/AOAssetLibrary.h"
 #include "ao/game/effects/FlashEffect.h"
 #include "ao/game/effects/ScreenshakeEffect.h"
 #include "ao/game/effects/ShaderEffect.h"
+#include "ao/game/effects/SlideEffect.h"
 #include "game/IScenePresenter.h"
 #include "game/TickProfiler.h"
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
 class ISceneEffect;
@@ -31,6 +33,11 @@ class AOCourtroomPresenter : public IScenePresenter {
         courtroom_active_.store(active, std::memory_order_release);
     }
 
+    void set_local_player(int char_id, bool slide_enabled) override {
+        own_char_id_ = char_id;
+        own_slide_enabled_ = slide_enabled;
+    }
+
     std::vector<ProfileEntry> tick_profile() const override {
         return profiler_.entries();
     }
@@ -40,46 +47,48 @@ class AOCourtroomPresenter : public IScenePresenter {
 
     std::unique_ptr<AOAssetLibrary> ao_assets;
     AOBackground background;
-    AOEmotePlayer emote_player;
     AOTextBox textbox;
     ICMessageQueue message_queue_;
 
-    // Per-IC-message state. Present while a message is active, cleared when
-    // the message queue moves on.
-    struct ActiveICState {
-        bool flip = false;
-        bool show_desk = true;
-        bool preanim_blocking = false;
-        std::string pending_showname;
-        std::string pending_message;
-        int pending_text_color = 0;
-        bool pending_additive = false;
-    };
     std::optional<ActiveICState> active_ic_;
+    std::optional<ActiveICState> departing_ic_; // held during slide transitions
 
-    AOBlipPlayer blip_player_;
+    AOSceneCompositor compositor_;
+    AOMessagePlayer message_player_;
     AOMusicPlayer music_player_;
-    int prev_chars_visible_ = 0;
     std::atomic<bool> courtroom_active_{false};
+    std::atomic<int> own_char_id_{-1};
+    std::atomic<bool> own_slide_enabled_{false};
 
     int evict_timer_ms = 0;
-    int theme_retry_ms_ = 0;
     float scene_time_s_ = 0; // monotonic time for shader effects
 
-    // Scene effects
+    // Scene effects — keyed by name so AOMessagePlayer can trigger by string.
+    // Slide is separate because it has a different lifecycle (not stopped on new message).
     ScreenshakeEffect screenshake_;
     FlashEffect flash_{BASE_W, BASE_H};
     ShaderEffect rainbow_{"shaders/rainbow", 5.0f, 5};
     ShaderEffect shatter_{"shaders/shatter", 4.0f, 5};
     ShaderEffect cube_{"shaders/cube", 0, 5};
+    SlideEffect slide_effect_;
+
+    struct NamedEffect {
+        const char* name;
+        ISceneEffect* effect;
+    };
+    std::array<NamedEffect, 5> message_effects_ = {{
+        {"screenshake", &screenshake_},
+        {"flash", &flash_},
+        {"rainbow", &rainbow_},
+        {"shatter", &shatter_},
+        {"cube", &cube_},
+    }};
 
     template <typename F>
     void for_each_effect(F&& fn) {
-        fn(screenshake_);
-        fn(flash_);
-        fn(rainbow_);
-        fn(shatter_);
-        fn(cube_);
+        for (auto& [name, effect] : message_effects_)
+            fn(*effect);
+        fn(slide_effect_);
     }
 
     // Profiler sections (indices set in constructor)

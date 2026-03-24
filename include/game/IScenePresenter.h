@@ -38,6 +38,11 @@ class IScenePresenter {
     virtual void set_courtroom_active(bool) {
     }
 
+    /// Set the local player's char_id and slide preference.
+    /// Used to force slide on our own echoed messages when the server strips the flag.
+    virtual void set_local_player(int /*char_id*/, bool /*slide_enabled*/) {
+    }
+
     struct ProfileEntry {
         const char* name;
         const std::atomic<int>* us;

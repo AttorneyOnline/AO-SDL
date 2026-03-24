@@ -272,7 +272,9 @@ AOPacketMS::AOPacketMS(const ICMessageData& d)
            ao_encode(d.showname), std::to_string(d.other_charid), ao_encode(d.self_offset), std::to_string(d.immediate),
            // 19-25: 2.8 extensions
            std::to_string(d.looping_sfx), std::to_string(d.screenshake), ao_encode(d.frame_screenshake),
-           ao_encode(d.frame_realization), ao_encode(d.frame_sfx), std::to_string(d.additive), ao_encode(d.effects)}) {
+           ao_encode(d.frame_realization), ao_encode(d.frame_sfx), std::to_string(d.additive), ao_encode(d.effects),
+           // 26-27: blipname + slide (client→server only; pair fields are server-added)
+           ao_encode(d.blipname), d.slide}) {
 }
 
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {
@@ -315,6 +317,9 @@ AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", 
             frame_sfx = ao_decode(fields[27]);
         if (fields.size() > 28)
             additive = fields[28] == "1";
+        // fields[29] = effects, fields[30] = blipname (not yet used)
+        if (fields.size() > 31)
+            slide = fields[31] == "1";
 
         // Legacy emote_mod remapping
         if (emote_mod == 4)

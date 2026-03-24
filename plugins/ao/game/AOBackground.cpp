@@ -40,6 +40,7 @@ void AOBackground::reload_if_needed(AOAssetLibrary& ao_assets) {
         return;
 
     ao_assets.prefetch_background(bg_name, pos);
+    ao_assets.engine_assets().prefetch_config("background/" + bg_name + "/design.ini");
 
     // Try loading the exact background without falling back to default.
     // If the real bg isn't available yet (HTTP pending), show the default

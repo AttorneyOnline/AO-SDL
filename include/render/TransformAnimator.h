@@ -9,6 +9,7 @@ enum class Easing {
     QUAD_IN,
     QUAD_OUT,
     QUAD_IN_OUT,
+    CUBIC_IN_OUT,
 };
 
 struct TransformKeyframe {

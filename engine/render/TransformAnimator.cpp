@@ -51,6 +51,12 @@ float TransformAnimator::ease(float t) const {
         if (t < 0.5f)
             return 2.0f * t * t;
         return -1.0f + (4.0f - 2.0f * t) * t;
+    case Easing::CUBIC_IN_OUT: {
+        float p = 2.0f * t - 2.0f;
+        if (t < 0.5f)
+            return 4.0f * t * t * t;
+        return 0.5f * p * p * p + 1.0f;
+    }
     }
     return t;
 }

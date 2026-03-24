@@ -231,6 +231,77 @@ std::string AOAssetLibrary::design_value(const std::string& key) {
     return {};
 }
 
+// Read a value from background/{bg_name}/design.ini.
+// AO2 design.ini uses QSettings format where "/" is a section separator:
+//   "def/origin" → section "def", key "origin"
+//   "court:def/origin" → section "court:def", key "origin"
+static std::string bg_design_value(AssetLibrary& assets, const std::string& bg_name, const std::string& key) {
+    auto doc = assets.config("background/" + bg_name + "/design.ini");
+    if (!doc) {
+        Log::log_print(DEBUG, "bg_design_value: no design.ini for bg='%s'", bg_name.c_str());
+        return {};
+    }
+
+    // Split key on "/" into section + key (QSettings convention)
+    auto slash = key.find('/');
+    std::string section = slash != std::string::npos ? key.substr(0, slash) : "";
+    std::string subkey = slash != std::string::npos ? key.substr(slash + 1) : key;
+
+    // Dump available sections on first miss for debugging
+    auto it = doc->find(section);
+    if (it == doc->end()) {
+        std::string sections;
+        for (const auto& [s, _] : *doc)
+            sections += "'" + s + "' ";
+        Log::log_print(DEBUG, "bg_design_value: section '%s' not found in design.ini (have: %s)", section.c_str(),
+                       sections.c_str());
+        return {};
+    }
+    auto val = it->second.find(subkey);
+    if (val == it->second.end()) {
+        std::string keys;
+        for (const auto& [k, _] : it->second)
+            keys += "'" + k + "' ";
+        Log::log_print(DEBUG, "bg_design_value: key '%s' not found in section '%s' (have: %s)", subkey.c_str(),
+                       section.c_str(), keys.c_str());
+        return {};
+    }
+    return val->second;
+}
+
+std::optional<int> AOAssetLibrary::position_origin(const std::string& bg_name, const std::string& position) {
+    // Try "court:{position}/origin" first, then "{position}/origin"
+    std::string val = bg_design_value(assets, bg_name, "court:" + position + "/origin");
+    if (val.empty())
+        val = bg_design_value(assets, bg_name, position + "/origin");
+    if (val.empty())
+        return std::nullopt;
+    try {
+        return std::stoi(val);
+    }
+    catch (...) {
+        return std::nullopt;
+    }
+}
+
+static constexpr int DEFAULT_SLIDE_MS = 600;
+
+int AOAssetLibrary::slide_duration_ms(const std::string& bg_name, const std::string& from_pos,
+                                      const std::string& to_pos) {
+    // Try "court:{from}/slide_ms_{to}" first, then "{from}/slide_ms_{to}"
+    std::string val = bg_design_value(assets, bg_name, "court:" + from_pos + "/slide_ms_" + to_pos);
+    if (val.empty())
+        val = bg_design_value(assets, bg_name, from_pos + "/slide_ms_" + to_pos);
+    if (val.empty())
+        return DEFAULT_SLIDE_MS;
+    try {
+        return std::stoi(val);
+    }
+    catch (...) {
+        return DEFAULT_SLIDE_MS;
+    }
+}
+
 AOFontSpec AOAssetLibrary::message_font_spec() {
     ensure_configs();
     AOFontSpec spec;
