@@ -28,7 +28,8 @@ class Session {
     Session& operator=(const Session&) = delete;
 
     /// Add an HTTP mount for this session. The mount is removed on destruction.
-    MountManager::MountHandle add_http_mount(const std::string& url, HttpPool& pool);
+    /// @param priority Mount search priority (lower = searched first). Default 200.
+    MountManager::MountHandle add_http_mount(const std::string& url, HttpPool& pool, int priority = 200);
 
     uint32_t session_id() const {
         return session_id_;

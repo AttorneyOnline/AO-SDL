@@ -15,7 +15,7 @@ MountManager::MountManager() {
     // Embedded assets always available, even before load_mounts is called
     auto embedded = std::make_unique<MountEmbedded>();
     embedded->load();
-    loaded_mounts.push_back({0, std::move(embedded)});
+    loaded_mounts.push_back({0, std::move(embedded), 100});
 }
 
 void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_mount_path) {
@@ -36,7 +36,7 @@ void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_
             }
 
             mount->load();
-            loaded_mounts.push_back({0, std::move(mount)});
+            loaded_mounts.push_back({0, std::move(mount), 0});
         }
         catch (const std::exception& e) {
             Log::log_print(WARNING,
@@ -47,14 +47,17 @@ void MountManager::load_mounts(const std::vector<std::filesystem::path>& target_
     // Embedded assets after local mounts, before HTTP
     auto embedded = std::make_unique<MountEmbedded>();
     embedded->load();
-    loaded_mounts.push_back({0, std::move(embedded)});
+    loaded_mounts.push_back({0, std::move(embedded), 100});
 }
 
-MountManager::MountHandle MountManager::add_mount(std::unique_ptr<Mount> mount) {
+MountManager::MountHandle MountManager::add_mount(std::unique_ptr<Mount> mount, int priority) {
     std::unique_lock<std::shared_mutex> locker(lock);
     mount->load();
     MountHandle handle = next_handle_++;
-    loaded_mounts.push_back({handle, std::move(mount)});
+    // Insert before the first entry with strictly greater priority (stable within same priority).
+    auto pos = std::find_if(loaded_mounts.begin(), loaded_mounts.end(),
+                            [priority](const MountEntry& e) { return e.priority > priority; });
+    loaded_mounts.insert(pos, {handle, std::move(mount), priority});
     return handle;
 }
 

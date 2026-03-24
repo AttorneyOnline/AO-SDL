@@ -33,10 +33,11 @@ Session::~Session() {
     Log::log_print(INFO, "Session %u ended (removed %zu mount(s))", session_id_, mount_handles_.size());
 }
 
-MountManager::MountHandle Session::add_http_mount(const std::string& url, HttpPool& pool) {
+MountManager::MountHandle Session::add_http_mount(const std::string& url, HttpPool& pool, int priority) {
     auto mount = std::make_unique<MountHttp>(url, pool);
-    auto handle = mounts_.add_mount(std::move(mount));
+    auto handle = mounts_.add_mount(std::move(mount), priority);
     mount_handles_.push_back(handle);
-    Log::log_print(INFO, "Session %u: added HTTP mount %s (handle %u)", session_id_, url.c_str(), handle);
+    Log::log_print(INFO, "Session %u: added HTTP mount %s (handle %u, priority %d)", session_id_, url.c_str(), handle,
+                   priority);
     return handle;
 }

@@ -111,19 +111,22 @@ int main(int argc, char* argv[]) {
     game_window.set_frame_callback([&http_pool, &active_session]() {
         http_pool.poll();
 
-        // Session start: network thread connected to a server
+        // Session start: network thread connected to a server.
+        // Add the global fallback mount at low priority so server-specific
+        // mounts (added on ASS packets) are always searched first.
         auto& start_ch = EventManager::instance().get_channel<SessionStartEvent>();
         if (start_ch.get_event()) {
             active_session =
                 std::make_unique<Session>(MediaManager::instance().mounts_ref(), MediaManager::instance().assets());
+            active_session->add_http_mount("https://attorneyoffline.de/base/", http_pool, 300);
         }
 
-        // When the server sends an asset URL (ASS packet), add HTTP mounts to the session.
+        // When the server sends an asset URL (ASS packet), add its HTTP mount
+        // at default priority (200), which is higher than the fallback (300).
         auto& asset_ch = EventManager::instance().get_channel<AssetUrlEvent>();
         while (auto ev = asset_ch.get_event()) {
             if (active_session) {
                 active_session->add_http_mount(ev->url(), http_pool);
-                active_session->add_http_mount("https://attorneyoffline.de/base/", http_pool);
             }
         }
 
