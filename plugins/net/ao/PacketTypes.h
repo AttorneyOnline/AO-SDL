@@ -264,6 +264,7 @@ class AOPacketMS : public AOPacket {
     bool sfx_looping = false;
     std::string frame_sfx;
     bool immediate = false;
+    bool slide = false;
 
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 15;

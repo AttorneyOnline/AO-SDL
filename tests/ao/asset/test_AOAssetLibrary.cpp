@@ -1,6 +1,7 @@
 #include "ao/asset/AOAssetLibrary.h"
 
 #include "asset/AssetLibrary.h"
+#include "asset/Mount.h"
 #include "asset/MountManager.h"
 
 #include <gtest/gtest.h>
@@ -152,4 +153,63 @@ TEST_F(AOAssetLibraryTest, TextColorsIndex4IsBlueAndNotTalking) {
 TEST_F(AOAssetLibraryTest, FindFontReturnsNulloptWithNoMounts) {
     auto result = ao_assets.find_font("arial");
     EXPECT_FALSE(result.has_value());
+}
+
+// ---------------------------------------------------------------------------
+// Position origin and slide duration
+// ---------------------------------------------------------------------------
+
+namespace {
+
+class InMemoryMount : public Mount {
+  public:
+    InMemoryMount() : Mount("memory://") {
+    }
+    void add(const std::string& path, const std::string& content) {
+        files_[path] = {content.begin(), content.end()};
+    }
+    void load() override {
+    }
+    bool seek_file(const std::string& path) const override {
+        return files_.count(path) > 0;
+    }
+    std::vector<uint8_t> fetch_data(const std::string& path) override {
+        auto it = files_.find(path);
+        return it != files_.end() ? it->second : std::vector<uint8_t>{};
+    }
+
+  protected:
+    void load_cache() override {
+    }
+    void save_cache() override {
+    }
+
+  private:
+    std::unordered_map<std::string, std::vector<uint8_t>> files_;
+};
+
+} // namespace
+
+TEST(AOAssetLibraryPositionData, SlideDurationDefaultWithNoConfig) {
+    MountManager mounts;
+    AssetLibrary engine(mounts, 0);
+    AOAssetLibrary ao(engine);
+    // Returns a sensible default (600ms) when no design.ini exists
+    EXPECT_GT(ao.slide_duration_ms("gs4", "def", "wit"), 0);
+}
+
+TEST(AOAssetLibraryPositionData, SlideDurationParsed) {
+    MountManager mounts;
+    auto mount = std::make_unique<InMemoryMount>();
+    // QSettings INI format: "def/slide_ms_wit" becomes section [def], key slide_ms_wit
+    mount->add("background/gs4/design.ini", "[def]\nslide_ms_wit = 800\n[wit]\nslide_ms_def = 600\n");
+    mounts.add_mount(std::move(mount));
+
+    AssetLibrary engine(mounts, 0);
+    AOAssetLibrary ao(engine);
+
+    EXPECT_EQ(ao.slide_duration_ms("gs4", "def", "wit"), 800);
+    EXPECT_EQ(ao.slide_duration_ms("gs4", "wit", "def"), 600);
+    // def→pro not in config, but still returns default
+    EXPECT_GT(ao.slide_duration_ms("gs4", "def", "pro"), 0);
 }

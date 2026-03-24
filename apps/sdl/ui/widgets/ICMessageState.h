@@ -40,4 +40,5 @@ struct ICMessageState {
     bool realization = false;
     bool screenshake = false;
     bool additive = false;
+    bool slide = false;
 };

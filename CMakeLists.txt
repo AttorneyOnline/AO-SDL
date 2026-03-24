@@ -420,6 +420,8 @@ add_library(ao_game STATIC
     plugins/ao/asset/AOCharacterSheet.cpp
     plugins/ao/game/AOBlipPlayer.cpp
     plugins/ao/game/AOCourtroomPresenter.cpp
+    plugins/ao/game/AOSceneCompositor.cpp
+    plugins/ao/game/AOMessagePlayer.cpp
     plugins/ao/game/AOMusicPlayer.cpp
     plugins/ao/game/ICMessageQueue.cpp
     plugins/ao/game/AOBackground.cpp
@@ -427,6 +429,7 @@ add_library(ao_game STATIC
     plugins/ao/game/AOTextBox.cpp
     plugins/ao/game/AOTextProcessor.cpp
     plugins/ao/game/effects/ScreenshakeEffect.cpp
+    plugins/ao/game/effects/SlideEffect.cpp
     plugins/ao/game/effects/FlashEffect.cpp
     plugins/ao/game/effects/ShaderEffect.cpp
 )

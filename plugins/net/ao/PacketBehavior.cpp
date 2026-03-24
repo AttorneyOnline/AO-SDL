@@ -172,7 +172,7 @@ void AOPacketMS::handle(AOClient& cli) {
     EventManager::instance().get_channel<ICMessageEvent>().publish(ICMessageEvent(
         character, emote, pre_emote, message, showname, side, static_cast<EmoteMod>(emote_mod),
         static_cast<DeskMod>(desk_mod), flip, char_id, text_color, objection_mod, screenshake, realization, additive,
-        frame_screenshake, sfx_name, sfx_delay, sfx_looping, frame_sfx, immediate));
+        frame_screenshake, sfx_name, sfx_delay, sfx_looping, frame_sfx, immediate, slide));
 }
 
 void AOPacketBN::handle(AOClient& cli) {

@@ -35,6 +35,13 @@ class RenderState {
     LayerGroup get_layer_group(int id);
 
     /**
+     * @brief Get a mutable pointer to a LayerGroup by its identifier.
+     * @param id Identifier of the requested group.
+     * @return Pointer to the LayerGroup, or nullptr if not found.
+     */
+    LayerGroup* get_mutable_layer_group(int id);
+
+    /**
      * @brief Get all layer groups.
      * @return A const copy of the internal map of LayerGroups keyed by id.
      */

@@ -20,6 +20,8 @@ class ISceneEffect {
     virtual void tick(int delta_ms) = 0;
 
     /// Apply the effect's current state to the scene.
+    /// Some effects (e.g. SlideEffect) use specialized apply methods for
+    /// multi-group scenes and implement this as a no-op.
     virtual void apply(LayerGroup& scene) = 0;
 
     /// Whether the effect is currently active (playing or needs to apply).

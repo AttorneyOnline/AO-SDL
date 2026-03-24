@@ -80,6 +80,14 @@ class AOAssetLibrary {
     /// Prefetch background images for a position (legacy + modern names).
     void prefetch_background(const std::string& name, const std::string& position, int priority = 3);
 
+    /// Pixel origin for a position on the background (from background/{name}/design.ini).
+    /// Used to determine slide direction. Returns nullopt if not configured.
+    std::optional<int> position_origin(const std::string& bg_name, const std::string& position);
+
+    /// Transition duration in ms between two positions (from background/{name}/design.ini).
+    /// Returns a default (600ms) if not configured.
+    int slide_duration_ms(const std::string& bg_name, const std::string& from_pos, const std::string& to_pos);
+
     // -------------------------------------------------------------------------
     // Theme / UI
     // -------------------------------------------------------------------------

@@ -353,6 +353,13 @@ void CourtroomController::render() {
 
     ImGui::End();
 
+    // Keep presenter in sync with local player state (slide checkbox, char_id)
+    {
+        auto& ctx = DebugContext::instance();
+        if (ctx.presenter)
+            ctx.presenter->set_local_player(ic_state_.char_id, ic_state_.slide);
+    }
+
     // Floating debug window (toggled by /debug)
     if (debug_open_) {
         ImGui::SetNextWindowSize(ImVec2(420, 600), ImGuiCond_FirstUseEver);

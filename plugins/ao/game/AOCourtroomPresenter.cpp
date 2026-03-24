@@ -1,44 +1,12 @@
 #include "ao/game/AOCourtroomPresenter.h"
 
-#include "ao/event/ICLogEvent.h"
 #include "ao/event/ICMessageEvent.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
-#include "asset/ShaderAsset.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
-#include "event/PlaySFXEvent.h"
-#include "render/Layer.h"
 #include "render/RenderState.h"
 #include "utils/Log.h"
-
-#include <chrono>
-#include <cstring>
-
-/// Provides text color uniforms (u_text_r/g/b) to the text shader.
-class TextColorProvider : public ShaderUniformProvider {
-  public:
-    TextColorProvider(float r, float g, float b) : r_(r), g_(g), b_(b) {
-    }
-    std::unordered_map<std::string, UniformValue> get_uniforms() const override {
-        return {{"u_text_r", r_}, {"u_text_g", g_}, {"u_text_b", b_}};
-    }
-
-  private:
-    float r_, g_, b_;
-};
-
-class RainbowTextProvider : public ShaderUniformProvider {
-  public:
-    RainbowTextProvider(float time) : time_(time) {
-    }
-    std::unordered_map<std::string, UniformValue> get_uniforms() const override {
-        return {{"u_time", time_}};
-    }
-
-  private:
-    float time_;
-};
 
 AOCourtroomPresenter::AOCourtroomPresenter()
     : prof_events_(profiler_.add_section("Events")), prof_assets_(profiler_.add_section("Assets")),
@@ -77,106 +45,78 @@ void AOCourtroomPresenter::init() {
 }
 
 void AOCourtroomPresenter::play_message(const ICMessage& msg) {
-    // Stop all active effects before starting a new message
-    for_each_effect([](auto& e) { e.stop(); });
+    // Stop message effects (not slide — it has its own lifecycle)
+    for (auto& [name, effect] : message_effects_)
+        effect->stop();
 
-    active_ic_.emplace();
-    auto& ic = *active_ic_;
+    // Slide if the sender requested it (msg.slide) and the position changed.
+    // For our own messages, the flag may be force-enabled in the event drain
+    // (own_slide_enabled_) since the server can strip it from the echo.
+    std::string old_position = active_ic_ ? active_ic_->position : "";
+    std::string new_position = msg.side;
+    bool should_slide = false;
+
+    if (active_ic_ && msg.slide && !old_position.empty() && !new_position.empty() && old_position != new_position &&
+        msg.emote_mod != EmoteMod::ZOOM && msg.emote_mod != EmoteMod::PREANIM_ZOOM) {
+        int duration = ao_assets->slide_duration_ms(background.background(), old_position, new_position);
+        Log::log_print(DEBUG, "Slide check: bg='%s' %s→%s duration=%d", background.background().c_str(),
+                       old_position.c_str(), new_position.c_str(), duration);
+
+        if (duration > 0) {
+            departing_ic_ = std::move(active_ic_);
+            departing_ic_->bg_asset = background.bg_asset();
+            departing_ic_->desk_asset = background.desk_asset();
+
+            // Direction: if new origin > old origin, camera moves right (departing exits left).
+            // Default to LEFT if origins aren't configured.
+            auto from_origin = ao_assets->position_origin(background.background(), old_position);
+            auto to_origin = ao_assets->position_origin(background.background(), new_position);
+            auto dir = SlideEffect::Direction::LEFT;
+            if (from_origin && to_origin && *to_origin < *from_origin)
+                dir = SlideEffect::Direction::RIGHT;
+
+            slide_effect_.configure(dir, duration);
+            slide_effect_.trigger();
+            should_slide = true;
+            Log::log_print(DEBUG, "Slide: %s→%s (%dms, %s)", old_position.c_str(), new_position.c_str(), duration,
+                           dir == SlideEffect::Direction::LEFT ? "left" : "right");
+        }
+    }
+
+    if (!should_slide)
+        departing_ic_.reset();
 
     if (!msg.side.empty())
         background.set_position(msg.side);
 
-    if (msg.desk_mod == DeskMod::CHAT) {
-        // Default: desk shown for def/pro/wit, hidden for other positions
-        ic.show_desk = (msg.side == "def" || msg.side == "pro" || msg.side == "wit");
+    bool active = courtroom_active_.load(std::memory_order_acquire);
+    auto result = message_player_.play(msg, *ao_assets, textbox, active);
+
+    // During a slide, suppress the textbox until the slide finishes.
+    // Store the text data so it can be started after the slide completes.
+    if (should_slide && !msg.message.empty()) {
+        // Override any preanim blocking — slide takes priority and defers
+        // the textbox until the slide finishes instead.
+        result.ic.preanim_blocking = false;
+        result.ic.slide_pending = true;
+        result.ic.pending_showname = result.resolved_showname;
+        result.ic.pending_message = msg.message;
+        result.ic.pending_text_color = msg.text_color;
+        result.ic.pending_additive = msg.additive;
+        textbox.start_message("", "", 0, ao_assets->text_colors());
     }
-    else {
-        ic.show_desk = (msg.desk_mod == DeskMod::SHOW || msg.desk_mod == DeskMod::EMOTE_ONLY ||
-                        msg.desk_mod == DeskMod::EMOTE_ONLY_EX);
-    }
-    ic.flip = msg.flip;
 
-    // Prefetch character assets via HTTP
-    ao_assets->prefetch_character(msg.character, msg.emote, msg.pre_emote, 2);
+    active_ic_.emplace(std::move(result.ic));
 
-    // Always load the character sheet so char.ini is promoted from the HTTP
-    // raw cache into the asset cache (survives release_all_http eviction).
-    auto sheet = ao_assets->character_sheet(msg.character);
-
-    // Resolve showname: prefer the one from the message, fall back to char.ini
-    std::string showname = msg.showname;
-    if (showname.empty())
-        showname = sheet ? sheet->showname() : msg.character;
-
-    // Check if message text is blank (whitespace-only)
-    bool blank = true;
-    for (char c : msg.message) {
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-            blank = false;
-            break;
+    // Fire scene effects by name
+    for (const auto& name : result.effects) {
+        for (auto& [ename, effect] : message_effects_) {
+            if (name == ename) {
+                effect->trigger();
+                break;
+            }
         }
     }
-
-    // Blank messages skip pre-anim and go straight to idle
-    if (msg.message.empty() || blank) {
-        textbox.start_message(showname, msg.message, msg.text_color, ao_assets->text_colors(), msg.additive);
-        emote_player.start(*ao_assets, msg.character, msg.emote, "", EmoteMod::IDLE);
-        emote_player.transition_to_idle();
-    }
-    else {
-        emote_player.start(*ao_assets, msg.character, msg.emote, msg.pre_emote, msg.emote_mod);
-
-        // Blocking preanim: defer textbox until preanim finishes
-        if (emote_player.state() == AOEmotePlayer::State::PREANIM && !msg.immediate) {
-            ic.preanim_blocking = true;
-            ic.pending_showname = showname;
-            ic.pending_message = msg.message;
-            ic.pending_text_color = msg.text_color;
-            ic.pending_additive = msg.additive;
-            // Keep textbox inactive during preanim
-            textbox.start_message("", "", 0, ao_assets->text_colors());
-        }
-        else {
-            // Immediate (no-int-pre) or no preanim: start text right away
-            textbox.start_message(showname, msg.message, msg.text_color, ao_assets->text_colors(), msg.additive);
-        }
-    }
-
-    if (msg.screenshake)
-        screenshake_.trigger();
-    if (msg.realization)
-        flash_.trigger();
-    if (msg.message.find("rainbow") != std::string::npos)
-        rainbow_.trigger();
-    if (msg.message.find("glass") != std::string::npos)
-        shatter_.trigger();
-    if (msg.message.find("cube") != std::string::npos)
-        cube_.trigger();
-
-    // Resolve SFX: use packet sfx_name, fall back to char.ini emote SFX
-    std::string sfx_name = msg.sfx_name;
-    bool sfx_looping = msg.sfx_looping;
-    if ((sfx_name.empty() || sfx_name == "0" || sfx_name == "1") && sheet) {
-        auto* emote_entry = sheet->find_emote(msg.emote);
-        if (emote_entry && !emote_entry->sfx_name.empty() && emote_entry->sfx_name != "0") {
-            sfx_name = emote_entry->sfx_name;
-            sfx_looping = emote_entry->sfx_looping;
-        }
-    }
-
-    // Load and play SFX
-    if (!sfx_name.empty() && sfx_name != "0" && sfx_name != "1") {
-        auto sfx_asset = ao_assets->sound_effect(sfx_name);
-        if (sfx_asset && courtroom_active_.load(std::memory_order_acquire)) {
-            EventManager::instance().get_channel<PlaySFXEvent>().publish(PlaySFXEvent(sfx_asset, sfx_looping, 1.0f));
-        }
-    }
-
-    // Initialize blip player for this character
-    blip_player_.start(*ao_assets, msg.character);
-    prev_chars_visible_ = 0;
-
-    EventManager::instance().get_channel<ICLogEvent>().publish(ICLogEvent(showname, msg.message, msg.text_color));
 }
 
 RenderState AOCourtroomPresenter::tick(uint64_t t) {
@@ -202,21 +142,28 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
             // Area change: clear IC state so only the background shows
             textbox.start_message("", "", 0, ao_assets->text_colors());
             message_queue_.clear();
-            emote_player.stop();
             active_ic_.reset();
+            departing_ic_.reset();
             for_each_effect([](auto& e) { e.stop(); });
         }
 
         auto& ic_ch = EventManager::instance().get_channel<ICMessageEvent>();
         while (auto ev = ic_ch.get_event()) {
-            message_queue_.enqueue(ICMessage::from_event(*ev));
+            auto msg = ICMessage::from_event(*ev);
+            // Server may strip the slide field from the echo. If we have slide
+            // enabled and this is our own message, force it on.
+            if (!msg.slide && own_slide_enabled_ && msg.char_id == own_char_id_)
+                msg.slide = true;
+            message_queue_.enqueue(std::move(msg));
         }
 
         // Advance queue — dequeue next message when current one finishes.
-        // Don't advance during a blocking preanim (textbox is INACTIVE but message isn't done).
+        // Don't advance during a blocking preanim or slide (textbox is INACTIVE but message isn't done).
         bool preanim_blocking = active_ic_ && active_ic_->preanim_blocking;
-        bool text_done = !preanim_blocking && (textbox.text_state() == AOTextBox::TextState::DONE ||
-                                               textbox.text_state() == AOTextBox::TextState::INACTIVE);
+        bool slide_blocking = active_ic_ && active_ic_->slide_pending;
+        bool text_done = !preanim_blocking && !slide_blocking &&
+                         (textbox.text_state() == AOTextBox::TextState::DONE ||
+                          textbox.text_state() == AOTextBox::TextState::INACTIVE);
         message_queue_.tick(delta_ms, text_done);
 
         if (auto msg = message_queue_.next()) {
@@ -234,30 +181,38 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
         }
 
         background.reload_if_needed(*ao_assets);
-        emote_player.retry_load(*ao_assets);
+        if (active_ic_)
+            active_ic_->emote_player.retry_load(*ao_assets);
+        if (departing_ic_)
+            departing_ic_->emote_player.retry_load(*ao_assets);
     }
 
     // ---- Animation ----
     {
         auto _ = profiler_.scope(prof_animation_);
 
-        auto prev_emote_state = emote_player.state();
-        emote_player.tick(delta_ms);
-
-        // Blocking preanim just finished → start the deferred textbox
-        if (active_ic_ && active_ic_->preanim_blocking && prev_emote_state == AOEmotePlayer::State::PREANIM &&
-            emote_player.state() == AOEmotePlayer::State::TALKING) {
+        if (active_ic_) {
             auto& ic = *active_ic_;
-            ic.preanim_blocking = false;
-            textbox.start_message(ic.pending_showname, ic.pending_message, ic.pending_text_color,
-                                  ao_assets->text_colors(), ic.pending_additive);
-            prev_chars_visible_ = 0;
+            auto prev_emote_state = ic.emote_player.state();
+            ic.emote_player.tick(delta_ms);
+
+            // Blocking preanim just finished → start the deferred textbox
+            if (ic.preanim_blocking && prev_emote_state == AOEmotePlayer::State::PREANIM &&
+                ic.emote_player.state() == AOEmotePlayer::State::TALKING) {
+                ic.preanim_blocking = false;
+                textbox.start_message(ic.pending_showname, ic.pending_message, ic.pending_text_color,
+                                      ao_assets->text_colors(), ic.pending_additive);
+                ic.prev_chars_visible = 0;
+            }
+
+            if (textbox.text_state() == AOTextBox::TextState::DONE &&
+                ic.emote_player.state() == AOEmotePlayer::State::TALKING) {
+                ic.emote_player.transition_to_idle();
+            }
         }
 
-        if (textbox.text_state() == AOTextBox::TextState::DONE &&
-            emote_player.state() == AOEmotePlayer::State::TALKING) {
-            emote_player.transition_to_idle();
-        }
+        if (departing_ic_)
+            departing_ic_->emote_player.tick(delta_ms);
     }
 
     // ---- Textbox ----
@@ -280,17 +235,41 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
 
         music_player_.tick(active);
 
-        // Use text_advanced instead of is_talking(): the textbox may have
-        // already transitioned to DONE (e.g. single-char message) by the
-        // time we get here, but blips should still play for the new chars.
-        blip_player_.tick(*ao_assets, prev_chars_visible_, cur_chars, textbox.current_msg(), text_advanced, active);
-        prev_chars_visible_ = cur_chars;
+        if (active_ic_) {
+            auto& ic = *active_ic_;
+            // Use text_advanced instead of is_talking(): the textbox may have
+            // already transitioned to DONE (e.g. single-char message) by the
+            // time we get here, but blips should still play for the new chars.
+            ic.blip_player.tick(*ao_assets, ic.prev_chars_visible, cur_chars, textbox.current_msg(), text_advanced,
+                                active);
+            ic.prev_chars_visible = cur_chars;
+        }
     }
 
     // ---- Effects ----
     {
         auto _ = profiler_.scope(prof_effects_);
         for_each_effect([&](auto& e) { e.tick(delta_ms); });
+
+        // Clean up departing scene after the pan finishes. needs_departing_scene()
+        // is true during PRE_DELAY and SLIDING, false during POST_DELAY and INACTIVE.
+        if (departing_ic_ && !slide_effect_.needs_departing_scene()) {
+            departing_ic_.reset();
+            if (active_ic_ && active_ic_->slide_pending) {
+                active_ic_->slide_pending = false;
+                // If the emote is still in preanim, chain into preanim blocking
+                // instead of starting the textbox immediately.
+                if (active_ic_->emote_player.state() == AOEmotePlayer::State::PREANIM) {
+                    active_ic_->preanim_blocking = true;
+                }
+                else {
+                    textbox.start_message(active_ic_->pending_showname, active_ic_->pending_message,
+                                          active_ic_->pending_text_color, ao_assets->text_colors(),
+                                          active_ic_->pending_additive);
+                    active_ic_->prev_chars_visible = 0;
+                }
+            }
+        }
     }
 
     // ---- Hint AssetCache Evictions ----
@@ -312,80 +291,35 @@ RenderState AOCourtroomPresenter::tick(uint64_t t) {
     {
         auto _ = profiler_.scope(prof_compose_);
 
-        LayerGroup scene;
+        state = compositor_.compose(background, active_ic_ ? &*active_ic_ : nullptr,
+                                    departing_ic_ ? &*departing_ic_ : nullptr, textbox, scene_time_s_);
 
-        if (background.bg_asset()) {
-            scene.add_layer(0, Layer(background.bg_asset(), 0, 0));
-        }
-
-        if (emote_player.has_frame()) {
-            Layer char_layer(emote_player.asset(), emote_player.current_frame_index(), 5);
-            // Preserve sprite aspect ratio: lock height to viewport, scale width proportionally.
-            float sprite_aspect = (float)emote_player.asset()->width() / (float)emote_player.asset()->height();
-            float viewport_aspect = (float)BASE_W / (float)BASE_H;
-            char_layer.transform().scale({sprite_aspect / viewport_aspect, 1.0f});
-            scene.add_layer(5, std::move(char_layer));
-        }
-
-        if (background.desk_asset() && active_ic_ && active_ic_->show_desk) {
-            scene.add_layer(10, Layer(background.desk_asset(), 0, 10));
-        }
-
-        if (textbox.text_state() != AOTextBox::TextState::INACTIVE) {
-            // Chatbox background — positioned via transform at the chatbox rect
-            auto chatbox_bg = textbox.chatbox_background();
-            if (chatbox_bg && chatbox_bg->frame_count() > 0) {
-                const auto& rect = textbox.chatbox_position();
-                float ndc_w = (float)chatbox_bg->width() / BASE_W * 2.0f;
-                float ndc_h = (float)chatbox_bg->height() / BASE_H * 2.0f;
-                float ndc_x = ((float)rect.x / BASE_W) * 2.0f - 1.0f + ndc_w * 0.5f;
-                float ndc_y = 1.0f - ((float)rect.y / BASE_H) * 2.0f - ndc_h * 0.5f;
-
-                Layer bg_layer(chatbox_bg, 0, 20);
-                bg_layer.transform().scale({ndc_w * 0.5f, ndc_h * 0.5f});
-                bg_layer.transform().translate({ndc_x, ndc_y});
-                scene.add_layer(20, std::move(bg_layer));
-            }
-
-            // GPU text mesh
-            auto atlas = textbox.message_atlas();
-            auto mesh = textbox.message_mesh();
-            auto shader = textbox.text_shader();
-            if (atlas && mesh && mesh->index_count() > 0 && shader) {
-                // Per-vertex color is baked into the mesh by TextMeshBuilder.
-                // Rainbow characters use a sentinel vertex color; the shader
-                // needs u_time to animate them.
-                shader->set_uniform_provider(std::make_shared<RainbowTextProvider>(scene_time_s_));
-
-                Layer text_layer(atlas, 0, 21);
-                text_layer.set_mesh(mesh);
-                text_layer.set_shader(shader);
-                scene.add_layer(21, std::move(text_layer));
+        if (departing_ic_) {
+            // Slide: apply out/in transforms to separate layer groups
+            auto* departing_group = state.get_mutable_layer_group(0);
+            auto* arriving_group = state.get_mutable_layer_group(1);
+            if (departing_group && slide_effect_.is_active())
+                slide_effect_.apply_out(*departing_group);
+            if (arriving_group && slide_effect_.is_active())
+                slide_effect_.apply_in(*arriving_group);
+            // Apply message effects to the arriving group
+            if (arriving_group) {
+                for (auto& [name, effect] : message_effects_) {
+                    if (effect->is_active())
+                        effect->apply(*arriving_group);
+                }
             }
         }
-
-        // Nameplate: rendered once, positioned and scaled via GPU transform
-        auto nameplate = textbox.get_nameplate();
-        if (nameplate && textbox.text_state() != AOTextBox::TextState::INACTIVE) {
-            auto nl = textbox.nameplate_layout();
-
-            float ndc_w = (float)nameplate->width() * nl.scale / BASE_W * 2.0f;
-            float ndc_h = (float)nameplate->height() / (float)BASE_H * 2.0f;
-            float ndc_x = ((float)nl.x / BASE_W) * 2.0f - 1.0f + ndc_w * 0.5f;
-            float ndc_y = 1.0f - ((float)nl.y / BASE_H) * 2.0f - ndc_h * 0.5f;
-
-            Layer nameplate_layer(nameplate, 0, 25);
-            nameplate_layer.transform().scale({ndc_w * 0.5f, ndc_h * 0.5f});
-            nameplate_layer.transform().translate({ndc_x, ndc_y});
-            scene.add_layer(25, std::move(nameplate_layer));
+        else {
+            // Normal: apply all effects to the single layer group
+            auto* scene = state.get_mutable_layer_group(0);
+            if (scene) {
+                for_each_effect([&](auto& e) {
+                    if (e.is_active())
+                        e.apply(*scene);
+                });
+            }
         }
-
-        for_each_effect([&](auto& e) {
-            if (e.is_active())
-                e.apply(scene);
-        });
-
-        state.add_layer_group(0, scene);
     }
 
     return state;
