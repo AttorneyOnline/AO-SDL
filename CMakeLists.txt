@@ -489,9 +489,10 @@ if(AO_BUILD_FLUTTER)
         target_link_libraries(ao_bridge PRIVATE aorender_gl)
     endif()
 
-    # flutter-build: build the native bridge for Flutter
+    # flutter-build: build the native bridge and all libraries that the
+    # xcconfig links against (some are not transitive deps of ao_bridge).
     add_custom_target(flutter-build
-        DEPENDS ao_bridge
+        DEPENDS ao_bridge webpdecoder sharpyuv
         COMMENT "Building native bridge for Flutter"
     )
 endif()

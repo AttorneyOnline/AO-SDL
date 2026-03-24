@@ -170,7 +170,7 @@ jobs:
         run: cmake --preset ios-sim-debug
 
       - name: Build native bridge
-        run: cmake --build out/build/ios-sim-debug --target ao_bridge -j $(sysctl -n hw.ncpu)
+        run: cmake --build out/build/ios-sim-debug --target flutter-build -j $(sysctl -n hw.ncpu)
 
       - name: Set up Flutter project
         working-directory: apps/flutter
