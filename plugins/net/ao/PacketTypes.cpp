@@ -43,6 +43,14 @@ static std::string ao_decode(const std::string& s) {
     return out;
 }
 
+static std::vector<std::string> ao_decode_list(const std::vector<std::string>& fields) {
+    std::vector<std::string> out;
+    out.reserve(fields.size());
+    for (const auto& f : fields)
+        out.push_back(ao_decode(f));
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // AOPacketDecryptor
 // ---------------------------------------------------------------------------
@@ -111,7 +119,7 @@ AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) : AOPacket("PN", 
     if (fields.size() >= MIN_FIELDS) {
         current_players = std::stoi(fields[0]);
         max_players = std::stoi(fields[1]);
-        server_description = fields.size() > 2 ? fields[2] : "";
+        server_description = fields.size() > 2 ? ao_decode(fields[2]) : "";
     }
 }
 
@@ -161,7 +169,8 @@ AOPacketRC::AOPacketRC() : AOPacket("RC", {}) {
 
 PacketRegistrar AOPacketSC::registrar("SC", [](const auto& f) { return std::make_unique<AOPacketSC>(f); });
 
-AOPacketSC::AOPacketSC(const std::vector<std::string>& fields) : AOPacket("SC", fields), character_list(fields) {
+AOPacketSC::AOPacketSC(const std::vector<std::string>& fields)
+    : AOPacket("SC", fields), character_list(ao_decode_list(fields)) {
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +186,8 @@ AOPacketRM::AOPacketRM() : AOPacket("RM", {}) {
 
 PacketRegistrar AOPacketSM::registrar("SM", [](const auto& f) { return std::make_unique<AOPacketSM>(f); });
 
-AOPacketSM::AOPacketSM(const std::vector<std::string>& fields) : AOPacket("SM", fields), music_list(fields) {
+AOPacketSM::AOPacketSM(const std::vector<std::string>& fields)
+    : AOPacket("SM", fields), music_list(ao_decode_list(fields)) {
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +363,8 @@ PacketRegistrar AOPacketARUP::registrar("ARUP", [](const auto& f) { return std::
 AOPacketARUP::AOPacketARUP(const std::vector<std::string>& fields) : AOPacket("ARUP", fields) {
     if (fields.size() >= MIN_FIELDS) {
         arup_type = std::stoi(fields[0]);
-        values.assign(fields.begin() + 1, fields.end());
+        for (auto it = fields.begin() + 1; it != fields.end(); ++it)
+            values.push_back(ao_decode(*it));
     }
 }
 
@@ -365,8 +376,8 @@ PacketRegistrar AOPacketBN::registrar("BN", [](const auto& f) { return std::make
 
 AOPacketBN::AOPacketBN(const std::vector<std::string>& fields) : AOPacket("BN", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        background = fields[0];
-        position = fields.size() >= 2 ? fields[1] : "";
+        background = ao_decode(fields[0]);
+        position = fields.size() >= 2 ? ao_decode(fields[1]) : "";
     }
 }
 
@@ -397,7 +408,8 @@ AOPacketFL::AOPacketFL(const std::vector<std::string>& fields) : AOPacket("FL", 
 
 PacketRegistrar AOPacketFA::registrar("FA", [](const auto& f) { return std::make_unique<AOPacketFA>(f); });
 
-AOPacketFA::AOPacketFA(const std::vector<std::string>& fields) : AOPacket("FA", fields), areas(fields) {
+AOPacketFA::AOPacketFA(const std::vector<std::string>& fields)
+    : AOPacket("FA", fields), areas(ao_decode_list(fields)) {
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +418,8 @@ AOPacketFA::AOPacketFA(const std::vector<std::string>& fields) : AOPacket("FA", 
 
 PacketRegistrar AOPacketFM::registrar("FM", [](const auto& f) { return std::make_unique<AOPacketFM>(f); });
 
-AOPacketFM::AOPacketFM(const std::vector<std::string>& fields) : AOPacket("FM", fields), tracks(fields) {
+AOPacketFM::AOPacketFM(const std::vector<std::string>& fields)
+    : AOPacket("FM", fields), tracks(ao_decode_list(fields)) {
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +456,8 @@ AOPacketTI::AOPacketTI(const std::vector<std::string>& fields) : AOPacket("TI", 
 
 PacketRegistrar AOPacketLE::registrar("LE", [](const auto& f) { return std::make_unique<AOPacketLE>(f); });
 
-AOPacketLE::AOPacketLE(const std::vector<std::string>& fields) : AOPacket("LE", fields), raw_items(fields) {
+AOPacketLE::AOPacketLE(const std::vector<std::string>& fields)
+    : AOPacket("LE", fields), raw_items(ao_decode_list(fields)) {
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +483,7 @@ AOPacketPU::AOPacketPU(const std::vector<std::string>& fields) : AOPacket("PU", 
     if (fields.size() >= MIN_FIELDS) {
         player_id = std::stoi(fields[0]);
         data_type = std::stoi(fields[1]);
-        data = fields[2];
+        data = ao_decode(fields[2]);
     }
 }
 
