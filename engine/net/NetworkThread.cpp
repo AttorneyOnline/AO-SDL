@@ -1,8 +1,11 @@
 #include "net/NetworkThread.h"
 
 #include "event/DisconnectEvent.h"
+#include "event/DisconnectRequestEvent.h"
 #include "event/EventManager.h"
 #include "event/ServerConnectEvent.h"
+#include "event/SessionEndEvent.h"
+#include "event/SessionStartEvent.h"
 #include "net/WebSocket.h"
 #include "utils/Log.h"
 
@@ -23,6 +26,10 @@ void NetworkThread::stop() {
 
 void NetworkThread::net_loop() {
     while (running) {
+        // Drain any stale disconnect requests before waiting for a new connection.
+        while (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
+        }
+
         // Wait for the user to select a server before connecting.
         std::optional<WebSocket> sock;
         while (running && !sock.has_value()) {
@@ -49,10 +56,17 @@ void NetworkThread::net_loop() {
         }
 
         handler.on_connect();
+        EventManager::instance().get_channel<SessionStartEvent>().publish(SessionStartEvent());
 
         std::vector<WebSocket::WebSocketFrame> msgs;
 
         while (running) {
+            // Check if the UI requested a voluntary disconnect.
+            if (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
+                Log::log_print(INFO, "Disconnect requested by user");
+                break;
+            }
+
             try {
                 msgs = sock->read();
 
@@ -78,6 +92,7 @@ void NetworkThread::net_loop() {
         }
 
         handler.on_disconnect();
+        EventManager::instance().get_channel<SessionEndEvent>().publish(SessionEndEvent());
         // Socket goes out of scope here, loop back to wait for next ServerConnectEvent
     }
 }

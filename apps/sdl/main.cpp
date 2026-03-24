@@ -25,9 +25,10 @@
 #include "ui/ImGuiUIRenderer.h"
 #include "ui/LogBuffer.h"
 
-#include "asset/MountHttp.h"
-#include "asset/MountManager.h"
 #include "event/AssetUrlEvent.h"
+#include "event/SessionEndEvent.h"
+#include "event/SessionStartEvent.h"
+#include "game/Session.h"
 #include "net/HttpPool.h"
 
 #include <csignal>
@@ -104,25 +105,35 @@ int main(int argc, char* argv[]) {
     debug_ctx.presenter = presenter.get();
     debug_ctx.audio_device = &audio_device;
 
-    // Poll HTTP responses and handle asset URL events on the main thread
-    game_window.set_frame_callback([&http_pool]() {
+    // Poll HTTP responses and manage Session lifecycle on the main thread.
+    std::unique_ptr<Session> active_session;
+
+    game_window.set_frame_callback([&http_pool, &active_session]() {
         http_pool.poll();
 
-        // When the server sends an asset URL (ASS packet), create an HTTP mount
-        // then add the default fallback mount after it so the server's assets take priority
+        // Session start: network thread connected to a server.
+        // Add the global fallback mount at low priority so server-specific
+        // mounts (added on ASS packets) are always searched first.
+        auto& start_ch = EventManager::instance().get_channel<SessionStartEvent>();
+        if (start_ch.get_event()) {
+            active_session =
+                std::make_unique<Session>(MediaManager::instance().mounts_ref(), MediaManager::instance().assets());
+            active_session->add_http_mount("https://attorneyoffline.de/base/", http_pool, 300);
+        }
+
+        // When the server sends an asset URL (ASS packet), add its HTTP mount
+        // at default priority (200), which is higher than the fallback (300).
         auto& asset_ch = EventManager::instance().get_channel<AssetUrlEvent>();
         while (auto ev = asset_ch.get_event()) {
-            auto mount = std::make_unique<MountHttp>(ev->url(), http_pool);
-            MediaManager::instance().mounts_ref().add_mount(std::move(mount));
-            Log::log_print(INFO, "Added HTTP asset mount: %s", ev->url().c_str());
-
-            static bool default_mount_added = false;
-            if (!default_mount_added) {
-                default_mount_added = true;
-                auto fallback = std::make_unique<MountHttp>("https://attorneyoffline.de/base/", http_pool);
-                MediaManager::instance().mounts_ref().add_mount(std::move(fallback));
-                Log::log_print(INFO, "Added fallback HTTP asset mount: https://attorneyoffline.de/base/");
+            if (active_session) {
+                active_session->add_http_mount(ev->url(), http_pool);
             }
+        }
+
+        // Session end: network thread disconnected — destructor handles all cleanup
+        auto& end_ch = EventManager::instance().get_channel<SessionEndEvent>();
+        if (end_ch.get_event()) {
+            active_session.reset();
         }
     });
 

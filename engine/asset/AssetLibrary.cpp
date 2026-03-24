@@ -48,7 +48,7 @@ decoded:
         return nullptr;
 
     auto asset = std::make_shared<ImageAsset>(path, format, std::move(frames));
-    cache_.insert(asset);
+    cache_.insert(asset, active_session_id_);
     // Release raw bytes from HTTP cache — decoded data is now in AssetCache.
     // Release all extension variants since prefetch may have downloaded multiple.
     for (const auto& ext : supported_image_extensions())
@@ -96,7 +96,7 @@ decoded:
     Log::log_print(INFO, "AssetLibrary::audio: decoded '%s' (%.1fs, %u Hz, %u ch)", path.c_str(),
                    asset->duration_seconds(), asset->sample_rate(), asset->channels());
     auto shared = std::shared_ptr<SoundAsset>(std::move(asset));
-    cache_.insert(shared);
+    cache_.insert(shared, active_session_id_);
     for (const auto& ext : supported_audio_extensions())
         mounts.release_http(path + "." + ext);
     return shared;
@@ -138,7 +138,7 @@ std::shared_ptr<SoundAsset> AssetLibrary::audio_exact(const std::string& path) {
     Log::log_print(INFO, "AssetLibrary::audio_exact: decoded '%s' (%.1fs, %u Hz, %u ch)", path.c_str(),
                    asset->duration_seconds(), asset->sample_rate(), asset->channels());
     auto shared = std::shared_ptr<SoundAsset>(std::move(asset));
-    cache_.insert(shared);
+    cache_.insert(shared, active_session_id_);
     mounts.release_http(path);
     return shared;
 }
@@ -160,7 +160,7 @@ std::optional<IniDocument> AssetLibrary::config(const std::string& path) {
     // Cache the raw bytes so configs show up in the asset cache viewer
     if (!cached) {
         auto raw = std::make_shared<RawAsset>(path, "ini", *data);
-        cache_.insert(raw);
+        cache_.insert(raw, active_session_id_);
         mounts.release_http(path);
     }
 
@@ -229,7 +229,7 @@ std::shared_ptr<ShaderAsset> AssetLibrary::shader(const std::string& path) {
     std::string frag_src(frag_result->second.begin(), frag_result->second.end());
 
     auto asset = std::make_shared<ShaderAsset>(cache_key, subdir, std::move(vert_src), std::move(frag_src));
-    cache_.insert(asset);
+    cache_.insert(asset, active_session_id_);
     return asset;
 }
 
@@ -253,7 +253,7 @@ std::optional<std::vector<uint8_t>> AssetLibrary::raw(const std::string& path) {
     if (!data)
         return std::nullopt;
     // Cache for visibility in debug viewer
-    cache_.insert(std::make_shared<RawAsset>(path, "raw", *data));
+    cache_.insert(std::make_shared<RawAsset>(path, "raw", *data), active_session_id_);
     mounts.release_http(path);
     return data;
 }

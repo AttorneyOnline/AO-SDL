@@ -54,7 +54,7 @@ class AssetCache {
      *
      * @param asset The asset to cache. Its path() is used as the cache key.
      */
-    void insert(std::shared_ptr<Asset> asset);
+    void insert(std::shared_ptr<Asset> asset, uint32_t session_id = 0);
 
     /**
      * @brief Evict LRU entries that are not externally held until under the memory limit.
@@ -63,6 +63,21 @@ class AssetCache {
      * Entries with use_count > 1 (held by callers) are skipped.
      */
     void evict();
+
+    /**
+     * @brief Remove all entries from the cache.
+     *
+     * Pinned entries (use_count > 1) will still be released by the cache;
+     * external holders keep the assets alive via their shared_ptr.
+     */
+    void clear();
+
+    /**
+     * @brief Remove all entries tagged with a specific session ID.
+     *
+     * Entries with session_id == 0 (app-lifetime) are never removed.
+     */
+    void clear_session(uint32_t session_id);
 
     /**
      * @brief Get the current total memory usage of cached assets.
@@ -135,6 +150,7 @@ class AssetCache {
     struct Entry {
         std::shared_ptr<Asset> asset; /**< The cached asset. */
         LruList::iterator lru_pos;    /**< Iterator into the LRU list for O(1) promotion. */
+        uint32_t session_id = 0;      /**< 0 = app-lifetime, >0 = belongs to a session. */
     };
 
     std::unordered_map<std::string, Entry> entries; /**< Path-keyed lookup table. */

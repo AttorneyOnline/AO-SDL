@@ -25,7 +25,7 @@ std::shared_ptr<Asset> AssetCache::peek(const std::string& path) const {
     return it->second.asset;
 }
 
-void AssetCache::insert(std::shared_ptr<Asset> asset) {
+void AssetCache::insert(std::shared_ptr<Asset> asset, uint32_t session_id) {
     std::lock_guard lock(mutex_);
     const std::string& path = asset->path();
 
@@ -39,7 +39,7 @@ void AssetCache::insert(std::shared_ptr<Asset> asset) {
 
     used_bytes_ += asset->memory_size();
     lru.push_front(path);
-    entries[path] = {asset, lru.begin()};
+    entries[path] = {asset, lru.begin(), session_id};
 
     evict_locked();
 }
@@ -47,6 +47,37 @@ void AssetCache::insert(std::shared_ptr<Asset> asset) {
 void AssetCache::evict() {
     std::lock_guard lock(mutex_);
     evict_locked();
+}
+
+void AssetCache::clear() {
+    std::lock_guard lock(mutex_);
+    Log::log_print(INFO, "AssetCache: clearing all entries (%zu entries, %zuMB)", entries.size(),
+                   used_bytes_ / (1024 * 1024));
+    entries.clear();
+    lru.clear();
+    used_bytes_ = 0;
+}
+
+void AssetCache::clear_session(uint32_t session_id) {
+    if (session_id == 0)
+        return;
+    std::lock_guard lock(mutex_);
+    int removed = 0;
+    auto it = lru.begin();
+    while (it != lru.end()) {
+        auto entry_it = entries.find(*it);
+        if (entry_it != entries.end() && entry_it->second.session_id == session_id) {
+            used_bytes_ -= entry_it->second.asset->memory_size();
+            entries.erase(entry_it);
+            it = lru.erase(it);
+            removed++;
+        }
+        else {
+            ++it;
+        }
+    }
+    if (removed > 0)
+        Log::log_print(INFO, "AssetCache: cleared %d session %u entries", removed, session_id);
 }
 
 void AssetCache::evict_locked() {

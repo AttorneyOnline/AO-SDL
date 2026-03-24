@@ -42,6 +42,18 @@ void AOClient::on_message(const std::string& message) {
 
 void AOClient::on_disconnect() {
     conn_state = NOT_CONNECTED;
+    decryptor.clear();
+    player_number = 0;
+    asset_url.clear();
+    character_count = 0;
+    evidence_count = 0;
+    music_count = 0;
+    character_list.clear();
+    music_list.clear();
+    char_id = -1;
+    features.clear();
+    incomplete_buf.clear();
+    buffered_messages.clear();
 }
 
 std::vector<std::string> AOClient::flush_outgoing() {
