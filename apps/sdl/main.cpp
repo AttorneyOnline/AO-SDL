@@ -114,8 +114,8 @@ int main(int argc, char* argv[]) {
         // Session start: network thread connected to a server
         auto& start_ch = EventManager::instance().get_channel<SessionStartEvent>();
         if (start_ch.get_event()) {
-            active_session = std::make_unique<Session>(MediaManager::instance().mounts_ref(),
-                                                       MediaManager::instance().assets());
+            active_session =
+                std::make_unique<Session>(MediaManager::instance().mounts_ref(), MediaManager::instance().assets());
         }
 
         // When the server sends an asset URL (ASS packet), add HTTP mounts to the session.

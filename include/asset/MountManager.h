@@ -139,5 +139,5 @@ class MountManager {
         std::unique_ptr<Mount> mount;
     };
     std::vector<MountEntry> loaded_mounts; /**< Ordered list of active mount backends. */
-    MountHandle next_handle_ = 1;         /**< Monotonically increasing handle counter. */
+    MountHandle next_handle_ = 1;          /**< Monotonically increasing handle counter. */
 };
