@@ -69,6 +69,10 @@ MountHttp::MountHttp(const std::string& base_url, HttpPool& pool)
     Log::log_print(DEBUG, "MountHttp: host=%s prefix=%s", host_.c_str(), path_prefix_.c_str());
 }
 
+MountHttp::~MountHttp() {
+    *alive_ = false;
+}
+
 void MountHttp::load() {
     // Fetch extensions.json to know which file formats the server hosts
     fetch_extensions();
@@ -76,9 +80,12 @@ void MountHttp::load() {
 
 void MountHttp::fetch_extensions() {
     std::string ext_path = path_prefix_ + "/extensions.json";
+    auto alive = alive_;
     pool_.get(
         host_, url_encode_path(ext_path),
-        [this](HttpResponse resp) {
+        [this, alive](HttpResponse resp) {
+            if (!*alive)
+                return;
             if (resp.status != 200 || resp.body.empty()) {
                 Log::log_print(DEBUG, "MountHttp: no extensions.json, using defaults");
                 return;
@@ -227,9 +234,12 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
     std::string http_path = url_encode_path(path_prefix_ + "/" + path);
     std::string captured_path = path;
 
+    auto alive = alive_;
     pool_.get(
         host_, http_path,
-        [this, captured_path](HttpResponse resp) {
+        [this, alive, captured_path](HttpResponse resp) {
+            if (!*alive)
+                return;
             std::lock_guard lock(mutex_);
 
             // If not in pending_, this request was cancelled or superseded — skip

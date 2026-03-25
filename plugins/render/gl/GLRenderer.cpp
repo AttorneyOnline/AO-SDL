@@ -136,13 +136,13 @@ void GLRenderer::evict_expired_textures() {
     }
 }
 
-GLProgram& GLRenderer::resolve_program(const ShaderAsset* shader) {
+GLProgram& GLRenderer::resolve_program(const std::shared_ptr<ShaderAsset>& shader) {
     if (!shader || shader->is_default())
         return program;
 
-    auto it = shader_cache_.find(shader);
+    auto it = shader_cache_.find(shader.get());
     if (it != shader_cache_.end())
-        return *it->second;
+        return *it->second.program;
 
     auto prog = std::make_unique<GLProgram>();
     GLShader vert(ShaderType::Vertex, shader->vertex_source(), true);
@@ -150,7 +150,7 @@ GLProgram& GLRenderer::resolve_program(const ShaderAsset* shader) {
     prog->link_shaders({vert, frag});
 
     auto* ptr = prog.get();
-    shader_cache_[shader] = std::move(prog);
+    shader_cache_[shader.get()] = {shader, std::move(prog)};
     return *ptr;
 }
 
@@ -224,6 +224,15 @@ void GLRenderer::evict_expired_meshes() {
     }
 }
 
+void GLRenderer::evict_expired_shaders() {
+    for (auto it = shader_cache_.begin(); it != shader_cache_.end();) {
+        if (it->second.asset.expired())
+            it = shader_cache_.erase(it);
+        else
+            ++it;
+    }
+}
+
 void GLRenderer::draw(const RenderState* state) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
     glViewport(0, 0, fb_width, fb_height);
@@ -241,11 +250,11 @@ void GLRenderer::draw(const RenderState* state) {
     if (++frame_counter % 60 == 0) {
         evict_expired_textures();
         evict_expired_meshes();
+        evict_expired_shaders();
     }
 
     draw_calls_ = 0;
     for (const auto& [_, group] : state->get_layer_groups()) {
-        const ShaderAsset* group_shader = group.get_shader().get();
         Mat4 group_mat = group.transform().get_local_transform();
 
         for (const auto& [__, layer] : group.get_layers()) {
@@ -281,11 +290,9 @@ void GLRenderer::draw(const RenderState* state) {
                 glUseProgram(0);
             }
             else {
-                const ShaderAsset* effective = layer.get_shader().get();
-                if (!effective)
-                    effective = group_shader;
+                const auto& effective = layer.get_shader() ? layer.get_shader() : group.get_shader();
                 GLProgram& prog = resolve_program(effective);
-                apply_uniforms(prog, effective);
+                apply_uniforms(prog, effective.get());
 
                 const auto& mesh = layer.get_mesh();
                 if (mesh && mesh->index_count() > 0) {

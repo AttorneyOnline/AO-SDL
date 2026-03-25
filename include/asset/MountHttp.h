@@ -22,6 +22,7 @@ class MountHttp : public Mount {
     /// @param base_url  Scheme + host + path prefix, e.g. "https://server.com/assets/"
     /// @param pool      Reference to the HTTP thread pool (must outlive this mount).
     MountHttp(const std::string& base_url, HttpPool& pool);
+    ~MountHttp() override;
 
     void load() override;
     bool seek_file(const std::string& path) const override;
@@ -91,6 +92,11 @@ class MountHttp : public Mount {
     HttpPool& pool_;
 
     void fetch_extensions();
+
+    // Shared flag checked by async callbacks to detect destruction.
+    // Callbacks capture this by value; the destructor sets it to false.
+    // Safe without a mutex because poll() and ~MountHttp run on the same thread.
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::vector<uint8_t>> cache_;
