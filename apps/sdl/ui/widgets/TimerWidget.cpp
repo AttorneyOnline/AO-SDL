@@ -77,6 +77,10 @@ void TimerWidget::render() {
 
         ImGui::Text("Timer %d: %s", i, buf);
 
+if (i % 2 == 0) {
+    ImGui::SameLine(250);
+}
+
         if (!t.running)
             ImGui::PopStyleColor();
     }
