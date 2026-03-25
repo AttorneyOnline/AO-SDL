@@ -21,7 +21,12 @@ void GLRenderer::init_gl() {
     glewExperimental = GL_TRUE;
     GLenum glewError = glewInit();
     if (glewError != GLEW_OK) {
-        printf("Failed to initialize GLEW: %s\n", glewGetErrorString(glewError));
+        Log::log_print(FATAL, "glewInit failed: %s", glewGetErrorString(glewError));
+        return;
+    }
+    if (!GLEW_VERSION_3_3) {
+        const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        Log::log_print(FATAL, "OpenGL 3.3 required but driver only provides %s", version ? version : "unknown");
     }
 }
 

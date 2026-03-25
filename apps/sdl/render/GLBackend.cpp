@@ -1,5 +1,8 @@
 #include "IGPUBackend.h"
 
+#include "utils/Log.h"
+
+#include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -21,10 +24,18 @@ class GLBackend : public IGPUBackend {
         window_ = window;
         gl_context_ = SDL_GL_CreateContext(window);
         if (!gl_context_) {
-            fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+            Log::log_print(FATAL, "SDL_GL_CreateContext failed: %s", SDL_GetError());
             return;
         }
         SDL_GL_MakeCurrent(window, gl_context_);
+
+        const char* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+        const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+        const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        Log::log_print(INFO, "GL Vendor:   %s", vendor ? vendor : "(null)");
+        Log::log_print(INFO, "GL Renderer: %s", renderer ? renderer : "(null)");
+        Log::log_print(INFO, "GL Version:  %s", version ? version : "(null)");
+
         SDL_GL_SetSwapInterval(1);
     }
 
