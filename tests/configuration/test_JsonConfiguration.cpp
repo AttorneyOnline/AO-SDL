@@ -400,9 +400,8 @@ TEST_F(JsonConfigurationTest, ForEachNestedValues) {
     ASSERT_TRUE(cfg().deserialize(data));
 
     std::map<std::string, std::string> visited;
-    cfg().for_each([&](const std::string& key, const std::any& val) {
-        visited[key] = std::any_cast<std::string>(val);
-    });
+    cfg().for_each(
+        [&](const std::string& key, const std::any& val) { visited[key] = std::any_cast<std::string>(val); });
 
     ASSERT_EQ(visited.size(), 2u);
     EXPECT_EQ(visited["servers/0/name"], "alpha");

@@ -25,8 +25,7 @@ template <typename Derived>
 class JsonConfiguration : public ConfigurationBase<Derived> {
   public:
     static Derived& instance() {
-        static_assert(std::is_base_of_v<JsonConfiguration, Derived>,
-                      "Derived must inherit from JsonConfiguration");
+        static_assert(std::is_base_of_v<JsonConfiguration, Derived>, "Derived must inherit from JsonConfiguration");
         return ConfigurationBase<Derived>::instance();
     }
 
@@ -208,8 +207,7 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
     // -- iteration helpers ----------------------------------------------------
 
     /// Recursively collect leaf-node paths from the JSON tree.
-    static void flatten_keys(const nlohmann::json& j, const std::string& prefix,
-                             std::vector<std::string>& out) {
+    static void flatten_keys(const nlohmann::json& j, const std::string& prefix, std::vector<std::string>& out) {
         if (j.is_object()) {
             for (auto it = j.begin(); it != j.end(); ++it) {
                 std::string child = prefix.empty() ? it.key() : prefix + "/" + it.key();

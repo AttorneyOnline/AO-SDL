@@ -209,9 +209,7 @@ TEST_F(ConfigurationTest, ForEachVisitsAllPairs) {
     cfg().set_value("y", std::any{20});
 
     std::map<std::string, int> visited;
-    cfg().for_each([&](const std::string& key, const std::any& val) {
-        visited[key] = std::any_cast<int>(val);
-    });
+    cfg().for_each([&](const std::string& key, const std::any& val) { visited[key] = std::any_cast<int>(val); });
 
     EXPECT_EQ(visited.size(), 2u);
     EXPECT_EQ(visited["x"], 10);

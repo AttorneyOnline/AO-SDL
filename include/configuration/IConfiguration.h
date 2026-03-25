@@ -76,8 +76,7 @@ class ConfigurationBase : public IConfiguration {
     using IConfiguration::value; // unhide the value<T> template
 
     static Derived& instance() {
-        static_assert(std::is_base_of_v<ConfigurationBase, Derived>,
-                      "Derived must inherit from ConfigurationBase");
+        static_assert(std::is_base_of_v<ConfigurationBase, Derived>, "Derived must inherit from ConfigurationBase");
         static Derived inst;
         return inst;
     }
@@ -104,8 +103,7 @@ class ConfigurationBase : public IConfiguration {
     void remove_on_change(int id) {
         std::unique_lock lock(mutex_);
         auto& cbs = on_change_callbacks_;
-        cbs.erase(std::remove_if(cbs.begin(), cbs.end(),
-                                 [id](const auto& entry) { return entry.id == id; }),
+        cbs.erase(std::remove_if(cbs.begin(), cbs.end(), [id](const auto& entry) { return entry.id == id; }),
                   cbs.end());
     }
 
