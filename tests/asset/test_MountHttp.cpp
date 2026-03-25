@@ -233,3 +233,112 @@ TEST_F(MountHttpTest, ReleaseAfterReleaseAllDoesNotCrash) {
     EXPECT_NO_THROW(mount->release("anything.png"));
     EXPECT_EQ(mount->cached_count(), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Destruction safety — callbacks delivered after MountHttp is destroyed
+// ---------------------------------------------------------------------------
+
+// Reproduces the crash from the Windows crash dump: MountHttp::request()
+// captures `this` in a callback passed to HttpPool. If the MountHttp is
+// destroyed (e.g. session disconnect) while requests are in-flight, the
+// callback fires on a freed object when poll() delivers it.
+//
+// Sequence: request() → destroy MountHttp → poll() delivers error callback
+// Without the alive_ guard, this is a use-after-free.
+TEST(MountHttpLifetime, PollAfterDestroyDoesNotCrash) {
+    HttpPool pool(1);
+    {
+        MountHttp mount("https://127.0.0.1:1/assets/", pool);
+        // Fire several requests. The worker thread will fail to connect
+        // (connection refused) and queue error callbacks.
+        for (int i = 0; i < 10; i++)
+            mount.request("file" + std::to_string(i) + ".png");
+        EXPECT_EQ(mount.pending_count(), 10);
+    }
+    // MountHttp is now destroyed. Wait for workers to finish and deliver
+    // the error callbacks. Without the fix, this poll() would crash.
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    EXPECT_NO_THROW(pool.poll());
+}
+
+// Same scenario but with load() which internally calls fetch_extensions(),
+// another callback that captures `this`.
+TEST(MountHttpLifetime, PollAfterDestroyWithExtensionsFetchDoesNotCrash) {
+    HttpPool pool(1);
+    {
+        MountHttp mount("https://127.0.0.1:1/assets/", pool);
+        mount.load(); // triggers fetch_extensions() → pool_.get() with [this]
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    EXPECT_NO_THROW(pool.poll());
+}
+
+// Multiple mounts created and destroyed in sequence, with poll() only at the
+// end — simulates rapid reconnect cycles.
+TEST(MountHttpLifetime, RapidCreateDestroyWithDeferredPoll) {
+    HttpPool pool(2);
+    for (int round = 0; round < 5; round++) {
+        MountHttp mount("https://127.0.0.1:1/assets/", pool);
+        mount.request("round" + std::to_string(round) + ".png");
+    }
+    // All 5 mounts are destroyed. Poll delivers all queued callbacks.
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    EXPECT_NO_THROW(pool.poll());
+}
+
+// Interleaved: poll between create/destroy cycles to mix live and dead
+// callback delivery.
+TEST(MountHttpLifetime, InterleavedCreateDestroyAndPoll) {
+    HttpPool pool(2);
+    for (int round = 0; round < 3; round++) {
+        {
+            MountHttp mount("https://127.0.0.1:1/assets/", pool);
+            mount.request("interleaved" + std::to_string(round) + ".png");
+            mount.load();
+        }
+        // Poll after each destruction — some callbacks may have arrived,
+        // some may still be in-flight.
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        EXPECT_NO_THROW(pool.poll());
+    }
+    // Final drain
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    EXPECT_NO_THROW(pool.poll());
+}
+
+// ---------------------------------------------------------------------------
+// Destruction with drop_below — callbacks fired synchronously by drop
+// ---------------------------------------------------------------------------
+
+TEST_F(MountHttpTest, DropBelowAfterRequestDoesNotCrash) {
+    mount->request("low_priority.png", HttpPriority::LOW);
+    // drop_below fires the callback synchronously with error="dropped".
+    // Mount is still alive here, so this should work fine.
+    EXPECT_NO_THROW(pool->drop_below(HttpPriority::NORMAL));
+}
+
+TEST(MountHttpLifetime, DropBelowAfterDestroyDoesNotCrash) {
+    HttpPool pool(1);
+    {
+        MountHttp mount("https://127.0.0.1:1/assets/", pool);
+        mount.request("will_be_dropped.png", HttpPriority::LOW);
+    }
+    // drop_below fires callbacks synchronously — mount is already dead.
+    EXPECT_NO_THROW(pool.drop_below(HttpPriority::NORMAL));
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent request + destroy stress test
+// ---------------------------------------------------------------------------
+
+TEST(MountHttpLifetime, StressCreateRequestDestroy) {
+    HttpPool pool(4);
+    for (int i = 0; i < 20; i++) {
+        MountHttp mount("https://127.0.0.1:1/assets/", pool);
+        for (int j = 0; j < 5; j++)
+            mount.request("stress_" + std::to_string(i) + "_" + std::to_string(j) + ".png");
+    }
+    // Drain everything
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    EXPECT_NO_THROW(pool.poll());
+}

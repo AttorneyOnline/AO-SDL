@@ -40,7 +40,7 @@ class GLRenderer : public IRenderer {
     GLuint get_texture_array(const std::shared_ptr<ImageAsset>& asset);
     void evict_expired_textures();
 
-    GLProgram& resolve_program(const class ShaderAsset* shader);
+    GLProgram& resolve_program(const std::shared_ptr<ShaderAsset>& shader);
 
     GLProgram program;
     GLProgram wireframe_program_;
@@ -58,7 +58,11 @@ class GLRenderer : public IRenderer {
     };
 
     std::unordered_map<const ImageAsset*, TextureCacheEntry> texture_cache;
-    std::unordered_map<const class ShaderAsset*, std::unique_ptr<GLProgram>> shader_cache_;
+    struct ShaderCacheEntry {
+        std::weak_ptr<ShaderAsset> asset;
+        std::unique_ptr<GLProgram> program;
+    };
+    std::unordered_map<const ShaderAsset*, ShaderCacheEntry> shader_cache_;
 
     // Preview textures: GL_TEXTURE_2D (frame 0 only) for ImGui display.
     // Separate from texture_cache which uses GL_TEXTURE_2D_ARRAY.
@@ -74,6 +78,7 @@ class GLRenderer : public IRenderer {
 
     MeshCacheEntry& get_mesh_entry(const std::shared_ptr<MeshAsset>& mesh);
     void evict_expired_meshes();
+    void evict_expired_shaders();
 };
 
 /// Factory: creates a GLRenderer after initializing GLEW.
