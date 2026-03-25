@@ -82,12 +82,21 @@ class ConfigurationBase : public IConfiguration {
         return inst;
     }
 
-    /// Register a change callback. Returns an ID that can be passed to
-    /// remove_on_change() to unregister it later.
+    /// Register a global change callback that fires for every key.
+    /// Returns an ID that can be passed to remove_on_change().
     int add_on_change(ChangeCallback cb) {
         std::unique_lock lock(mutex_);
         int id = next_cb_id_++;
-        on_change_callbacks_.emplace_back(id, std::move(cb));
+        on_change_callbacks_.push_back({id, {}, std::move(cb)});
+        return id;
+    }
+
+    /// Register a change callback that only fires when @p key is modified.
+    /// Returns an ID that can be passed to remove_on_change().
+    int add_on_change(const std::string& key, ChangeCallback cb) {
+        std::unique_lock lock(mutex_);
+        int id = next_cb_id_++;
+        on_change_callbacks_.push_back({id, key, std::move(cb)});
         return id;
     }
 
@@ -96,7 +105,7 @@ class ConfigurationBase : public IConfiguration {
         std::unique_lock lock(mutex_);
         auto& cbs = on_change_callbacks_;
         cbs.erase(std::remove_if(cbs.begin(), cbs.end(),
-                                 [id](const auto& p) { return p.first == id; }),
+                                 [id](const auto& entry) { return entry.id == id; }),
                   cbs.end());
     }
 
@@ -182,20 +191,31 @@ class ConfigurationBase : public IConfiguration {
     virtual void do_for_each(const KeyValueVisitor& visitor) const = 0;
 
   private:
+    struct SettingsCallbackEntry {
+        int id;
+        std::string key_filter; // empty = global (fires for every change)
+        ChangeCallback cb;
+    };
+
     void notify(const std::string& key) {
-        std::vector<std::pair<int, ChangeCallback>> callbacks;
+        std::vector<SettingsCallbackEntry> callbacks;
         {
             std::shared_lock lock(mutex_);
             callbacks = on_change_callbacks_;
         }
-        for (const auto& [id, cb] : callbacks) {
-            if (cb)
-                cb(key);
+        for (const auto& entry : callbacks) {
+            if (!entry.cb)
+                continue;
+            // Global callbacks (empty filter) always fire.
+            // Key-specific callbacks fire only on exact match, or when key
+            // is empty (bulk operations like clear/deserialize).
+            if (entry.key_filter.empty() || key.empty() || entry.key_filter == key)
+                entry.cb(key);
         }
     }
 
     mutable std::shared_mutex mutex_;
-    std::vector<std::pair<int, ChangeCallback>> on_change_callbacks_;
+    std::vector<SettingsCallbackEntry> on_change_callbacks_;
     int next_cb_id_ = 0;
 };
 

@@ -194,6 +194,8 @@ TEST_F(JsonConfigurationTest, ConstCharStarStoredAsString) {
 // Change callback fires on deserialize
 // ---------------------------------------------------------------------------
 
+// Global callback fires when JSON is deserialized (bulk operation, empty key).
+//   deserialize({"k":1}) → callback("")
 TEST_F(JsonConfigurationTest, CallbackOnDeserialize) {
     bool fired = false;
     cfg().add_on_change([&](const std::string&) { fired = true; });
@@ -405,6 +407,186 @@ TEST_F(JsonConfigurationTest, ForEachNestedValues) {
     ASSERT_EQ(visited.size(), 2u);
     EXPECT_EQ(visited["servers/0/name"], "alpha");
     EXPECT_EQ(visited["servers/1/name"], "bravo");
+}
+
+// ---------------------------------------------------------------------------
+// Key-filtered callbacks with path-based keys
+// ---------------------------------------------------------------------------
+
+// Path-filtered callback fires only when the exact nested path is set.
+//   filter="audio/master_volume"
+//   set("audio/master_volume")→fires  set("audio/music_volume")→skipped
+TEST_F(JsonConfigurationTest, PathKeyCallbackFiresOnNestedSet) {
+    int count = 0;
+    cfg().add_on_change("audio/master_volume", [&](const std::string& key) {
+        EXPECT_EQ(key, "audio/master_volume");
+        ++count;
+    });
+
+    cfg().set_value("audio/master_volume", std::any{80});
+    cfg().set_value("audio/music_volume", std::any{60});
+    cfg().set_value("audio/master_volume", std::any{90});
+    EXPECT_EQ(count, 2);
+}
+
+// Path-filtered callback ignores sibling keys under the same parent.
+//   filter="display/width"  set("display/height")→skip  set("display/fullscreen")→skip
+TEST_F(JsonConfigurationTest, PathKeyCallbackIgnoresSiblingPaths) {
+    bool fired = false;
+    cfg().add_on_change("display/width", [&](const std::string&) { fired = true; });
+
+    cfg().set_value("display/height", std::any{1080});
+    cfg().set_value("display/fullscreen", std::any{true});
+    EXPECT_FALSE(fired);
+}
+
+// Path-filtered callback fires when the watched nested key is removed.
+//   filter="net/host"  remove("net/host") → callback("net/host")
+TEST_F(JsonConfigurationTest, PathKeyCallbackFiresOnRemove) {
+    const std::string json = R"({"net": {"host": "localhost", "port": 27016}})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    std::string notified;
+    cfg().add_on_change("net/host", [&](const std::string& key) { notified = key; });
+
+    cfg().remove("net/host");
+    EXPECT_EQ(notified, "net/host");
+}
+
+// Path-filtered callback works at arbitrary nesting depth (4 levels deep).
+//   filter="a/b/c/d"
+//   set("a/b/c/d")→fires  set("a/b/c/e")→skip  set("a/b/x")→skip
+TEST_F(JsonConfigurationTest, PathKeyCallbackDeepNestedKey) {
+    int count = 0;
+    cfg().add_on_change("a/b/c/d", [&](const std::string& key) {
+        EXPECT_EQ(key, "a/b/c/d");
+        ++count;
+    });
+
+    cfg().set_value("a/b/c/d", std::any{42});
+    cfg().set_value("a/b/c/e", std::any{99});
+    cfg().set_value("a/b/x", std::any{0});
+    cfg().set_value("a/b/c/d", std::any{43});
+    EXPECT_EQ(count, 2);
+}
+
+// Path-filtered callback with array index fires only for the exact index+field.
+//   filter="servers/1/port"
+//   set("servers/0/port")→skip  set("servers/1/name")→skip
+//   set("servers/1/port")→fires  set("servers/2/port")→skip
+TEST_F(JsonConfigurationTest, ArrayPathCallbackFiresForSpecificIndex) {
+    const std::string json = R"({"servers": [
+        {"name": "alpha", "port": 27016},
+        {"name": "bravo", "port": 27017},
+        {"name": "charlie", "port": 27018}
+    ]})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    int count = 0;
+    cfg().add_on_change("servers/1/port", [&](const std::string& key) {
+        EXPECT_EQ(key, "servers/1/port");
+        ++count;
+    });
+
+    cfg().set_value("servers/0/port", std::any{9000});
+    cfg().set_value("servers/1/name", std::any{std::string("delta")});
+    cfg().set_value("servers/1/port", std::any{9001});
+    cfg().set_value("servers/2/port", std::any{9002});
+    EXPECT_EQ(count, 1);
+}
+
+// Global and path-filtered callbacks registered together fire independently.
+//   global + filter="video/resolution/width"
+//   set("video/resolution/width")→both  set("video/resolution/height")→global only
+TEST_F(JsonConfigurationTest, GlobalAndPathCallbacksCoexist) {
+    int global_count = 0;
+    int path_count = 0;
+
+    cfg().add_on_change([&](const std::string&) { ++global_count; });
+    cfg().add_on_change("video/resolution/width", [&](const std::string&) { ++path_count; });
+
+    cfg().set_value("video/resolution/width", std::any{1920});
+    cfg().set_value("video/resolution/height", std::any{1080});
+    cfg().set_value("video/vsync", std::any{true});
+    cfg().set_value("video/resolution/width", std::any{2560});
+
+    EXPECT_EQ(global_count, 4);
+    EXPECT_EQ(path_count, 2);
+}
+
+// Path-filtered callbacks receive empty-key notifications from bulk operations
+// (clear/deserialize) so listeners can re-read their value after a full reload.
+//   filter="audio/volume"  clear() → callback("")
+//   filter="net/port"      deserialize({...}) → callback("")
+TEST_F(JsonConfigurationTest, PathCallbackFiresOnBulkClearAndDeserialize) {
+    int clear_count = 0;
+    int deser_count = 0;
+
+    cfg().add_on_change("audio/volume", [&](const std::string& key) {
+        if (key.empty())
+            ++clear_count;
+    });
+
+    cfg().clear();
+    EXPECT_EQ(clear_count, 1);
+
+    cfg().add_on_change("net/port", [&](const std::string& key) {
+        if (key.empty())
+            ++deser_count;
+    });
+
+    const std::string json = R"({"net": {"port": 27016}})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    cfg().deserialize(data);
+    EXPECT_EQ(deser_count, 1);
+}
+
+// Callbacks at different nesting depths fire independently.
+//   filter="ui/theme" (depth 2) + filter="ui/panels/left/width" (depth 4)
+//   set("ui/theme")→shallow  set("ui/panels/left/width")→deep
+//   set("ui/panels/left/visible")→neither  set("ui/panels/right/width")→neither
+TEST_F(JsonConfigurationTest, MultiplePathCallbacksDifferentDepths) {
+    int shallow_count = 0;
+    int deep_count = 0;
+
+    cfg().add_on_change("ui/theme", [&](const std::string&) { ++shallow_count; });
+    cfg().add_on_change("ui/panels/left/width", [&](const std::string&) { ++deep_count; });
+
+    cfg().set_value("ui/theme", std::any{std::string("dark")});
+    cfg().set_value("ui/panels/left/width", std::any{300});
+    cfg().set_value("ui/panels/left/visible", std::any{true});
+    cfg().set_value("ui/theme", std::any{std::string("light")});
+    cfg().set_value("ui/panels/right/width", std::any{250});
+
+    EXPECT_EQ(shallow_count, 2);
+    EXPECT_EQ(deep_count, 1);
+}
+
+// A parent path filter must not match children — exact path match only.
+//   filter="servers/0"  set("servers/0/name")→skip  set("servers/0/port")→skip
+TEST_F(JsonConfigurationTest, PathCallbackExactMatchNoPartialPrefix) {
+    bool fired = false;
+    cfg().add_on_change("servers/0", [&](const std::string&) { fired = true; });
+
+    cfg().set_value("servers/0/name", std::any{std::string("alpha")});
+    cfg().set_value("servers/0/port", std::any{27016});
+    EXPECT_FALSE(fired);
+}
+
+// A path-filtered callback can be unregistered by its ID.
+//   add("controls/sensitivity", cb) → set→count=1 → remove_on_change(id) → set→count=1
+TEST_F(JsonConfigurationTest, PathCallbackRemoveById) {
+    int count = 0;
+    int id = cfg().add_on_change("controls/sensitivity", [&](const std::string&) { ++count; });
+
+    cfg().set_value("controls/sensitivity", std::any{0.5});
+    EXPECT_EQ(count, 1);
+
+    cfg().remove_on_change(id);
+    cfg().set_value("controls/sensitivity", std::any{0.8});
+    EXPECT_EQ(count, 1);
 }
 
 TEST_F(JsonConfigurationTest, KeysConsistentWithContains) {

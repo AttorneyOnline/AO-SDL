@@ -246,6 +246,8 @@ TEST_F(ConfigurationTest, DeserializeEmptyDataReturnsFalse) {
 // Change callback
 // ---------------------------------------------------------------------------
 
+// Global callback receives the key that was set.
+//   set("x", 10) → callback("x")
 TEST_F(ConfigurationTest, CallbackFiredOnSetValue) {
     std::string notified_key;
     cfg().add_on_change([&](const std::string& key) { notified_key = key; });
@@ -254,6 +256,8 @@ TEST_F(ConfigurationTest, CallbackFiredOnSetValue) {
     EXPECT_EQ(notified_key, "x");
 }
 
+// Global callback receives the key that was removed.
+//   remove("y") → callback("y")
 TEST_F(ConfigurationTest, CallbackFiredOnRemove) {
     cfg().set_value("y", std::any{1});
 
@@ -264,19 +268,23 @@ TEST_F(ConfigurationTest, CallbackFiredOnRemove) {
     EXPECT_EQ(notified_key, "y");
 }
 
+// clear() is a bulk operation — callback receives an empty key.
+//   clear() → callback("")
 TEST_F(ConfigurationTest, CallbackFiredOnClear) {
     cfg().set_value("z", std::any{1});
 
     bool called = false;
     cfg().add_on_change([&](const std::string& key) {
         called = true;
-        EXPECT_TRUE(key.empty()); // clear() notifies with empty key
+        EXPECT_TRUE(key.empty());
     });
 
     cfg().clear();
     EXPECT_TRUE(called);
 }
 
+// deserialize() is a bulk operation — callback receives an empty key.
+//   deserialize({...}) → callback("")
 TEST_F(ConfigurationTest, CallbackFiredOnDeserialize) {
     bool called = false;
     cfg().add_on_change([&](const std::string& key) {
@@ -289,6 +297,8 @@ TEST_F(ConfigurationTest, CallbackFiredOnDeserialize) {
     EXPECT_TRUE(called);
 }
 
+// Failed deserialize must not fire any callbacks.
+//   deserialize({}) → (fails) → no callback
 TEST_F(ConfigurationTest, CallbackNotFiredOnFailedDeserialize) {
     bool called = false;
     cfg().add_on_change([&](const std::string&) { called = true; });
@@ -297,13 +307,16 @@ TEST_F(ConfigurationTest, CallbackNotFiredOnFailedDeserialize) {
     EXPECT_FALSE(called);
 }
 
+// Mutating without any registered callbacks must not crash.
+//   set/remove/clear with zero callbacks → no-op notification
 TEST_F(ConfigurationTest, NoCallbackDoesNotCrash) {
-    // No callback set — mutating operations should not crash.
     EXPECT_NO_THROW(cfg().set_value("a", std::any{1}));
     EXPECT_NO_THROW(cfg().remove("a"));
     EXPECT_NO_THROW(cfg().clear());
 }
 
+// Two independent global callbacks both fire for the same change.
+//   set("x", 1) → callback_a("x"), callback_b("x")
 TEST_F(ConfigurationTest, MultipleCallbacksFired) {
     int count_a = 0;
     int count_b = 0;
@@ -315,6 +328,8 @@ TEST_F(ConfigurationTest, MultipleCallbacksFired) {
     EXPECT_EQ(count_b, 1);
 }
 
+// A global callback can be unregistered by the ID returned from add_on_change.
+//   add → set("x") → count=1 → remove_on_change(id) → set("y") → count=1
 TEST_F(ConfigurationTest, RemoveCallbackById) {
     int count = 0;
     int id = cfg().add_on_change([&](const std::string&) { ++count; });
@@ -324,9 +339,11 @@ TEST_F(ConfigurationTest, RemoveCallbackById) {
 
     cfg().remove_on_change(id);
     cfg().set_value("y", std::any{2});
-    EXPECT_EQ(count, 1); // callback was removed, count unchanged
+    EXPECT_EQ(count, 1);
 }
 
+// clear_on_change() removes every registered callback (global and key-filtered).
+//   add(cb_a), add(cb_b) → clear_on_change() → set("x") → count=0
 TEST_F(ConfigurationTest, ClearOnChangeRemovesAll) {
     int count = 0;
     cfg().add_on_change([&](const std::string&) { ++count; });
@@ -335,6 +352,171 @@ TEST_F(ConfigurationTest, ClearOnChangeRemovesAll) {
     cfg().clear_on_change();
     cfg().set_value("x", std::any{1});
     EXPECT_EQ(count, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Key-filtered callbacks
+// ---------------------------------------------------------------------------
+
+// Key-filtered callback fires only when the exact key is set.
+//   filter="volume"  set("volume")→fires  set("brightness")→skipped
+TEST_F(ConfigurationTest, KeyCallbackFiresOnMatchingKey) {
+    int count = 0;
+    cfg().add_on_change("volume", [&](const std::string& key) {
+        EXPECT_EQ(key, "volume");
+        ++count;
+    });
+
+    cfg().set_value("volume", std::any{80});
+    cfg().set_value("brightness", std::any{50});
+    cfg().set_value("volume", std::any{90});
+    EXPECT_EQ(count, 2);
+}
+
+// Key-filtered callback stays silent when only unrelated keys change.
+//   filter="music"  set("sfx")→skipped  set("voice")→skipped  remove("sfx")→skipped
+TEST_F(ConfigurationTest, KeyCallbackIgnoresOtherKeys) {
+    bool fired = false;
+    cfg().add_on_change("music", [&](const std::string&) { fired = true; });
+
+    cfg().set_value("sfx", std::any{100});
+    cfg().set_value("voice", std::any{75});
+    cfg().remove("sfx");
+    EXPECT_FALSE(fired);
+}
+
+// Key-filtered callback fires when its watched key is removed.
+//   filter="temp"  remove("temp") → callback("temp")
+TEST_F(ConfigurationTest, KeyCallbackFiresOnRemoveMatchingKey) {
+    cfg().set_value("temp", std::any{1});
+
+    std::string notified;
+    cfg().add_on_change("temp", [&](const std::string& key) { notified = key; });
+
+    cfg().remove("temp");
+    EXPECT_EQ(notified, "temp");
+}
+
+// Key-filtered callback fires on clear() with an empty key, so listeners
+// know the entire store was wiped even if their specific key wasn't named.
+//   filter="anything"  clear() → callback("")
+TEST_F(ConfigurationTest, KeyCallbackFiresOnClearBulkOperation) {
+    bool fired = false;
+    cfg().add_on_change("anything", [&](const std::string& key) {
+        EXPECT_TRUE(key.empty());
+        fired = true;
+    });
+
+    cfg().clear();
+    EXPECT_TRUE(fired);
+}
+
+// Key-filtered callback fires on deserialize() with an empty key, so
+// listeners can re-read their value after a full reload.
+//   filter="specific_key"  deserialize({...}) → callback("")
+TEST_F(ConfigurationTest, KeyCallbackFiresOnDeserializeBulkOperation) {
+    bool fired = false;
+    cfg().add_on_change("specific_key", [&](const std::string& key) {
+        EXPECT_TRUE(key.empty());
+        fired = true;
+    });
+
+    std::vector<uint8_t> data{'h', 'i'};
+    cfg().deserialize(data);
+    EXPECT_TRUE(fired);
+}
+
+// Global and key-filtered callbacks can be registered side by side.
+// The global fires for every change; the key-filtered fires only on match.
+//   global + filter="target"
+//   set("target")→both  set("other")→global only  set("target")→both
+TEST_F(ConfigurationTest, GlobalAndKeyCallbacksCoexist) {
+    int global_count = 0;
+    int key_count = 0;
+
+    cfg().add_on_change([&](const std::string&) { ++global_count; });
+    cfg().add_on_change("target", [&](const std::string&) { ++key_count; });
+
+    cfg().set_value("target", std::any{1});
+    cfg().set_value("other", std::any{2});
+    cfg().set_value("target", std::any{3});
+
+    EXPECT_EQ(global_count, 3);
+    EXPECT_EQ(key_count, 2);
+}
+
+// Two independent callbacks watching the same key both fire.
+//   filter="shared" (x2)  set("shared") → cb_a + cb_b
+TEST_F(ConfigurationTest, MultipleKeyCallbacksSameKey) {
+    int count_a = 0;
+    int count_b = 0;
+
+    cfg().add_on_change("shared", [&](const std::string&) { ++count_a; });
+    cfg().add_on_change("shared", [&](const std::string&) { ++count_b; });
+
+    cfg().set_value("shared", std::any{42});
+    EXPECT_EQ(count_a, 1);
+    EXPECT_EQ(count_b, 1);
+}
+
+// Callbacks on different keys fire independently and never cross-trigger.
+//   filter="alpha" + filter="beta"
+//   set("alpha")→alpha_cb  set("beta")→beta_cb  set("gamma")→neither
+TEST_F(ConfigurationTest, MultipleKeyCallbacksDifferentKeys) {
+    int alpha_count = 0;
+    int beta_count = 0;
+
+    cfg().add_on_change("alpha", [&](const std::string&) { ++alpha_count; });
+    cfg().add_on_change("beta", [&](const std::string&) { ++beta_count; });
+
+    cfg().set_value("alpha", std::any{1});
+    cfg().set_value("beta", std::any{2});
+    cfg().set_value("alpha", std::any{3});
+    cfg().set_value("gamma", std::any{4});
+
+    EXPECT_EQ(alpha_count, 2);
+    EXPECT_EQ(beta_count, 1);
+}
+
+// A key-filtered callback can be unregistered by its ID, just like global ones.
+//   add("target", cb) → set → count=1 → remove_on_change(id) → set → count=1
+TEST_F(ConfigurationTest, RemoveKeyCallbackById) {
+    int count = 0;
+    int id = cfg().add_on_change("target", [&](const std::string&) { ++count; });
+
+    cfg().set_value("target", std::any{1});
+    EXPECT_EQ(count, 1);
+
+    cfg().remove_on_change(id);
+    cfg().set_value("target", std::any{2});
+    EXPECT_EQ(count, 1);
+}
+
+// clear_on_change() wipes both global and key-filtered callbacks.
+//   global_cb + filter="x" → clear_on_change() → set("x") → nothing fires
+TEST_F(ConfigurationTest, ClearOnChangeRemovesKeyCallbacksToo) {
+    int global_count = 0;
+    int key_count = 0;
+
+    cfg().add_on_change([&](const std::string&) { ++global_count; });
+    cfg().add_on_change("x", [&](const std::string&) { ++key_count; });
+
+    cfg().clear_on_change();
+    cfg().set_value("x", std::any{1});
+    EXPECT_EQ(global_count, 0);
+    EXPECT_EQ(key_count, 0);
+}
+
+// Key filter uses exact string match — substrings and superstrings are ignored.
+//   filter="volume"  set("volume_max")→skip  set("master_volume")→skip  set("vol")→skip
+TEST_F(ConfigurationTest, KeyCallbackExactMatchOnly) {
+    bool fired = false;
+    cfg().add_on_change("volume", [&](const std::string&) { fired = true; });
+
+    cfg().set_value("volume_max", std::any{100});
+    cfg().set_value("master_volume", std::any{80});
+    cfg().set_value("vol", std::any{50});
+    EXPECT_FALSE(fired);
 }
 
 // ---------------------------------------------------------------------------
