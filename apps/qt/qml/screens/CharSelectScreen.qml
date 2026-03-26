@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 /**
  * Character selection screen.  Shows the character roster in a grid with
- * taken characters greyed out.  Delegates to charSelectController.
+ * taken characters greyed out.  Delegates to app.charSelectController.
  */
 Page {
     id: root
@@ -12,7 +12,7 @@ Page {
     header: RowLayout {
         width: parent.width
         Label { text: "Select your character"; font.bold: true; padding: 8; Layout.fillWidth: true }
-        ToolButton { text: "✕ Disconnect"; onClicked: charSelectController.disconnect() }
+        ToolButton { text: "✕ Disconnect"; onClicked: app.charSelectController.disconnect() }
     }
 
     GridView {
@@ -22,7 +22,7 @@ Page {
         cellWidth:  96
         cellHeight: 112
         clip: true
-        model: charSelectController ? charSelectController.model : null
+        model: app.charSelectController ? app.charSelectController.model : null
 
         delegate: ItemDelegate {
             width:  grid.cellWidth  - 4
@@ -49,7 +49,7 @@ Page {
                 }
             }
 
-            onClicked: charSelectController.selectCharacter(index)
+            onClicked: app.charSelectController.selectCharacter(index)
         }
     }
 }

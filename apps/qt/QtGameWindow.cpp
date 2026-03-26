@@ -10,6 +10,7 @@
 #include "utils/Log.h"
 
 // Qt app
+#include "AppContext.h"
 #include "render/RenderBridge.h"
 
 // Qt
@@ -240,8 +241,10 @@ void QtGameWindow::setupQml() {
     m_engine->rootContext()->setContextProperty(
         QStringLiteral("renderBridge"), &RenderBridge::instance());
 
-    // Additional context properties (controllers, models) are registered
-    // by their respective commits; they are added here once implemented.
+    // Expose the controller context object populated by main() before this
+    // window is constructed (see AppContext::setControllers()).
+    m_engine->rootContext()->setContextProperty(
+        QStringLiteral("app"), &AppContext::instance());
 
     m_component = new QQmlComponent(
         m_engine,

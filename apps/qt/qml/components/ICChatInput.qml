@@ -16,7 +16,7 @@ Frame {
 
         // Character name badge
         Label {
-            text: courtroomController ? courtroomController.charName : ""
+            text: app.courtroomController ? app.courtroomController.charName : ""
             font.bold: true
             font.pixelSize: 11
             elide: Text.ElideRight

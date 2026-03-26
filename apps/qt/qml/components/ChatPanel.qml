@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 /**
  * OOC chat panel: scrolling log + text input.
- * Model: courtroomController.chatModel
+ * Model: app.courtroomController.chatModel
  */
 Frame {
     id: root
@@ -19,7 +19,7 @@ Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: courtroomController ? courtroomController.chatModel : null
+            model: app.courtroomController ? app.courtroomController.chatModel : null
             verticalLayoutDirection: ListView.BottomToTop
 
             delegate: Label {
