@@ -131,7 +131,7 @@ void AOServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
                           a.sfx_looping ? "1" : "0",       // 23
                           a.screenshake ? "1" : "0",       // 24
                           a.frame_screenshake,             // 25
-                          "",                              // 26: frame_realization
+                          a.frame_realization,             // 26
                           a.frame_sfx,                     // 27
                           a.additive ? "1" : "0",          // 28
                           a.effects,                       // 29

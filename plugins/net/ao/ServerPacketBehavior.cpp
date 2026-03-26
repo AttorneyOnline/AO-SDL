@@ -141,35 +141,39 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
         return i < fields.size() ? fields[i] : empty;
     };
     auto fi = [&](size_t i, int def = 0) -> int {
-        if (i >= fields.size() || fields[i].empty()) return def;
-        try { return std::stoi(fields[i]); } catch (...) { return def; }
+        if (i >= fields.size() || fields[i].empty())
+            return def;
+        try {
+            return std::stoi(fields[i]);
+        }
+        catch (...) {
+            return def;
+        }
     };
-    auto fb = [&](size_t i) -> bool {
-        return i < fields.size() && fields[i] == "1";
-    };
+    auto fb = [&](size_t i) -> bool { return i < fields.size() && fields[i] == "1"; };
 
     ICAction action;
     action.sender_id = session.client_id;
 
-    // 0-14: same layout in both formats (constructor parsed these correctly)
-    action.desk_mod = desk_mod;
-    action.pre_emote = pre_emote;
-    action.character = character;
-    action.emote = emote;
-    action.message = message;
-    action.side = side;
-    action.sfx_name = sfx_name;
-    action.emote_mod = emote_mod;
-    action.char_id = char_id;
-    action.sfx_delay = sfx_delay;
-    action.objection_mod = objection_mod;
-    action.evidence_id = fi(11); // 0 = no evidence, 1+ = evidence list index
-    action.flip = flip;
-    action.realization = realization;
-    action.text_color = text_color;
-
-    // 15+: client→server indices (NO pair fields — those are server-injected on echo)
-    action.showname = showname; // 15 — same in both formats
+    // All fields read from raw fields[] at client→server indices.
+    // Does NOT use constructor-parsed members to avoid coupling to
+    // the server→client index layout used by the deserializing constructor.
+    action.desk_mod = (f(0) == "chat") ? -1 : fi(0);
+    action.pre_emote = f(1);
+    action.character = f(2);
+    action.emote = f(3);
+    action.message = f(4);
+    action.side = f(5);
+    action.sfx_name = f(6);
+    action.emote_mod = fi(7);
+    action.char_id = fi(8);
+    action.sfx_delay = fi(9);
+    action.objection_mod = fi(10);
+    action.evidence_id = fi(11);
+    action.flip = fb(12);
+    action.realization = fb(13);
+    action.text_color = fi(14);
+    action.showname = f(15);
     action.other_charid = fi(16, -1);
     action.self_offset = f(17);
     action.immediate = fb(18);

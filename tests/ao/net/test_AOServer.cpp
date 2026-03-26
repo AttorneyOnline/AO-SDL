@@ -287,18 +287,83 @@ TEST_F(AOServerTest, SessionCount) {
 TEST_F(AOServerTest, ICMessageBroadcastsToArea) {
     auto id1 = do_full_handshake();
     auto id2 = do_full_handshake();
-    // Both in Lobby (default area)
 
     client_send(id1, "CC#0#0#hwid#%");
     clear_sent();
 
-    // Client 1 sends IC message — should broadcast to both in Lobby
     std::string ms = "MS#0##Phoenix#normal#hello#def#Phoenix#5#0#0#0#0#0#0#0#%";
     client_send(id1, ms);
 
     auto pkts1 = packets_to(id1);
     auto pkts2 = packets_to(id2);
-    // Both should receive the broadcast
     EXPECT_GE(pkts1.size(), 1u);
     EXPECT_GE(pkts2.size(), 1u);
+}
+
+TEST_F(AOServerTest, ICMessagePreservesAllExtensionFields) {
+    auto id1 = do_full_handshake();
+    auto id2 = do_full_handshake();
+
+    client_send(id1, "CC#0#0#hwid#%");
+    clear_sent();
+
+    // Full 28-field client→server MS with all extensions populated.
+    // Layout: desk_mod, pre_emote, character, emote, message, side, sfx_name,
+    //   emote_mod, char_id, sfx_delay, objection_mod, evidence_id, flip,
+    //   realization, text_color, showname, other_charid, self_offset,
+    //   immediate, looping_sfx, screenshake, frame_screenshake,
+    //   frame_realization, frame_sfx, additive, effects, blipname, slide
+    std::string ms = "MS#1#pre#Phoenix#talk#Hello world#def#slam.opus#5#0#200#2#3#1#1#4#"
+                     "Nick#-1#40#1#1#1#FrameShake#FrameReal#FrameSfx#1#flash#male#1#%";
+    client_send(id1, ms);
+
+    auto pkts = packets_to(id2);
+    ASSERT_GE(pkts.size(), 1u);
+
+    // The echo is a 32-field server→client MS. Verify key fields survive.
+    auto& echo = pkts[0];
+    EXPECT_NE(echo.find("MS#"), std::string::npos);
+
+    // Split the echo on '#' to check field positions
+    std::vector<std::string> ef;
+    size_t start = 0, pos;
+    while ((pos = echo.find('#', start)) != std::string::npos) {
+        ef.push_back(echo.substr(start, pos - start));
+        start = pos + 1;
+    }
+
+    // Server→client echo layout (32 fields + header "MS"):
+    // ef[0]=MS, ef[1..32]=fields, ef[33]=% (delimiter tail)
+    ASSERT_GE(ef.size(), 32u);
+
+    EXPECT_EQ(ef[1], "1");           // desk_mod
+    EXPECT_EQ(ef[2], "pre");         // pre_emote
+    EXPECT_EQ(ef[3], "Phoenix");     // character
+    EXPECT_EQ(ef[4], "talk");        // emote
+    EXPECT_EQ(ef[5], "Hello world"); // message
+    EXPECT_EQ(ef[6], "def");         // side
+    EXPECT_EQ(ef[7], "slam.opus");   // sfx_name
+    EXPECT_EQ(ef[8], "5");           // emote_mod
+    EXPECT_EQ(ef[9], "0");           // char_id
+    EXPECT_EQ(ef[10], "200");        // sfx_delay
+    EXPECT_EQ(ef[11], "2");          // objection_mod
+    EXPECT_EQ(ef[12], "3");          // evidence_id
+    EXPECT_EQ(ef[13], "1");          // flip
+    EXPECT_EQ(ef[14], "1");          // realization
+    EXPECT_EQ(ef[15], "4");          // text_color
+    EXPECT_EQ(ef[16], "Nick");       // showname
+    EXPECT_EQ(ef[17], "-1");         // other_charid (pair)
+    // ef[18], ef[19], ef[20] = pair name, pair emote, self_offset
+    EXPECT_EQ(ef[20], "40"); // self_offset
+    // ef[21], ef[22] = pair offset, pair flip
+    EXPECT_EQ(ef[23], "1");          // immediate
+    EXPECT_EQ(ef[24], "1");          // sfx_looping
+    EXPECT_EQ(ef[25], "1");          // screenshake
+    EXPECT_EQ(ef[26], "FrameShake"); // frame_screenshake
+    EXPECT_EQ(ef[27], "FrameReal");  // frame_realization
+    EXPECT_EQ(ef[28], "FrameSfx");   // frame_sfx
+    EXPECT_EQ(ef[29], "1");          // additive
+    EXPECT_EQ(ef[30], "flash");      // effects
+    EXPECT_EQ(ef[31], "male");       // blipname
+    EXPECT_EQ(ef[32], "1");          // slide
 }
