@@ -1,5 +1,12 @@
 #include "net/WebSocketCommon.h"
 
+// sha1.h uses htonl — include platform network headers before it.
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #include "utils/Base64.h"
 
 #include <sha1.h>

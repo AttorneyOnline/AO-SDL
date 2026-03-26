@@ -4,6 +4,7 @@
 
 #include <kissnet.hpp>
 
+#include <optional>
 #include <stdexcept>
 
 struct KissnetServerSocket::Impl {

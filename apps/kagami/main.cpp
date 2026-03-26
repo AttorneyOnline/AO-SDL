@@ -51,7 +51,6 @@ int main(int /*argc*/, char* argv[]) {
 
     if (interactive) {
         ui.init();
-        // Route all log output through the terminal UI
         Log::set_sink([&ui](LogLevel level, const std::string& timestamp, const std::string& message) {
             ui.log(level, timestamp, message);
         });

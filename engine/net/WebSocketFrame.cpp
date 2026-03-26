@@ -7,6 +7,7 @@
 #endif
 
 #include <algorithm>
+#include <iterator>
 
 std::vector<uint8_t> WebSocketFrame::serialize() const {
     std::vector<uint8_t> out_buf;
