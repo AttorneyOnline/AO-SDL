@@ -35,6 +35,12 @@
 // Factory provided by the linked render plugin (aorender_gl or aorender_metal).
 std::unique_ptr<IRenderer> create_renderer(int width, int height);
 
+#if defined(Q_OS_APPLE)
+// Implemented in QtGameWindow_apple.mm — casts void* to MTLDevice*/MTLCommandQueue*
+// so this file stays plain C++.
+QQuickGraphicsDevice qt_make_metal_graphics_device(void* device, void* queue);
+#endif
+
 // --------------------------------------------------------------------------
 
 QtGameWindow::QtGameWindow(UIManager& uiMgr, StateBuffer& buffer,
@@ -187,6 +193,10 @@ void QtGameWindow::initGraphics() {
     // MetalRenderer creates its own MTLDevice and command queue.
     // We hand those pointers to Qt so both the renderer and the scene
     // graph share the same device and can exchange textures directly.
+    //
+    // QQuickGraphicsDevice::fromDeviceAndCommandQueue requires MTLDevice* /
+    // MTLCommandQueue* (ObjC types), so the cast lives in the companion
+    // QtGameWindow_apple.mm to keep this file plain C++.
 
     auto renderer = create_renderer(m_renderW, m_renderH);
     Log::log_print(INFO, "QtGameWindow: renderer created (%s)",
@@ -198,7 +208,7 @@ void QtGameWindow::initGraphics() {
     m_renderManager = std::make_unique<RenderManager>(m_buffer, std::move(renderer));
 
     m_window->setGraphicsDevice(
-        QQuickGraphicsDevice::fromDeviceAndCommandQueue(device, queue));
+        qt_make_metal_graphics_device(device, queue));
 #endif
 
     RenderBridge::instance().setRenderManager(m_renderManager.get(), m_renderW, m_renderH);
@@ -218,7 +228,7 @@ void QtGameWindow::loadFonts() {
             Log::log_print(INFO, "QtGameWindow: registered NotoEmoji (%zu bytes)",
                            file.size);
         else
-            Log::log_print(WARN, "QtGameWindow: failed to register NotoEmoji");
+            Log::log_print(WARNING, "QtGameWindow: failed to register NotoEmoji");
         break;
     }
 }
