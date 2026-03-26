@@ -78,8 +78,10 @@ option(AO_BUILD_SERVER_ONLY "Build only the Kagami server (no SDL client, render
 # Third-party dependencies
 # =============================================================================
 
-# --- SDL2 — only needed for the desktop SDL app, not for Flutter/mobile ------
-if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
+option(AO_BUILD_SDL "Build the SDL2 desktop frontend" ON)
+
+# --- SDL2 — only needed for the SDL desktop app ------------------------------
+if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
@@ -167,8 +169,8 @@ target_include_directories(opusfile
 target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
 target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
 
-# ImGui (static lib — desktop only, not needed for Flutter or server)
-if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
+# ImGui (static lib — SDL frontend only)
+if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
     set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
