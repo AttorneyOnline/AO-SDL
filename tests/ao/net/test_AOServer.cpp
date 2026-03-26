@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "game/GameRoom.h"
 #include "net/ao/AOServer.h"
 #include "net/ao/PacketTypes.h"
 #include "utils/Log.h"
@@ -15,14 +16,13 @@ class AOServerTest : public ::testing::Test {
 
         server_.set_send_func([this](uint64_t id, const std::string& data) { sent_packets_.push_back({id, data}); });
 
-        auto& gs = server_.game_state();
-        gs.characters = {"Phoenix", "Edgeworth", "Maya"};
-        gs.music = {"Trial.opus", "Objection.opus"};
-        gs.areas = {"Lobby", "Courtroom"};
-        gs.server_name = "TestServer";
-        gs.server_description = "A test server";
-        gs.max_players = 10;
-        gs.reset_taken();
+        room_.characters = {"Phoenix", "Edgeworth", "Maya"};
+        room_.music = {"Trial.opus", "Objection.opus"};
+        room_.areas = {"Lobby", "Courtroom"};
+        room_.server_name = "TestServer";
+        room_.server_description = "A test server";
+        room_.max_players = 10;
+        room_.reset_taken();
     }
 
     void TearDown() override {
@@ -76,7 +76,8 @@ class AOServerTest : public ::testing::Test {
         return id;
     }
 
-    AOServer server_;
+    GameRoom room_;
+    AOServer server_{room_};
     std::vector<std::pair<uint64_t, std::string>> sent_packets_;
     uint64_t next_id_ = 1;
 };
@@ -167,7 +168,7 @@ TEST_F(AOServerTest, RMRespondWithSM) {
 TEST_F(AOServerTest, RDMarksJoinedAndSendsDone) {
     auto id = do_full_handshake();
     // After handshake, session should be joined
-    auto* session = server_.get_session(id);
+    auto* session = room_.get_session(id);
     ASSERT_NE(session, nullptr);
     EXPECT_TRUE(session->joined);
     EXPECT_EQ(session->area, "Lobby");
@@ -232,7 +233,7 @@ TEST_F(AOServerTest, CharacterSelection) {
     EXPECT_NE(pkts[0].find("PV#"), std::string::npos);
     EXPECT_NE(pkts[0].find("#CID#1#"), std::string::npos);
 
-    auto* session = server_.get_session(id);
+    auto* session = room_.get_session(id);
     EXPECT_EQ(session->character_id, 1);
     EXPECT_EQ(session->display_name, "Edgeworth");
 }
@@ -268,19 +269,19 @@ TEST_F(AOServerTest, DisconnectFreesCharacter) {
     auto id = do_full_handshake();
     client_send(id, "CC#0#0#hwid#%");
 
-    EXPECT_NE(server_.game_state().char_taken[0], 0);
+    EXPECT_NE(room_.char_taken[0], 0);
     server_.on_client_disconnected(id);
-    EXPECT_EQ(server_.game_state().char_taken[0], 0);
+    EXPECT_EQ(room_.char_taken[0], 0);
 }
 
 TEST_F(AOServerTest, SessionCount) {
-    EXPECT_EQ(server_.session_count(), 0u);
+    EXPECT_EQ(room_.session_count(), 0u);
     server_.on_client_connected(1);
-    EXPECT_EQ(server_.session_count(), 1u);
+    EXPECT_EQ(room_.session_count(), 1u);
     server_.on_client_connected(2);
-    EXPECT_EQ(server_.session_count(), 2u);
+    EXPECT_EQ(room_.session_count(), 2u);
     server_.on_client_disconnected(1);
-    EXPECT_EQ(server_.session_count(), 1u);
+    EXPECT_EQ(room_.session_count(), 1u);
 }
 
 TEST_F(AOServerTest, ICMessageBroadcastsToArea) {

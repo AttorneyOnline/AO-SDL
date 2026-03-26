@@ -3,6 +3,7 @@
 #include "ServerSettings.h"
 #include "TerminalUI.h"
 
+#include "game/GameRoom.h"
 #include "net/KissnetServerSocket.h"
 #include "net/WebSocketServer.h"
 #include "utils/Log.h"
@@ -78,29 +79,29 @@ int main(int /*argc*/, char* argv[]) {
     WebSocketServer ws(std::move(listener));
     ws.set_supported_subprotocols({"aonx", "ao2"});
 
-    AOServer ao_backend;
-    NXServer nx_backend;
+    // --- Shared game state ---
+    GameRoom room;
+    room.server_name = cfg.server_name();
+    room.server_description = cfg.server_description();
+    room.max_players = cfg.max_players();
+    room.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
+    room.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
+    room.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
+    room.reset_taken();
+
+    // --- Protocol backends (thin serialization adapters over shared room) ---
+    AOServer ao_backend(room);
+    NXServer nx_backend(room);
     ProtocolRouter router(ao_backend, nx_backend);
 
     router.set_subprotocol_func([&ws](uint64_t id) { return ws.get_client_subprotocol(id); });
 
-    // Configure AO2 game state
-    auto& gs = ao_backend.game_state();
-    gs.server_name = cfg.server_name();
-    gs.server_description = cfg.server_description();
-    gs.max_players = cfg.max_players();
-    gs.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
-    gs.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
-    gs.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
-    gs.reset_taken();
-
     // Wire send functions to WebSocket transport
-    ao_backend.set_send_func([&ws](uint64_t id, const std::string& data) {
+    auto ws_send = [&ws](uint64_t id, const std::string& data) {
         ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
-    });
-    nx_backend.set_broadcast_func([&ws](uint64_t id, const std::string& data) {
-        ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
-    });
+    };
+    ao_backend.set_send_func(ws_send);
+    nx_backend.set_send_func(ws_send);
 
     ws.on_client_connected([&router](WebSocketServer::ClientId id) { router.on_client_connected(id); });
     ws.on_client_disconnected([&router](WebSocketServer::ClientId id) { router.on_client_disconnected(id); });

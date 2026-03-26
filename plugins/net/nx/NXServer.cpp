@@ -4,7 +4,6 @@
 
 #include <random>
 
-/// Generate a random session token (hex string).
 static std::string generate_token() {
     thread_local std::mt19937 rng(std::random_device{}());
     thread_local std::uniform_int_distribution<uint32_t> dist;
@@ -13,57 +12,82 @@ static std::string generate_token() {
     return buf;
 }
 
-NXServer::NXServer() = default;
+NXServer::NXServer(GameRoom& room) : room_(room) {
+    room_.add_ic_broadcast([this](const std::string& area, const ICEvent& evt) { broadcast_ic(area, evt); });
+    room_.add_ooc_broadcast([this](const std::string& area, const OOCEvent& evt) { broadcast_ooc(area, evt); });
+    room_.add_char_select_broadcast([this](const CharSelectEvent& evt) { broadcast_char_select(evt); });
+    room_.add_chars_taken_broadcast([this](const std::vector<int>& taken) { broadcast_chars_taken(taken); });
+}
+
+void NXServer::set_send_func(SendFunc func) {
+    send_func_ = std::move(func);
+}
 
 std::string NXServer::create_session(uint64_t client_id) {
-    ServerSession session;
-    session.client_id = client_id;
+    auto& session = room_.create_session(client_id, "aonx");
     session.session_token = generate_token();
-    session.protocol = "aonx";
-    auto token = session.session_token;
-    sessions_.emplace(client_id, std::move(session));
+    session.joined = true;
     Log::log_print(INFO, "NX: session created for client %llu", (unsigned long long)client_id);
-    return token;
+    return session.session_token;
 }
 
 void NXServer::destroy_session(uint64_t client_id) {
-    sessions_.erase(client_id);
+    room_.destroy_session(client_id);
     Log::log_print(INFO, "NX: session destroyed for client %llu", (unsigned long long)client_id);
 }
 
-ServerSession* NXServer::get_session(uint64_t client_id) {
-    auto it = sessions_.find(client_id);
-    return it != sessions_.end() ? &it->second : nullptr;
+void NXServer::send(uint64_t client_id, const NXMessage& msg) {
+    if (!send_func_)
+        return;
+    send_func_(client_id, msg.serialize());
 }
 
-ServerSession* NXServer::get_session_by_token(const std::string& token) {
-    // O(n) scan — fine for current scale. If this becomes a hot path
-    // (e.g. REST auth middleware on every request), add a token→client_id index.
-    for (auto& [id, session] : sessions_) {
-        if (session.session_token == token)
-            return &session;
-    }
-    return nullptr;
-}
-
-void NXServer::set_broadcast_func(BroadcastFunc func) {
-    broadcast_func_ = std::move(func);
-}
-
-void NXServer::broadcast_to_area(const std::string& area, const NXMessage& msg) {
-    if (!broadcast_func_)
+void NXServer::send_to_area(const std::string& area, const NXMessage& msg) {
+    if (!send_func_)
         return;
     auto serialized = msg.serialize();
-    for (auto& [id, session] : sessions_) {
-        if (session.area == area)
-            broadcast_func_(id, serialized);
+    for (auto* session : room_.sessions_in_area(area)) {
+        if (session->protocol == "aonx")
+            send_func_(session->client_id, serialized);
     }
 }
 
-void NXServer::broadcast_all(const NXMessage& msg) {
-    if (!broadcast_func_)
-        return;
-    auto serialized = msg.serialize();
-    for (auto& [id, session] : sessions_)
-        broadcast_func_(id, serialized);
+void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
+    auto& a = evt.action;
+    nlohmann::json j = {
+        {"type", "ic_message"}, {"schema_version", 1}, {"character", a.character}, {"emote", a.emote},
+        {"message", a.message}, {"side", a.side},      {"showname", a.showname},
+    };
+    send_to_area(area, NXMessage(j));
+}
+
+void NXServer::broadcast_ooc(const std::string& area, const OOCEvent& evt) {
+    nlohmann::json j = {
+        {"type", "ooc_message"},
+        {"schema_version", 1},
+        {"name", evt.action.name},
+        {"message", evt.action.message},
+    };
+    send_to_area(area, NXMessage(j));
+}
+
+void NXServer::broadcast_char_select(const CharSelectEvent& evt) {
+    nlohmann::json j = {
+        {"type", "char_select"},
+        {"schema_version", 1},
+        {"client_id", evt.client_id},
+        {"character_id", evt.character_id},
+        {"character_name", evt.character_name},
+    };
+    send(evt.client_id, NXMessage(j));
+}
+
+void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
+    nlohmann::json j = {
+        {"type", "chars_taken"},
+        {"schema_version", 1},
+        {"taken", taken},
+    };
+    // TODO: broadcast to all NX clients when we have an all-NX-clients iterator
+    (void)j;
 }

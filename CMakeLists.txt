@@ -225,6 +225,7 @@ add_library(aoengine STATIC
     engine/utils/Base64.cpp
     engine/utils/JsonValidation.cpp
 
+    engine/game/GameRoom.cpp
     engine/game/GameThread.cpp
     engine/game/ServerList.cpp
     engine/game/Session.cpp

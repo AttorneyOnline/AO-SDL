@@ -1,82 +1,36 @@
-/**
- * @file NXServer.h
- * @brief AONX protocol handler (server side).
- *
- * Handles incoming REST requests and manages WebSocket broadcast
- * for connected clients. This is the server-side counterpart to NXClient.
- *
- * REST endpoints handle: auth, session, character selection, IC/OOC
- * submission, moderation, asset queries.
- *
- * WebSocket pushes: IC messages, OOC chat, background/music changes,
- * moderation actions, presence updates.
- */
 #pragma once
 
 #include "NXMessage.h"
-#include "game/ServerSession.h"
+#include "game/GameAction.h"
+#include "game/GameRoom.h"
 
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <unordered_map>
 
-/// Server-side AONX protocol handler.
-///
-/// Owns the session table and provides methods for:
-///   - Processing REST API requests (routed from httplib handlers)
-///   - Broadcasting events to WebSocket clients
-///   - Managing session lifecycle
 class NXServer {
   public:
-    NXServer();
+    explicit NXServer(GameRoom& room);
 
-    // --- Session management ---
+    using SendFunc = std::function<void(uint64_t client_id, const std::string& data)>;
+    void set_send_func(SendFunc func);
 
-    /// Create a new session for a WebSocket client.
-    /// Returns the session token.
-    std::string create_session(uint64_t client_id);
-
-    /// Remove a session (disconnect/kick).
-    void destroy_session(uint64_t client_id);
-
-    /// Look up a session by client ID.
-    ServerSession* get_session(uint64_t client_id);
-
-    /// Look up a session by token.
-    ServerSession* get_session_by_token(const std::string& token);
-
-    /// Number of active sessions.
-    size_t session_count() const {
-        return sessions_.size();
+    GameRoom& room() {
+        return room_;
     }
 
-    // --- Broadcast ---
+    std::string create_session(uint64_t client_id);
+    void destroy_session(uint64_t client_id);
 
-    using BroadcastFunc = std::function<void(uint64_t client_id, const std::string& data)>;
+    void send(uint64_t client_id, const NXMessage& msg);
+    void send_to_area(const std::string& area, const NXMessage& msg);
 
-    /// Set the function used to send data to a specific WebSocket client.
-    /// Typically wired to WebSocketServer::send().
-    void set_broadcast_func(BroadcastFunc func);
-
-    /// Broadcast a message to all clients in a given area.
-    void broadcast_to_area(const std::string& area, const NXMessage& msg);
-
-    /// Broadcast a message to all connected clients.
-    void broadcast_all(const NXMessage& msg);
-
-    // --- REST request handling ---
-
-    // TODO: Handler methods for each REST endpoint.
-    // These will be called from httplib route handlers in Kagami's main.
-    //
-    // NXMessage handle_authenticate(const NXMessage& request);
-    // NXMessage handle_select_character(const ServerSession& session, const NXMessage& request);
-    // NXMessage handle_ic_message(const ServerSession& session, const NXMessage& request);
-    // NXMessage handle_ooc_message(const ServerSession& session, const NXMessage& request);
-    // NXMessage handle_moderation_action(const ServerSession& session, const NXMessage& request);
+    void broadcast_ic(const std::string& area, const ICEvent& evt);
+    void broadcast_ooc(const std::string& area, const OOCEvent& evt);
+    void broadcast_char_select(const CharSelectEvent& evt);
+    void broadcast_chars_taken(const std::vector<int>& taken);
 
   private:
-    std::unordered_map<uint64_t, ServerSession> sessions_; ///< client_id → session
-    BroadcastFunc broadcast_func_;
+    GameRoom& room_;
+    SendFunc send_func_;
 };
