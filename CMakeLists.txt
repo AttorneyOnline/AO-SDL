@@ -453,9 +453,13 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 # Applications — one per backend
 # =============================================================================
 
+option(AO_BUILD_QT "Build the Qt/QML frontend" OFF)
+
 if(NOT AO_BUILD_FLUTTER)
     add_subdirectory(apps/sdl)
-    # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+    if(AO_BUILD_QT)
+        add_subdirectory(apps/qt)
+    endif()
 endif()
 
 # --- ao_bridge — C API for Flutter/Dart FFI (mobile) -------------------------
