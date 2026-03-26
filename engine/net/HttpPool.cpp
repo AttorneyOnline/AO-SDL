@@ -8,7 +8,7 @@
 
 HttpPool::HttpPool(int num_threads) {
     for (int i = 0; i < num_threads; i++)
-        workers_.emplace_back(&HttpPool::worker_loop, this);
+        workers_.emplace_back([this](std::stop_token st) { worker_loop(st); });
     Log::log_print(DEBUG, "HttpPool: started %d worker threads", num_threads);
 }
 
@@ -17,18 +17,17 @@ HttpPool::~HttpPool() {
 }
 
 void HttpPool::stop() {
-    if (!running_.load(std::memory_order_acquire))
+    if (workers_.empty())
         return;
-    running_.store(false, std::memory_order_release);
+    for (auto& t : workers_)
+        t.request_stop();
     {
         std::lock_guard lock(work_mutex_);
         work_queue_.clear();
     }
     work_cv_.notify_all();
-    for (auto& t : workers_) {
-        if (t.joinable())
-            t.join();
-    }
+    // jthread destructors auto-join
+    workers_.clear();
 }
 
 void HttpPool::get(const std::string& host, const std::string& path, HttpCallback cb, HttpPriority priority) {
@@ -100,7 +99,7 @@ int HttpPool::poll() {
     return count;
 }
 
-void HttpPool::worker_loop() {
+void HttpPool::worker_loop(std::stop_token st) {
     // Keep one persistent httplib::Client per host so TCP+SSL connections are
     // reused via HTTP keep-alive.  This avoids creating a new SSL_CTX, loading
     // the Windows certificate store, and performing a full TLS handshake for
@@ -124,15 +123,15 @@ void HttpPool::worker_loop() {
         Request req;
         {
             std::unique_lock lock(work_mutex_);
-            work_cv_.wait(lock, [this] { return !work_queue_.empty() || !running_.load(std::memory_order_acquire); });
-            if (!running_.load(std::memory_order_acquire) && work_queue_.empty())
+            work_cv_.wait(lock, [this, &st] { return !work_queue_.empty() || st.stop_requested(); });
+            if (st.stop_requested() && work_queue_.empty())
                 return;
             req = std::move(work_queue_.front());
             work_queue_.pop_front();
         }
 
         HttpResponse resp;
-        if (running_.load(std::memory_order_acquire)) {
+        if (!st.stop_requested()) {
             try {
                 auto& cli = get_client(req.host);
                 if (req.chunk_callback) {
@@ -168,7 +167,7 @@ void HttpPool::worker_loop() {
             }
         }
 
-        if (running_.load(std::memory_order_acquire)) {
+        if (!st.stop_requested()) {
             if (req.chunk_callback) {
                 // Streaming: callback runs directly on worker thread (caller blocks on future)
                 if (req.callback)

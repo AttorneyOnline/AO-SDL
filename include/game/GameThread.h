@@ -13,11 +13,12 @@
 /**
  * @brief Drives an IScenePresenter on a background thread at approximately 10 Hz.
  *
- * On construction, a std::thread is spawned running game_loop(). Each iteration
+ * On construction, a std::jthread is spawned running game_loop(). Each iteration
  * calls IScenePresenter::tick() and publishes the resulting RenderState into the
  * shared StateBuffer for the render thread to consume.
  *
- * Call stop() to signal the thread to exit and join it.
+ * Call stop() to signal the thread to exit and join it, or let the destructor
+ * handle it automatically.
  */
 class GameThread {
   public:
@@ -32,8 +33,6 @@ class GameThread {
 
     /**
      * @brief Signal the game loop to stop and join the thread.
-     *
-     * Sets the running flag to false and blocks until the thread exits.
      */
     void stop();
 
@@ -46,18 +45,11 @@ class GameThread {
     }
 
   private:
-    /**
-     * @brief Main loop executed on the game thread.
-     *
-     * Repeatedly calls presenter.tick() at ~10 Hz and writes the result
-     * into the render buffer until running becomes false.
-     */
-    void game_loop();
+    void game_loop(std::stop_token st);
 
-    std::atomic<bool> running;        /**< Flag to signal the loop to exit. */
     std::atomic<int> last_tick_us_;   /**< Last tick() duration in microseconds. */
     std::atomic<float> tick_rate_hz_; /**< Measured tick frequency. */
     StateBuffer& render_buffer;       /**< Shared render state output buffer. */
     IScenePresenter& presenter;       /**< Scene presenter driven each tick. */
-    std::thread tick_thread;          /**< The background game thread. */
+    std::jthread tick_thread;         /**< The background game thread. */
 };

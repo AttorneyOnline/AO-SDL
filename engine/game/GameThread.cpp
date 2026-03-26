@@ -1,23 +1,24 @@
 #include "game/GameThread.h"
 
 GameThread::GameThread(StateBuffer& render_buffer, IScenePresenter& presenter)
-    : running(true), last_tick_us_(0), tick_rate_hz_(0), render_buffer(render_buffer), presenter(presenter),
-      tick_thread(&GameThread::game_loop, this) {
+    : last_tick_us_(0), tick_rate_hz_(0), render_buffer(render_buffer), presenter(presenter),
+      tick_thread([this](std::stop_token st) { game_loop(st); }) {
 }
 
 void GameThread::stop() {
-    running = false;
-    tick_thread.join();
+    tick_thread.request_stop();
+    if (tick_thread.joinable())
+        tick_thread.join();
 }
 
-void GameThread::game_loop() {
+void GameThread::game_loop(std::stop_token st) {
     presenter.init();
 
     auto last = std::chrono::steady_clock::now();
     int tick_count = 0;
     auto rate_start = std::chrono::steady_clock::now();
 
-    while (running) {
+    while (!st.stop_requested()) {
         auto now = std::chrono::steady_clock::now();
         auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count();
         last = now;

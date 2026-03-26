@@ -14,25 +14,24 @@
 #include <thread>
 
 NetworkThread::NetworkThread(ProtocolHandler& handler)
-    : running(true), handler(handler), net_thread(&NetworkThread::net_loop, this) {
+    : handler(handler), net_thread([this](std::stop_token st) { net_loop(st); }) {
 }
 
 void NetworkThread::stop() {
-    running = false;
-    if (net_thread.joinable()) {
+    net_thread.request_stop();
+    if (net_thread.joinable())
         net_thread.join();
-    }
 }
 
-void NetworkThread::net_loop() {
-    while (running) {
+void NetworkThread::net_loop(std::stop_token st) {
+    while (!st.stop_requested()) {
         // Drain any stale disconnect requests before waiting for a new connection.
         while (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
         }
 
         // Wait for the user to select a server before connecting.
         std::optional<WebSocket> sock;
-        while (running && !sock.has_value()) {
+        while (!st.stop_requested() && !sock.has_value()) {
             if (auto ev = EventManager::instance().get_channel<ServerConnectEvent>().get_event()) {
                 sock.emplace(ev->get_host(), ev->get_port());
             }
@@ -41,7 +40,7 @@ void NetworkThread::net_loop() {
             }
         }
 
-        if (!running)
+        if (st.stop_requested())
             return;
 
         try {
@@ -60,7 +59,7 @@ void NetworkThread::net_loop() {
 
         std::vector<WebSocket::WebSocketFrame> msgs;
 
-        while (running) {
+        while (!st.stop_requested()) {
             // Check if the UI requested a voluntary disconnect.
             if (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
                 Log::log_print(INFO, "Disconnect requested by user");

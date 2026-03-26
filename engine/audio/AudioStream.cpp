@@ -159,8 +159,7 @@ AudioStream::AudioStream() : pcm_ring_(RING_CAPACITY) {
 
 AudioStream::~AudioStream() {
     cancel();
-    if (decode_thread_.joinable())
-        decode_thread_.join();
+    // jthread destructor auto-joins
 }
 
 void AudioStream::feed(const uint8_t* data, size_t len) {
@@ -180,7 +179,7 @@ void AudioStream::mark_complete() {
 
     // Start the decode thread now that all data is available.
     if (!decode_thread_.joinable() && !cancelled_.load(std::memory_order_acquire) && !raw_data_.empty()) {
-        decode_thread_ = std::thread(&AudioStream::decode_thread_func, this);
+        decode_thread_ = std::jthread(&AudioStream::decode_thread_func, this);
     }
     else if (!decode_thread_.joinable()) {
         finished_.store(true, std::memory_order_release);
