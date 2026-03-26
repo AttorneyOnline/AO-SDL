@@ -2,6 +2,7 @@
 
 #include "net/ao/AOServer.h"
 #include "net/ao/PacketTypes.h"
+#include "utils/Log.h"
 
 #include <string>
 #include <vector>
@@ -9,6 +10,9 @@
 class AOServerTest : public ::testing::Test {
   protected:
     void SetUp() override {
+        // Suppress verbose protocol logs during tests.
+        Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
         server_.set_send_func([this](uint64_t id, const std::string& data) { sent_packets_.push_back({id, data}); });
 
         auto& gs = server_.game_state();
@@ -19,6 +23,10 @@ class AOServerTest : public ::testing::Test {
         gs.server_description = "A test server";
         gs.max_players = 10;
         gs.reset_taken();
+    }
+
+    void TearDown() override {
+        Log::set_sink(nullptr);
     }
 
     // Simulate a client connecting and sending a raw packet string.
@@ -260,9 +268,9 @@ TEST_F(AOServerTest, DisconnectFreesCharacter) {
     auto id = do_full_handshake();
     client_send(id, "CC#0#0#hwid#%");
 
-    EXPECT_TRUE(server_.game_state().char_taken[0]);
+    EXPECT_NE(server_.game_state().char_taken[0], 0);
     server_.on_client_disconnected(id);
-    EXPECT_FALSE(server_.game_state().char_taken[0]);
+    EXPECT_EQ(server_.game_state().char_taken[0], 0);
 }
 
 TEST_F(AOServerTest, SessionCount) {

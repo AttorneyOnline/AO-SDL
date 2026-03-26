@@ -68,6 +68,12 @@ static void sigwinch_handler(int) {
 }
 #endif
 
+TerminalUI::~TerminalUI() {
+    // Guard against destruction without cleanup() — prevent dangling global pointer.
+    if (g_active_ui.load(std::memory_order_relaxed) == this)
+        cleanup();
+}
+
 void TerminalUI::init() {
     get_terminal_size(width_, height_);
     std::cout << "\033[2J"; // clear screen

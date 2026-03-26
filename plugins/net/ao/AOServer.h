@@ -46,11 +46,11 @@ struct AOGameState {
         "expanded_desk_mods",
     };
 
-    /// Per-character taken state. Index matches characters[].
-    std::vector<bool> char_taken;
+    /// Per-character taken state. Index matches characters[]. 0 = available, 1 = taken.
+    std::vector<int> char_taken;
 
     void reset_taken() {
-        char_taken.assign(characters.size(), false);
+        char_taken.assign(characters.size(), 0);
     }
 };
 

@@ -36,7 +36,8 @@ void WebSocketServer::stop() {
         running_ = false;
 
         for (auto& [id, client] : clients_) {
-            all_ids.push_back(id);
+            if (client.handshake_complete)
+                all_ids.push_back(id);
             try {
                 WebSocketFrame close_frame;
                 close_frame.fin = true;
@@ -157,6 +158,13 @@ void WebSocketServer::send(ClientId client_id, std::span<const uint8_t> data) {
 }
 
 void WebSocketServer::broadcast(std::span<const uint8_t> data) {
+    // Threading assumption: poll(), send(), broadcast(), and close_client()
+    // are called from a single thread (the WS poll thread). If multiple
+    // threads call these concurrently, a client could be removed by one
+    // thread while another is about to fire its disconnect callback,
+    // resulting in a double callback. The mutex protects the data structure
+    // but not the callback-firing window. This is safe under the current
+    // single-writer model.
     std::vector<ClientId> dead_clients;
     {
         std::lock_guard lock(mutex_);
@@ -530,7 +538,7 @@ std::vector<WebSocketFrame> WebSocketServer::read_client_frames(ClientConnection
 }
 
 void WebSocketServer::send_frame(ClientConnection& client, const WebSocketFrame& frame) {
-    auto wire = const_cast<WebSocketFrame&>(frame).serialize();
+    auto wire = frame.serialize();
     client.socket->send(wire.data(), wire.size());
 }
 

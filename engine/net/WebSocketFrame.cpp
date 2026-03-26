@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-std::vector<uint8_t> WebSocketFrame::serialize() {
+std::vector<uint8_t> WebSocketFrame::serialize() const {
     std::vector<uint8_t> out_buf;
 
     uint8_t fin_rsv_opcode = ((fin ? 0x80 : 0x00) | ((rsv & 0x07) << 4) | (opcode & 0x0F));

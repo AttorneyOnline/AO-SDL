@@ -108,7 +108,7 @@ void AOPacketRD::handle_server(AOServer& server, ServerSession& session) {
     // CharsCheck — character availability
     std::vector<std::string> taken_fields;
     taken_fields.reserve(gs.char_taken.size());
-    for (bool t : gs.char_taken)
+    for (int t : gs.char_taken)
         taken_fields.push_back(t ? "-1" : "0");
     server.send(session.client_id, AOPacket("CharsCheck", taken_fields));
 
@@ -169,7 +169,7 @@ void AOPacketCC::handle_server(AOServer& server, ServerSession& session) {
     // Free previous character
     int old_char = session.character_id;
     if (old_char >= 0 && old_char < static_cast<int>(gs.char_taken.size()))
-        gs.char_taken[old_char] = false;
+        gs.char_taken[old_char] = 0;
 
     // Take new character (if not spectator)
     if (requested_char >= 0) {
@@ -178,7 +178,7 @@ void AOPacketCC::handle_server(AOServer& server, ServerSession& session) {
                            (unsigned long long)session.client_id);
             return;
         }
-        gs.char_taken[requested_char] = true;
+        gs.char_taken[requested_char] = 1;
     }
 
     session.character_id = requested_char;
@@ -192,7 +192,7 @@ void AOPacketCC::handle_server(AOServer& server, ServerSession& session) {
     // Broadcast updated CharsCheck to all clients in area
     std::vector<std::string> taken_fields;
     taken_fields.reserve(gs.char_taken.size());
-    for (bool t : gs.char_taken)
+    for (int t : gs.char_taken)
         taken_fields.push_back(t ? "-1" : "0");
     server.broadcast_all(AOPacket("CharsCheck", taken_fields));
 

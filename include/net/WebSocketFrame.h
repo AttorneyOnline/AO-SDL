@@ -55,7 +55,7 @@ struct WebSocketFrame {
      * @brief Serialize this frame into a byte buffer suitable for sending.
      * @return The serialized frame bytes.
      */
-    std::vector<uint8_t> serialize();
+    std::vector<uint8_t> serialize() const;
 };
 
 /** @brief Convert a 64-bit value from network to host byte order. */

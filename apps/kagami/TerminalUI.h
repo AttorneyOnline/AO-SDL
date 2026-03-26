@@ -16,6 +16,8 @@
 /// after each log line so it stays at the bottom.
 class TerminalUI {
   public:
+    ~TerminalUI();
+
     /// Set up the terminal: clear screen, draw separator, show prompt.
     /// Installs a SIGWINCH handler for terminal resize.
     void init();

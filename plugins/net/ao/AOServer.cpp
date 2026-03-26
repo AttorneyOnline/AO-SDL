@@ -31,7 +31,7 @@ void AOServer::on_client_disconnected(uint64_t client_id) {
         // Free character slot if taken
         int char_id = it->second.session.character_id;
         if (char_id >= 0 && char_id < static_cast<int>(game_state_.char_taken.size()))
-            game_state_.char_taken[char_id] = false;
+            game_state_.char_taken[char_id] = 0;
     }
     sessions_.erase(client_id);
     Log::log_print(INFO, "AO: client %llu disconnected", (unsigned long long)client_id);
