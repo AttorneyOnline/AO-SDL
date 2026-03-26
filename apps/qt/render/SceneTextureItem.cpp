@@ -2,27 +2,33 @@
 
 #include "RenderBridge.h"
 
+#include <rhi/qrhi.h>
+#include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
 #include <QQuickWindow>
 
-// On Apple the Metal texture must be wrapped via Objective-C++.
-// tex_from_native() is defined in SceneTextureItem_apple.mm on Apple,
-// and inline below on all other platforms.
-#if defined(Q_OS_APPLE)
-QSGTexture* tex_from_native(uintptr_t texId, QQuickWindow* window,
-                             int renderW, int renderH);
-#else
+// Wrap an existing native texture (GL name or Metal pointer) in a QSGTexture
+// using Qt's RHI layer. createTextureFromRhiTexture is the supported API in
+// Qt 6.6+ and works identically on all backends/platforms.
 static QSGTexture* tex_from_native(uintptr_t texId, QQuickWindow* window,
                                    int renderW, int renderH) {
-    // Qt6: createTextureFromId was removed; use createTextureFromNativeObject.
-    // nativeObjectPtr is a pointer to the GL texture ID (uint).
-    unsigned int gl_id = static_cast<unsigned int>(texId);
-    return window->createTextureFromNativeObject(
-        QQuickWindow::NativeObjectTexture,
-        &gl_id, 0,
-        QSize(renderW, renderH));
+    auto *ri  = window->rendererInterface();
+    auto *rhi = static_cast<QRhi *>(
+        ri->getResource(window, QSGRendererInterface::RhiResource));
+    if (!rhi)
+        return nullptr;
+
+    // Metal render target is MTLPixelFormatBGRA8Unorm; GL is GL_RGBA8.
+    // Declaring the wrong format to RHI causes channel-swapped output.
+    const bool isMetal =
+        (ri->graphicsApi() == QSGRendererInterface::Metal);
+    const QRhiTexture::Format fmt =
+        isMetal ? QRhiTexture::BGRA8 : QRhiTexture::RGBA8;
+
+    QRhiTexture *rhiTex = rhi->newTexture(fmt, QSize(renderW, renderH));
+    rhiTex->createFrom({static_cast<quint64>(texId), 0});
+    return window->createTextureFromRhiTexture(rhiTex);
 }
-#endif
 
 // --------------------------------------------------------------------------
 
