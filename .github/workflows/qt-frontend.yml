@@ -35,7 +35,6 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.*'
-          modules: 'qtquickcontrols2'
           cache: true
 
       # ---- Platform dependencies ----
