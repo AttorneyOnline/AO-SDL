@@ -1,3 +1,4 @@
+#include "ProtocolRouter.h"
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
@@ -70,16 +71,37 @@ int main(int /*argc*/, char* argv[]) {
         http.listen(cfg.bind_address(), cfg.http_port());
     });
 
-    // --- WebSocket echo server ---
+    // --- WebSocket server + protocol routing ---
     auto listener = std::make_unique<KissnetServerSocket>(cfg.bind_address());
     WebSocketServer ws(std::move(listener));
+    ws.set_supported_subprotocols({"aonx", "ao2"});
 
-    ws.on_client_connected(
-        [](WebSocketServer::ClientId id) { Log::log_print(INFO, "WS client %llu connected", (unsigned long long)id); });
+    AOServer ao_backend;
+    NXServer nx_backend;
+    ProtocolRouter router(ao_backend, nx_backend);
 
-    ws.on_client_disconnected([](WebSocketServer::ClientId id) {
-        Log::log_print(INFO, "WS client %llu disconnected", (unsigned long long)id);
+    router.set_subprotocol_func([&ws](uint64_t id) { return ws.get_client_subprotocol(id); });
+
+    // Configure AO2 game state
+    auto& gs = ao_backend.game_state();
+    gs.server_name = cfg.server_name();
+    gs.server_description = cfg.server_description();
+    gs.max_players = cfg.max_players();
+    gs.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
+    gs.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
+    gs.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
+    gs.reset_taken();
+
+    // Wire send functions to WebSocket transport
+    ao_backend.set_send_func([&ws](uint64_t id, const std::string& data) {
+        ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
     });
+    nx_backend.set_broadcast_func([&ws](uint64_t id, const std::string& data) {
+        ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
+    });
+
+    ws.on_client_connected([&router](WebSocketServer::ClientId id) { router.on_client_connected(id); });
+    ws.on_client_disconnected([&router](WebSocketServer::ClientId id) { router.on_client_disconnected(id); });
 
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
@@ -89,7 +111,9 @@ int main(int /*argc*/, char* argv[]) {
         while (!st.stop_requested()) {
             auto frames = ws.poll();
             for (auto& [client_id, frame] : frames) {
-                ws.send(client_id, frame.data);
+                std::string data(frame.data.begin(), frame.data.end());
+                Log::log_print(VERBOSE, "WS frame from %llu: %s", (unsigned long long)client_id, data.c_str());
+                router.on_client_message(client_id, data);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }

@@ -56,42 +56,58 @@ void WebSocketServer::stop() {
 }
 
 std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll() {
-    std::lock_guard lock(mutex_);
-    if (!running_)
-        return {};
-
-    accept_new_clients();
-
     std::vector<ClientFrame> result;
-    std::vector<ClientId> dead_clients;
+    std::vector<ClientId> newly_connected;
+    std::vector<ClientId> newly_disconnected;
 
-    for (auto& [id, client] : clients_) {
-        if (!client.handshake_complete) {
+    {
+        std::lock_guard lock(mutex_);
+        if (!running_)
+            return {};
+
+        accept_new_clients();
+
+        std::vector<ClientId> dead_clients;
+
+        for (auto& [id, client] : clients_) {
+            if (!client.handshake_complete) {
+                try {
+                    if (!perform_server_handshake(client))
+                        continue;
+                    newly_connected.push_back(id);
+                }
+                catch (...) {
+                    dead_clients.push_back(id);
+                    continue;
+                }
+            }
+
             try {
-                if (!perform_server_handshake(client))
-                    continue; // Not enough data yet
-                if (on_connected_)
-                    on_connected_(id);
+                auto frames = read_client_frames(client);
+                for (auto& frame : frames)
+                    result.push_back({id, std::move(frame)});
             }
             catch (...) {
                 dead_clients.push_back(id);
-                continue;
             }
         }
 
-        try {
-            auto frames = read_client_frames(client);
-            for (auto& frame : frames) {
-                result.push_back({id, std::move(frame)});
-            }
-        }
-        catch (...) {
-            dead_clients.push_back(id);
+        for (auto id : dead_clients) {
+            newly_disconnected.push_back(id);
+            remove_client(id);
         }
     }
 
-    for (auto id : dead_clients)
-        remove_client(id);
+    // Fire callbacks outside the lock to avoid deadlock when
+    // callbacks call send()/broadcast() which re-acquire the mutex.
+    for (auto id : newly_connected) {
+        if (on_connected_)
+            on_connected_(id);
+    }
+    for (auto id : newly_disconnected) {
+        if (on_disconnected_)
+            on_disconnected_(id);
+    }
 
     return result;
 }
@@ -497,7 +513,8 @@ void WebSocketServer::remove_client(ClientId id) {
     auto it = clients_.find(id);
     if (it == clients_.end())
         return;
-    if (on_disconnected_)
-        on_disconnected_(id);
+    // Note: on_disconnected_ is NOT fired here — it's fired outside the lock
+    // in poll() to avoid deadlock. Direct callers (close_client, stop) handle
+    // their own callback invocation.
     clients_.erase(it);
 }

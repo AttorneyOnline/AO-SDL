@@ -405,9 +405,11 @@ endif()
 
 add_library(ao_net STATIC
     plugins/net/ao/AOClient.cpp
+    plugins/net/ao/AOServer.cpp
     plugins/net/ao/AOPacket.cpp
     plugins/net/ao/PacketTypes.cpp
     plugins/net/ao/PacketBehavior.cpp
+    plugins/net/ao/ServerPacketBehavior.cpp
 )
 set_property(TARGET ao_net PROPERTY CXX_STANDARD 20)
 target_include_directories(ao_net
@@ -415,6 +417,20 @@ target_include_directories(ao_net
     PRIVATE plugins/net/ao   # bare includes within the net plugin
 )
 target_link_libraries(ao_net PUBLIC aoengine)
+
+# --- nx_net — AONX network protocol (JSON messages, REST+WebSocket) ---------
+
+add_library(nx_net STATIC
+    plugins/net/nx/NXMessage.cpp
+    plugins/net/nx/NXClient.cpp
+    plugins/net/nx/NXServer.cpp
+)
+set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
+target_include_directories(nx_net
+    PUBLIC  plugins
+    PRIVATE plugins/net/nx
+)
+target_link_libraries(nx_net PUBLIC aoengine)
 
 # --- ao_game — AO2 game logic (courtroom, emotes, textbox, effects) ---------
 

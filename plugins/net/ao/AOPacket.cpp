@@ -1,6 +1,7 @@
 #include "AOPacket.h"
 
 #include "AOClient.h"
+#include "AOServer.h"
 #include "PacketFactory.h"
 #include "utils/Log.h"
 
@@ -63,5 +64,9 @@ bool AOPacket::is_valid() {
 }
 
 void AOPacket::handle(AOClient& cli) {
-    Log::log_print(DEBUG, "Unhandled packet %s", header.c_str());
+    Log::log_print(DEBUG, "Unhandled client packet %s", header.c_str());
+}
+
+void AOPacket::handle_server(AOServer& /*server*/, ServerSession& /*session*/) {
+    Log::log_print(DEBUG, "Unhandled server packet %s", header.c_str());
 }
