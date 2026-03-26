@@ -56,6 +56,11 @@ qt_add_qml_module(aoqt
         render/SceneTextureItem.cpp
 )
 
+# Metal texture wrapping requires Objective-C++ and must be a separate .mm file.
+if(APPLE)
+    target_sources(aoqt PRIVATE render/SceneTextureItem_apple.mm)
+endif()
+
 set_property(TARGET aoqt PROPERTY CXX_STANDARD 20)
 target_include_directories(aoqt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

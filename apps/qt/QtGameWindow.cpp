@@ -201,7 +201,7 @@ void QtGameWindow::initGraphics() {
         QQuickGraphicsDevice::fromDeviceAndCommandQueue(device, queue));
 #endif
 
-    RenderBridge::instance().setRenderManager(m_renderManager.get());
+    RenderBridge::instance().setRenderManager(m_renderManager.get(), m_renderW, m_renderH);
 }
 
 void QtGameWindow::loadFonts() {

@@ -1,5 +1,8 @@
 #include "RenderBridge.h"
 
+#include "render/IRenderer.h"
+#include "render/RenderManager.h"
+
 RenderBridge::RenderBridge(QObject* parent)
     : QObject(parent) {}
 
@@ -8,6 +11,26 @@ RenderBridge& RenderBridge::instance() {
     return bridge;
 }
 
-void RenderBridge::setRenderManager(RenderManager* rm) {
+void RenderBridge::setRenderManager(RenderManager* rm,
+                                    int renderWidth, int renderHeight) {
     m_renderManager = rm;
+    m_renderWidth   = renderWidth;
+    m_renderHeight  = renderHeight;
+}
+
+void RenderBridge::renderFrame() {
+    if (m_renderManager)
+        m_renderManager->render_frame();
+}
+
+uintptr_t RenderBridge::nativeTextureId() const {
+    if (!m_renderManager)
+        return 0;
+    return m_renderManager->get_renderer().get_render_texture_id();
+}
+
+bool RenderBridge::uvFlipped() const {
+    if (!m_renderManager)
+        return false;
+    return m_renderManager->get_renderer().uv_flipped();
 }
