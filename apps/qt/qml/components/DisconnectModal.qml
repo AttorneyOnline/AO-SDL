@@ -6,7 +6,7 @@ import QtQuick.Layouts
  * Disconnect confirmation dialog.  Shown when the server closes the
  * connection (DisconnectEvent) or the user clicks the disconnect button.
  *
- * Calls courtroomController.disconnect() on confirm, which emits
+ * Calls app.courtroomController.disconnect() on confirm, which emits
  * POP_TO_ROOT → QtGameWindow::onNavAction().
  */
 Dialog {
@@ -34,7 +34,7 @@ Dialog {
             text: "Return to Server List"
             onClicked: {
                 root.close();
-                courtroomController.disconnect();
+                app.courtroomController.disconnect();
             }
         }
     }

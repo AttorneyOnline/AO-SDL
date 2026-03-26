@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 /**
  * Server browser screen.  Displays the master-server list and a direct-connect
- * bar.  Delegates to serverListController (ServerListController*).
+ * bar.  Delegates to app.serverListController (ServerListController*).
  */
 Page {
     id: root
@@ -44,7 +44,7 @@ Page {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: serverListController ? serverListController.model : null
+            model: app.serverListController ? app.serverListController.model : null
 
             delegate: ItemDelegate {
                 width: ListView.view.width
@@ -54,7 +54,7 @@ Page {
                     Label { text: model.description; wrapMode: Text.Wrap; opacity: 0.7 }
                     Label { text: model.players + " players"; font.pixelSize: 11 }
                 }
-                onClicked: serverListController.connectToServer(index)
+                onClicked: app.serverListController.connectToServer(index)
             }
 
             Label {
@@ -75,7 +75,7 @@ Page {
             port = parseInt(addr.substring(colon + 1), 10) || port;
             addr = addr.substring(0, colon);
         }
-        serverListController.directConnect(addr, port);
+        app.serverListController.directConnect(addr, port);
         directField.clear();
     }
 }
