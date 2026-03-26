@@ -91,10 +91,9 @@ class HttpPool {
         HttpCallback callback;
     };
 
-    void worker_loop();
+    void worker_loop(std::stop_token st);
 
-    std::vector<std::thread> workers_;
-    std::atomic<bool> running_{true};
+    std::vector<std::jthread> workers_;
     std::atomic<int> pending_{0};
 
     // Work queue sorted by priority (highest first)

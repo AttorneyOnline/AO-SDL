@@ -10,20 +10,19 @@
 
 #include "ProtocolHandler.h"
 
-#include <atomic>
 #include <thread>
 
 /**
  * @brief Manages a dedicated network I/O thread for a ProtocolHandler.
  *
- * On construction, a std::thread is spawned running net_loop(). The thread
+ * On construction, a std::jthread is spawned running net_loop(). The thread
  * first waits for a ServerConnectEvent to determine which server to connect
  * to, then opens a WebSocket connection and enters the main poll loop. Each
  * iteration drains ProtocolHandler::flush_outgoing() and delivers received
  * messages via ProtocolHandler::on_message().
  *
- * Call stop() to signal the thread to exit and join it. The ProtocolHandler
- * must outlive the NetworkThread.
+ * Call stop() to signal the thread to exit and join it, or let the destructor
+ * handle it automatically. The ProtocolHandler must outlive the NetworkThread.
  */
 class NetworkThread {
   public:
@@ -45,9 +44,8 @@ class NetworkThread {
     void stop();
 
   private:
-    void net_loop();
+    void net_loop(std::stop_token st);
 
-    std::atomic<bool> running;
     ProtocolHandler& handler;
-    std::thread net_thread;
+    std::jthread net_thread;
 };

@@ -160,5 +160,5 @@ class AudioStream : public std::enable_shared_from_this<AudioStream> {
     std::atomic<bool> cancelled_{false};
     std::atomic<bool> decode_done_{false}; // decode thread has exited
 
-    std::thread decode_thread_;
+    std::jthread decode_thread_;
 };
