@@ -1,4 +1,5 @@
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2)
+find_package(OpenGL REQUIRED)
 qt_standard_project_setup(REQUIRES 6.8)
 
 # Sources are added to this list across commits. The QML module handles
@@ -14,6 +15,7 @@ set(QT_APP_SOURCES
     ui/models/PlayerListModel.cpp
     ui/models/EvidenceModel.cpp
     ui/models/MusicAreaModel.cpp
+    ui/controllers/IQtScreenController.h
     ui/controllers/ServerListController.cpp
     ui/controllers/CharSelectController.cpp
     ui/controllers/CourtroomController.cpp
@@ -86,7 +88,7 @@ if(APPLE)
         "-framework QuartzCore"
     )
 else()
-    target_link_libraries(aoqt PRIVATE aorender_gl)
+    target_link_libraries(aoqt PRIVATE aorender_gl OpenGL::GL)
 endif()
 
 # Prefer the discrete GPU on Windows laptops with hybrid graphics.
