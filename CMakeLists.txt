@@ -26,8 +26,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Third-party dependencies
 # =============================================================================
 
-# --- SDL2 — only needed for the desktop SDL app, not for Flutter/mobile ------
-if(NOT AO_BUILD_FLUTTER)
+option(AO_BUILD_SDL "Build the SDL2 desktop frontend" ON)
+
+# --- SDL2 — only needed for the SDL desktop app ------------------------------
+if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
@@ -115,8 +117,8 @@ target_include_directories(opusfile
 target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
 target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
 
-# ImGui (static lib — desktop only, not needed for Flutter)
-if(NOT AO_BUILD_FLUTTER)
+# ImGui (static lib — SDL frontend only)
+if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER)
     set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
     set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
@@ -456,7 +458,9 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 option(AO_BUILD_QT "Build the Qt/QML frontend" OFF)
 
 if(NOT AO_BUILD_FLUTTER)
-    add_subdirectory(apps/sdl)
+    if(AO_BUILD_SDL)
+        add_subdirectory(apps/sdl)
+    endif()
     if(AO_BUILD_QT)
         add_subdirectory(apps/qt)
     endif()
