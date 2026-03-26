@@ -65,7 +65,12 @@ if(APPLE)
 endif()
 
 set_property(TARGET aoqt PROPERTY CXX_STANDARD 20)
-target_include_directories(aoqt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# render/ is added so Qt's generated qmltyperegistrations.cpp can resolve
+# #include "SceneTextureItem.h" (codegen drops the subdirectory prefix).
+target_include_directories(aoqt PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/render
+)
 
 target_link_libraries(aoqt PRIVATE
     ao_protocol

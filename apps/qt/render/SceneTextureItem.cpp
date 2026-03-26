@@ -5,10 +5,6 @@
 #include <QSGSimpleTextureNode>
 #include <QQuickWindow>
 
-#if !defined(Q_OS_APPLE)
-#  include <QSGTexture>
-#endif
-
 // On Apple the Metal texture must be wrapped via Objective-C++.
 // tex_from_native() is defined in SceneTextureItem_apple.mm on Apple,
 // and inline below on all other platforms.
@@ -18,8 +14,13 @@ QSGTexture* tex_from_native(uintptr_t texId, QQuickWindow* window,
 #else
 static QSGTexture* tex_from_native(uintptr_t texId, QQuickWindow* window,
                                    int renderW, int renderH) {
-    return window->createTextureFromId(static_cast<uint>(texId),
-                                       QSize(renderW, renderH));
+    // Qt6: createTextureFromId was removed; use createTextureFromNativeObject.
+    // nativeObjectPtr is a pointer to the GL texture ID (uint).
+    unsigned int gl_id = static_cast<unsigned int>(texId);
+    return window->createTextureFromNativeObject(
+        QQuickWindow::NativeObjectTexture,
+        &gl_id, 0,
+        QSize(renderW, renderH));
 }
 #endif
 
