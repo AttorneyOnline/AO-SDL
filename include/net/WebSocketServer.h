@@ -1,0 +1,154 @@
+/**
+ * @file WebSocketServer.h
+ * @brief RFC 6455 WebSocket server for accepting and broadcasting to clients.
+ *
+ * Designed for server-to-client push: accepts WebSocket connections, performs
+ * the server-side handshake, and broadcasts messages to all connected clients.
+ * Supports subprotocol negotiation for AO2/v2 transport selection.
+ */
+#pragma once
+
+#include "net/IServerSocket.h"
+#include "net/ITcpSocket.h"
+#include "net/WebSocketFrame.h"
+
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <span>
+#include <string>
+#include <vector>
+
+/**
+ * @brief Server-side WebSocket that accepts and manages multiple client connections.
+ *
+ * Usage:
+ *   1. Construct with an IServerSocket.
+ *   2. Call start() to bind and begin listening.
+ *   3. Call poll() periodically to accept new connections and read client frames.
+ *   4. Call broadcast() to push messages to all connected clients.
+ *
+ * Thread safety: all public methods are mutex-protected and may be called
+ * from any thread. Typical usage is single-threaded poll + broadcast.
+ */
+class WebSocketServer {
+  public:
+    using ClientId = uint64_t;
+
+    struct ClientFrame {
+        ClientId client_id;
+        WebSocketFrame frame;
+    };
+
+    /**
+     * @brief Construct a WebSocket server.
+     * @param listener An IServerSocket implementation for accepting connections.
+     */
+    explicit WebSocketServer(std::unique_ptr<IServerSocket> listener);
+
+    ~WebSocketServer();
+
+    WebSocketServer(const WebSocketServer&) = delete;
+    WebSocketServer& operator=(const WebSocketServer&) = delete;
+
+    /**
+     * @brief Bind and start listening on the given port.
+     * @param port TCP port to listen on.
+     */
+    void start(uint16_t port);
+
+    /**
+     * @brief Stop the server and close all client connections.
+     */
+    void stop();
+
+    /**
+     * @brief Accept pending connections and read frames from all clients.
+     *
+     * Non-blocking. Returns data frames received from clients (TEXT/BINARY).
+     * Control frames (PING, CLOSE) are handled internally.
+     *
+     * @return Vector of client frames received since the last poll.
+     */
+    std::vector<ClientFrame> poll();
+
+    /**
+     * @brief Send a text message to a specific client.
+     * @param client_id The client to send to.
+     * @param data The payload bytes.
+     */
+    void send(ClientId client_id, std::span<const uint8_t> data);
+
+    /**
+     * @brief Broadcast a text message to all connected clients.
+     * @param data The payload bytes.
+     */
+    void broadcast(std::span<const uint8_t> data);
+
+    /**
+     * @brief Close a specific client connection.
+     * @param client_id The client to disconnect.
+     * @param code WebSocket close status code.
+     * @param reason Optional close reason string.
+     */
+    void close_client(ClientId client_id, uint16_t code = 1000, const std::string& reason = "");
+
+    /**
+     * @brief Set the subprotocols this server supports.
+     *
+     * During the handshake, the server selects the first client-requested
+     * subprotocol that appears in this list.
+     */
+    void set_supported_subprotocols(const std::vector<std::string>& protocols);
+
+    /**
+     * @brief Get the negotiated subprotocol for a client.
+     * @return The selected subprotocol string, or empty if none.
+     */
+    std::string get_client_subprotocol(ClientId client_id) const;
+
+    /**
+     * @brief Get the number of currently connected clients.
+     */
+    size_t client_count() const;
+
+    /**
+     * @brief Set a callback invoked when a client completes the handshake.
+     */
+    void on_client_connected(std::function<void(ClientId)> callback);
+
+    /**
+     * @brief Set a callback invoked when a client disconnects.
+     */
+    void on_client_disconnected(std::function<void(ClientId)> callback);
+
+  private:
+    struct ClientConnection {
+        ClientId id = 0;
+        std::unique_ptr<ITcpSocket> socket;
+        bool handshake_complete = false;
+        std::vector<uint8_t> extra_data;
+        std::vector<uint8_t> fragment_buf;
+        Opcode fragment_opcode = TEXT;
+        bool in_fragment = false;
+        std::string selected_subprotocol;
+    };
+
+    void accept_new_clients();
+    bool perform_server_handshake(ClientConnection& client);
+    std::vector<WebSocketFrame> read_client_frames(ClientConnection& client);
+    void send_frame(ClientConnection& client, const WebSocketFrame& frame);
+    void remove_client(ClientId id);
+
+    std::unique_ptr<IServerSocket> listener_;
+    std::map<ClientId, ClientConnection> clients_;
+    std::vector<std::string> supported_subprotocols_;
+    uint64_t next_client_id_ = 1;
+    bool running_ = false;
+    mutable std::mutex mutex_;
+
+    std::function<void(ClientId)> on_connected_;
+    std::function<void(ClientId)> on_disconnected_;
+};

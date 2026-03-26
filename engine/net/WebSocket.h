@@ -8,88 +8,14 @@
 #pragma once
 
 #include "net/ITcpSocket.h"
+#include "net/WebSocketCommon.h"
+#include "net/WebSocketFrame.h"
 
 #include <array>
-#include <map>
 #include <memory>
 #include <span>
 #include <string>
 #include <vector>
-
-// Define byte swap macro based on compiler
-#if defined(__GNUC__) || defined(__clang__)
-#define BSWAP64(x) __builtin_bswap64(x)
-#elif defined(_MSC_VER)
-#include <cstdlib>
-#define BSWAP64(x) _byteswap_uint64(x)
-#else
-static inline uint64_t BSWAP64(uint64_t x) {
-    return ((x & 0x00000000000000FFULL) << 56) | ((x & 0x000000000000FF00ULL) << 40) |
-           ((x & 0x0000000000FF0000ULL) << 24) | ((x & 0x00000000FF000000ULL) << 8) |
-           ((x & 0x000000FF00000000ULL) >> 8) | ((x & 0x0000FF0000000000ULL) >> 24) |
-           ((x & 0x00FF000000000000ULL) >> 40) | ((x & 0xFF00000000000000ULL) >> 56);
-}
-#endif
-
-/**
- * @brief Case-insensitive comparator for HTTP header map keys.
- */
-struct CaseInsensitiveCompare {
-    /**
-     * @brief Compare two strings lexicographically, ignoring case.
-     * @param a First string.
-     * @param b Second string.
-     * @return True if @p a is less than @p b (case-insensitive).
-     */
-    bool operator()(const std::string& a, const std::string& b) const {
-        return std::lexicographical_compare(
-            a.begin(), a.end(), b.begin(), b.end(),
-            [](unsigned char ac, unsigned char bc) { return std::tolower(ac) < std::tolower(bc); });
-    }
-};
-
-/** @brief Map of HTTP headers with case-insensitive key comparison. */
-typedef std::map<std::string, std::string, CaseInsensitiveCompare> HTTPHeaders;
-
-/**
- * @brief Parsed HTTP response (status line + headers).
- *
- * Used internally during the WebSocket opening handshake to validate the
- * server's HTTP 101 Switching Protocols response.
- */
-class HTTPResponse {
-  public:
-    /** @brief Parsed HTTP status line components. */
-    struct StatusLine {
-        std::string http_version;  /**< HTTP version string (e.g. "HTTP/1.1"). */
-        int status_code;           /**< Numeric status code (e.g. 101). */
-        std::string status_reason; /**< Reason phrase (e.g. "Switching Protocols"). */
-    };
-
-    /**
-     * @brief Construct an HTTPResponse from a parsed status line and headers.
-     * @param status_line The parsed status line.
-     * @param headers The parsed HTTP headers.
-     */
-    HTTPResponse(StatusLine status_line, HTTPHeaders headers);
-
-    /**
-     * @brief Retrieve a header value by name (case-insensitive lookup).
-     * @param header The header name.
-     * @return The header value, or an empty string if not present.
-     */
-    std::string get_header(std::string header) const;
-
-    /**
-     * @brief Get the parsed status line.
-     * @return The StatusLine struct.
-     */
-    StatusLine get_status() const;
-
-  private:
-    StatusLine status_line;
-    HTTPHeaders headers;
-};
 
 /**
  * @brief RFC 6455 WebSocket client.
@@ -103,34 +29,16 @@ class HTTPResponse {
  */
 class WebSocket {
   public:
-    /** @brief WebSocket frame opcodes per RFC 6455. */
-    enum Opcode { CONTINUATION = 0x00, TEXT = 0x01, BINARY = 0x02, CLOSE = 0x08, PING = 0x09, PONG = 0x0A };
+    // Backward-compatible aliases for code that uses WebSocket::TEXT, etc.
+    using Opcode = ::Opcode;
+    using WebSocketFrame = ::WebSocketFrame;
 
-    /**
-     * @brief A single WebSocket frame (possibly partial during parsing).
-     */
-    struct WebSocketFrame {
-        bool complete;              /**< True if the frame has been fully received. */
-        std::vector<uint8_t> bytes; /**< Raw bytes of the frame as received. */
-
-        bool fin;      /**< FIN bit: true if this is the final fragment. */
-        uint8_t rsv;   /**< RSV bits (reserved, should be 0). */
-        Opcode opcode; /**< Frame opcode. */
-
-        bool mask;        /**< True if the payload is masked. */
-        uint8_t len_code; /**< Raw length code from the frame header. */
-        uint64_t len;     /**< Actual payload length after decoding. */
-
-        uint32_t mask_key; /**< Masking key (only valid if mask is true). */
-
-        std::vector<uint8_t> data; /**< Unmasked payload data. */
-
-        /**
-         * @brief Serialize this frame into a byte buffer suitable for sending.
-         * @return The serialized frame bytes.
-         */
-        std::vector<uint8_t> serialize();
-    };
+    static constexpr ::Opcode CONTINUATION = ::CONTINUATION;
+    static constexpr ::Opcode TEXT = ::TEXT;
+    static constexpr ::Opcode BINARY = ::BINARY;
+    static constexpr ::Opcode CLOSE = ::CLOSE;
+    static constexpr ::Opcode PING = ::PING;
+    static constexpr ::Opcode PONG = ::PONG;
 
     /**
      * @brief Construct a WebSocket client using the default kissnet TCP socket.
@@ -161,10 +69,6 @@ class WebSocket {
 
     /**
      * @brief Perform the WebSocket opening handshake to the root endpoint "/".
-     *
-     * This is a blocking call. It connects the underlying TCP socket, sends
-     * the HTTP upgrade request, and validates the server response.
-     *
      * @throws WebSocketException on connection or handshake failure.
      */
     void connect();
@@ -172,9 +76,6 @@ class WebSocket {
     /**
      * @brief Perform the WebSocket opening handshake to a specific endpoint.
      * @param endpoint The URI path to connect to (e.g. "/ws").
-     *
-     * This is a blocking call.
-     *
      * @throws WebSocketException on connection or handshake failure.
      */
     void connect(const std::string& endpoint);
@@ -184,7 +85,7 @@ class WebSocket {
      * @return A vector of fully received WebSocketFrame objects. May be empty
      *         if no complete frames are available.
      */
-    std::vector<WebSocketFrame> read();
+    std::vector<::WebSocketFrame> read();
 
     /**
      * @brief Send a binary WebSocket message.
@@ -220,17 +121,6 @@ class WebSocket {
     HTTPResponse read_handshake();
     bool validate_handshake(const HTTPResponse& response);
 
-    std::vector<std::string> get_lines(std::span<uint8_t> input);
-    std::string trim(const std::string& str);
-    std::string collapse_lws(const std::string& str);
-    std::pair<std::string, std::string> parse_http_header(const std::string& header);
-    HTTPResponse::StatusLine parse_status_line(const std::string& line);
-
-    bool case_insensitive_equal(const std::string& a, const std::string& b);
-
-    static inline uint64_t net_to_host_64(uint64_t net_value);
-    static inline uint64_t host_to_net_64(uint64_t host_value);
-
     std::unique_ptr<ITcpSocket> socket; /**< Underlying TCP transport. */
 
     HTTPHeaders http_headers;           /**< Custom headers for the handshake. */
@@ -242,6 +132,6 @@ class WebSocket {
 
     // Continuation frame accumulation (RFC 6455 §5.4)
     std::vector<uint8_t> fragment_buf_; /**< Accumulated payload across fragments. */
-    Opcode fragment_opcode_ = TEXT;     /**< Opcode from the first fragment. */
+    ::Opcode fragment_opcode_ = TEXT;   /**< Opcode from the first fragment. */
     bool in_fragment_ = false;          /**< True while accumulating fragments. */
 };

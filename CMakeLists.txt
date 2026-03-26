@@ -241,7 +241,11 @@ add_library(aoengine STATIC
     engine/asset/stb_image_impl.cpp
 
     engine/net/WebSocket.cpp
+    engine/net/WebSocketFrame.cpp
+    engine/net/WebSocketCommon.cpp
+    engine/net/WebSocketServer.cpp
     engine/net/KissnetTcpSocket.cpp
+    engine/net/KissnetServerSocket.cpp
     engine/net/NetworkThread.cpp
 
     engine/event/OutgoingICMessageEvent.cpp
@@ -455,6 +459,7 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 
 if(NOT AO_BUILD_FLUTTER)
     add_subdirectory(apps/sdl)
+    add_subdirectory(apps/kagami)
     # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
 endif()
 

@@ -30,6 +30,30 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
     }
 
   protected:
+    // -- defaults ------------------------------------------------------------
+
+    /// Set a JSON object whose keys serve as fallback values.
+    ///
+    /// Call this once (typically in the subclass constructor) to define all
+    /// known keys and their default values in a single place:
+    ///
+    ///   set_defaults({
+    ///       {"http_port", 8080},
+    ///       {"server_name", "My Server"},
+    ///   });
+    ///
+    /// - value() falls through to the default when a key is absent from json_.
+    /// - keys() and for_each() include defaulted keys that haven't been set.
+    /// - serialize() merges defaults under live values so the output is complete.
+    void set_defaults(nlohmann::json defaults) {
+        defaults_ = std::move(defaults);
+    }
+
+    /// Read-only access to the defaults object.
+    const nlohmann::json& defaults() const {
+        return defaults_;
+    }
+
     // -- serialization -------------------------------------------------------
 
     bool do_deserialize(const std::vector<uint8_t>& data) override {
@@ -41,7 +65,10 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
     }
 
     std::vector<uint8_t> do_serialize() const override {
-        auto s = json_.dump();
+        // Merge: defaults first, then live values on top.
+        auto merged = defaults_;
+        merged.merge_patch(json_);
+        auto s = merged.dump(4);
         return {s.begin(), s.end()};
     }
 
@@ -62,20 +89,25 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
     std::any do_value(const std::string& key, const std::any& default_value) const override {
         if (is_path(key)) {
             auto ptr = to_pointer(key);
-            if (!json_.contains(ptr))
-                return default_value;
-            return json_to_any(json_.at(ptr), default_value);
+            if (json_.contains(ptr))
+                return json_to_any(json_.at(ptr), default_value);
+            if (defaults_.contains(ptr))
+                return json_to_any(defaults_.at(ptr), default_value);
+            return default_value;
         }
         auto it = json_.find(key);
-        if (it == json_.end())
-            return default_value;
-        return json_to_any(*it, default_value);
+        if (it != json_.end())
+            return json_to_any(*it, default_value);
+        auto dit = defaults_.find(key);
+        if (dit != defaults_.end())
+            return json_to_any(*dit, default_value);
+        return default_value;
     }
 
     bool do_contains(const std::string& key) const override {
         if (is_path(key))
-            return json_.contains(to_pointer(key));
-        return json_.contains(key);
+            return json_.contains(to_pointer(key)) || defaults_.contains(to_pointer(key));
+        return json_.contains(key) || defaults_.contains(key);
     }
 
     void do_remove(const std::string& key) override {
@@ -106,13 +138,17 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
     }
 
     std::vector<std::string> do_keys() const override {
+        auto merged = defaults_;
+        merged.merge_patch(json_);
         std::vector<std::string> result;
-        flatten_keys(json_, "", result);
+        flatten_keys(merged, "", result);
         return result;
     }
 
     void do_for_each(const IConfiguration::KeyValueVisitor& visitor) const override {
-        flatten_visit(json_, "", visitor);
+        auto merged = defaults_;
+        merged.merge_patch(json_);
+        flatten_visit(merged, "", visitor);
     }
 
     /// Direct access for subclasses that need richer JSON manipulation.
@@ -264,4 +300,5 @@ class JsonConfiguration : public ConfigurationBase<Derived> {
     }
 
     nlohmann::json json_ = nlohmann::json::object();
+    nlohmann::json defaults_ = nlohmann::json::object();
 };

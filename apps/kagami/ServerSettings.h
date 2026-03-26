@@ -1,0 +1,56 @@
+#pragma once
+
+#include "configuration/JsonConfiguration.h"
+
+#include <string>
+
+/// Server-specific configuration backed by kagami.json.
+///
+/// Access via ServerSettings::instance(). All keys have sensible defaults
+/// so the server runs out of the box with no config file.
+///
+/// To add a new setting: add it to the defaults in the constructor
+/// and add an accessor.
+class ServerSettings : public JsonConfiguration<ServerSettings> {
+  public:
+    std::string server_name() const {
+        return value<std::string>("server_name");
+    }
+    std::string server_description() const {
+        return value<std::string>("server_description");
+    }
+
+    int http_port() const {
+        return value<int>("http_port");
+    }
+    int ws_port() const {
+        return value<int>("ws_port");
+    }
+    std::string bind_address() const {
+        return value<std::string>("bind_address");
+    }
+
+    int max_players() const {
+        return value<int>("max_players");
+    }
+    std::string motd() const {
+        return value<std::string>("motd");
+    }
+
+    static bool load_from_disk(const std::string& path);
+    static bool save_to_disk(const std::string& path);
+
+  private:
+    friend class ConfigurationBase<ServerSettings>;
+    ServerSettings() {
+        set_defaults({
+            {"server_name", "Kagami Server"},
+            {"server_description", ""},
+            {"http_port", 8080},
+            {"ws_port", 8081},
+            {"bind_address", "0.0.0.0"},
+            {"max_players", 100},
+            {"motd", ""},
+        });
+    }
+};
