@@ -4,6 +4,7 @@
 #include "net/IServerSocket.h"
 #include "net/WebSocketServer.h"
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <queue>
