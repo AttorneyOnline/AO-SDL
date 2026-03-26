@@ -86,27 +86,26 @@ AOPacketHI::AOPacketHI(const std::vector<std::string>& fields) : AOPacket("HI", 
 PacketRegistrar AOPacketIDClient::registrar("ID", [](const auto& f) { return std::make_unique<AOPacketIDClient>(f); });
 
 AOPacketIDClient::AOPacketIDClient(const std::vector<std::string>& fields) : AOPacket("ID", fields) {
-    if (fields.size() >= MIN_FIELDS) {
+    // 3 fields = server→client: player_number, software, version
+    // 2 fields = client→server: software, version
+    if (fields.size() >= 3) {
         player_number = std::stoi(fields[0]);
-        server_software = fields[1];
-        server_version = fields[2];
+        software = fields[1];
+        version = fields[2];
+    }
+    else if (fields.size() >= 2) {
+        software = fields[0];
+        version = fields[1];
     }
 }
 
 // ---------------------------------------------------------------------------
-// AOPacketIDServer  (client → server)
+// AOPacketIDServer  (client → server, sending only)
 // ---------------------------------------------------------------------------
 
 AOPacketIDServer::AOPacketIDServer(const std::string& client_software, const std::string& client_version)
     : AOPacket("ID", {client_software, client_version}), client_software(client_software),
       client_version(client_version) {
-}
-
-AOPacketIDServer::AOPacketIDServer(const std::vector<std::string>& fields) : AOPacket("ID", fields) {
-    if (fields.size() >= MIN_FIELDS) {
-        client_software = fields[0];
-        client_version = fields[1];
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +126,13 @@ AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) : AOPacket("PN", 
 // AOPacketAskChaa  (client → server, no handle)
 // ---------------------------------------------------------------------------
 
+PacketRegistrar AOPacketAskChaa::registrar("askchaa",
+                                           [](const auto& f) { return std::make_unique<AOPacketAskChaa>(f); });
+
 AOPacketAskChaa::AOPacketAskChaa() : AOPacket("askchaa", {}) {
+}
+
+AOPacketAskChaa::AOPacketAskChaa(const std::vector<std::string>& fields) : AOPacket("askchaa", fields) {
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +165,12 @@ AOPacketSI::AOPacketSI(const std::vector<std::string>& fields) : AOPacket("SI", 
 // AOPacketRC  (client → server, no handle)
 // ---------------------------------------------------------------------------
 
+PacketRegistrar AOPacketRC::registrar("RC", [](const auto& f) { return std::make_unique<AOPacketRC>(f); });
+
 AOPacketRC::AOPacketRC() : AOPacket("RC", {}) {
+}
+
+AOPacketRC::AOPacketRC(const std::vector<std::string>& fields) : AOPacket("RC", fields) {
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +187,12 @@ AOPacketSC::AOPacketSC(const std::vector<std::string>& fields)
 // AOPacketRM  (client → server, no handle)
 // ---------------------------------------------------------------------------
 
+PacketRegistrar AOPacketRM::registrar("RM", [](const auto& f) { return std::make_unique<AOPacketRM>(f); });
+
 AOPacketRM::AOPacketRM() : AOPacket("RM", {}) {
+}
+
+AOPacketRM::AOPacketRM(const std::vector<std::string>& fields) : AOPacket("RM", fields) {
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +209,12 @@ AOPacketSM::AOPacketSM(const std::vector<std::string>& fields)
 // AOPacketCH  (client → server keepalive, no handle)
 // ---------------------------------------------------------------------------
 
+PacketRegistrar AOPacketCH::registrar("CH", [](const auto& f) { return std::make_unique<AOPacketCH>(f); });
+
 AOPacketCH::AOPacketCH(int char_id) : AOPacket("CH", {std::to_string(char_id)}) {
+}
+
+AOPacketCH::AOPacketCH(const std::vector<std::string>& fields) : AOPacket("CH", fields) {
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +230,12 @@ AOPacketCHECK::AOPacketCHECK(const std::vector<std::string>& fields) : AOPacket(
 // AOPacketRD  (client → server, no handle)
 // ---------------------------------------------------------------------------
 
+PacketRegistrar AOPacketRD::registrar("RD", [](const auto& f) { return std::make_unique<AOPacketRD>(f); });
+
 AOPacketRD::AOPacketRD() : AOPacket("RD", {}) {
+}
+
+AOPacketRD::AOPacketRD(const std::vector<std::string>& fields) : AOPacket("RD", fields) {
 }
 
 // ---------------------------------------------------------------------------
@@ -247,8 +272,13 @@ AOPacketPW::AOPacketPW(const std::string& password) : AOPacket("PW", {password})
 // AOPacketCC
 // ---------------------------------------------------------------------------
 
+PacketRegistrar AOPacketCC::registrar("CC", [](const auto& f) { return std::make_unique<AOPacketCC>(f); });
+
 AOPacketCC::AOPacketCC(int player_num, int char_id, const std::string& hdid)
     : AOPacket("CC", {std::to_string(player_num), std::to_string(char_id), hdid}) {
+}
+
+AOPacketCC::AOPacketCC(const std::vector<std::string>& fields) : AOPacket("CC", fields) {
 }
 
 // ---------------------------------------------------------------------------
@@ -508,4 +538,11 @@ AOPacketCT::AOPacketCT(const std::vector<std::string>& fields) : AOPacket("CT", 
         message = ao_decode(fields[1]);
         system_message = fields.size() > 2 && fields[2] == "1";
     }
+}
+
+// Force this TU to be linked by providing a symbol that AOServer references.
+void ao_register_packet_types() {
+    // The static PacketRegistrar objects above run their constructors
+    // at program startup, registering all packet types with the factory.
+    // This function exists solely to create a linker dependency.
 }

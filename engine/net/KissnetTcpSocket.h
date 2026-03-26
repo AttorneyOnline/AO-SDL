@@ -12,6 +12,9 @@ class KissnetTcpSocket : public ITcpSocket {
   public:
     KissnetTcpSocket(const std::string& host, uint16_t port);
 
+    /// Construct from an already-connected kissnet socket (from server accept).
+    explicit KissnetTcpSocket(kissnet::tcp_socket&& connected_sock);
+
     void connect() override;
     void set_non_blocking(bool non_blocking) override;
     void send(const uint8_t* data, size_t size) override;

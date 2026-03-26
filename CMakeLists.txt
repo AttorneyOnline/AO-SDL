@@ -225,6 +225,7 @@ add_library(aoengine STATIC
     engine/utils/Base64.cpp
     engine/utils/JsonValidation.cpp
 
+    engine/game/GameRoom.cpp
     engine/game/GameThread.cpp
     engine/game/ServerList.cpp
     engine/game/Session.cpp
@@ -241,7 +242,11 @@ add_library(aoengine STATIC
     engine/asset/stb_image_impl.cpp
 
     engine/net/WebSocket.cpp
+    engine/net/WebSocketFrame.cpp
+    engine/net/WebSocketCommon.cpp
+    engine/net/WebSocketServer.cpp
     engine/net/KissnetTcpSocket.cpp
+    engine/net/KissnetServerSocket.cpp
     engine/net/NetworkThread.cpp
 
     engine/event/OutgoingICMessageEvent.cpp
@@ -401,9 +406,11 @@ endif()
 
 add_library(ao_net STATIC
     plugins/net/ao/AOClient.cpp
+    plugins/net/ao/AOServer.cpp
     plugins/net/ao/AOPacket.cpp
     plugins/net/ao/PacketTypes.cpp
     plugins/net/ao/PacketBehavior.cpp
+    plugins/net/ao/ServerPacketBehavior.cpp
 )
 set_property(TARGET ao_net PROPERTY CXX_STANDARD 20)
 target_include_directories(ao_net
@@ -411,6 +418,20 @@ target_include_directories(ao_net
     PRIVATE plugins/net/ao   # bare includes within the net plugin
 )
 target_link_libraries(ao_net PUBLIC aoengine)
+
+# --- nx_net — AONX network protocol (JSON messages, REST+WebSocket) ---------
+
+add_library(nx_net STATIC
+    plugins/net/nx/NXMessage.cpp
+    plugins/net/nx/NXClient.cpp
+    plugins/net/nx/NXServer.cpp
+)
+set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
+target_include_directories(nx_net
+    PUBLIC  plugins
+    PRIVATE plugins/net/nx
+)
+target_link_libraries(nx_net PUBLIC aoengine)
 
 # --- ao_game — AO2 game logic (courtroom, emotes, textbox, effects) ---------
 
@@ -455,6 +476,7 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 
 if(NOT AO_BUILD_FLUTTER)
     add_subdirectory(apps/sdl)
+    add_subdirectory(apps/kagami)
     # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
 endif()
 

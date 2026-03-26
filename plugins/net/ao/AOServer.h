@@ -1,0 +1,53 @@
+#pragma once
+
+#include "AOPacket.h"
+#include "game/GameAction.h"
+#include "game/GameRoom.h"
+
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+struct AOProtocolState {
+    std::string incomplete_buf;
+    std::string hardware_id;
+
+    enum State { CONNECTED, IDENTIFIED, LOADING, JOINED };
+    State state = CONNECTED;
+};
+
+class AOServer {
+  public:
+    explicit AOServer(GameRoom& room);
+
+    using SendFunc = std::function<void(uint64_t client_id, const std::string& data)>;
+    void set_send_func(SendFunc func);
+
+    GameRoom& room() {
+        return room_;
+    }
+
+    void on_client_connected(uint64_t client_id);
+    void on_client_disconnected(uint64_t client_id);
+    void on_client_message(uint64_t client_id, const std::string& raw);
+
+    AOProtocolState* get_protocol_state(uint64_t client_id);
+
+    void send(uint64_t client_id, const AOPacket& packet);
+    void send_to_area(const std::string& area, const AOPacket& packet);
+    void send_to_all(const AOPacket& packet);
+
+    void broadcast_ic(const std::string& area, const ICEvent& evt);
+    void broadcast_ooc(const std::string& area, const OOCEvent& evt);
+    void broadcast_char_select(const CharSelectEvent& evt);
+    void broadcast_chars_taken(const std::vector<int>& taken);
+
+  private:
+    void dispatch(uint64_t client_id, AOPacket& packet);
+
+    GameRoom& room_;
+    SendFunc send_func_;
+    std::unordered_map<uint64_t, AOProtocolState> proto_state_;
+};

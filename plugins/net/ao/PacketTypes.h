@@ -5,6 +5,11 @@
 
 class AOClient;
 
+/// Call once at startup to ensure all PacketRegistrar statics are initialized.
+/// This prevents the linker from stripping the translation unit when linking
+/// as a static library.
+void ao_register_packet_types();
+
 // To prevent footguns, only implement the constructor to specify explicit fields if the client is supposed to send it
 
 class AOPacketDecryptor : public AOPacket {
@@ -24,6 +29,7 @@ class AOPacketHI : public AOPacket {
   public:
     AOPacketHI(const std::string& hardware_id);
     AOPacketHI(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
     std::string hardware_id;
@@ -32,31 +38,34 @@ class AOPacketHI : public AOPacket {
     static constexpr int MIN_FIELDS = 1;
 };
 
+/// Bidirectional "ID" packet. The same header is used in both directions:
+///   server→client: ID#[player_number]#[software]#[version]#%  (3 fields)
+///   client→server: ID#[software]#[version]#%                  (2 fields)
+/// The factory creates this class for all "ID" packets. The constructor
+/// parses whichever variant it receives based on field count.
 class AOPacketIDClient : public AOPacket {
   public:
     AOPacketIDClient(const std::vector<std::string>& fields);
 
     virtual void handle(AOClient& cli) override;
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
-    int player_number;
-    std::string server_software;
-    std::string server_version;
+    int player_number = 0;
+    std::string software;
+    std::string version;
 
     static PacketRegistrar registrar;
-    static constexpr int MIN_FIELDS = 3;
+    static constexpr int MIN_FIELDS = 2;
 };
 
 class AOPacketIDServer : public AOPacket {
   public:
     AOPacketIDServer(const std::string& client_software, const std::string& client_version);
-    AOPacketIDServer(const std::vector<std::string>& fields);
 
   private:
     std::string client_software;
     std::string client_version;
-
-    static constexpr int MIN_FIELDS = 2;
 };
 
 class AOPacketPN : public AOPacket {
@@ -77,8 +86,11 @@ class AOPacketPN : public AOPacket {
 class AOPacketAskChaa : public AOPacket {
   public:
     AOPacketAskChaa();
+    AOPacketAskChaa(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
 };
 
@@ -113,8 +125,11 @@ class AOPacketSI : public AOPacket {
 class AOPacketRC : public AOPacket {
   public:
     AOPacketRC();
+    AOPacketRC(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
 };
 
@@ -134,8 +149,11 @@ class AOPacketSC : public AOPacket {
 class AOPacketRM : public AOPacket {
   public:
     AOPacketRM();
+    AOPacketRM(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
 };
 
@@ -155,8 +173,11 @@ class AOPacketSM : public AOPacket {
 class AOPacketRD : public AOPacket {
   public:
     AOPacketRD();
+    AOPacketRD(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 0;
 };
 
@@ -164,8 +185,11 @@ class AOPacketRD : public AOPacket {
 class AOPacketCH : public AOPacket {
   public:
     AOPacketCH(int char_id);
+    AOPacketCH(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 1;
 };
 
@@ -215,8 +239,11 @@ class AOPacketPW : public AOPacket {
 class AOPacketCC : public AOPacket {
   public:
     AOPacketCC(int player_num, int char_id, const std::string& hdid);
+    AOPacketCC(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 3;
 };
 
@@ -241,6 +268,7 @@ class AOPacketMS : public AOPacket {
     AOPacketMS(const std::vector<std::string>& fields);
 
     virtual void handle(AOClient& cli) override;
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
     int desk_mod;
@@ -430,6 +458,7 @@ class AOPacketCT : public AOPacket {
     AOPacketCT(const std::vector<std::string>& fields);
 
     virtual void handle(AOClient& cli) override;
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
     std::string sender_name;

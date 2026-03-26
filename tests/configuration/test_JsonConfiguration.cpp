@@ -596,3 +596,97 @@ TEST_F(JsonConfigurationTest, KeysConsistentWithContains) {
     for (const auto& key : k)
         EXPECT_TRUE(cfg().contains(key)) << "keys() returned '" << key << "' but contains() is false";
 }
+
+// ---------------------------------------------------------------------------
+// set_defaults() — first-class defaults support
+// ---------------------------------------------------------------------------
+
+// A second mock that uses set_defaults().
+class MockJsonConfigWithDefaults : public JsonConfiguration<MockJsonConfigWithDefaults> {
+  public:
+    void init_defaults() {
+        set_defaults({
+            {"port", 8080},
+            {"name", "default_name"},
+            {"verbose", false},
+        });
+    }
+};
+
+class JsonConfigDefaultsTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        cfg().clear_on_change();
+        cfg().clear();
+        cfg().init_defaults();
+    }
+    static MockJsonConfigWithDefaults& cfg() {
+        return MockJsonConfigWithDefaults::instance();
+    }
+};
+
+TEST_F(JsonConfigDefaultsTest, ValueFallsThroughToDefaults) {
+    EXPECT_EQ(cfg().value<int>("port"), 8080);
+    EXPECT_EQ(cfg().value<std::string>("name"), "default_name");
+    EXPECT_EQ(cfg().value<bool>("verbose"), false);
+}
+
+TEST_F(JsonConfigDefaultsTest, SetValueOverridesDefault) {
+    cfg().set_value("port", std::any{9090});
+    EXPECT_EQ(cfg().value<int>("port"), 9090);
+}
+
+TEST_F(JsonConfigDefaultsTest, ContainsIncludesDefaults) {
+    EXPECT_TRUE(cfg().contains("port"));
+    EXPECT_TRUE(cfg().contains("name"));
+    EXPECT_FALSE(cfg().contains("nonexistent"));
+}
+
+TEST_F(JsonConfigDefaultsTest, KeysIncludesDefaults) {
+    auto k = cfg().keys();
+    std::sort(k.begin(), k.end());
+    ASSERT_EQ(k.size(), 3u);
+    EXPECT_EQ(k[0], "name");
+    EXPECT_EQ(k[1], "port");
+    EXPECT_EQ(k[2], "verbose");
+}
+
+TEST_F(JsonConfigDefaultsTest, SerializeIncludesDefaults) {
+    auto bytes = cfg().serialize();
+    std::string json(bytes.begin(), bytes.end());
+    EXPECT_NE(json.find("8080"), std::string::npos);
+    EXPECT_NE(json.find("default_name"), std::string::npos);
+}
+
+TEST_F(JsonConfigDefaultsTest, SerializeIncludesOverrides) {
+    cfg().set_value("port", std::any{9090});
+    auto bytes = cfg().serialize();
+    std::string json(bytes.begin(), bytes.end());
+    EXPECT_NE(json.find("9090"), std::string::npos);
+    EXPECT_EQ(json.find("8080"), std::string::npos); // overridden
+}
+
+TEST_F(JsonConfigDefaultsTest, DeserializePreservesDefaults) {
+    std::string json = R"({"port": 3000})";
+    std::vector<uint8_t> data(json.begin(), json.end());
+    ASSERT_TRUE(cfg().deserialize(data));
+
+    // port overridden, name falls through to default
+    EXPECT_EQ(cfg().value<int>("port"), 3000);
+    EXPECT_EQ(cfg().value<std::string>("name"), "default_name");
+}
+
+TEST_F(JsonConfigDefaultsTest, ClearRemovesOverridesButKeepsDefaults) {
+    cfg().set_value("port", std::any{9090});
+    cfg().clear();
+    EXPECT_EQ(cfg().value<int>("port"), 8080); // back to default
+}
+
+TEST_F(JsonConfigDefaultsTest, ForEachIncludesDefaults) {
+    std::map<std::string, std::any> visited;
+    cfg().for_each([&](const std::string& key, const std::any& val) { visited[key] = val; });
+    EXPECT_EQ(visited.size(), 3u);
+    EXPECT_TRUE(visited.count("port"));
+    EXPECT_TRUE(visited.count("name"));
+    EXPECT_TRUE(visited.count("verbose"));
+}

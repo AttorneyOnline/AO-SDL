@@ -6,6 +6,8 @@
 #include <vector>
 
 class AOClient;
+class AOServer;
+struct ServerSession;
 
 class PacketFormatException : public std::invalid_argument {
   public:
@@ -28,7 +30,11 @@ class AOPacket {
     static std::unique_ptr<AOPacket> deserialize(const std::string& serialized);
     bool is_valid();
 
+    /// Client-side handler: process a packet received from the server.
     virtual void handle(AOClient& cli);
+
+    /// Server-side handler: process a packet received from a client.
+    virtual void handle_server(AOServer& server, ServerSession& session);
 
     static constexpr const char* DELIMITER = "#%";
 

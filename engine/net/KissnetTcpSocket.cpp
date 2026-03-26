@@ -8,6 +8,9 @@
 KissnetTcpSocket::KissnetTcpSocket(const std::string& host, uint16_t port) : sock(kissnet::endpoint(host, port)) {
 }
 
+KissnetTcpSocket::KissnetTcpSocket(kissnet::tcp_socket&& connected_sock) : sock(std::move(connected_sock)) {
+}
+
 void KissnetTcpSocket::connect() {
     sock.connect();
 }

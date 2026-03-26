@@ -58,6 +58,10 @@ set(TEST_SOURCES
     render/test_TextMeshBuilder.cpp
     configuration/test_IConfiguration.cpp
     configuration/test_JsonConfiguration.cpp
+    net/test_WebSocketCommon.cpp
+    net/test_WebSocketServer.cpp
+    net/test_NXMessage.cpp
+    ao/net/test_AOServer.cpp
 )
 
 add_executable(aosdl_tests ${TEST_SOURCES})
@@ -75,7 +79,7 @@ target_compile_definitions(aosdl_tests PRIVATE
 # Stub Texture2D so tests don't need the GL renderer plugin
 target_sources(aosdl_tests PRIVATE stubs/StubTexture.cpp)
 
-target_link_libraries(aosdl_tests PRIVATE ao_protocol GTest::gtest_main)
+target_link_libraries(aosdl_tests PRIVATE ao_protocol nx_net GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(aosdl_tests)
