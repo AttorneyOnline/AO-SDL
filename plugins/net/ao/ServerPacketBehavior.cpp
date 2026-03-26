@@ -125,6 +125,7 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
 
     ICAction action;
     action.sender_id = session.client_id;
+    action.char_id = char_id;
     action.desk_mod = desk_mod;
     action.pre_emote = pre_emote;
     action.character = character;
@@ -136,12 +137,17 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
     action.flip = flip;
     action.text_color = text_color;
     action.objection_mod = objection_mod;
-    action.screenshake = screenshake;
+    action.evidence_id = 0; // TODO: parse from fields[11]
     action.realization = realization;
+    action.screenshake = screenshake;
     action.additive = additive;
+    action.immediate = immediate;
     action.sfx_name = sfx_name;
     action.sfx_delay = sfx_delay;
-    action.immediate = immediate;
+    action.sfx_looping = sfx_looping;
+    action.frame_screenshake = frame_screenshake;
+    action.frame_sfx = frame_sfx;
+    action.slide = slide;
 
     server.room().handle_ic(action);
 }

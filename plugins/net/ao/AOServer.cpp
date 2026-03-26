@@ -102,22 +102,41 @@ void AOServer::dispatch(uint64_t client_id, AOPacket& packet) {
 
 void AOServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
     auto& a = evt.action;
+    // Server→client MS echo format (all 32 positional fields).
+    // Pair character fields (16-21) are placeholders until pairing is implemented.
     AOPacket ms("MS", {
-                          std::to_string(a.desk_mod),
-                          a.pre_emote,
-                          a.character,
-                          a.emote,
-                          a.message,
-                          a.side,
-                          a.showname,
-                          std::to_string(a.emote_mod),
-                          std::to_string(0),
-                          a.flip ? "1" : "0",
-                          std::to_string(a.text_color),
-                          std::to_string(a.objection_mod),
-                          "0",
-                          a.screenshake ? "1" : "0",
-                          a.realization ? "1" : "0",
+                          std::to_string(a.desk_mod),      // 0
+                          a.pre_emote,                     // 1
+                          a.character,                     // 2
+                          a.emote,                         // 3
+                          a.message,                       // 4
+                          a.side,                          // 5
+                          a.sfx_name,                      // 6
+                          std::to_string(a.emote_mod),     // 7
+                          std::to_string(a.char_id),       // 8
+                          std::to_string(a.sfx_delay),     // 9
+                          std::to_string(a.objection_mod), // 10
+                          std::to_string(a.evidence_id),   // 11
+                          a.flip ? "1" : "0",              // 12
+                          a.realization ? "1" : "0",       // 13
+                          std::to_string(a.text_color),    // 14
+                          a.showname,                      // 15
+                          std::to_string(a.other_charid),  // 16: pair char_id
+                          "",                              // 17: pair name
+                          "",                              // 18: pair emote
+                          a.self_offset,                   // 19: self offset
+                          "",                              // 20: pair offset
+                          "0",                             // 21: pair flip
+                          a.immediate ? "1" : "0",         // 22
+                          a.sfx_looping ? "1" : "0",       // 23
+                          a.screenshake ? "1" : "0",       // 24
+                          a.frame_screenshake,             // 25
+                          "",                              // 26: frame_realization
+                          a.frame_sfx,                     // 27
+                          a.additive ? "1" : "0",          // 28
+                          a.effects,                       // 29
+                          a.blipname,                      // 30
+                          a.slide ? "1" : "0",             // 31
                       });
     send_to_area(area, ms);
 }
