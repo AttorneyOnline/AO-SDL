@@ -76,6 +76,7 @@ target_link_libraries(aoqt PRIVATE
     Qt6::Quick
     Qt6::Qml
     Qt6::QuickControls2
+    Qt6::GuiPrivate
 )
 
 if(APPLE)
