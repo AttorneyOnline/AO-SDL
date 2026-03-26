@@ -17,6 +17,7 @@
 class TerminalUI {
   public:
     /// Set up the terminal: clear screen, draw separator, show prompt.
+    /// Installs a SIGWINCH handler for terminal resize.
     void init();
 
     /// Restore terminal state (scroll region, cursor).
@@ -31,14 +32,14 @@ class TerminalUI {
     /// Redraw the prompt (call after reading a line of input).
     void show_prompt();
 
-    /// Get the current terminal height.
-    int height() const {
-        return height_;
-    }
+    /// Re-query terminal size and redraw the separator/prompt.
+    /// Called automatically on SIGWINCH.
+    void handle_resize();
 
   private:
     void emit(const std::string& line);
     void draw_separator();
+    void apply_layout();
 
     int height_ = 24;
     int width_ = 80;

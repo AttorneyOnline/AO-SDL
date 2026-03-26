@@ -93,14 +93,15 @@ inline uint64_t host_to_net_64(uint64_t host_value) {
  * The same function masks and unmasks (XOR is its own inverse).
  */
 inline void apply_mask(uint8_t* data, size_t len, uint32_t mask_key) {
-    uint8_t key_bytes[4];
-    uint32_t mask_net = 0;
-#ifdef _WIN32
-    mask_net = _byteswap_ulong(mask_key);
-#else
-    mask_net = __builtin_bswap32(mask_key);
-#endif
-    std::memcpy(key_bytes, &mask_net, 4);
+    // Extract mask bytes in network byte order (MSB first) without
+    // platform-specific intrinsics. This matches the wire layout
+    // defined in RFC 6455 §5.3.
+    uint8_t key_bytes[4] = {
+        static_cast<uint8_t>((mask_key >> 24) & 0xFF),
+        static_cast<uint8_t>((mask_key >> 16) & 0xFF),
+        static_cast<uint8_t>((mask_key >> 8) & 0xFF),
+        static_cast<uint8_t>((mask_key) & 0xFF),
+    };
     for (size_t i = 0; i < len; ++i)
         data[i] ^= key_bytes[i % 4];
 }

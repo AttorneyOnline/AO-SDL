@@ -28,31 +28,38 @@ void WebSocketServer::start(uint16_t port) {
 }
 
 void WebSocketServer::stop() {
-    std::lock_guard lock(mutex_);
-    if (!running_)
-        return;
-    running_ = false;
+    std::vector<ClientId> all_ids;
+    {
+        std::lock_guard lock(mutex_);
+        if (!running_)
+            return;
+        running_ = false;
 
-    // Close all clients
-    for (auto& [id, client] : clients_) {
-        try {
-            // Send close frame (best effort)
-            WebSocketFrame close_frame;
-            close_frame.fin = true;
-            close_frame.opcode = CLOSE;
-            close_frame.mask = false;
-            uint16_t net_code = htons(1001); // Going Away
-            close_frame.data.resize(2);
-            std::memcpy(close_frame.data.data(), &net_code, 2);
-            close_frame.len = close_frame.data.size();
-            close_frame.len_code = (uint8_t)close_frame.len;
-            send_frame(client, close_frame);
+        for (auto& [id, client] : clients_) {
+            all_ids.push_back(id);
+            try {
+                WebSocketFrame close_frame;
+                close_frame.fin = true;
+                close_frame.opcode = CLOSE;
+                close_frame.mask = false;
+                uint16_t net_code = htons(1001); // Going Away
+                close_frame.data.resize(2);
+                std::memcpy(close_frame.data.data(), &net_code, 2);
+                close_frame.len = close_frame.data.size();
+                close_frame.len_code = (uint8_t)close_frame.len;
+                send_frame(client, close_frame);
+            }
+            catch (...) {
+            }
         }
-        catch (...) {
-        }
+        clients_.clear();
+        listener_->close();
     }
-    clients_.clear();
-    listener_->close();
+
+    for (auto id : all_ids) {
+        if (on_disconnected_)
+            on_disconnected_(id);
+    }
 }
 
 std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll() {
@@ -113,100 +120,118 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll() {
 }
 
 void WebSocketServer::send(ClientId client_id, std::span<const uint8_t> data) {
-    std::lock_guard lock(mutex_);
-    auto it = clients_.find(client_id);
-    if (it == clients_.end() || !it->second.handshake_complete)
-        return;
+    bool dead = false;
+    {
+        std::lock_guard lock(mutex_);
+        auto it = clients_.find(client_id);
+        if (it == clients_.end() || !it->second.handshake_complete)
+            return;
 
-    WebSocketFrame frame;
-    frame.fin = true;
-    frame.rsv = 0;
-    frame.opcode = TEXT;
-    frame.mask = false; // Server MUST NOT mask
-    frame.len = data.size();
+        WebSocketFrame frame;
+        frame.fin = true;
+        frame.rsv = 0;
+        frame.opcode = TEXT;
+        frame.mask = false; // Server MUST NOT mask
+        frame.len = data.size();
 
-    if (frame.len <= 125)
-        frame.len_code = (uint8_t)(frame.len & 0xFF);
-    else if (frame.len <= UINT16_MAX)
-        frame.len_code = 126;
-    else
-        frame.len_code = 127;
+        if (frame.len <= 125)
+            frame.len_code = (uint8_t)(frame.len & 0xFF);
+        else if (frame.len <= UINT16_MAX)
+            frame.len_code = 126;
+        else
+            frame.len_code = 127;
 
-    frame.data.assign(data.begin(), data.end());
+        frame.data.assign(data.begin(), data.end());
 
-    try {
-        send_frame(it->second, frame);
+        try {
+            send_frame(it->second, frame);
+        }
+        catch (...) {
+            remove_client(client_id);
+            dead = true;
+        }
     }
-    catch (...) {
-        remove_client(client_id);
-    }
+
+    if (dead && on_disconnected_)
+        on_disconnected_(client_id);
 }
 
 void WebSocketServer::broadcast(std::span<const uint8_t> data) {
-    std::lock_guard lock(mutex_);
-
-    // Build the wire frame once
-    WebSocketFrame frame;
-    frame.fin = true;
-    frame.rsv = 0;
-    frame.opcode = TEXT;
-    frame.mask = false;
-    frame.len = data.size();
-
-    if (frame.len <= 125)
-        frame.len_code = (uint8_t)(frame.len & 0xFF);
-    else if (frame.len <= UINT16_MAX)
-        frame.len_code = 126;
-    else
-        frame.len_code = 127;
-
-    frame.data.assign(data.begin(), data.end());
-    auto wire_bytes = frame.serialize();
-
     std::vector<ClientId> dead_clients;
-    for (auto& [id, client] : clients_) {
-        if (!client.handshake_complete)
-            continue;
-        try {
-            client.socket->send(wire_bytes.data(), wire_bytes.size());
+    {
+        std::lock_guard lock(mutex_);
+
+        WebSocketFrame frame;
+        frame.fin = true;
+        frame.rsv = 0;
+        frame.opcode = TEXT;
+        frame.mask = false;
+        frame.len = data.size();
+
+        if (frame.len <= 125)
+            frame.len_code = (uint8_t)(frame.len & 0xFF);
+        else if (frame.len <= UINT16_MAX)
+            frame.len_code = 126;
+        else
+            frame.len_code = 127;
+
+        frame.data.assign(data.begin(), data.end());
+        auto wire_bytes = frame.serialize();
+
+        for (auto& [id, client] : clients_) {
+            if (!client.handshake_complete)
+                continue;
+            try {
+                client.socket->send(wire_bytes.data(), wire_bytes.size());
+            }
+            catch (...) {
+                dead_clients.push_back(id);
+            }
         }
-        catch (...) {
-            dead_clients.push_back(id);
-        }
+
+        for (auto id : dead_clients)
+            remove_client(id);
     }
 
-    for (auto id : dead_clients)
-        remove_client(id);
+    for (auto id : dead_clients) {
+        if (on_disconnected_)
+            on_disconnected_(id);
+    }
 }
 
 void WebSocketServer::close_client(ClientId client_id, uint16_t code, const std::string& reason) {
-    std::lock_guard lock(mutex_);
-    auto it = clients_.find(client_id);
-    if (it == clients_.end())
-        return;
+    {
+        std::lock_guard lock(mutex_);
+        auto it = clients_.find(client_id);
+        if (it == clients_.end())
+            return;
 
-    try {
-        WebSocketFrame frame;
-        frame.fin = true;
-        frame.opcode = CLOSE;
-        frame.mask = false;
+        try {
+            WebSocketFrame frame;
+            frame.fin = true;
+            frame.opcode = CLOSE;
+            frame.mask = false;
 
-        uint16_t net_code = htons(code);
-        frame.data.resize(2);
-        std::memcpy(frame.data.data(), &net_code, 2);
-        if (!reason.empty()) {
-            size_t reason_len = std::min(reason.size(), (size_t)123);
-            frame.data.insert(frame.data.end(), reason.begin(), reason.begin() + reason_len);
+            uint16_t net_code = htons(code);
+            frame.data.resize(2);
+            std::memcpy(frame.data.data(), &net_code, 2);
+            if (!reason.empty()) {
+                size_t reason_len = std::min(reason.size(), (size_t)123);
+                frame.data.insert(frame.data.end(), reason.begin(), reason.begin() + reason_len);
+            }
+            frame.len = frame.data.size();
+            frame.len_code = (uint8_t)frame.len;
+
+            send_frame(it->second, frame);
         }
-        frame.len = frame.data.size();
-        frame.len_code = (uint8_t)frame.len;
+        catch (...) {
+        }
 
-        send_frame(it->second, frame);
-    }
-    catch (...) {
+        remove_client(client_id);
     }
 
-    remove_client(client_id);
+    if (on_disconnected_)
+        on_disconnected_(client_id);
 }
 
 void WebSocketServer::set_supported_subprotocols(const std::vector<std::string>& protocols) {
@@ -510,11 +535,11 @@ void WebSocketServer::send_frame(ClientConnection& client, const WebSocketFrame&
 }
 
 void WebSocketServer::remove_client(ClientId id) {
+    // Removes the client from the map only. Must be called under mutex_.
+    // The caller is responsible for firing on_disconnected_ AFTER releasing
+    // the lock to avoid deadlock (callbacks may call send/broadcast).
     auto it = clients_.find(id);
     if (it == clients_.end())
         return;
-    // Note: on_disconnected_ is NOT fired here — it's fired outside the lock
-    // in poll() to avoid deadlock. Direct callers (close_client, stop) handle
-    // their own callback invocation.
     clients_.erase(it);
 }

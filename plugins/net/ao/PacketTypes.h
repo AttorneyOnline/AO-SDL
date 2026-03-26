@@ -38,6 +38,11 @@ class AOPacketHI : public AOPacket {
     static constexpr int MIN_FIELDS = 1;
 };
 
+/// Bidirectional "ID" packet. The same header is used in both directions:
+///   server→client: ID#[player_number]#[software]#[version]#%  (3 fields)
+///   client→server: ID#[software]#[version]#%                  (2 fields)
+/// The factory creates this class for all "ID" packets. The constructor
+/// parses whichever variant it receives based on field count.
 class AOPacketIDClient : public AOPacket {
   public:
     AOPacketIDClient(const std::vector<std::string>& fields);
@@ -47,11 +52,11 @@ class AOPacketIDClient : public AOPacket {
 
   private:
     int player_number = 0;
-    std::string server_software;
-    std::string server_version;
+    std::string software;
+    std::string version;
 
     static PacketRegistrar registrar;
-    static constexpr int MIN_FIELDS = 2; // 2 for client→server, 3 for server→client
+    static constexpr int MIN_FIELDS = 2;
 };
 
 class AOPacketIDServer : public AOPacket {

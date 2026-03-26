@@ -10,6 +10,7 @@
 
 #include "net/ao/AOServer.h"
 #include "net/nx/NXServer.h"
+#include "utils/Log.h"
 
 #include <cstdint>
 #include <functional>
@@ -57,7 +58,8 @@ class ProtocolRouter {
             ao_.on_client_message(client_id, data);
         else {
             // NX messages are handled via REST; WS is broadcast-only.
-            // If we receive data on the WS leg, it's unexpected — log and ignore.
+            Log::log_print(WARNING, "NX: unexpected WS data from client %llu (NX uses REST)",
+                           (unsigned long long)client_id);
         }
     }
 

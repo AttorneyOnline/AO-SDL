@@ -1,10 +1,12 @@
 #include "TerminalUI.h"
 
+#include <atomic>
 #include <iostream>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <csignal>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #endif
@@ -55,36 +57,59 @@ static void get_terminal_size(int& width, int& height) {
 #endif
 }
 
+// Global pointer for SIGWINCH handler (only one TerminalUI exists at a time).
+static std::atomic<TerminalUI*> g_active_ui{nullptr};
+
+#ifndef _WIN32
+static void sigwinch_handler(int) {
+    auto* ui = g_active_ui.load(std::memory_order_relaxed);
+    if (ui)
+        ui->handle_resize();
+}
+#endif
+
 void TerminalUI::init() {
     get_terminal_size(width_, height_);
+    std::cout << "\033[2J"; // clear screen
+    apply_layout();
 
-    // Clear screen
-    std::cout << "\033[2J";
-
-    // Set scroll region to rows 1 through H-2 (leave 2 rows for separator + prompt)
-    int scroll_bottom = height_ - 2;
-    std::cout << "\033[1;" << scroll_bottom << "r";
-
-    // Park cursor at the bottom of the scroll region so the first
-    // log line triggers a scroll instead of landing on the separator.
-    std::cout << "\033[" << scroll_bottom << ";1H";
-
-    draw_separator();
-    show_prompt();
+    g_active_ui.store(this, std::memory_order_relaxed);
+#ifndef _WIN32
+    struct sigaction sa = {};
+    sa.sa_handler = sigwinch_handler;
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGWINCH, &sa, nullptr);
+#endif
 }
 
 void TerminalUI::cleanup() {
-    // Reset scroll region to full screen
-    std::cout << "\033[r";
-    // Move cursor below the UI
-    std::cout << "\033[" << height_ << ";1H\n";
+#ifndef _WIN32
+    signal(SIGWINCH, SIG_DFL);
+#endif
+    g_active_ui.store(nullptr, std::memory_order_relaxed);
+
+    std::cout << "\033[r";                      // reset scroll region
+    std::cout << "\033[" << height_ << ";1H\n"; // move below UI
     std::cout << std::flush;
+}
+
+void TerminalUI::handle_resize() {
+    std::lock_guard lock(mutex_);
+    get_terminal_size(width_, height_);
+    apply_layout();
+}
+
+void TerminalUI::apply_layout() {
+    int scroll_bottom = height_ - 2;
+    std::cout << "\033[1;" << scroll_bottom << "r"; // set scroll region
+    std::cout << "\033[" << scroll_bottom << ";1H"; // park cursor
+    draw_separator();
+    show_prompt();
 }
 
 void TerminalUI::log(LogLevel level, const std::string& timestamp, const std::string& message) {
     const char* color = level_color(level);
     std::string line;
-    // Dim timestamp, colored level tag, white message
     line += DIM;
     line += timestamp;
     line += " ";
@@ -98,7 +123,6 @@ void TerminalUI::log(LogLevel level, const std::string& timestamp, const std::st
 }
 
 void TerminalUI::print(const std::string& line) {
-    // REPL output: cyan arrow prefix to distinguish from log lines
     std::string formatted;
     formatted += CYAN;
     formatted += "  \u25b8 "; // ▸
@@ -108,8 +132,8 @@ void TerminalUI::print(const std::string& line) {
 }
 
 void TerminalUI::show_prompt() {
-    std::cout << "\033[" << height_ << ";1H"; // move to last row
-    std::cout << "\033[2K";                   // clear line
+    std::cout << "\033[" << height_ << ";1H";
+    std::cout << "\033[2K";
     std::cout << BOLD << "> " << RESET << std::flush;
 }
 
@@ -118,16 +142,12 @@ void TerminalUI::emit(const std::string& line) {
 
     int scroll_bottom = height_ - 2;
 
-    // Move into the scroll region and force a scroll-up by writing at the bottom.
-    // \033[T scrolls the region down (inserts blank at top), but we want scroll up.
-    // The reliable way: move to the last line, issue \n to scroll, then overwrite.
-    std::cout << "\033[" << scroll_bottom << ";1H"; // move to last row of scroll region
-    std::cout << "\n";                              // scroll region up by one line
-    std::cout << "\033[" << scroll_bottom << ";1H"; // move back (now a blank line)
-    std::cout << "\033[2K";                         // clear it
-    std::cout << line << RESET;                     // print content
+    std::cout << "\033[" << scroll_bottom << ";1H";
+    std::cout << "\n";
+    std::cout << "\033[" << scroll_bottom << ";1H";
+    std::cout << "\033[2K";
+    std::cout << line << RESET;
 
-    // Redraw separator and prompt since cursor moved out of prompt area
     draw_separator();
     show_prompt();
     std::cout << std::flush;
@@ -138,6 +158,6 @@ void TerminalUI::draw_separator() {
     std::cout << "\033[2K";
     std::cout << DIM;
     for (int i = 0; i < width_; ++i)
-        std::cout << "\u2500"; // ─
+        std::cout << "\u2500";
     std::cout << RESET << std::flush;
 }

@@ -90,12 +90,12 @@ AOPacketIDClient::AOPacketIDClient(const std::vector<std::string>& fields) : AOP
     // 2 fields = client→server: software, version
     if (fields.size() >= 3) {
         player_number = std::stoi(fields[0]);
-        server_software = fields[1];
-        server_version = fields[2];
+        software = fields[1];
+        version = fields[2];
     }
     else if (fields.size() >= 2) {
-        server_software = fields[0];
-        server_version = fields[1];
+        software = fields[0];
+        version = fields[1];
     }
 }
 

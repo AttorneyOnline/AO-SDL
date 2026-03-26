@@ -6,8 +6,8 @@
 
 /// Generate a random session token (hex string).
 static std::string generate_token() {
-    static std::mt19937 rng(std::random_device{}());
-    static std::uniform_int_distribution<uint32_t> dist;
+    thread_local std::mt19937 rng(std::random_device{}());
+    thread_local std::uniform_int_distribution<uint32_t> dist;
     char buf[33];
     std::snprintf(buf, sizeof(buf), "%08x%08x%08x%08x", dist(rng), dist(rng), dist(rng), dist(rng));
     return buf;
@@ -37,6 +37,8 @@ ServerSession* NXServer::get_session(uint64_t client_id) {
 }
 
 ServerSession* NXServer::get_session_by_token(const std::string& token) {
+    // O(n) scan — fine for current scale. If this becomes a hot path
+    // (e.g. REST auth middleware on every request), add a token→client_id index.
     for (auto& [id, session] : sessions_) {
         if (session.session_token == token)
             return &session;

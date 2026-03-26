@@ -42,8 +42,7 @@ void AOPacketIDClient::handle(AOClient& cli) {
 
     cli.player_number = player_number;
 
-    EventManager::instance().get_channel<ServerInfoEvent>().publish(
-        ServerInfoEvent(server_software, server_version, player_number));
+    EventManager::instance().get_channel<ServerInfoEvent>().publish(ServerInfoEvent(software, version, player_number));
 
     AOPacketIDServer id_to_server(std::string("AO-SDL/") + ao_sdl_version(), "2.999.999");
     cli.add_message(id_to_server);

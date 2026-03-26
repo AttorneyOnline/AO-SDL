@@ -13,7 +13,7 @@
 
 struct ServerSession {
     uint64_t client_id = 0;    ///< WebSocket client ID (transport-level).
-    uint32_t session_id = 0;   ///< Unique server-assigned session ID.
+    uint64_t session_id = 0;   ///< Unique server-assigned session ID.
     std::string session_token; ///< Auth token (empty for AO legacy clients).
 
     std::string display_name; ///< Player display name / showname.

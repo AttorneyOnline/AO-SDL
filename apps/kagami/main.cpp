@@ -66,10 +66,13 @@ int main(int /*argc*/, char* argv[]) {
         res.set_content("Hello from " + cfg.server_name() + "\n", "text/plain");
     });
 
-    std::jthread http_thread([&](std::stop_token) {
-        Log::log_print(INFO, "HTTP listening on %s:%d", cfg.bind_address().c_str(), cfg.http_port());
-        http.listen(cfg.bind_address(), cfg.http_port());
-    });
+    if (!http.bind_to_port(cfg.bind_address(), cfg.http_port())) {
+        Log::log_print(ERR, "Failed to bind HTTP on %s:%d", cfg.bind_address().c_str(), cfg.http_port());
+        return 1;
+    }
+    Log::log_print(INFO, "HTTP listening on %s:%d", cfg.bind_address().c_str(), cfg.http_port());
+
+    std::jthread http_thread([&](std::stop_token) { http.listen_after_bind(); });
 
     // --- WebSocket server + protocol routing ---
     auto listener = std::make_unique<KissnetServerSocket>(cfg.bind_address());

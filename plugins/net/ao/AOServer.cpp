@@ -14,7 +14,7 @@ void AOServer::set_send_func(SendFunc func) {
 void AOServer::on_client_connected(uint64_t client_id) {
     ClientEntry entry;
     entry.session.client_id = client_id;
-    entry.session.session_id = static_cast<uint32_t>(next_player_number_);
+    entry.session.session_id = next_player_number_;
     entry.session.protocol = "ao2";
     sessions_.emplace(client_id, std::move(entry));
 
@@ -31,7 +31,7 @@ void AOServer::on_client_disconnected(uint64_t client_id) {
         // Free character slot if taken
         int char_id = it->second.session.character_id;
         if (char_id >= 0 && char_id < static_cast<int>(game_state_.char_taken.size()))
-            game_state_.char_taken[char_id] = -1;
+            game_state_.char_taken[char_id] = false;
     }
     sessions_.erase(client_id);
     Log::log_print(INFO, "AO: client %llu disconnected", (unsigned long long)client_id);
@@ -106,6 +106,6 @@ void AOServer::broadcast_all(const AOPacket& packet) {
         send_func_(id, serialized);
 }
 
-void AOServer::dispatch(ClientEntry& entry, const AOPacket& packet) {
-    const_cast<AOPacket&>(packet).handle_server(*this, entry.session);
+void AOServer::dispatch(ClientEntry& entry, AOPacket& packet) {
+    packet.handle_server(*this, entry.session);
 }

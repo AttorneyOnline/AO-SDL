@@ -46,11 +46,11 @@ struct AOGameState {
         "expanded_desk_mods",
     };
 
-    /// Per-character taken state. Index matches characters[]. -1 = available.
-    std::vector<int> char_taken;
+    /// Per-character taken state. Index matches characters[].
+    std::vector<bool> char_taken;
 
     void reset_taken() {
-        char_taken.assign(characters.size(), -1);
+        char_taken.assign(characters.size(), false);
     }
 };
 
@@ -104,10 +104,10 @@ class AOServer {
         AOProtocolState proto;
     };
 
-    void dispatch(ClientEntry& entry, const AOPacket& packet);
+    void dispatch(ClientEntry& entry, AOPacket& packet);
 
     std::unordered_map<uint64_t, ClientEntry> sessions_;
     SendFunc send_func_;
     AOGameState game_state_;
-    int next_player_number_ = 0;
+    uint64_t next_player_number_ = 0;
 };

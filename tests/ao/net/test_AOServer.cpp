@@ -260,9 +260,9 @@ TEST_F(AOServerTest, DisconnectFreesCharacter) {
     auto id = do_full_handshake();
     client_send(id, "CC#0#0#hwid#%");
 
-    EXPECT_GE(server_.game_state().char_taken[0], 0);
+    EXPECT_TRUE(server_.game_state().char_taken[0]);
     server_.on_client_disconnected(id);
-    EXPECT_EQ(server_.game_state().char_taken[0], -1);
+    EXPECT_FALSE(server_.game_state().char_taken[0]);
 }
 
 TEST_F(AOServerTest, SessionCount) {
