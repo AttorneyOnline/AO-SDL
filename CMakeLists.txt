@@ -78,7 +78,7 @@ option(AO_BUILD_SERVER_ONLY "Build only the Kagami server (no SDL client, render
 # Third-party dependencies
 # =============================================================================
 
-option(AO_BUILD_SDL "Build the SDL2 desktop frontend" ON)
+option(AO_BUILD_SDL "Build the SDL2 desktop frontend" OFF)
 
 # --- SDL2 — only needed for the SDL desktop app ------------------------------
 if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)

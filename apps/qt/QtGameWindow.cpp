@@ -4,7 +4,6 @@
 #include "asset/MountEmbedded.h"
 #include "event/DisconnectRequestEvent.h"
 #include "event/EventManager.h"
-#include "render/RenderManager.h"
 #include "ui/Screen.h"
 #include "ui/UIManager.h"
 #include "utils/Log.h"
@@ -12,35 +11,46 @@
 // Qt app
 #include "AppContext.h"
 #include "render/RenderBridge.h"
+#include "render/RenderThread.h"
 
 // Qt
 #include <QAbstractEventDispatcher>
+#include <QCoreApplication>
 #include <QFontDatabase>
+#include <QOffscreenSurface>
+#include <QOpenGLContext>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
-#include <QQuickGraphicsDevice>
 #include <QQuickItem>
+#include <QQuickRenderControl>
 #include <QQuickWindow>
-#include <QThread>
-
-#if !defined(Q_OS_APPLE)
-#include <QOffscreenSurface>
-#include <QOpenGLContext>
 #include <QSurfaceFormat>
-#endif
+#include <QThread>
+#include <QTimer>
+#include <QWindow>
 
 #include <cstring>
-#include <memory>
 
-// Factory provided by the linked render plugin (aorender_gl or aorender_metal).
-std::unique_ptr<IRenderer> create_renderer(int width, int height);
+// --------------------------------------------------------------------------
+// QQuickRenderControl subclass — returns the real display window so that
+// QML coordinate mapping (mapToGlobal, popup placement, etc.) works.
+// --------------------------------------------------------------------------
 
-#if defined(Q_OS_APPLE)
-// Implemented in QtGameWindow_apple.mm — casts void* to MTLDevice*/MTLCommandQueue*
-// so this file stays plain C++.
-QQuickGraphicsDevice qt_make_metal_graphics_device(void* device, void* queue);
-#endif
+class DisplayRenderControl : public QQuickRenderControl {
+  public:
+    explicit DisplayRenderControl(QWindow* displayWindow, QObject* parent = nullptr)
+        : QQuickRenderControl(parent), m_displayWindow(displayWindow) {}
+
+    QWindow* renderWindow(QPoint* offset) override {
+        if (offset)
+            *offset = QPoint(0, 0);
+        return m_displayWindow;
+    }
+
+  private:
+    QWindow* m_displayWindow;
+};
 
 // --------------------------------------------------------------------------
 
@@ -53,49 +63,69 @@ QtGameWindow::QtGameWindow(UIManager& uiMgr, StateBuffer& buffer,
     , m_renderW(renderW)
     , m_renderH(renderH)
 {
-    m_window = new QQuickWindow();
-    m_window->setTitle("Attorney Online");
-    m_window->resize(1280, 720);
+#if !defined(Q_OS_APPLE)
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
 
-    connect(m_window, &QQuickWindow::sceneGraphInitialized,
-            this, &QtGameWindow::onSceneGraphInitialized,
-            Qt::DirectConnection);
-
-    initGraphics();
+    initDisplay();
+    initRenderControl();
     loadFonts();
     setupQml();
+
+    // Create the render thread object (not yet started).
+    m_renderThread = new RenderThread(
+        m_renderControl, m_quickWindow, m_displayWindow,
+        m_glSurface, m_glContext, m_buffer, m_renderW, m_renderH);
+
+    // RHI initialisation must happen on the main (GUI) thread because Qt
+    // creates platform surfaces internally.  The GL context is still on
+    // this thread at this point.
+    QSize initialSize = m_displayWindow->size()
+                        * m_displayWindow->devicePixelRatio();
+    if (initialSize.width() <= 0 || initialSize.height() <= 0)
+        initialSize = QSize(1280, 720);
+    m_renderThread->initializeRhi(initialSize);
+
+    // Now hand the context to the render thread.
+    m_renderControl->prepareThread(m_renderThread);
+    m_glContext->moveToThread(m_renderThread);
+    m_renderThread->start();
+    m_renderThread->waitForInit();
+
+    Log::log_print(INFO, "QtGameWindow: render thread started");
+
+    // Frame timer — drives polish → sync → render at the display's cadence.
+    // The actual rate is limited by swapBuffers (vsync) in the render thread.
+    m_frameTimer = new QTimer(this);
+    m_frameTimer->setInterval(1);
+    connect(m_frameTimer, &QTimer::timeout, this, &QtGameWindow::triggerSync);
 }
 
 QtGameWindow::~QtGameWindow() {
-    // Disconnect the screen-change hook before any teardown.
-    if (auto* d = QAbstractEventDispatcher::instance(QThread::currentThread()))
-        d->disconnect(this);
+    m_frameTimer->stop();
 
-#if !defined(Q_OS_APPLE)
-    if (m_glContext && m_glSurface) {
-        m_glContext->makeCurrent(m_glSurface);
-        m_renderManager.reset(); // destroy renderer while context is current
-        m_glContext->doneCurrent();
-    }
-    // m_glSurface and m_glContext have 'this' as QObject parent — Qt deletes them.
-#endif
+    // Stop and join the render thread (destroys GL resources internally,
+    // including m_glContext which was moved to the render thread).
+    delete m_renderThread;
+    m_renderThread = nullptr;
+    m_glContext = nullptr;  // destroyed by RenderThread::cleanup()
 
-    if (m_window)
-        m_window->deleteLater();
+    delete m_quickWindow;
+    m_quickWindow = nullptr;
+
+    delete m_renderControl;
+    m_renderControl = nullptr;
+
+    delete m_displayWindow;
+    m_displayWindow = nullptr;
+
+    delete m_glSurface;
+    m_glSurface = nullptr;
 }
 
 void QtGameWindow::show() {
-    m_window->show();
-
-    // Hook into the event dispatcher to detect game-screen transitions.
-    // Called on every event-loop wake-up with DirectConnection so it runs
-    // inline, synchronously, on the main thread — no extra latency.
-    auto* dispatcher = QAbstractEventDispatcher::instance(QThread::currentThread());
-    if (dispatcher) {
-        connect(dispatcher, &QAbstractEventDispatcher::awake,
-                this, &QtGameWindow::onScreenChanged,
-                Qt::DirectConnection);
-    }
+    m_displayWindow->show();
+    m_frameTimer->start();
 }
 
 // --------------------------------------------------------------------------
@@ -104,8 +134,6 @@ void QtGameWindow::show() {
 
 void QtGameWindow::onNavAction(IUIRenderer::NavAction action) {
     if (action == IUIRenderer::NavAction::POP_TO_ROOT) {
-        // Signal the network layer to disconnect. Session cleanup (including
-        // model resets) is triggered by the resulting SessionEndEvent.
         EventManager::instance()
             .get_channel<DisconnectRequestEvent>()
             .publish(DisconnectRequestEvent());
@@ -119,15 +147,8 @@ void QtGameWindow::onNavAction(IUIRenderer::NavAction action) {
 // Private slots
 // --------------------------------------------------------------------------
 
-void QtGameWindow::onSceneGraphInitialized() {
-    const char* backend = m_renderManager
-        ? m_renderManager->get_renderer().backend_name()
-        : "(none)";
-    Log::log_print(INFO, "QtGameWindow: scene graph initialised (%s)", backend);
-}
-
 void QtGameWindow::onScreenChanged() {
-    Screen* screen  = m_uiMgr.active_screen();
+    Screen* screen = m_uiMgr.active_screen();
     std::string newId = screen ? screen->screen_id() : std::string{};
     if (newId == m_activeScreenId)
         return;
@@ -137,88 +158,121 @@ void QtGameWindow::onScreenChanged() {
     if (!m_rootItem || newId.empty())
         return;
 
-    // Invoke navigateTo(id) on the QML root item so the StackView transitions
-    // to the matching screen. The method is defined in Main.qml.
     QMetaObject::invokeMethod(m_rootItem, "navigateTo",
-                              Qt::QueuedConnection,
+                              Qt::DirectConnection,
                               Q_ARG(QVariant, QString::fromStdString(newId)));
+}
+
+void QtGameWindow::triggerSync() {
+    // Polish any pending item geometry / animations on the main thread.
+    m_renderControl->polishItems();
+
+    // Propagate display-window size to the offscreen QQuickWindow so QML
+    // layout matches the actual display area.
+    QSize sz = m_displayWindow->size();
+    if (QSize(m_quickWindow->width(), m_quickWindow->height()) != sz) {
+        m_quickWindow->setGeometry(0, 0, sz.width(), sz.height());
+        if (m_rootItem) {
+            m_rootItem->setWidth(sz.width());
+            m_rootItem->setHeight(sz.height());
+        }
+    }
+
+    // Blocks the main thread only for the duration of sync() (~0.1 ms).
+    m_renderThread->requestSync();
+}
+
+// --------------------------------------------------------------------------
+// Event filter — forward input from the display window to the QQuickWindow
+// --------------------------------------------------------------------------
+
+bool QtGameWindow::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == m_displayWindow) {
+        switch (event->type()) {
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+        case QEvent::MouseButtonDblClick:
+        case QEvent::MouseMove:
+        case QEvent::Wheel:
+        case QEvent::HoverEnter:
+        case QEvent::HoverLeave:
+        case QEvent::HoverMove:
+        case QEvent::TouchBegin:
+        case QEvent::TouchUpdate:
+        case QEvent::TouchEnd:
+        case QEvent::KeyPress:
+        case QEvent::KeyRelease:
+        case QEvent::Enter:
+        case QEvent::Leave:
+            QCoreApplication::sendEvent(m_quickWindow, event);
+            return true;
+
+        case QEvent::FocusIn:
+            QCoreApplication::sendEvent(m_quickWindow, event);
+            if (m_quickWindow->contentItem())
+                m_quickWindow->contentItem()->forceActiveFocus();
+            return true;
+
+        case QEvent::FocusOut:
+            QCoreApplication::sendEvent(m_quickWindow, event);
+            return true;
+
+        case QEvent::Resize:
+            // Handled in triggerSync(); just let the offscreen window know.
+            QCoreApplication::sendEvent(m_quickWindow, event);
+            break;
+
+        default:
+            break;
+        }
+    }
+    return QObject::eventFilter(obj, event);
 }
 
 // --------------------------------------------------------------------------
 // Private helpers
 // --------------------------------------------------------------------------
 
-void QtGameWindow::initGraphics() {
-#if !defined(Q_OS_APPLE)
-    // ── OpenGL path ──────────────────────────────────────────────────────
-    // Create a context + offscreen surface so the renderer can be
-    // initialised (glewInit, FBO setup) before Qt's scene graph claims
-    // the context. Qt adopts the context via QQuickGraphicsDevice.
-
+void QtGameWindow::initDisplay() {
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
     fmt.setDepthBufferSize(24);
+    fmt.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
 
-    m_glContext = new QOpenGLContext(this);
-    m_glContext->setFormat(fmt);
-    if (!m_glContext->create()) {
-        Log::log_print(FATAL, "QtGameWindow: failed to create OpenGL 3.3 context");
-        return;
-    }
+    // On-screen window.
+    m_displayWindow = new QWindow();
+    m_displayWindow->setSurfaceType(QSurface::OpenGLSurface);
+    m_displayWindow->setFormat(fmt);
+    m_displayWindow->setTitle("Attorney Online");
+    m_displayWindow->resize(1280, 720);
+    m_displayWindow->installEventFilter(this);
 
-    m_glSurface = new QOffscreenSurface(nullptr, this);
-    m_glSurface->setFormat(m_glContext->format());
+    // Offscreen surface for the render thread's GL context.
+    // Must be created on the main thread (platform requirement).
+    m_glSurface = new QOffscreenSurface();
+    m_glSurface->setFormat(fmt);
     m_glSurface->create();
 
-    if (!m_glContext->makeCurrent(m_glSurface)) {
-        Log::log_print(FATAL, "QtGameWindow: failed to make GL context current");
-        return;
-    }
+    // Create the GL context on the main thread (required by Qt).
+    // It will be moved to the render thread before start().
+    m_glContext = new QOpenGLContext();
+    m_glContext->setFormat(fmt);
+    if (!m_glContext->create())
+        Log::log_print(FATAL, "QtGameWindow: failed to create GL 3.3 context");
+}
 
-    // GLRenderer constructor calls glewInit() while a context is current.
-    auto renderer = create_renderer(m_renderW, m_renderH);
-    Log::log_print(INFO, "QtGameWindow: renderer created (%s)",
-                   renderer->backend_name());
+void QtGameWindow::initRenderControl() {
+    m_renderControl = new DisplayRenderControl(m_displayWindow, this);
+    m_quickWindow   = new QQuickWindow(m_renderControl);
 
-    m_renderManager = std::make_unique<RenderManager>(m_buffer, std::move(renderer));
-
-    // Release the context so Qt's render thread can take ownership.
-    m_glContext->doneCurrent();
-
-    m_window->setGraphicsDevice(
-        QQuickGraphicsDevice::fromOpenGLContext(m_glContext));
-
-#else
-    // ── Metal path ───────────────────────────────────────────────────────
-    // MetalRenderer creates its own MTLDevice and command queue.
-    // We hand those pointers to Qt so both the renderer and the scene
-    // graph share the same device and can exchange textures directly.
-    //
-    // QQuickGraphicsDevice::fromDeviceAndCommandQueue requires MTLDevice* /
-    // MTLCommandQueue* (ObjC types), so the cast lives in the companion
-    // QtGameWindow_apple.mm to keep this file plain C++.
-
-    auto renderer = create_renderer(m_renderW, m_renderH);
-    Log::log_print(INFO, "QtGameWindow: renderer created (%s)",
-                   renderer->backend_name());
-
-    void* device = renderer->get_device_ptr();
-    void* queue  = renderer->get_command_queue_ptr();
-
-    m_renderManager = std::make_unique<RenderManager>(m_buffer, std::move(renderer));
-
-    m_window->setGraphicsDevice(
-        qt_make_metal_graphics_device(device, queue));
-#endif
-
-    RenderBridge::instance().setRenderManager(m_renderManager.get(), m_renderW, m_renderH);
+    // Size the offscreen window to match the display window.
+    m_quickWindow->setGeometry(0, 0,
+                               m_displayWindow->width(),
+                               m_displayWindow->height());
 }
 
 void QtGameWindow::loadFonts() {
-    // Register the bundled NotoEmoji font for monochrome emoji support in
-    // QML text elements. The data pointer is stable for the process lifetime
-    // (it lives in the binary's read-only data segment).
     for (const auto& file : embedded_assets()) {
         if (std::strcmp(file.path, "fonts/NotoEmoji.ttf") != 0)
             continue;
@@ -237,12 +291,9 @@ void QtGameWindow::loadFonts() {
 void QtGameWindow::setupQml() {
     m_engine = new QQmlEngine(this);
 
-    // Expose the render bridge so SceneTextureItem can reach RenderManager.
     m_engine->rootContext()->setContextProperty(
         QStringLiteral("renderBridge"), &RenderBridge::instance());
 
-    // Expose the controller context object populated by main() before this
-    // window is constructed (see AppContext::setControllers()).
     m_engine->rootContext()->setContextProperty(
         QStringLiteral("app"), &AppContext::instance());
 
@@ -259,23 +310,15 @@ void QtGameWindow::setupQml() {
         return;
     }
 
-    auto* obj    = m_component->create(m_engine->rootContext());
-    m_rootItem   = qobject_cast<QQuickItem*>(obj);
+    auto* obj  = m_component->create(m_engine->rootContext());
+    m_rootItem = qobject_cast<QQuickItem*>(obj);
     if (!m_rootItem) {
         Log::log_print(ERR, "QtGameWindow: Main.qml root is not a QQuickItem");
         delete obj;
         return;
     }
 
-    m_rootItem->setParentItem(m_window->contentItem());
-    m_rootItem->setWidth(m_window->width());
-    m_rootItem->setHeight(m_window->height());
-
-    // Keep the root item sized to the window as the user resizes it.
-    connect(m_window, &QQuickWindow::widthChanged, m_rootItem, [this]() {
-        m_rootItem->setWidth(m_window->width());
-    });
-    connect(m_window, &QQuickWindow::heightChanged, m_rootItem, [this]() {
-        m_rootItem->setHeight(m_window->height());
-    });
+    m_rootItem->setParentItem(m_quickWindow->contentItem());
+    m_rootItem->setWidth(m_quickWindow->width());
+    m_rootItem->setHeight(m_quickWindow->height());
 }

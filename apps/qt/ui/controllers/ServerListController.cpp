@@ -8,7 +8,9 @@ ServerListController::ServerListController(QObject* parent)
 
 void ServerListController::sync(Screen& screen) {
     m_screen = static_cast<ServerListScreen*>(&screen);
-    m_model.reset(m_screen->get_servers());
+    const auto& servers = m_screen->get_servers();
+    if (static_cast<int>(servers.size()) != m_model.rowCount())
+        m_model.reset(servers);
 }
 
 void ServerListController::connectToServer(int index) {

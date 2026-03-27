@@ -1,23 +1,21 @@
 #pragma once
 
-#include <QtQuick/QQuickItem>
-#include <QtQml/qqml.h>
+#include <QQuickItem>
+#include <QQuickWindow>
+
+class QOpenGLExtraFunctions;
+class QRhiTexture;
 
 /**
- * @brief QML item that drives the game renderer and composites its output.
+ * @brief QML item that renders a GL triangle outside the scene graph.
  *
- * Each frame SceneTextureItem::updatePaintNode() calls RenderBridge::renderFrame()
- * to advance the game scene, then wraps the resulting native texture in a
- * QSGSimpleTextureNode for Qt's scene graph to composite into the QML tree.
+ * Hooks into QQuickWindow::beforeRendering() to issue raw OpenGL commands
+ * on Qt's render thread, drawing into a private FBO.  The FBO colour
+ * attachment is then wrapped as a QRhiTexture and displayed through a
+ * QSGSimpleTextureNode in updatePaintNode().
  *
- * UV orientation is handled automatically: when the backend reports
- * uv_flipped() (OpenGL), the texture node is mirrored vertically.
- *
- * Declare in QML as:
- * @code
- *   import AO 1.0
- *   SceneTextureItem { anchors.fill: parent }
- * @endcode
+ * No manual context management is needed — Qt's threaded render loop
+ * ensures the GL context is current when our slots fire.
  */
 class SceneTextureItem : public QQuickItem {
     Q_OBJECT
@@ -25,7 +23,37 @@ class SceneTextureItem : public QQuickItem {
 
   public:
     explicit SceneTextureItem(QQuickItem* parent = nullptr);
+    ~SceneTextureItem() override;
 
   protected:
-    QSGNode* updatePaintNode(QSGNode* old, UpdatePaintNodeData* data) override;
+    QSGNode* updatePaintNode(QSGNode* old, UpdatePaintNodeData*) override;
+
+  private slots:
+    void handleWindowChanged(QQuickWindow* win);
+    void renderGL();
+    void handleSceneGraphInvalidated();
+
+  private:
+    void initGL();
+    void cleanupGL();
+
+    QOpenGLExtraFunctions* m_gl = nullptr;
+
+    // FBO colour attachment that receives the triangle.
+    uint m_fbo        = 0;
+    uint m_fboTexture = 0;
+    int  m_texW       = 0;
+    int  m_texH       = 0;
+
+    // Shader / geometry.
+    uint m_vao     = 0;
+    uint m_vbo     = 0;
+    uint m_program = 0;
+    float m_angle  = 0.0f;
+
+    bool m_glInitialized = false;
+
+    // Scene-graph wrapper for the FBO texture.
+    QRhiTexture* m_rhiTexture  = nullptr;
+    uintptr_t    m_cachedTexId = 0;
 };

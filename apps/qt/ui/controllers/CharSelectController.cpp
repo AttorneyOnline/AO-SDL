@@ -50,12 +50,14 @@ void CharSelectController::sync(Screen& screen) {
     m_screen = static_cast<CharSelectScreen*>(&screen);
 
     const auto& chars = m_screen->get_chars();
-    std::vector<CharListModel::CharEntry> entries;
-    entries.reserve(chars.size());
-    for (const auto& c : chars)
-        entries.push_back({ QString::fromStdString(c.folder), c.taken });
+    if (static_cast<int>(chars.size()) != m_model.rowCount()) {
+        std::vector<CharListModel::CharEntry> entries;
+        entries.reserve(chars.size());
+        for (const auto& c : chars)
+            entries.push_back({ QString::fromStdString(c.folder), c.taken });
 
-    m_model.reset(entries);
+        m_model.reset(entries);
+    }
 }
 
 void CharSelectController::selectCharacter(int index) {
