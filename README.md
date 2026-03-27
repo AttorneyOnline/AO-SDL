@@ -192,3 +192,69 @@ apps/flutter/
 - Audio uses miniaudio's CoreAudio backend (iOS) instead of SDL
 - HTTPS uses `NSURLSession` via a drop-in `httplib::Client` shim (no OpenSSL dependency on iOS)
 - Platform widgets are abstracted so the same screens work with Cupertino (iOS) or Material (Android) by swapping one file
+
+---
+
+## Kagami Server
+
+The `apps/kagami/` directory contains **Kagami**, a standalone multi-protocol game server for Attorney Online. It handles player sessions, character selection, area management, and message routing for both legacy AO2 and next-generation AONX clients simultaneously.
+
+### Building
+
+Kagami is built alongside the desktop client by default:
+
+```sh
+cmake --preset macos-debug    # or linux-debug, x64-debug
+cmake --build build --target kagami
+```
+
+The binary is output to `build/apps/kagami/kagami`.
+
+### Running
+
+```sh
+./kagami
+```
+
+On first run, Kagami creates a `kagami.json` config file next to the binary with sensible defaults. The server runs in interactive mode when launched from a terminal, providing a REPL with commands like `/status`, `/stop`, and `/help`.
+
+### Configuration
+
+All settings are stored in `kagami.json` and can be edited while the server is stopped:
+
+| Setting | Default | Description |
+|---|---|---|
+| `server_name` | `"Kagami Server"` | Display name shown to clients |
+| `server_description` | `""` | Server description |
+| `bind_address` | `"0.0.0.0"` | Listen address |
+| `http_port` | `8080` | HTTP status endpoint port |
+| `ws_port` | `8081` | WebSocket game port |
+| `max_players` | `100` | Maximum concurrent players |
+| `motd` | `""` | Message of the day |
+
+### Architecture
+
+Kagami uses a protocol-agnostic core with pluggable protocol backends:
+
+```
+apps/kagami/              # Server application
+├── main.cpp              # Entry point, wiring, REPL
+├── ServerSettings.*      # kagami.json configuration
+└── TerminalUI.*          # Interactive terminal with log display
+
+plugins/kagami_server/    # Protocol layer (engine plugin)
+├── kagami/
+│   ├── ProtocolRouter.*  # Routes clients by WebSocket subprotocol
+│   ├── AOServer.*        # AO2 backend (#%-delimited packets)
+│   └── NXServer.*        # AONX backend (JSON messages)
+└── game/
+    ├── GameRoom.*        # Authoritative game state
+    ├── GameAction.h      # Protocol-agnostic input actions
+    ├── GameEvent.h       # Protocol-agnostic output events
+    └── ServerSession.*   # Per-player session state
+```
+
+**Key design decisions:**
+- **Multi-protocol**: A `ProtocolRouter` inspects the WebSocket subprotocol header (`ao2` or `aonx`) and routes each client to the correct backend — both protocol types can play in the same room
+- **Action/Event model**: Protocol backends parse wire formats into protocol-agnostic `GameAction`s; the `GameRoom` validates and processes them, then emits `GameEvent`s that each backend serializes back to its own wire format
+- **Transport**: WebSocket (RFC 6455) for game traffic, with a separate HTTP endpoint for status
