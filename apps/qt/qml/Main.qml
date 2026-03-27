@@ -1,48 +1,66 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
-/**
- * Root item loaded by QtGameWindow.  Hosts a StackView that mirrors the
- * C++ UIManager screen stack.  QtGameWindow calls navigateTo(id) whenever
- * UIManager's active screen changes.
- *
- * Context properties set from C++ (see QtGameWindow::setupQml()):
- *   renderBridge          — RenderBridge*
- *   serverListController  — ServerListController*
- *   charSelectController  — CharSelectController*
- *   courtroomController   — CourtroomController*
- */
-Item {
+ApplicationWindow {
     id: root
-    width:  800
-    height: 600
+    visible: true
+    width: 1280
+    height: 720
+    title: "Attorney Online — Qt PoC"
+    color: "#000"
 
-    // Called by QtGameWindow::onScreenChanged() when the engine transitions
-    // to a new screen.
-    function navigateTo(screenId) {
-        switch (screenId) {
-        case "server_list":
-            stack.replace(null, serverListPage);
-            break;
-        case "char_select":
-            stack.push(charSelectPage);
-            break;
-        case "courtroom":
-            stack.push(courtroomPage);
-            break;
-        default:
-            break;
+    property int clicks: 0
+
+    // GL triangle rendered outside the scene graph, displayed as a texture.
+    SceneTextureItem {
+        anchors.fill: parent
+        anchors.bottomMargin: controlBar.height
+    }
+
+    // Interactive QML controls — proves input forwarding works.
+    Rectangle {
+        id: controlBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 80
+        color: "#cc1a1a2e"
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 12
+
+            Label {
+                text: "Clicks: " + root.clicks
+                color: "white"
+                font.pixelSize: 18
+            }
+
+            Button {
+                text: "Click Me"
+                onClicked: root.clicks++
+            }
+
+            Button {
+                text: "Reset"
+                onClicked: root.clicks = 0
+            }
+
+            TextField {
+                id: input
+                placeholderText: "Type here to test keyboard..."
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: input.text.length > 0 ? "Echo: " + input.text : ""
+                color: "#88ff88"
+                font.pixelSize: 14
+                Layout.preferredWidth: 200
+                elide: Text.ElideRight
+            }
         }
     }
-
-    StackView {
-        id: stack
-        anchors.fill: parent
-
-        Component.onCompleted: stack.push(serverListPage)
-    }
-
-    Component { id: serverListPage;  ServerListScreen  {} }
-    Component { id: charSelectPage;  CharSelectScreen  {} }
-    Component { id: courtroomPage;   CourtroomScreen   {} }
 }

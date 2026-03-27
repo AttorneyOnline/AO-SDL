@@ -26,7 +26,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Third-party dependencies
 # =============================================================================
 
-option(AO_BUILD_SDL "Build the SDL2 desktop frontend" ON)
+option(AO_BUILD_SDL "Build the SDL2 desktop frontend" OFF)
 
 # --- SDL2 — only needed for the SDL desktop app ------------------------------
 if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER)
@@ -455,7 +455,7 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 # Applications — one per backend
 # =============================================================================
 
-option(AO_BUILD_QT "Build the Qt/QML frontend" OFF)
+option(AO_BUILD_QT "Build the Qt/QML frontend" ON)
 
 if(NOT AO_BUILD_FLUTTER)
     if(AO_BUILD_SDL)

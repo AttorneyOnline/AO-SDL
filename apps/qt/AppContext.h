@@ -2,9 +2,9 @@
 
 #include <QObject>
 
-class CharSelectController;
-class CourtroomController;
-class ServerListController;
+#include "ui/controllers/CharSelectController.h"
+#include "ui/controllers/CourtroomController.h"
+#include "ui/controllers/ServerListController.h"
 
 /**
  * @brief Singleton context object that exposes Qt screen controllers to QML.
@@ -25,7 +25,7 @@ class AppContext : public QObject {
     Q_PROPERTY(CourtroomController*  courtroomController  READ courtroomController  CONSTANT)
 
   public:
-    static AppContext& instance();
+    static AppContext &instance();
 
     /**
      * @brief Bind the three screen controllers.

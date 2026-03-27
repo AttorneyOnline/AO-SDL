@@ -3,61 +3,61 @@
 #include "ui/IUIRenderer.h"
 
 #include <QObject>
-#include <memory>
+#include <QSize>
+
 #include <string>
 
+class QOffscreenSurface;
+class QOpenGLContext;
 class QQmlComponent;
 class QQmlEngine;
 class QQuickItem;
+class QQuickRenderControl;
 class QQuickWindow;
-class RenderManager;
+class QTimer;
+class QWindow;
+class RenderThread;
 class StateBuffer;
 class UIManager;
-
-#if !defined(Q_OS_APPLE)
-class QOffscreenSurface;
-class QOpenGLContext;
-#endif
 
 /**
  * @brief Qt/QML equivalent of SDLGameWindow.
  *
- * Creates a QQuickWindow with the platform-appropriate graphics API (OpenGL
- * on non-Apple, Metal on Apple), initialises the IRenderer against that
- * context/device, and loads Main.qml. Navigation actions from the UI are
- * forwarded back to UIManager via onNavAction().
+ * Uses QQuickRenderControl so that the QML scene graph and the game renderer
+ * share a single OpenGL context on a dedicated RenderThread.  The main thread
+ * runs the Qt event loop, QML engine, and EngineEventBridge; it blocks only
+ * for the brief sync() phase each frame.
  *
- * The render loop is driven by Qt's scene graph; there is no blocking
- * start_loop() call. Call show() then hand control to QGuiApplication::exec().
+ * A plain QWindow is used as the on-screen display surface.  The render
+ * thread blits the composited result from the offscreen render target into
+ * the display window's default framebuffer each frame.
  */
 class QtGameWindow : public QObject {
     Q_OBJECT
 
   public:
-    /**
-     * @param uiMgr     Engine screen stack — the window forwards nav actions to it.
-     * @param buffer    Triple-buffered game state read by SceneTextureItem each frame.
-     * @param renderW   Internal render width  (BASE_W * scale).
-     * @param renderH   Internal render height (BASE_H * scale).
-     */
     QtGameWindow(UIManager& uiMgr, StateBuffer& buffer,
                  int renderW, int renderH,
                  QObject* parent = nullptr);
     ~QtGameWindow() override;
 
-    /// Show the window. Call after all engine objects are initialised.
     void show();
 
+    /// Check UIManager for screen transitions and update QML navigation.
+    /// Called from the event bridge after handle_events().
+    void onScreenChanged();
+
   public slots:
-    /// Called by Qt controllers when a navigation action is triggered.
     void onNavAction(IUIRenderer::NavAction action);
 
   private slots:
-    void onSceneGraphInitialized();
-    void onScreenChanged();
+    void triggerSync();
 
   private:
-    void initGraphics();
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
+    void initDisplay();
+    void initRenderControl();
     void loadFonts();
     void setupQml();
 
@@ -66,17 +66,32 @@ class QtGameWindow : public QObject {
     int           m_renderW;
     int           m_renderH;
 
-    QQuickWindow*              m_window    = nullptr;
-    QQmlEngine*                m_engine    = nullptr;
-    QQmlComponent*             m_component = nullptr;
-    QQuickItem*                m_rootItem  = nullptr;
-    std::unique_ptr<RenderManager> m_renderManager;
+    // On-screen display window (receives input, shows final composited frame).
+    QWindow* m_displayWindow = nullptr;
 
-    // Active screen ID cached to detect transitions
+    // Offscreen QQuickWindow driven by QQuickRenderControl.
+    QQuickRenderControl* m_renderControl = nullptr;
+    QQuickWindow*        m_quickWindow   = nullptr;
+
+    // QML engine + loaded component.
+    QQmlEngine*    m_engine    = nullptr;
+    QQmlComponent* m_component = nullptr;
+    QQuickItem*    m_rootItem  = nullptr;
+
+    // GL context created on the main thread, moved to the render thread.
+    // Ownership transfers to RenderThread (cleaned up in its destructor).
+    QOpenGLContext* m_glContext = nullptr;
+
+    // Offscreen surface created on the main thread (platform requirement),
+    // used by the render thread for GL makeCurrent.
+    QOffscreenSurface* m_glSurface = nullptr;
+
+    // Dedicated render thread.
+    RenderThread* m_renderThread = nullptr;
+
+    // Drives the sync+render cycle from the main thread.
+    QTimer* m_frameTimer = nullptr;
+
+    // Screen transition detection.
     std::string m_activeScreenId;
-
-#if !defined(Q_OS_APPLE)
-    QOffscreenSurface* m_glSurface  = nullptr;
-    QOpenGLContext*    m_glContext   = nullptr;
-#endif
 };
