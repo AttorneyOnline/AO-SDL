@@ -1,7 +1,7 @@
-#include "kagami/ProtocolRouter.h"
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
+#include "kagami/ProtocolRouter.h"
 
 #include "game/GameRoom.h"
 #include "net/KissnetServerSocket.h"
