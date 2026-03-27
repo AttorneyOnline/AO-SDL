@@ -249,6 +249,7 @@ add_library(aoengine STATIC
     engine/net/KissnetServerSocket.cpp
     engine/net/NetworkThread.cpp
 
+    engine/event/ICMessageEvent.cpp
     engine/event/OutgoingICMessageEvent.cpp
     engine/event/DisconnectEvent.cpp
     engine/ui/UIManager.cpp
@@ -433,10 +434,15 @@ target_include_directories(nx_net
 )
 target_link_libraries(nx_net PUBLIC aoengine)
 
+# --- kagami_server — server orchestration (protocol routing, room management) -
+
+add_library(kagami_server INTERFACE)
+target_include_directories(kagami_server INTERFACE plugins)
+target_link_libraries(kagami_server INTERFACE aoengine ao_net nx_net)
+
 # --- ao_game — AO2 game logic (courtroom, emotes, textbox, effects) ---------
 
 add_library(ao_game STATIC
-    plugins/ao/event/ICMessageEvent.cpp
     plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/asset/AOCharacterSheet.cpp
     plugins/ao/game/AOBlipPlayer.cpp

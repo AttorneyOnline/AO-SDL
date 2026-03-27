@@ -2,7 +2,7 @@
 #include "net/ao/AOPacket.h"
 #include "net/ao/PacketTypes.h"
 
-#include "ao/event/ICMessageEvent.h"
+#include "event/ICMessageEvent.h"
 #include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
 #include "event/AreaUpdateEvent.h"

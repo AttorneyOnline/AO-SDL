@@ -1,7 +1,7 @@
 #include "PacketTypes.h"
 
 #include "AOClient.h"
-#include "ao/event/ICMessageEvent.h"
+#include "event/ICMessageEvent.h"
 #include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
 #include "event/AreaUpdateEvent.h"

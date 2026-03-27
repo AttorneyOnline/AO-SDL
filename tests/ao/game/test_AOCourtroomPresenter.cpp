@@ -1,7 +1,7 @@
 #include "ao/game/AOCourtroomPresenter.h"
 
 #include "ao/event/ICLogEvent.h"
-#include "ao/event/ICMessageEvent.h"
+#include "event/ICMessageEvent.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
 #include "render/RenderState.h"

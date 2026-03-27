@@ -1,4 +1,4 @@
-#include "ao/event/ICMessageEvent.h"
+#include "event/ICMessageEvent.h"
 
 #include <gtest/gtest.h>
 #include <string>

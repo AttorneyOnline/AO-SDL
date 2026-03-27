@@ -5,4 +5,4 @@ add_executable(kagami
 )
 set_property(TARGET kagami PROPERTY CXX_STANDARD 20)
 target_include_directories(kagami PRIVATE ${CMAKE_SOURCE_DIR}/engine)
-target_link_libraries(kagami PRIVATE aoengine ao_net ao_game nx_net)
+target_link_libraries(kagami PRIVATE kagami_server)

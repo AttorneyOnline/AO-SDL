@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ao/asset/AOAssetLibrary.h"
-#include "ao/event/ICMessageEvent.h" // EmoteMod
+#include "event/ICMessageEvent.h" // EmoteMod
 #include "asset/ImageAsset.h"
 #include "render/AnimationPlayer.h"
 
