@@ -1,28 +1,35 @@
 #pragma once
 
 #include "IQtScreenController.h"
+#include "game/ServerList.h"
 #include "ui/models/ServerListModel.h"
 
 #include <QObject>
 #include <QString>
 
-class ServerListScreen;
+#include <vector>
+
+class UIManager;
 
 /**
  * @brief Qt controller for the server browser screen.
  *
- * Owns a ServerListModel and syncs it from ServerListScreen::get_servers()
- * each event-loop tick.  Exposes Q_INVOKABLEs so QML can initiate connections.
+ * drain() consumes ServerListEvent directly from EventManager and updates
+ * ServerListModel — no Screen object is involved.
+ *
+ * connectToServer() and directConnect() publish ServerConnectEvent and push
+ * CharSelectScreen onto UIManager's stack, making UIManager the single
+ * authority over navigation.
  */
 class ServerListController : public IQtScreenController {
     Q_OBJECT
     Q_PROPERTY(ServerListModel* model READ model CONSTANT)
 
   public:
-    explicit ServerListController(QObject* parent = nullptr);
+    explicit ServerListController(UIManager& uiMgr, QObject* parent = nullptr);
 
     /// IQtScreenController
-    void sync(Screen& screen) override;
+    void drain() override;
 
     ServerListModel* model() { return &m_model; }
 
@@ -33,6 +40,9 @@ class ServerListController : public IQtScreenController {
     Q_INVOKABLE void directConnect(const QString& host, quint16 port);
 
   private:
-    ServerListModel   m_model;
-    ServerListScreen* m_screen = nullptr; ///< Cached from last sync(); valid while active.
+    void doConnect(const std::string& host, uint16_t port);
+
+    UIManager&               m_uiMgr;
+    ServerListModel          m_model;
+    std::vector<ServerEntry> m_entries; ///< Mirrored from ServerListEvent for connectToServer().
 };

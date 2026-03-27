@@ -2,6 +2,7 @@
 
 #include "render/IRenderer.h"
 #include "render/RenderManager.h"
+#include "render/StateBuffer.h"
 
 RenderBridge::RenderBridge(QObject* parent)
     : QObject(parent) {}
@@ -9,6 +10,13 @@ RenderBridge::RenderBridge(QObject* parent)
 RenderBridge& RenderBridge::instance() {
     static RenderBridge bridge;
     return bridge;
+}
+
+void RenderBridge::setStateBuffer(StateBuffer* buf,
+                                   int renderWidth, int renderHeight) {
+    m_stateBuffer  = buf;
+    m_renderWidth  = renderWidth;
+    m_renderHeight = renderHeight;
 }
 
 void RenderBridge::setRenderManager(RenderManager* rm,

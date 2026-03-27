@@ -1,6 +1,5 @@
 #include "CourtroomController.h"
 
-#include "ao/ui/screens/CourtroomScreen.h"
 #include "event/AreaUpdateEvent.h"
 #include "event/ChatEvent.h"
 #include "event/EvidenceListEvent.h"
@@ -9,26 +8,25 @@
 #include "event/MusicListEvent.h"
 #include "event/NowPlayingEvent.h"
 #include "event/PlayerListEvent.h"
-#include "ui/IUIRenderer.h"
-#include "ui/Screen.h"
+#include "ui/UIManager.h"
 
 #include <algorithm>
 #include <cstdlib>
 
-CourtroomController::CourtroomController(QObject* parent)
-    : IQtScreenController(parent) {}
+CourtroomController::CourtroomController(UIManager& uiMgr, QObject* parent)
+    : IQtScreenController(parent)
+    , m_uiMgr(uiMgr)
+{}
 
-void CourtroomController::sync(Screen& screen) {
-    auto& cs = static_cast<CourtroomScreen&>(screen);
+void CourtroomController::setInitialCharName(const std::string& name) {
+    QString qname = QString::fromStdString(name);
+    if (qname == m_charName)
+        return;
+    m_charName = qname;
+    emit charNameChanged();
+}
 
-    // Update character name if it changed (e.g. after change_character()).
-    QString newName = QString::fromStdString(cs.get_character_name());
-    if (newName != m_charName) {
-        m_charName = newName;
-        emit charNameChanged();
-    }
-
-    // Drain server-pushed events and update models.
+void CourtroomController::drain() {
     drainChat();
     drainPlayerList();
     drainEvidence();
@@ -54,7 +52,8 @@ void CourtroomController::reset() {
 }
 
 void CourtroomController::disconnect() {
-    emit navActionRequested(IUIRenderer::NavAction::POP_TO_ROOT);
+    reset();
+    m_uiMgr.pop_to_root();
 }
 
 // --------------------------------------------------------------------------

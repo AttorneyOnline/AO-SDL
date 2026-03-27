@@ -1,24 +1,19 @@
 #pragma once
 
-#include "ui/IUIRenderer.h"
-
 #include <QObject>
-
-class Screen;
 
 /**
  * @brief Abstract base for Qt/QML screen controllers.
  *
- * Mirrors the SDL IScreenController pattern but as a QObject so that
- * controllers can expose Q_PROPERTYs and signals directly to QML.
- *
- * Each concrete controller (ServerListController, CharSelectController,
- * CourtroomController) owns its Qt models and Q_PROPERTYs.
+ * Each concrete controller owns its Qt models and Q_PROPERTYs.
+ * Navigation is performed by calling UIManager::push_screen() /
+ * pop_screen() / pop_to_root() directly — no nav signal needed.
  *
  * Lifecycle:
- *  - Controllers are created once at startup and registered with QtUIRenderer.
- *  - sync() is called every event-loop tick when this screen is the active one.
- *  - Controllers emit navActionRequested() when the user triggers navigation.
+ *  - Controllers are created once at startup and live for the process.
+ *  - drain() is called on every event-loop wakeup by EngineEventBridge,
+ *    regardless of which screen is currently active.  Implementations
+ *    must be fast and non-blocking; they pull from EventChannels only.
  */
 class IQtScreenController : public QObject {
     Q_OBJECT
@@ -31,21 +26,10 @@ class IQtScreenController : public QObject {
     ~IQtScreenController() override = default;
 
     /**
-     * @brief Synchronise Qt models and properties from the active Screen state.
+     * @brief Drain pending engine events and update Qt models.
      *
-     * Called by QtUIRenderer::update() each event-loop tick while this screen
-     * is on top of the UIManager stack.  Implementations must not block.
-     *
-     * @param screen The active Screen whose state should be mirrored.
+     * Called by EngineEventBridge on every event-loop wakeup.
+     * Must run on the main thread.  Must not block.
      */
-    virtual void sync(Screen& screen) = 0;
-
-  signals:
-    /**
-     * @brief Emitted when the user triggers a navigation action.
-     *
-     * Connected by QtUIRenderer to its own navActionRequested() signal,
-     * which in turn is connected to QtGameWindow::onNavAction().
-     */
-    void navActionRequested(IUIRenderer::NavAction action);
+    virtual void drain() = 0;
 };

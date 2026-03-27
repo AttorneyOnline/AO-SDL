@@ -14,10 +14,12 @@
 #include <string>
 #include <vector>
 
+class UIManager;
+
 /**
  * @brief Qt controller for the courtroom screen.
  *
- * Drives four Qt models from server events consumed on each sync() tick:
+ * Drives four Qt models from server events consumed on each drain() tick:
  *   - ChatModel        (OOC chat log, CT packets)
  *   - PlayerListModel  (player roster, PR/PU packets via PlayerListEvent)
  *   - EvidenceModel    (evidence list, LE packets)
@@ -40,9 +42,9 @@ class CourtroomController : public IQtScreenController {
     Q_PROPERTY(QString charName    READ charName    NOTIFY charNameChanged)
 
   public:
-    explicit CourtroomController(QObject* parent = nullptr);
+    explicit CourtroomController(UIManager& uiMgr, QObject* parent = nullptr);
 
-    void sync(Screen& screen) override;
+    void drain() override;
 
     ChatModel*       chatModel()       { return &m_chat;       }
     PlayerListModel* playerListModel() { return &m_players;    }
@@ -54,7 +56,15 @@ class CourtroomController : public IQtScreenController {
     QString nowPlaying() const { return m_nowPlaying;  }
     QString charName()   const { return m_charName;    }
 
-    /// Reset all models and properties (called on disconnect / POP_TO_ROOT).
+    /**
+     * @brief Called by CharSelectController when ENTERED_COURTROOM fires.
+     *
+     * Sets the initial character name before the courtroom screen is visible
+     * so QML bindings evaluate against the correct value on first render.
+     */
+    void setInitialCharName(const std::string& name);
+
+    /// Reset all models and properties (called on disconnect / pop_to_root).
     Q_INVOKABLE void reset();
 
     /// Disconnect and return to the server list.
@@ -108,4 +118,6 @@ class CourtroomController : public IQtScreenController {
 
     void rebuildMusicAreaModel();
     void rebuildPlayerModel();
+
+    UIManager& m_uiMgr;
 };
