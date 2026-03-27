@@ -1,24 +1,53 @@
 #include "ServerListController.h"
 
-#include "ao/ui/screens/ServerListScreen.h"
-#include "ui/Screen.h"
+#include "ao/ui/screens/CharSelectScreen.h"
+#include "event/EventManager.h"
+#include "event/ServerConnectEvent.h"
+#include "event/ServerListEvent.h"
+#include "ui/UIManager.h"
 
-ServerListController::ServerListController(QObject* parent)
-    : IQtScreenController(parent) {}
+#include <memory>
 
-void ServerListController::sync(Screen& screen) {
-    m_screen = static_cast<ServerListScreen*>(&screen);
-    const auto& servers = m_screen->get_servers();
-    if (static_cast<int>(servers.size()) != m_model.rowCount())
-        m_model.reset(servers);
+ServerListController::ServerListController(UIManager& uiMgr, QObject* parent)
+    : IQtScreenController(parent)
+    , m_uiMgr(uiMgr)
+{}
+
+void ServerListController::drain() {
+    auto& ch = EventManager::instance().get_channel<ServerListEvent>();
+    while (auto ev = ch.get_event()) {
+        m_entries = ev->get_server_list().get_servers();
+        m_model.reset(m_entries);
+    }
 }
 
 void ServerListController::connectToServer(int index) {
-    if (m_screen)
-        m_screen->select_server(index);
+    if (index < 0 || index >= static_cast<int>(m_entries.size()))
+        return;
+
+    const ServerEntry& entry = m_entries[index];
+
+    // Prefer WebSocket ports (protocol plugin uses WebSocket for AO2).
+    // Fall back to TCP if no WS port is advertised.
+    uint16_t port = 0;
+    if (entry.wss_port) port = *entry.wss_port;
+    else if (entry.ws_port)  port = *entry.ws_port;
+    else if (entry.tcp_port) port = *entry.tcp_port;
+
+    if (port == 0)
+        return;
+
+    doConnect(entry.hostname, port);
 }
 
 void ServerListController::directConnect(const QString& host, quint16 port) {
-    if (m_screen)
-        m_screen->direct_connect(host.toStdString(), port);
+    doConnect(host.toStdString(), port);
+}
+
+void ServerListController::doConnect(const std::string& host, uint16_t port) {
+    EventManager::instance()
+        .get_channel<ServerConnectEvent>()
+        .publish(ServerConnectEvent(host, port));
+
+    m_uiMgr.push_screen(std::make_unique<CharSelectScreen>());
 }

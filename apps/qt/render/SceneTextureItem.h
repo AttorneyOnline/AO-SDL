@@ -3,19 +3,27 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 
-class QOpenGLExtraFunctions;
+#include <memory>
+
 class QRhiTexture;
+class RenderManager;
 
 /**
- * @brief QML item that renders a GL triangle outside the scene graph.
+ * @brief QML item that renders the game scene outside the Qt scene graph.
  *
- * Hooks into QQuickWindow::beforeRendering() to issue raw OpenGL commands
- * on Qt's render thread, drawing into a private FBO.  The FBO colour
- * attachment is then wrapped as a QRhiTexture and displayed through a
- * QSGSimpleTextureNode in updatePaintNode().
+ * Hooks into QQuickWindow::beforeRendering() (Qt's render thread) to drive
+ * RenderManager::render_frame() each frame.  The renderer writes into its own
+ * offscreen FBO; the resulting texture is wrapped as a QRhiTexture and
+ * displayed via a QSGSimpleTextureNode in updatePaintNode().
  *
- * No manual context management is needed — Qt's threaded render loop
- * ensures the GL context is current when our slots fire.
+ * Initialisation order each session:
+ *   1. handleWindowChanged() — connects render-thread signals
+ *   2. renderGL() → initGL() on first call — creates RenderManager, registers
+ *      it on RenderBridge
+ *   3. updatePaintNode() — wraps the renderer texture for the scene graph
+ *
+ * RenderBridge must have a valid StateBuffer set (via setStateBuffer()) before
+ * the first renderGL() fires.
  */
 class SceneTextureItem : public QQuickItem {
     Q_OBJECT
@@ -37,23 +45,12 @@ class SceneTextureItem : public QQuickItem {
     void initGL();
     void cleanupGL();
 
-    QOpenGLExtraFunctions* m_gl = nullptr;
-
-    // FBO colour attachment that receives the triangle.
-    uint m_fbo        = 0;
-    uint m_fboTexture = 0;
-    int  m_texW       = 0;
-    int  m_texH       = 0;
-
-    // Shader / geometry.
-    uint m_vao     = 0;
-    uint m_vbo     = 0;
-    uint m_program = 0;
-    float m_angle  = 0.0f;
+    // Owned on the render thread; created in initGL(), destroyed in cleanupGL().
+    std::unique_ptr<RenderManager> m_renderManager;
 
     bool m_glInitialized = false;
 
-    // Scene-graph wrapper for the FBO texture.
+    // Scene-graph wrapper for the renderer's offscreen texture.
     QRhiTexture* m_rhiTexture  = nullptr;
     uintptr_t    m_cachedTexId = 0;
 };

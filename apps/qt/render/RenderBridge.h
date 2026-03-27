@@ -4,6 +4,7 @@
 #include <cstdint>
 
 class RenderManager;
+class StateBuffer;
 
 /**
  * @brief Singleton bridge between RenderManager and the QML scene graph.
@@ -26,10 +27,21 @@ class RenderBridge : public QObject {
     static RenderBridge& instance();
 
     /**
+     * @brief Store the StateBuffer and render dimensions before QML loads.
+     *
+     * Must be called from main() before the QQmlApplicationEngine is created
+     * so that SceneTextureItem::initGL() (render thread) can construct its
+     * RenderManager against a valid StateBuffer.
+     */
+    void setStateBuffer(StateBuffer* buf, int renderWidth, int renderHeight);
+
+    StateBuffer* stateBuffer() const { return m_stateBuffer; }
+
+    /**
      * @brief Bind the RenderManager and its render dimensions.
      *
-     * Must be called from the main thread once after graphics initialisation
-     * and before the first frame is rendered.
+     * Called by SceneTextureItem::initGL() on the render thread after
+     * create_renderer() succeeds.
      */
     void setRenderManager(RenderManager* rm, int renderWidth, int renderHeight);
 
@@ -68,6 +80,7 @@ class RenderBridge : public QObject {
   private:
     explicit RenderBridge(QObject* parent = nullptr);
 
+    StateBuffer*   m_stateBuffer   = nullptr;
     RenderManager* m_renderManager = nullptr;
     int            m_renderWidth   = 0;
     int            m_renderHeight  = 0;

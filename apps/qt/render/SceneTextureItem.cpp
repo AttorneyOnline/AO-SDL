@@ -1,5 +1,11 @@
 #include "SceneTextureItem.h"
 
+#include "RenderBridge.h"
+#include "asset/MediaManager.h"
+#include "render/IRenderer.h"
+#include "render/RenderManager.h"
+#include "render/StateBuffer.h"
+
 #include <QOpenGLContext>
 #include <QOpenGLExtraFunctions>
 #include <QQuickWindow>
@@ -7,36 +13,8 @@
 #include <QSGSimpleTextureNode>
 #include <rhi/qrhi.h>
 
-#include <cmath>
-
-// --------------------------------------------------------------------------
-// Shaders (GLSL 330 core)
-// --------------------------------------------------------------------------
-
-static const char* kVertexShader = R"(
-#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec3 aCol;
-out vec3 vCol;
-uniform float uAngle;
-void main() {
-    float c = cos(uAngle);
-    float s = sin(uAngle);
-    vec2 p  = vec2(aPos.x * c - aPos.y * s,
-                   aPos.x * s + aPos.y * c);
-    gl_Position = vec4(p, 0.0, 1.0);
-    vCol = aCol;
-}
-)";
-
-static const char* kFragmentShader = R"(
-#version 330 core
-in  vec3 vCol;
-out vec4 fragColor;
-void main() {
-    fragColor = vec4(vCol, 1.0);
-}
-)";
+// Factory defined in whichever render plugin is linked (aorender_gl).
+std::unique_ptr<IRenderer> create_renderer(int width, int height);
 
 // --------------------------------------------------------------------------
 // Construction / destruction
@@ -51,7 +29,7 @@ SceneTextureItem::SceneTextureItem(QQuickItem* parent)
 }
 
 SceneTextureItem::~SceneTextureItem() {
-    // Normal path: cleanupGL() was already called via sceneGraphInvalidated.
+    // Normal path: cleanupGL() was already invoked via sceneGraphInvalidated.
     delete m_rhiTexture;
 }
 
@@ -63,7 +41,7 @@ void SceneTextureItem::handleWindowChanged(QQuickWindow* win) {
     if (!win)
         return;
 
-    // DirectConnection — these fire on the render thread.
+    // DirectConnection — these slots fire on the render thread.
     connect(win, &QQuickWindow::beforeRendering,
             this, &SceneTextureItem::renderGL,
             Qt::DirectConnection);
@@ -77,102 +55,42 @@ void SceneTextureItem::handleSceneGraphInvalidated() {
 }
 
 // --------------------------------------------------------------------------
-// GL initialisation (runs once, on the render thread)
+// GL initialisation — runs once on the render thread
 // --------------------------------------------------------------------------
 
-static uint compileShader(QOpenGLExtraFunctions* gl, uint type, const char* src) {
-    uint s = gl->glCreateShader(type);
-    gl->glShaderSource(s, 1, &src, nullptr);
-    gl->glCompileShader(s);
-    int ok = 0;
-    gl->glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-    if (!ok) {
-        char log[512];
-        gl->glGetShaderInfoLog(s, sizeof(log), nullptr, log);
-        qWarning("SceneTextureItem shader error: %s", log);
-    }
-    return s;
-}
-
 void SceneTextureItem::initGL() {
-    auto* ctx = QOpenGLContext::currentContext();
-    if (!ctx)
+    if (!QOpenGLContext::currentContext())
         return;
-    m_gl = ctx->extraFunctions();
 
-    m_texW = 512;
-    m_texH = 512;
+    RenderBridge& rb = RenderBridge::instance();
 
-    // ── FBO ──────────────────────────────────────────────────────────────
-    m_gl->glGenTextures(1, &m_fboTexture);
-    m_gl->glBindTexture(GL_TEXTURE_2D, m_fboTexture);
-    m_gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
-                       m_texW, m_texH, 0,
-                       GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    m_gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    m_gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    m_gl->glBindTexture(GL_TEXTURE_2D, 0);
-
-    m_gl->glGenFramebuffers(1, &m_fbo);
-    m_gl->glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    m_gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                 GL_TEXTURE_2D, m_fboTexture, 0);
-    if (m_gl->glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        qWarning("SceneTextureItem: FBO incomplete");
-    m_gl->glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    // ── Shader program ───────────────────────────────────────────────────
-    uint vs = compileShader(m_gl, GL_VERTEX_SHADER,   kVertexShader);
-    uint fs = compileShader(m_gl, GL_FRAGMENT_SHADER, kFragmentShader);
-
-    m_program = m_gl->glCreateProgram();
-    m_gl->glAttachShader(m_program, vs);
-    m_gl->glAttachShader(m_program, fs);
-    m_gl->glLinkProgram(m_program);
-
-    int ok = 0;
-    m_gl->glGetProgramiv(m_program, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[512];
-        m_gl->glGetProgramInfoLog(m_program, sizeof(log), nullptr, log);
-        qWarning("SceneTextureItem link error: %s", log);
+    if (!rb.stateBuffer()) {
+        qWarning("SceneTextureItem::initGL: RenderBridge has no StateBuffer — "
+                 "call RenderBridge::setStateBuffer() before showing the window");
+        return;
     }
-    m_gl->glDeleteShader(vs);
-    m_gl->glDeleteShader(fs);
 
-    // ── Triangle geometry (pos.xy + col.rgb) ─────────────────────────────
-    // clang-format off
-    static const float verts[] = {
-        //  x      y       r     g     b
-         0.0f,  0.6f,   1.0f, 0.0f, 0.0f,   // top      — red
-        -0.6f, -0.4f,   0.0f, 1.0f, 0.0f,   // left     — green
-         0.6f, -0.4f,   0.0f, 0.0f, 1.0f,   // right    — blue
-    };
-    // clang-format on
+    auto renderer = create_renderer(rb.renderWidth(), rb.renderHeight());
+    if (!renderer) {
+        qWarning("SceneTextureItem::initGL: create_renderer() returned null");
+        return;
+    }
 
-    m_gl->glGenVertexArrays(1, &m_vao);
-    m_gl->glGenBuffers(1, &m_vbo);
+    // Tell the asset library which shader sub-directory to use.
+    MediaManager::instance().assets()
+        .set_shader_backend(renderer->backend_name());
 
-    m_gl->glBindVertexArray(m_vao);
-    m_gl->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    m_gl->glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+    m_renderManager = std::make_unique<RenderManager>(
+        *rb.stateBuffer(), std::move(renderer));
 
-    m_gl->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE,
-                                5 * sizeof(float), nullptr);
-    m_gl->glEnableVertexAttribArray(0);
-    m_gl->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
-                                5 * sizeof(float),
-                                reinterpret_cast<void*>(2 * sizeof(float)));
-    m_gl->glEnableVertexAttribArray(1);
-
-    m_gl->glBindVertexArray(0);
-    m_gl->glBindBuffer(GL_ARRAY_BUFFER, 0);
+    rb.setRenderManager(m_renderManager.get(),
+                        rb.renderWidth(), rb.renderHeight());
 
     m_glInitialized = true;
 }
 
 // --------------------------------------------------------------------------
-// Per-frame GL rendering (render thread, via beforeRendering)
+// Per-frame rendering — render thread, via beforeRendering
 // --------------------------------------------------------------------------
 
 void SceneTextureItem::renderGL() {
@@ -183,34 +101,25 @@ void SceneTextureItem::renderGL() {
 
     window()->beginExternalCommands();
 
-    m_gl->glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    m_gl->glViewport(0, 0, m_texW, m_texH);
+    RenderBridge::instance().renderFrame();
 
-    m_gl->glClearColor(0.10f, 0.10f, 0.15f, 1.0f);
-    m_gl->glClear(GL_COLOR_BUFFER_BIT);
-
-    m_gl->glUseProgram(m_program);
-    m_gl->glUniform1f(m_gl->glGetUniformLocation(m_program, "uAngle"),
-                      m_angle);
-    m_angle += 0.016f;
-
-    m_gl->glBindVertexArray(m_vao);
-    m_gl->glDrawArrays(GL_TRIANGLES, 0, 3);
-    m_gl->glBindVertexArray(0);
-
-    m_gl->glUseProgram(0);
-    m_gl->glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // GLRenderer::draw() leaves its own FBO bound; restore the default so
+    // Qt's RHI can render the scene graph on top.
+    QOpenGLContext::currentContext()
+        ->extraFunctions()
+        ->glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     window()->endExternalCommands();
 }
 
 // --------------------------------------------------------------------------
-// Scene-graph texture node (render thread, during sync)
+// Scene-graph texture node — render thread, during sync
 // --------------------------------------------------------------------------
 
 QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
-    if (!m_fboTexture) {
-        // FBO not ready yet — will be created on the first beforeRendering.
+    uintptr_t texId = RenderBridge::instance().nativeTextureId();
+    if (!texId) {
+        // Renderer not ready yet — will be created on the next beforeRendering.
         update();
         return old;
     }
@@ -221,8 +130,8 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         node->setOwnsTexture(true);
     }
 
-    // Wrap the native GL texture once (ID never changes after init).
-    uintptr_t texId = static_cast<uintptr_t>(m_fboTexture);
+    // Wrap the native GL texture once (the renderer's FBO texture ID is
+    // stable for its lifetime — it only changes on a resize()).
     if (texId != m_cachedTexId) {
         auto* ri  = window()->rendererInterface();
         auto* rhi = static_cast<QRhi*>(
@@ -233,7 +142,9 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
             m_rhiTexture = nullptr;
 
             auto* rhiTex = rhi->newTexture(
-                QRhiTexture::RGBA8, QSize(m_texW, m_texH));
+                QRhiTexture::RGBA8,
+                QSize(RenderBridge::instance().renderWidth(),
+                      RenderBridge::instance().renderHeight()));
             if (rhiTex) {
                 rhiTex->createFrom({static_cast<quint64>(texId), 0});
                 m_rhiTexture  = rhiTex;
@@ -244,9 +155,11 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         }
     }
 
-    // OpenGL FBOs are bottom-up; flip to match QML's top-down coordinates.
-    node->setTextureCoordinatesTransform(
-        QSGSimpleTextureNode::MirrorVertically);
+    // GL FBOs have V=0 at the bottom; flip to match QML's top-down coordinates.
+    if (RenderBridge::instance().uvFlipped())
+        node->setTextureCoordinatesTransform(
+            QSGSimpleTextureNode::MirrorVertically);
+
     node->setRect(boundingRect());
 
     // Keep the render loop alive.
@@ -255,20 +168,21 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
 }
 
 // --------------------------------------------------------------------------
-// Cleanup (render thread)
+// Cleanup — render thread
 // --------------------------------------------------------------------------
 
 void SceneTextureItem::cleanupGL() {
     if (!m_glInitialized)
         return;
 
-    m_gl->glDeleteVertexArrays(1, &m_vao);
-    m_gl->glDeleteBuffers(1, &m_vbo);
-    m_gl->glDeleteProgram(m_program);
-    m_gl->glDeleteFramebuffers(1, &m_fbo);
-    m_gl->glDeleteTextures(1, &m_fboTexture);
+    // Unregister from the bridge before tearing down the GL resources it
+    // references, so no in-flight renderFrame() call can dereference them.
+    RenderBridge::instance().setRenderManager(nullptr, 0, 0);
 
-    m_vao = m_vbo = m_program = m_fbo = m_fboTexture = 0;
+    // RenderManager destructor destroys the IRenderer, which calls glDelete*
+    // — the GL context must be current at this point (guaranteed by
+    // sceneGraphInvalidated on Qt's render thread).
+    m_renderManager.reset();
 
     delete m_rhiTexture;
     m_rhiTexture  = nullptr;

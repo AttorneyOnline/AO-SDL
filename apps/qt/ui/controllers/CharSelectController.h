@@ -1,68 +1,66 @@
 #pragma once
 
 #include "IQtScreenController.h"
+#include "ui/models/CharListModel.h"
 
 #include <QAbstractListModel>
 #include <QObject>
 
-class CharSelectScreen;
+#include <string>
+#include <vector>
 
-/**
- * @brief Flat list model for the character roster on the char-select screen.
- *
- * Exposes the character folder name and taken status.  Icon loading is done
- * asynchronously by the engine; the Qt side reflects what the Screen reports
- * each frame.
- */
-class CharListModel : public QAbstractListModel {
-    Q_OBJECT
-
-  public:
-    enum Role { NameRole = Qt::UserRole + 1, TakenRole };
-
-    struct CharEntry {
-        QString name;
-        bool    taken = false;
-    };
-
-    explicit CharListModel(QObject* parent = nullptr);
-
-    void reset(const std::vector<CharEntry>& chars);
-
-    int rowCount(const QModelIndex& parent = {}) const override;
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
-    QHash<int, QByteArray> roleNames() const override;
-
-  private:
-    std::vector<CharEntry> m_entries;
-};
-
-// --------------------------------------------------------------------------
+class CourtroomController;
+class UIManager;
 
 /**
  * @brief Qt controller for the character selection screen.
  *
- * Syncs CharListModel from CharSelectScreen::get_chars() and exposes
- * selectCharacter() for QML.
+ * drain() consumes CharacterListEvent, CharsCheckEvent, and UIEvent directly
+ * from EventManager.  No CharSelectScreen is needed as a data source.
+ *
+ * On UIEvent::ENTERED_COURTROOM the controller:
+ *   1. Injects the character name into CourtroomController.
+ *   2. Pushes CourtroomScreen onto UIManager's stack.
+ *
+ * Icon prefetch runs inside drain() at the same rate as the SDL frontend
+ * (32 HTTP prefetch + 8 GPU upload per tick), but GPU upload is deferred
+ * to Phase 4 when QML receives a proper image provider.
  */
 class CharSelectController : public IQtScreenController {
     Q_OBJECT
     Q_PROPERTY(CharListModel* model READ model CONSTANT)
 
   public:
-    explicit CharSelectController(QObject* parent = nullptr);
+    explicit CharSelectController(UIManager&          uiMgr,
+                                  CourtroomController& crCtrl,
+                                  QObject*             parent = nullptr);
 
-    void sync(Screen& screen) override;
+    /// IQtScreenController
+    void drain() override;
 
     CharListModel* model() { return &m_model; }
 
-    /// Select the character at index and send a request to the server.
+    /// Select the character at index.  Publishes CharSelectRequestEvent.
     Q_INVOKABLE void selectCharacter(int index);
 
     /// Return to the server list.
     Q_INVOKABLE void disconnect();
 
   private:
-    CharListModel     m_model;
-    CharSelectScreen* m_screen = nullptr;
+    struct CharEntry {
+        std::string folder;
+        bool        taken = false;
+    };
+
+    void prefetchIcons();
+    void syncModel();
+
+    UIManager&           m_uiMgr;
+    CourtroomController& m_crCtrl;
+    CharListModel        m_model;
+
+    std::vector<CharEntry> m_chars;
+    int                    m_selected       = -1;
+    int                    m_prefetchCursor = 0;
+    int                    m_retryCursor    = 0;
 };
