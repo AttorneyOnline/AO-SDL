@@ -85,8 +85,3 @@ target_link_libraries(aoqt PRIVATE
     # and transitively pulls in ao_net and ao_game.
     ao_protocol
 )
-
-# Prefer the discrete GPU on Windows laptops with hybrid graphics.
-if(WIN32)
-    target_sources(aoqt PRIVATE gpu_preference.cpp)
-endif()
