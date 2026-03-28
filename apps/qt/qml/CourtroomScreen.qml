@@ -2,11 +2,17 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+/**
+ * Courtroom screen overlay.  The game scene is rendered by SceneTextureItem
+ * in Main.qml — this Item only hosts HUD elements on top of it.
+ */
 Item {
     anchors.fill: parent
 
-    // The game renderer fills the whole window behind this overlay.
-    // This overlay hosts HUD elements only.
+    // Game renderer — always visible behind every screen.
+    SceneTextureItem {
+        anchors.fill: parent
+    }
 
     // Top bar: character name + disconnect button.
     Rectangle {
@@ -23,9 +29,7 @@ Item {
             spacing: 12
 
             Label {
-                text: app.courtroomController.charName.length > 0
-                      ? app.courtroomController.charName
-                      : "Courtroom"
+                text: app.courtroomController.charName.length > 0 ? app.courtroomController.charName : "Courtroom"
                 color: "white"
                 font.pixelSize: 18
                 font.bold: true

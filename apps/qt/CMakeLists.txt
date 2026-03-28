@@ -1,4 +1,4 @@
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core OpenGL Gui Quick Qml QuickControls2)
 qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(aoqt main.cpp)
@@ -43,6 +43,10 @@ target_sources(aoqt PRIVATE
     AppContext.h
     AppContext.cpp
 
+    ui/CharIconProvider.h
+    ui/CharIconProvider.cpp
+
+    ui/controllers/IQtScreenController.h
     ui/controllers/ServerListController.h
     ui/controllers/ServerListController.cpp
     ui/controllers/CharSelectController.h

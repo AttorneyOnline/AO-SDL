@@ -10,6 +10,8 @@
 #include "event/PlayerListEvent.h"
 #include "ui/UIManager.h"
 
+#include "utils/Log.h"
+
 #include <algorithm>
 #include <cstdlib>
 
@@ -37,6 +39,7 @@ void CourtroomController::drain() {
 }
 
 void CourtroomController::reset() {
+    Log::debug("[CourtroomController] reset");
     m_chat.clear();
     m_players.clear();
     m_evidence.clear();
@@ -52,6 +55,7 @@ void CourtroomController::reset() {
 }
 
 void CourtroomController::disconnect() {
+    Log::info("[CourtroomController] disconnecting, returning to server list");
     reset();
     m_uiMgr.pop_to_root();
 }

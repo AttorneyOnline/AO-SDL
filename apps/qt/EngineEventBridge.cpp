@@ -1,5 +1,7 @@
 #include "EngineEventBridge.h"
 
+#include "utils/Log.h"
+
 #include <QAbstractEventDispatcher>
 #include <QThread>
 
@@ -31,9 +33,11 @@ void EngineEventBridge::start() {
         dispatcher, &QAbstractEventDispatcher::awake,
         this, &EngineEventBridge::drainAll,
         Qt::DirectConnection);
+    Log::info("[EngineEventBridge] started with {} drain channels", m_drains.size());
 }
 
 void EngineEventBridge::stop() {
+    Log::info("[EngineEventBridge] stopping");
     disconnect(m_connection);
     m_connection = {};
 }

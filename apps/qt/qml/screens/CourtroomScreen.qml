@@ -1,21 +1,15 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import AO 1.0
-
 /**
- * Main courtroom screen.  Hosts the game scene (SceneTextureItem) and all
- * courtroom panels as overlaid components.
+ * Main courtroom screen.  The game scene is rendered by the SceneTextureItem
+ * in Main.qml behind all screens — this page only hosts the courtroom HUD
+ * overlays.
  */
 Page {
     id: root
     padding: 0
-
-    // Game render view — fills the screen and drives the render loop.
-    SceneTextureItem {
-        id: scene
-        anchors.fill: parent
-    }
+    background: null
 
     // HUD overlay
     HealthBars {

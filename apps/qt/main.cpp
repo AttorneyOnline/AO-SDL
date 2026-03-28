@@ -3,8 +3,11 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 
+#include <cstdio>
+
 #include "AppContext.h"
 #include "EngineEventBridge.h"
+#include "utils/Log.h"
 #include "asset/MediaManager.h"
 #include "event/AssetUrlEvent.h"
 #include "event/EventManager.h"
@@ -23,13 +26,20 @@
 #include "ui/controllers/CourtroomController.h"
 #include "ui/controllers/DummyController.h"
 #include "ui/controllers/ServerListController.h"
+#include "ui/CharIconProvider.h"
 
 #include "ao/ao_plugin.h"
 #include "ao/ui/screens/ServerListScreen.h"
 
 int main(int argc, char* argv[]) {
+    // Disable stdout buffering so log output appears immediately in Qt Creator.
+    setvbuf(stdout, nullptr, _IONBF, 0);
+
+    Log::info("[main] starting");
+
 #if !defined(Q_OS_APPLE)
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    Log::debug("[main] graphics API set to OpenGL");
 #endif
 
     QGuiApplication app(argc, argv);
@@ -43,6 +53,7 @@ int main(int argc, char* argv[]) {
     // initGL() (render thread) reads these values to construct its RenderManager.
     StateBuffer stateBuffer;
     RenderBridge::instance().setStateBuffer(&stateBuffer, renderW, renderH);
+    Log::debug("[main] RenderBridge primed ({}x{})", renderW, renderH);
 
     // AO2 scene presenter drives the courtroom renderer.
     auto   presenter = ao::create_presenter();
@@ -63,19 +74,26 @@ int main(int argc, char* argv[]) {
     AppContext::instance().setUIManager(&uiMgr);
     AppContext::instance().setControllers(&slController, &csController, &crController);
     AppContext::instance().setDummyController(&dummyController);
+    Log::debug("[main] controllers created");
 
     // Initialise QML context before the engine loads Main.qml.
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("app", &AppContext::instance());
+    engine.addImageProvider(
+        QStringLiteral("charicon"),
+        new CharIconProvider(MediaManager::instance().assets()));
+    Log::debug("[main] QML engine created");
 
     // --- Network + HTTP -------------------------------------------------------
 
     HttpPool httpPool(4);
 
     // Kick off the server-list fetch immediately.
+    Log::info("[main] fetching server list");
     httpPool.get(
         "http://servers.aceattorneyonline.com", "/servers",
         [](HttpResponse resp) {
+            Log::debug("[main] server list HTTP response: {}", resp.status);
             if (resp.status == 200) {
                 ServerList svlist(resp.body);
                 EventManager::instance()
@@ -102,6 +120,7 @@ int main(int argc, char* argv[]) {
     // 2. Session lifecycle.
     bridge.addChannel([&] {
         if (EventManager::instance().get_channel<SessionStartEvent>().get_event()) {
+            Log::info("[main] session started");
             activeSession = std::make_unique<Session>(
                 MediaManager::instance().mounts_ref(),
                 MediaManager::instance().assets());
@@ -111,12 +130,16 @@ int main(int argc, char* argv[]) {
 
         auto& assetCh = EventManager::instance().get_channel<AssetUrlEvent>();
         while (auto ev = assetCh.get_event()) {
-            if (activeSession)
+            if (activeSession) {
+                Log::debug("[main] adding asset mount: {}", ev->url());
                 activeSession->add_http_mount(ev->url(), httpPool);
+            }
         }
 
-        if (EventManager::instance().get_channel<SessionEndEvent>().get_event())
+        if (EventManager::instance().get_channel<SessionEndEvent>().get_event()) {
+            Log::info("[main] session ended");
             activeSession.reset();
+        }
     });
 
     // 3. Drain all controllers — each pulls only its own EventChannels.
@@ -131,11 +154,14 @@ int main(int argc, char* argv[]) {
     bridge.addChannel([&] { AppContext::instance().syncCurrentScreenId(); });
 
     bridge.start();
+    Log::debug("[main] event bridge started");
 
     // --- QML ------------------------------------------------------------------
 
+    Log::info("[main] loading QML module");
     engine.loadFromModule("AO", "Main");
     if (engine.rootObjects().isEmpty()) {
+        Log::fatal("[main] QML engine failed to load — no root objects");
         bridge.stop();
         netThread.stop();
         gameThread.stop();
@@ -143,16 +169,19 @@ int main(int argc, char* argv[]) {
         MediaManager::instance().shutdown();
         return -1;
     }
+    Log::info("[main] QML loaded, entering event loop");
 
     int result = app.exec();
 
     // --- Shutdown (reverse construction order) --------------------------------
 
+    Log::info("[main] event loop exited (code {}), shutting down", result);
     bridge.stop();
     netThread.stop();
     gameThread.stop();
     httpPool.stop();
     MediaManager::instance().shutdown();
+    Log::info("[main] shutdown complete");
 
     return result;
 }
