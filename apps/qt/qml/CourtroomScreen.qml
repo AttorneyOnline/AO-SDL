@@ -9,11 +9,6 @@ import QtQuick.Layouts
 Item {
     anchors.fill: parent
 
-    // Game renderer — always visible behind every screen.
-    SceneTextureItem {
-        anchors.fill: parent
-    }
-
     // Top bar: character name + disconnect button.
     Rectangle {
         id: topBar
@@ -29,7 +24,9 @@ Item {
             spacing: 12
 
             Label {
-                text: app.courtroomController.charName.length > 0 ? app.courtroomController.charName : "Courtroom"
+                text: app.courtroomController.charName.length > 0
+                      ? app.courtroomController.charName
+                      : "Courtroom"
                 color: "white"
                 font.pixelSize: 18
                 font.bold: true
