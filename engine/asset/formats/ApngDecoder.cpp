@@ -201,6 +201,8 @@ static std::optional<DecodedFrame> decode_frame(const FrameInfo& fi, size_t fi_i
     uint32_t fw = (uint32_t)w;
     uint32_t fh = (uint32_t)h;
 
+    // NB: clang-tidy thinks this is an infinite loop because fx/fy don't change. It is wrong.
+    // NOLINTBEGIN(bugprone-infinite-loop)  
     for (uint32_t row = 0; row < fh && (fy + row) < canvas_h; row++) {
         for (uint32_t col = 0; col < fw && (fx + col) < canvas_w; col++) {
             size_t src_idx = (row * fw + col) * 4;
@@ -214,6 +216,7 @@ static std::optional<DecodedFrame> decode_frame(const FrameInfo& fi, size_t fi_i
             }
         }
     }
+    // NOLINTEND(bugprone-infinite-loop)  
 
     stbi_image_free(pixels);
 

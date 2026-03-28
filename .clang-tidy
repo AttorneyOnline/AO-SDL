@@ -1,0 +1,78 @@
+---
+# AO-SDL .clang-tidy — tuned for this project's actual patterns.
+#
+# Philosophy: catch real bugs and perf issues, skip pedantic style nits.
+# The codebase already has a consistent style enforced by .clang-format;
+# clang-tidy should focus on correctness, not cosmetics.
+
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  readability-container-size-empty,
+  readability-duplicate-include,
+  readability-else-after-return,
+  readability-misleading-indentation,
+  readability-redundant-control-flow,
+  readability-redundant-smartptr-get,
+  readability-redundant-string-cstr,
+  readability-redundant-string-init,
+  readability-simplify-boolean-expr,
+  readability-static-accessed-through-instance,
+  readability-string-compare,
+  readability-use-anyofallof,
+  readability-make-member-function-const,
+  google-explicit-constructor,
+  google-build-using-namespace,
+  cppcoreguidelines-prefer-member-initializer,
+  misc-redundant-expression,
+  misc-throw-by-value-catch-by-reference,
+  misc-unused-using-decls,
+  misc-unused-parameters,
+  misc-uniqueptr-reset-release,
+
+  -bugprone-branch-clone,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-narrowing-conversions,
+  -bugprone-switch-missing-default-case,
+
+  -modernize-avoid-c-arrays,
+  -modernize-pass-by-value,
+  -modernize-return-braced-init-list,
+  -modernize-use-auto,
+  -modernize-use-designated-initializers,
+  -modernize-use-nodiscard,
+  -modernize-use-trailing-return-type,
+
+  -performance-avoid-endl,
+  -performance-enum-size,
+  -performance-no-int-to-ptr,
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '^.*/(?!third-party/).*\.(h|hpp)$'
+
+FormatStyle: file
+
+CheckOptions:
+  # Matches the project's existing conventions (C++20, no legacy compat)
+  - key: modernize-use-override.IgnoreDestructors
+    value: false
+  - key: modernize-use-override.IgnoreTemplateInstantiations
+    value: false
+  - key: modernize-loop-convert.MinConfidence
+    value: reasonable
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: 'std::shared_ptr;std::function'
+  - key: bugprone-argument-comment.StrictMode
+    value: false
+  - key: bugprone-assert-side-effect.AssertMacros
+    value: 'assert'
+  - key: bugprone-unused-return-value.CheckedFunctions
+    value: '::std::async;::std::launder;::std::remove;::std::remove_if;::std::unique;::std::unique_ptr::release;::std::basic_string::empty;::std::vector::empty;::std::back_inserter'
+  - key: misc-throw-by-value-catch-by-reference.CheckThrowTemporaries
+    value: true
+...
