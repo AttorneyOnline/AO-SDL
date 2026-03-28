@@ -19,11 +19,16 @@ ApplicationWindow {
         anchors.fill: parent
         source: {
             switch (app.currentScreenId) {
-                case "server_list": return "ServerListScreen.qml"
-                case "char_select": return "CharSelectScreen.qml"
-                case "courtroom":   return "CourtroomScreen.qml"
-                case "dummy":       return "DummyScreen.qml"
-                default:            return ""
+            case "server_list":
+                return "ServerListScreen.qml";
+            case "char_select":
+                return "CharSelectScreen.qml";
+            case "courtroom":
+                return "CourtroomScreen.qml";
+            case "dummy":
+                return "DummyScreen.qml";
+            default:
+                return "";
             }
         }
     }

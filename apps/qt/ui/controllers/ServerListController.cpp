@@ -5,6 +5,7 @@
 #include "event/ServerConnectEvent.h"
 #include "event/ServerListEvent.h"
 #include "ui/UIManager.h"
+#include "utils/Log.h"
 
 #include <memory>
 
@@ -18,6 +19,7 @@ void ServerListController::drain() {
     while (auto ev = ch.get_event()) {
         m_entries = ev->get_server_list().get_servers();
         m_model.reset(m_entries);
+        Log::info("[ServerListController] received server list ({} servers)", m_entries.size());
     }
 }
 
@@ -30,8 +32,8 @@ void ServerListController::connectToServer(int index) {
     // Prefer WebSocket ports (protocol plugin uses WebSocket for AO2).
     // Fall back to TCP if no WS port is advertised.
     uint16_t port = 0;
-    if (entry.wss_port) port = *entry.wss_port;
-    else if (entry.ws_port)  port = *entry.ws_port;
+    if (entry.ws_port)
+        port = *entry.ws_port;
     else if (entry.tcp_port) port = *entry.tcp_port;
 
     if (port == 0)
@@ -45,6 +47,7 @@ void ServerListController::directConnect(const QString& host, quint16 port) {
 }
 
 void ServerListController::doConnect(const std::string& host, uint16_t port) {
+    Log::info("[ServerListController] connecting to {}:{}", host, port);
     EventManager::instance()
         .get_channel<ServerConnectEvent>()
         .publish(ServerConnectEvent(host, port));

@@ -22,9 +22,10 @@ class UIManager;
  *   1. Injects the character name into CourtroomController.
  *   2. Pushes CourtroomScreen onto UIManager's stack.
  *
- * Icon prefetch runs inside drain() at the same rate as the SDL frontend
- * (32 HTTP prefetch + 8 GPU upload per tick), but GPU upload is deferred
- * to Phase 4 when QML receives a proper image provider.
+ * The character list is fed into the QML model in batches
+ * (kHydrateBatch entries per tick) so the UI hydrates progressively
+ * rather than stalling on a single frame.  Icon prefetch and resolve
+ * are similarly rate-limited.
  */
 class CharSelectController : public IQtScreenController {
     Q_OBJECT
@@ -49,11 +50,13 @@ class CharSelectController : public IQtScreenController {
   private:
     struct CharEntry {
         std::string folder;
-        bool        taken = false;
+        bool        taken         = false;
+        bool        iconResolved  = false;
     };
 
+    void hydrateModel();
     void prefetchIcons();
-    void syncModel();
+    void resolveIcons();
 
     UIManager&           m_uiMgr;
     CourtroomController& m_crCtrl;
@@ -61,6 +64,12 @@ class CharSelectController : public IQtScreenController {
 
     std::vector<CharEntry> m_chars;
     int                    m_selected       = -1;
+    int                    m_hydrateCursor  = 0;
     int                    m_prefetchCursor = 0;
     int                    m_retryCursor    = 0;
+
+    /// Entries inserted into the model per tick during initial hydration.
+    static constexpr int kHydrateBatch = 64;
+    /// Icon resolves (dataChanged signals) per tick.
+    static constexpr int kResolveBatch = 32;
 };

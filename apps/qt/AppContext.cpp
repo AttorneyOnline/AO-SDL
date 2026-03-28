@@ -2,6 +2,7 @@
 
 #include "ui/UIManager.h"
 #include "ui/Screen.h"
+#include "utils/Log.h"
 
 AppContext::AppContext(QObject* parent)
     : QObject(parent) {}
@@ -37,6 +38,8 @@ void AppContext::syncCurrentScreenId() {
     if (newId == m_currentScreenId)
         return;
 
+    Log::info("[AppContext] screen changed: '{}' -> '{}'",
+              m_currentScreenId.toStdString(), newId.toStdString());
     m_currentScreenId = newId;
     emit currentScreenIdChanged();
 }

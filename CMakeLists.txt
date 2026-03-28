@@ -612,6 +612,10 @@ endif()
 # =============================================================================
 
 if(NOT AO_BUILD_SERVER_ONLY)
+
+if(NOT APPLE)
+    find_package(OpenGL REQUIRED)
+endif()
 if(APPLE)
     # --- aorender_metal — Metal renderer backend (macOS / iOS) ----------------
 
