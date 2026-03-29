@@ -1,0 +1,56 @@
+name: Docs
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Doxygen
+        run: sudo apt-get update && sudo apt-get install -y doxygen
+
+      - name: Build Doxygen
+        run: doxygen Doxyfile
+
+      - name: Build AONX protocol docs
+        run: doc/aonx/build-docs.sh
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r docs/html _site/api
+          cp doc/aonx/index.html _site/protocol.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -402,6 +402,7 @@ CMakeFiles/
 
 # Generated documentation
 docs/
+doc/aonx/index.html
 
 # IDE / OS / tool files
 .DS_Store
