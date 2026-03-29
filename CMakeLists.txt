@@ -801,7 +801,11 @@ endif() # NOT AO_BUILD_SERVER_ONLY
 
 if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     add_subdirectory(apps/sdl)
-    # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+
+    find_package(Qt6 6.8 QUIET COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
+    if(Qt6_FOUND)
+        add_subdirectory(apps/qt)
+    endif()
 endif()
 
 if(NOT AO_BUILD_FLUTTER)
