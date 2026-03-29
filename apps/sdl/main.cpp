@@ -164,6 +164,12 @@ int main(int argc, char* argv[]) {
 
     http_pool.stop();
     Log::log_print(DEBUG, "main: HTTP pool stopped");
+
+    // Session must be destroyed before MediaManager::shutdown() because its
+    // destructor calls mounts_.remove_mount() on the MountManager that
+    // shutdown() destroys.
+    active_session.reset();
+
     MediaManager::instance().shutdown();
     Log::log_print(INFO, "main: shutdown complete");
 
