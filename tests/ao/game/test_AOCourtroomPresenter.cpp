@@ -1,9 +1,9 @@
 #include "ao/game/AOCourtroomPresenter.h"
 
 #include "ao/event/ICLogEvent.h"
-#include "event/ICMessageEvent.h"
 #include "event/BackgroundEvent.h"
 #include "event/EventManager.h"
+#include "event/ICMessageEvent.h"
 #include "render/RenderState.h"
 
 #include <gtest/gtest.h>

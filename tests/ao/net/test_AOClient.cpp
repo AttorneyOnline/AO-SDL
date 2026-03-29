@@ -2,7 +2,6 @@
 #include "net/ao/AOPacket.h"
 #include "net/ao/PacketTypes.h"
 
-#include "event/ICMessageEvent.h"
 #include "ao/event/PlayerCountEvent.h"
 #include "ao/event/ServerInfoEvent.h"
 #include "event/AreaUpdateEvent.h"
@@ -15,6 +14,7 @@
 #include "event/EvidenceListEvent.h"
 #include "event/FeatureListEvent.h"
 #include "event/HealthBarEvent.h"
+#include "event/ICMessageEvent.h"
 #include "event/MusicChangeEvent.h"
 #include "event/MusicListEvent.h"
 #include "event/PlayerListEvent.h"
