@@ -33,6 +33,7 @@ target_include_directories(aoqt PRIVATE
 
 # Non-QML sources: bridge, controllers, EngineEventBridge.
 target_sources(aoqt PRIVATE
+    render/IQtRenderBackend.h
     render/RenderBridge.h
     render/RenderBridge.cpp
 
@@ -76,11 +77,23 @@ target_link_libraries(aoqt PRIVATE
     Qt6::Qml
     Qt6::QuickControls2
     Qt6::GuiPrivate
-    # aorender_gl provides create_renderer() and transitively pulls in
-    # aoengine (StateBuffer, RenderManager, GameThread, MediaManager, etc.)
-    # and the GLEW + OpenGL link dependencies.
-    aorender_gl
     # ao_protocol provides ServerListScreen, ao::create_protocol(), ao::create_presenter(),
     # and transitively pulls in ao_net and ao_game.
     ao_protocol
 )
+
+# Platform GPU backend (IQtRenderBackend) and renderer plugin, both selected
+# at link time.  The backend adapts Qt render-thread integration (context
+# readiness, state restoration, texture format); the renderer plugin provides
+# create_renderer() and transitively pulls in aoengine.
+if(APPLE)
+    target_sources(aoqt PRIVATE render/MetalRenderBackend.mm)
+    target_link_libraries(aoqt PRIVATE aorender_metal
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+    )
+else()
+    target_sources(aoqt PRIVATE render/GLRenderBackend.cpp)
+    target_link_libraries(aoqt PRIVATE aorender_gl OpenGL::GL)
+endif()
