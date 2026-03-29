@@ -19,6 +19,7 @@
 #include "game/Session.h"
 #include "net/HttpPool.h"
 #include "net/NetworkThread.h"
+#include "render/IQtRenderBackend.h"
 #include "render/RenderBridge.h"
 #include "render/StateBuffer.h"
 #include "ui/UIManager.h"
@@ -54,6 +55,14 @@ int main(int argc, char* argv[]) {
     StateBuffer stateBuffer;
     RenderBridge::instance().setStateBuffer(&stateBuffer, renderW, renderH);
     Log::debug("[main] RenderBridge primed ({}x{})", renderW, renderH);
+
+    // Set the shader backend before the game thread starts so that any
+    // shader loaded by the presenter resolves to the correct subdirectory
+    // (metal/ vs glsl/).  The backend name is a link-time constant from
+    // the IQtRenderBackend implementation.
+    auto gpuBackend = create_qt_render_backend();
+    MediaManager::instance().assets().set_shader_backend(gpuBackend->backendName());
+    Log::debug("[main] shader backend set to '{}'", gpuBackend->backendName());
 
     // AO2 scene presenter drives the courtroom renderer.
     auto   presenter = ao::create_presenter();

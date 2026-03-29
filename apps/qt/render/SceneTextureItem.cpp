@@ -2,7 +2,6 @@
 
 #include "IQtRenderBackend.h"
 #include "RenderBridge.h"
-#include "asset/MediaManager.h"
 #include "render/IRenderer.h"
 #include "render/RenderManager.h"
 
@@ -75,10 +74,6 @@ void SceneTextureItem::initRenderer() {
         qWarning("SceneTextureItem::initRenderer: create_renderer() returned null");
         return;
     }
-
-    // Tell the asset library which shader sub-directory to use.
-    MediaManager::instance().assets()
-        .set_shader_backend(renderer->backend_name());
 
     m_renderManager = std::make_unique<RenderManager>(
         *rb.stateBuffer(), std::move(renderer));

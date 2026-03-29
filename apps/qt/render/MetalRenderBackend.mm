@@ -12,6 +12,7 @@ class MetalRenderBackend : public IQtRenderBackend {
     QRhiTexture::Format textureFormat() const override {
         return QRhiTexture::BGRA8;
     }
+    const char* backendName() const override { return "Metal"; }
 };
 
 std::unique_ptr<IQtRenderBackend> create_qt_render_backend() {
