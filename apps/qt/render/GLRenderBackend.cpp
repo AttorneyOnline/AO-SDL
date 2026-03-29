@@ -25,6 +25,7 @@ class GLRenderBackend : public IQtRenderBackend {
     QRhiTexture::Format textureFormat() const override {
         return QRhiTexture::RGBA8;
     }
+    const char* backendName() const override { return "OpenGL"; }
 };
 
 std::unique_ptr<IQtRenderBackend> create_qt_render_backend() {

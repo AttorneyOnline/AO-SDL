@@ -33,6 +33,10 @@ class IQtRenderBackend {
     /// QRhiTexture pixel format matching the renderer's offscreen target.
     /// GL produces RGBA8; Metal produces BGRA8.
     virtual QRhiTexture::Format textureFormat() const = 0;
+
+    /// Backend name matching IRenderer::backend_name() ("OpenGL" or "Metal").
+    /// Used to set the shader backend before the renderer is constructed.
+    virtual const char* backendName() const = 0;
 };
 
 /// Factory — defined in MetalRenderBackend.mm or GLRenderBackend.cpp,
