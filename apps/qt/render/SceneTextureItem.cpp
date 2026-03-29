@@ -1,19 +1,18 @@
 #include "SceneTextureItem.h"
 
+#include "IQtRenderBackend.h"
 #include "RenderBridge.h"
 #include "asset/MediaManager.h"
 #include "render/IRenderer.h"
 #include "render/RenderManager.h"
-#include "render/StateBuffer.h"
 
-#include <QOpenGLContext>
-#include <QOpenGLExtraFunctions>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
 #include <rhi/qrhi.h>
 
-// Factory defined in whichever render plugin is linked (aorender_gl).
+// Factory defined in whichever render plugin is linked
+// (aorender_metal on Apple, aorender_gl elsewhere).
 std::unique_ptr<IRenderer> create_renderer(int width, int height);
 
 // --------------------------------------------------------------------------
@@ -22,6 +21,7 @@ std::unique_ptr<IRenderer> create_renderer(int width, int height);
 
 SceneTextureItem::SceneTextureItem(QQuickItem* parent)
     : QQuickItem(parent)
+    , m_backend(create_qt_render_backend())
 {
     setFlag(ItemHasContents, true);
     connect(this, &QQuickItem::windowChanged,
@@ -29,7 +29,7 @@ SceneTextureItem::SceneTextureItem(QQuickItem* parent)
 }
 
 SceneTextureItem::~SceneTextureItem() {
-    // Normal path: cleanupGL() was already invoked via sceneGraphInvalidated.
+    // Normal path: cleanup() was already invoked via sceneGraphInvalidated.
     delete m_rhiTexture;
 }
 
@@ -43,7 +43,7 @@ void SceneTextureItem::handleWindowChanged(QQuickWindow* win) {
 
     // DirectConnection — these slots fire on the render thread.
     connect(win, &QQuickWindow::beforeRendering,
-            this, &SceneTextureItem::renderGL,
+            this, &SceneTextureItem::render,
             Qt::DirectConnection);
     connect(win, &QQuickWindow::sceneGraphInvalidated,
             this, &SceneTextureItem::handleSceneGraphInvalidated,
@@ -51,28 +51,28 @@ void SceneTextureItem::handleWindowChanged(QQuickWindow* win) {
 }
 
 void SceneTextureItem::handleSceneGraphInvalidated() {
-    cleanupGL();
+    cleanup();
 }
 
 // --------------------------------------------------------------------------
-// GL initialisation — runs once on the render thread
+// Renderer initialisation — runs once on the render thread
 // --------------------------------------------------------------------------
 
-void SceneTextureItem::initGL() {
-    if (!QOpenGLContext::currentContext())
+void SceneTextureItem::initRenderer() {
+    if (!m_backend->isContextReady())
         return;
 
     RenderBridge& rb = RenderBridge::instance();
 
     if (!rb.stateBuffer()) {
-        qWarning("SceneTextureItem::initGL: RenderBridge has no StateBuffer — "
+        qWarning("SceneTextureItem::initRenderer: RenderBridge has no StateBuffer — "
                  "call RenderBridge::setStateBuffer() before showing the window");
         return;
     }
 
     auto renderer = create_renderer(rb.renderWidth(), rb.renderHeight());
     if (!renderer) {
-        qWarning("SceneTextureItem::initGL: create_renderer() returned null");
+        qWarning("SceneTextureItem::initRenderer: create_renderer() returned null");
         return;
     }
 
@@ -86,28 +86,23 @@ void SceneTextureItem::initGL() {
     rb.setRenderManager(m_renderManager.get(),
                         rb.renderWidth(), rb.renderHeight());
 
-    m_glInitialized = true;
+    m_initialized = true;
 }
 
 // --------------------------------------------------------------------------
 // Per-frame rendering — render thread, via beforeRendering
 // --------------------------------------------------------------------------
 
-void SceneTextureItem::renderGL() {
-    if (!m_glInitialized)
-        initGL();
-    if (!m_glInitialized)
+void SceneTextureItem::render() {
+    if (!m_initialized)
+        initRenderer();
+    if (!m_initialized)
         return;
 
     window()->beginExternalCommands();
 
     RenderBridge::instance().renderFrame();
-
-    // GLRenderer::draw() leaves its own FBO bound; restore the default so
-    // Qt's RHI can render the scene graph on top.
-    QOpenGLContext::currentContext()
-        ->extraFunctions()
-        ->glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_backend->restoreState();
 
     window()->endExternalCommands();
 }
@@ -130,7 +125,7 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         node->setOwnsTexture(true);
     }
 
-    // Wrap the native GL texture once (the renderer's FBO texture ID is
+    // Wrap the native texture once (the renderer's offscreen texture ID is
     // stable for its lifetime — it only changes on a resize()).
     if (texId != m_cachedTexId) {
         auto* ri  = window()->rendererInterface();
@@ -142,7 +137,7 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
             m_rhiTexture = nullptr;
 
             auto* rhiTex = rhi->newTexture(
-                QRhiTexture::RGBA8,
+                m_backend->textureFormat(),
                 QSize(RenderBridge::instance().renderWidth(),
                       RenderBridge::instance().renderHeight()));
             if (rhiTex) {
@@ -155,7 +150,6 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         }
     }
 
-    // GL FBOs have V=0 at the bottom; flip to match QML's top-down coordinates.
     if (RenderBridge::instance().uvFlipped())
         node->setTextureCoordinatesTransform(
             QSGSimpleTextureNode::MirrorVertically);
@@ -171,22 +165,19 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
 // Cleanup — render thread
 // --------------------------------------------------------------------------
 
-void SceneTextureItem::cleanupGL() {
-    if (!m_glInitialized)
+void SceneTextureItem::cleanup() {
+    if (!m_initialized)
         return;
 
-    // Unregister from the bridge before tearing down the GL resources it
+    // Unregister from the bridge before tearing down the resources it
     // references, so no in-flight renderFrame() call can dereference them.
     RenderBridge::instance().setRenderManager(nullptr, 0, 0);
 
-    // RenderManager destructor destroys the IRenderer, which calls glDelete*
-    // — the GL context must be current at this point (guaranteed by
-    // sceneGraphInvalidated on Qt's render thread).
     m_renderManager.reset();
 
     delete m_rhiTexture;
     m_rhiTexture  = nullptr;
     m_cachedTexId = 0;
 
-    m_glInitialized = false;
+    m_initialized = false;
 }

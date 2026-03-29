@@ -5,6 +5,7 @@
 
 #include <memory>
 
+class IQtRenderBackend;
 class QRhiTexture;
 class RenderManager;
 
@@ -13,17 +14,14 @@ class RenderManager;
  *
  * Hooks into QQuickWindow::beforeRendering() (Qt's render thread) to drive
  * RenderManager::render_frame() each frame.  The renderer writes into its own
- * offscreen FBO; the resulting texture is wrapped as a QRhiTexture and
+ * offscreen target; the resulting texture is wrapped as a QRhiTexture and
  * displayed via a QSGSimpleTextureNode in updatePaintNode().
  *
- * Initialisation order each session:
- *   1. handleWindowChanged() — connects render-thread signals
- *   2. renderGL() → initGL() on first call — creates RenderManager, registers
- *      it on RenderBridge
- *   3. updatePaintNode() — wraps the renderer texture for the scene graph
+ * GPU-backend differences (GL state restoration, texture format, context
+ * readiness) are handled by IQtRenderBackend, selected at link time.
  *
  * RenderBridge must have a valid StateBuffer set (via setStateBuffer()) before
- * the first renderGL() fires.
+ * the first render fires.
  */
 class SceneTextureItem : public QQuickItem {
     Q_OBJECT
@@ -38,17 +36,19 @@ class SceneTextureItem : public QQuickItem {
 
   private slots:
     void handleWindowChanged(QQuickWindow* win);
-    void renderGL();
+    void render();
     void handleSceneGraphInvalidated();
 
   private:
-    void initGL();
-    void cleanupGL();
+    void initRenderer();
+    void cleanup();
 
-    // Owned on the render thread; created in initGL(), destroyed in cleanupGL().
+    std::unique_ptr<IQtRenderBackend> m_backend;
+
+    // Owned on the render thread; created in initRenderer(), destroyed in cleanup().
     std::unique_ptr<RenderManager> m_renderManager;
 
-    bool m_glInitialized = false;
+    bool m_initialized = false;
 
     // Scene-graph wrapper for the renderer's offscreen texture.
     QRhiTexture* m_rhiTexture  = nullptr;
