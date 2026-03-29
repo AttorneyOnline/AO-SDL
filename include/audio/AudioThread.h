@@ -2,8 +2,6 @@
 
 #include "IAudioDevice.h"
 
-#include <atomic>
-#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -25,18 +23,17 @@ class AudioThread {
     void stop();
 
   private:
-    void audio_loop();
+    void audio_loop(std::stop_token st);
 
     /// Start streaming a music track from HTTP on a background download thread.
     void start_music_stream(const std::string& path, int channel, bool loop, float volume);
 
-    std::atomic<bool> running_;
     IAudioDevice& device_;
     MountManager& mounts_;
-    std::thread thread_;
+    std::jthread thread_;
 
     // Active download threads for cleanup
     std::mutex downloads_mutex_;
-    std::vector<std::thread> download_threads_;
+    std::vector<std::jthread> download_threads_;
     void cleanup_downloads();
 };
