@@ -8,6 +8,12 @@ info:
 tags:
   - name: Session
     description: Session lifecycle — create, renew, and delete sessions.
+  - name: Server
+    description: Server metadata and status.
+  - name: Character
+    description: Character listing and manifest retrieval.
+  - name: Asset
+    description: Content-addressed asset retrieval.
 
 servers:
   - url: "{scheme}://{host}/aonx/v1"
@@ -33,11 +39,16 @@ paths:
           application/json:
             schema:
               type: object
-              required: [client_name, client_version]
+              required: [client_name, client_version, hdid]
               properties:
                 auth:
                   type: string
                   description: Authentication token. Format is TBD and server-dependent. Omitted for anonymous sessions.
+                hdid:
+                  type: string
+                  description: |
+                    Hardware identifier. SHA-256 hash of a string in the format:
+                    `client_name:platform:platform_specific_fingerprint`
                 client_name:
                   type: string
                   description: Client software name.
@@ -144,6 +155,141 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /server/players:
+    get:
+      tags: [Server]
+      operationId: getPlayerCount
+      summary: Player Count
+      description: Returns the current and maximum player count.
+      responses:
+        "200":
+          description: Player count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  online:
+                    type: integer
+                    description: Number of players currently connected.
+                  max:
+                    type: integer
+                    description: Maximum player capacity.
+
+  /server/motd:
+    get:
+      tags: [Server]
+      operationId: getMotd
+      summary: Message of the Day
+      description: Returns the server's message of the day.
+      responses:
+        "200":
+          description: Message of the day.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Message of the day. May be empty.
+
+  /characters:
+    get:
+      tags: [Character]
+      operationId: listCharacters
+      summary: List Characters
+      description: Returns the list of characters available on this server.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Character list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  characters:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        char_id:
+                          type: string
+                          description: SHA-256 hash of the character manifest.
+                        available:
+                          type: boolean
+                          description: Whether this character is available for selection.
+
+  /asset/{hash}:
+    get:
+      tags: [Asset]
+      operationId: getAsset
+      summary: Get Asset
+      description: |
+        Fetch a content-addressed asset by its SHA-256 hash.
+        Returns the raw file bytes. Infinitely cacheable.
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+          description: SHA-256 hash of the asset.
+      responses:
+        "200":
+          description: Asset data.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "public, immutable, max-age=31536000"
+            ETag:
+              schema:
+                type: string
+              description: The content hash.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /characters/{char_id}:
+    get:
+      tags: [Character]
+      operationId: getCharacter
+      summary: Get Character
+      description: Returns the full manifest for a character.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: char_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: SHA-256 hash of the character manifest.
+      responses:
+        "200":
+          description: Character manifest.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterManifest"
+        "404":
+          description: Character not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     sessionToken:
@@ -152,6 +298,82 @@ components:
       description: Session token returned by POST /aonx/v1/session.
 
   schemas:
+    CharacterManifest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Human-readable identifier (e.g. "saturday/phoenix-wright").
+        name:
+          type: string
+          description: Display name (e.g. "Phoenix Wright").
+        icon:
+          type: string
+          description: Filename of the character icon within the bundle.
+        defaults:
+          type: object
+          properties:
+            side:
+              type: string
+              description: Default court position (e.g. "def", "pro", "wit").
+            blip:
+              type: string
+              description: Default blip sound category (e.g. "male", "female").
+        emotes:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: Emote display name.
+              idle:
+                type: string
+                description: Filename of the idle animation.
+              talking:
+                type: string
+                description: Filename of the talking animation.
+              button:
+                type: string
+                description: Filename of the emote picker button image.
+              desk:
+                type: string
+                description: Desk visibility ("show" or "hide").
+              sfx:
+                type: object
+                properties:
+                  file:
+                    type: string
+                  delay_ms:
+                    type: integer
+                  loop:
+                    type: boolean
+              pre_animation:
+                type: object
+                properties:
+                  file:
+                    type: string
+                  duration_ms:
+                    type: integer
+              frame_effects:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    frame:
+                      type: integer
+                    type:
+                      type: string
+                      description: Effect type (e.g. "sfx", "screenshake", "realization").
+                    file:
+                      type: string
+                      description: Asset filename, if applicable.
+        files:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of filename to SHA-256 content hash for every file in the bundle.
+
     Error:
       type: object
       properties:
