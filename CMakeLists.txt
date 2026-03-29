@@ -459,13 +459,13 @@ target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
 # Applications — one per backend
 # =============================================================================
 
-option(AO_BUILD_QT "Build the Qt/QML frontend" ON)
-
 if(NOT AO_BUILD_FLUTTER)
     if(AO_BUILD_SDL)
         add_subdirectory(apps/sdl)
     endif()
-    if(AO_BUILD_QT)
+
+    find_package(Qt6 6.8 QUIET COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
+    if(Qt6_FOUND)
         add_subdirectory(apps/qt)
     endif()
 endif()
