@@ -20,3 +20,14 @@ for file in $STAGED; do
     "$CLANG_FORMAT" -i "$file"
     git add "$file"
 done
+
+# Regenerate AONX protocol docs if the OpenAPI spec changed
+SPEC_CHANGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^doc/aonx/openapi\.yaml$')
+
+if [ -n "$SPEC_CHANGED" ]; then
+    SCRIPT_DIR="$(git rev-parse --show-toplevel)/doc/aonx/build-docs.sh"
+    if [ -x "$SCRIPT_DIR" ]; then
+        "$SCRIPT_DIR"
+        git add doc/aonx/index.html
+    fi
+fi

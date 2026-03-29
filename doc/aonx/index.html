@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AONX Protocol</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <script id="api-reference" type="application/yaml">
+openapi: 3.1.0
+info:
+  title: AONX Protocol
+  version: "1"
+  description: |
+    REST API specification for the AONX protocol, the successor to the AO2 client-server protocol.
+
+tags:
+  - name: Session
+    description: Session lifecycle — create, renew, and delete sessions.
+
+servers:
+  - url: "{scheme}://{host}/aonx/v1"
+    variables:
+      scheme:
+        default: https
+        enum: [https, http]
+      host:
+        default: example.com
+
+paths:
+  /session:
+    post:
+      tags: [Session]
+      operationId: createSession
+      summary: Create Session
+      description: |
+        Create a new session. Returns a session token used for all subsequent requests.
+        Authentication is optional and server-dependent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_name, client_version]
+              properties:
+                auth:
+                  type: string
+                  description: Authentication token. Format is TBD and server-dependent. Omitted for anonymous sessions.
+                client_name:
+                  type: string
+                  description: Client software name.
+                client_version:
+                  type: string
+                  description: Client software version.
+      responses:
+        "200":
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Session token. Used in all subsequent requests.
+                  expires_at:
+                    type: string
+                    format: date-time
+                    description: When the token expires (ISO 8601).
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        description: Server-assigned user identifier.
+                      display_name:
+                        type: string
+                        description: Display name.
+                      roles:
+                        type: array
+                        items:
+                          type: string
+                        description: Server-assigned roles (e.g. "player", "moderator").
+        "400":
+          description: Missing required fields (`client_name`, `client_version`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Auth token provided but rejected (bad signature, expired, unknown format).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: User is banned from this server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Server is full.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Session]
+      operationId: renewSession
+      summary: Renew Session
+      description: Extend the current session's lifetime.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Session extended.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: New session token (may be the same or rotated).
+                  expires_at:
+                    type: string
+                    format: date-time
+                    description: New expiration time.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Session]
+      operationId: deleteSession
+      summary: Delete Session
+      description: End the session. Invalidates the token immediately.
+      security:
+        - sessionToken: []
+      responses:
+        "204":
+          description: Session deleted.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    sessionToken:
+      type: http
+      scheme: bearer
+      description: Session token returned by POST /aonx/v1/session.
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Human-readable explanation. May be empty.
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>
