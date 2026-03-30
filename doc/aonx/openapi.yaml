@@ -292,8 +292,9 @@ paths:
       operationId: getArea
       summary: Get Area State
       description: |
-        Returns the full state of an area — metadata, current background,
-        music, health bars, timers. Use this to hydrate client state after
+        Returns area metadata and playback state — current background,
+        music, health bars, timers. Evidence and players are available
+        via their own endpoints. Use this to hydrate client state after
         joining or reconnecting. Use `_` for current area.
       security:
         - sessionToken: []
@@ -1589,6 +1590,9 @@ components:
     IcMessage:
       type: object
       properties:
+        schema_version:
+          type: integer
+          description: Schema version for IcMessage. Currently 1.
         objects:
           type: array
           items:
@@ -1738,8 +1742,8 @@ components:
           type: string
           description: Name displayed above the text box.
         color:
-          type: integer
-          description: Text color index.
+          type: string
+          description: Text color as hex (e.g. "#FFFFFF", "#00FF00"). Default "#FFFFFF".
         additive:
           type: boolean
           description: Append to existing text instead of replacing. Default false.
@@ -1910,7 +1914,15 @@ components:
           enum: [show, hide]
           description: Whether to show the desk overlay for this emote.
         sfx:
-          $ref: "#/components/schemas/AudioCue"
+          type: object
+          properties:
+            asset:
+              type: string
+              description: Asset hash of the sound file.
+            delay_ms:
+              type: integer
+              description: Delay before playing. Default 0.
+          description: Sound effect for this emote. Played on "start" by default when the client builds the IC message.
         effects:
           type: array
           items:
@@ -2015,6 +2027,10 @@ components:
 
     # -------------------------------------------------------------------------
     # SSE event schemas
+    #
+    # All SSE events carry a `schema_version` integer field (currently 1).
+    # Omitted from individual schemas below for brevity — it is present
+    # on every event payload.
     # -------------------------------------------------------------------------
     IcMessageEvent:
       type: object
