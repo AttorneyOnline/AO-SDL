@@ -287,6 +287,85 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /areas/{area_id}:
+    get:
+      tags: [Area]
+      operationId: getArea
+      summary: Get Area State
+      description: |
+        Returns the full state of an area — metadata, current background,
+        music, health bars, timers. Use this to hydrate client state after
+        joining or reconnecting. Use `_` for current area.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, `_` for current area, or `*` for all areas.
+      responses:
+        "200":
+          description: Full area state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  area:
+                    $ref: "#/components/schemas/Area"
+                  background:
+                    type: object
+                    nullable: true
+                    properties:
+                      name:
+                        type: string
+                      manifest_hash:
+                        type: string
+                      position:
+                        type: string
+                  music:
+                    type: object
+                    nullable: true
+                    properties:
+                      name:
+                        type: string
+                      asset_hash:
+                        type: string
+                      looping:
+                        type: boolean
+                      channel:
+                        type: integer
+                  hp:
+                    type: object
+                    properties:
+                      defense:
+                        type: integer
+                      prosecution:
+                        type: integer
+                  timers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timer_id:
+                          type: integer
+                        value_ms:
+                          type: integer
+                        running:
+                          type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Area not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     put:
       tags: [Area]
       operationId: updateArea
@@ -446,6 +525,7 @@ paths:
       description: |
         Move to a different area. Leaves the current area.
         Triggers a `presence_update` event in both the old and new areas.
+        Does not accept `_` or `*` — a specific area id is required.
       security:
         - sessionToken: []
       parameters:
@@ -454,7 +534,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier.
+          description: Area identifier. Must be a specific area id.
       responses:
         "200":
           description: Joined area.
@@ -606,7 +686,12 @@ paths:
       tags: [Area]
       operationId: setBackground
       summary: Set Background
-      description: Change the background in an area. Use `_` for current area, `*` for all areas.
+      description: |
+        Set which background is active in an area. This is shared area state
+        that determines which background manifest is available for IC messages
+        to reference via ObjectComposition.ref. The `position` field sets the
+        default position; individual IC messages override it by specifying
+        their own position refs. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -686,8 +771,15 @@ paths:
                   type: integer
                   description: Audio channel. 0 = music, 1+ = ambience. Default 0.
                 effects:
-                  type: integer
-                  description: Effect bitmask (bit 0 = fade in, bit 1 = fade out, bit 2 = sync). Default 0.
+                  type: object
+                  properties:
+                    fade_in:
+                      type: boolean
+                    fade_out:
+                      type: boolean
+                    sync:
+                      type: boolean
+                  description: Playback effects. All default false.
       responses:
         "200":
           description: Music started.
@@ -735,8 +827,9 @@ paths:
               required: [side, value]
               properties:
                 side:
-                  type: integer
-                  description: 1 = defense, 2 = prosecution.
+                  type: string
+                  enum: [defense, prosecution]
+                  description: Which health bar to set.
                 value:
                   type: integer
                   description: Health bar value (0-10).
@@ -784,8 +877,9 @@ paths:
                   type: integer
                   description: Timer identifier (0-4).
                 action:
-                  type: integer
-                  description: 0 = start, 1 = pause, 2 = set value, 3 = hide.
+                  type: string
+                  enum: [start, pause, set, hide]
+                  description: Timer action.
                 value_ms:
                   type: integer
                   description: Timer value in milliseconds. Required when action is 2 (set).
@@ -948,7 +1042,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "404":
-          description: Evidence index out of range.
+          description: Evidence not found.
           content:
             application/json:
               schema:
@@ -1958,23 +2052,7 @@ components:
         areas:
           type: array
           items:
-            type: object
-            properties:
-              name:
-                type: string
-                description: Area display name.
-              players:
-                type: integer
-                description: Number of players currently in this area.
-              status:
-                type: string
-                description: Area status (e.g. "IDLE", "CASING", "RECESS").
-              cm:
-                type: string
-                description: Current case maker. Empty if none.
-              locked:
-                type: boolean
-                description: Whether the area is locked.
+            $ref: "#/components/schemas/Area"
 
     BackgroundChangeEvent:
       type: object
@@ -1999,15 +2077,21 @@ components:
           type: integer
           description: Audio channel (0 = music, 1+ = ambience).
         effects:
-          type: integer
-          description: Effect bitmask.
+          type: object
+          properties:
+            fade_in:
+              type: boolean
+            fade_out:
+              type: boolean
+            sync:
+              type: boolean
 
     HealthUpdateEvent:
       type: object
       properties:
         side:
-          type: integer
-          description: 1 = defense, 2 = prosecution.
+          type: string
+          enum: [defense, prosecution]
         value:
           type: integer
           description: Health bar value (0-10).
@@ -2019,8 +2103,8 @@ components:
           type: integer
           description: Timer identifier (0-4).
         action:
-          type: integer
-          description: 0 = start, 1 = pause, 2 = set value, 3 = hide.
+          type: string
+          enum: [start, pause, set, hide]
         value_ms:
           type: integer
           description: Timer value in milliseconds.
