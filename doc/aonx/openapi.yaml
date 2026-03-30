@@ -17,7 +17,7 @@ tags:
   - name: Chat
     description: In-character and out-of-character messaging.
   - name: Area
-    description: Area actions — background, music, health bars, timers.
+    description: Area management, state, and area-scoped actions.
   - name: Evidence
     description: Evidence CRUD within an area.
   - name: Moderation
@@ -210,9 +210,9 @@ paths:
                     type: string
                     description: Message of the day. May be empty.
 
-  /server/areas:
+  /areas:
     get:
-      tags: [Server]
+      tags: [Area]
       operationId: listAreas
       summary: List Areas
       description: |
@@ -240,7 +240,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     post:
-      tags: [Server]
+      tags: [Area]
       operationId: createArea
       summary: Create Area
       description: Create a new area. The path determines its position in the hierarchy.
@@ -288,7 +288,7 @@ paths:
 
   /areas/{area_id}:
     put:
-      tags: [Server]
+      tags: [Area]
       operationId: updateArea
       summary: Update Area
       description: Update an area's name, path, or status.
@@ -349,7 +349,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     delete:
-      tags: [Server]
+      tags: [Area]
       operationId: deleteArea
       summary: Delete Area
       description: Delete an area. Players in the area are moved to a default area.
@@ -386,7 +386,7 @@ paths:
 
   /areas/{area_id}/players:
     get:
-      tags: [Server]
+      tags: [Area]
       operationId: listAreaPlayers
       summary: List Area Players
       description: Returns the players currently in an area. Use `_` as area_id for the current area.
@@ -440,7 +440,7 @@ paths:
 
   /areas/{area_id}/join:
     post:
-      tags: [Server]
+      tags: [Area]
       operationId: joinArea
       summary: Join Area
       description: |
