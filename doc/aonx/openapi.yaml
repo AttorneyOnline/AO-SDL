@@ -14,6 +14,14 @@ tags:
     description: Character listing and manifest retrieval.
   - name: Asset
     description: Content-addressed asset retrieval.
+  - name: Chat
+    description: In-character and out-of-character messaging.
+  - name: Area
+    description: Area actions — background, music, health bars, timers.
+  - name: Evidence
+    description: Evidence CRUD within an area.
+  - name: Events
+    description: Server-sent event stream and event schemas.
 
 servers:
   - url: "{scheme}://{host}/aonx/v1"
@@ -25,6 +33,9 @@ servers:
         default: example.com
 
 paths:
+  # ---------------------------------------------------------------------------
+  # Session
+  # ---------------------------------------------------------------------------
   /session:
     post:
       tags: [Session]
@@ -155,6 +166,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  # ---------------------------------------------------------------------------
+  # Server
+  # ---------------------------------------------------------------------------
   /server/players:
     get:
       tags: [Server]
@@ -194,6 +208,512 @@ paths:
                     type: string
                     description: Message of the day. May be empty.
 
+  /server/areas:
+    get:
+      tags: [Server]
+      operationId: listAreas
+      summary: List Areas
+      description: Returns all areas on the server with their current state.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Area list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  areas:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Area display name.
+                        players:
+                          type: integer
+                          description: Number of players currently in this area.
+                        status:
+                          type: string
+                          description: Area status (e.g. "IDLE", "CASING", "RECESS").
+                        cm:
+                          type: string
+                          description: Current case maker / courtroom magistrate. Empty if none.
+                        locked:
+                          type: boolean
+                          description: Whether the area is locked.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Chat
+  # ---------------------------------------------------------------------------
+  /ic:
+    post:
+      tags: [Chat]
+      operationId: sendIc
+      summary: Send IC Message
+      description: |
+        Send an in-character message to the current area. The message is a
+        composition of animated objects, text, audio cues, shader effects,
+        and event-driven transitions.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IcMessage"
+      responses:
+        "200":
+          description: Message accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: User is muted in IC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /ooc:
+    post:
+      tags: [Chat]
+      operationId: sendOoc
+      summary: Send OOC Message
+      description: Send an out-of-character chat message to the current area.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, message]
+              properties:
+                name:
+                  type: string
+                  description: Sender display name.
+                message:
+                  type: string
+                  description: Message text.
+      responses:
+        "200":
+          description: Message accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: User is muted in OOC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Area
+  # ---------------------------------------------------------------------------
+  /background:
+    post:
+      tags: [Area]
+      operationId: setBackground
+      summary: Set Background
+      description: Change the background in the current area.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Background name.
+                position:
+                  type: string
+                  description: Initial position (e.g. "def", "pro", "wit"). Default server-defined.
+      responses:
+        "200":
+          description: Background changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Background changes are locked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /music/play:
+    post:
+      tags: [Area]
+      operationId: playMusic
+      summary: Play Music
+      description: Play a music track in the current area.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Track name.
+                looping:
+                  type: boolean
+                  description: Whether to loop. Default true.
+                channel:
+                  type: integer
+                  description: Audio channel. 0 = music, 1+ = ambience. Default 0.
+                effects:
+                  type: integer
+                  description: Effect bitmask (bit 0 = fade in, bit 1 = fade out, bit 2 = sync). Default 0.
+      responses:
+        "200":
+          description: Music started.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: User is blocked from changing music.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /hp:
+    post:
+      tags: [Area]
+      operationId: setHealthBar
+      summary: Set Health Bar
+      description: Set the defense or prosecution health bar in the current area.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [side, value]
+              properties:
+                side:
+                  type: integer
+                  description: 1 = defense, 2 = prosecution.
+                value:
+                  type: integer
+                  description: Health bar value (0-10).
+      responses:
+        "200":
+          description: Health bar updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /timer:
+    post:
+      tags: [Area]
+      operationId: setTimer
+      summary: Set Timer
+      description: Create, start, pause, or set a timer in the current area.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timer_id, action]
+              properties:
+                timer_id:
+                  type: integer
+                  description: Timer identifier (0-4).
+                action:
+                  type: integer
+                  description: 0 = start, 1 = pause, 2 = set value, 3 = hide.
+                value_ms:
+                  type: integer
+                  description: Timer value in milliseconds. Required when action is 2 (set).
+      responses:
+        "200":
+          description: Timer updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Evidence
+  # ---------------------------------------------------------------------------
+  /evidence:
+    get:
+      tags: [Evidence]
+      operationId: listEvidence
+      summary: List Evidence
+      description: Returns the evidence list for the current area.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Evidence list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evidence:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvidenceItem"
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags: [Evidence]
+      operationId: addEvidence
+      summary: Add Evidence
+      description: Add a piece of evidence to the current area.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvidenceItem"
+      responses:
+        "201":
+          description: Evidence added.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /evidence/{index}:
+    put:
+      tags: [Evidence]
+      operationId: editEvidence
+      summary: Edit Evidence
+      description: Edit a piece of evidence by index.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: index
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Zero-based index of the evidence item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvidenceItem"
+      responses:
+        "200":
+          description: Evidence updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Evidence index out of range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Evidence]
+      operationId: deleteEvidence
+      summary: Delete Evidence
+      description: Remove a piece of evidence by index.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: index
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Zero-based index of the evidence item.
+      responses:
+        "204":
+          description: Evidence removed.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Evidence index out of range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Character
+  # ---------------------------------------------------------------------------
+  /characters/select:
+    post:
+      tags: [Character]
+      operationId: selectCharacter
+      summary: Select Character
+      description: Select a character for the current session.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [char_id]
+              properties:
+                char_id:
+                  type: string
+                  description: SHA-256 hash of the character manifest.
+      responses:
+        "200":
+          description: Character selected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Character not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Character is already taken.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /characters:
     get:
       tags: [Character]
@@ -221,6 +741,118 @@ paths:
                         available:
                           type: boolean
                           description: Whether this character is available for selection.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /characters/{char_id}:
+    get:
+      tags: [Character]
+      operationId: getCharacter
+      summary: Get Character
+      description: Returns the full manifest for a character.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: char_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: SHA-256 hash of the character manifest.
+      responses:
+        "200":
+          description: Character manifest.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterManifest"
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Character not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Asset
+  # ---------------------------------------------------------------------------
+  /backgrounds:
+    get:
+      tags: [Asset]
+      operationId: listBackgrounds
+      summary: List Backgrounds
+      description: Returns the list of backgrounds available on this server.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Background list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  backgrounds:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Background display name.
+                        manifest_hash:
+                          type: string
+                          description: SHA-256 hash of the background manifest.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /music:
+    get:
+      tags: [Asset]
+      operationId: listMusic
+      summary: List Music
+      description: Returns the list of music tracks available on this server.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Music list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tracks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Track display name.
+                        asset_hash:
+                          type: string
+                          description: SHA-256 content hash of the audio file.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /asset/{hash}:
     get:
@@ -261,30 +893,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /characters/{char_id}:
+  # ---------------------------------------------------------------------------
+  # Events (SSE)
+  # ---------------------------------------------------------------------------
+  /events:
     get:
-      tags: [Character]
-      operationId: getCharacter
-      summary: Get Character
-      description: Returns the full manifest for a character.
+      tags: [Events]
+      operationId: subscribeEvents
+      summary: Event Stream
+      description: |
+        Server-Sent Events (SSE) endpoint. Opens a persistent connection
+        that streams events as they occur. Each event is a JSON object
+        prefixed by `event:` (the event type) and `data:` (the payload).
+
+        Event types:
+        - `ic_message` — In-character message composition
+        - `ooc_message` — Out-of-character chat message
+        - `area_update` — Area state change (players, status, cm, lock)
+        - `background_change` — Area background changed
+        - `music_change` — Music track started/stopped
+        - `health_update` — Health bar changed
+        - `timer_update` — Timer state changed
+        - `evidence_update` — Evidence list changed
+        - `player_update` — Player joined, left, or changed state
+        - `char_taken` — Character availability changed
+
+        Clients MUST ignore unrecognized event types.
       security:
         - sessionToken: []
-      parameters:
-        - name: char_id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: SHA-256 hash of the character manifest.
       responses:
         "200":
-          description: Character manifest.
+          description: Event stream opened.
           content:
-            application/json:
+            text/event-stream:
               schema:
-                $ref: "#/components/schemas/CharacterManifest"
-        "404":
-          description: Character not found.
+                type: string
+                description: |
+                  SSE stream. Each message has the format:
+
+                  ```
+                  event: <event_type>
+                  data: <json_payload>
+                  ```
+        "401":
+          description: Token is invalid or already expired.
           content:
             application/json:
               schema:
@@ -298,6 +950,237 @@ components:
       description: Session token returned by POST /aonx/v1/session.
 
   schemas:
+    # -------------------------------------------------------------------------
+    # IC Message composition model
+    #
+    # An IC message is a composition of animated objects, text parts, audio,
+    # shader effects, state transitions, and an event queue that wires them
+    # together. The event queue is consumed in order — each cue fires once,
+    # the first time its trigger matches.
+    #
+    # Auto-fired events:
+    #   "start"                — when the message begins
+    #   "animation_end:<id>"   — when object <id>'s current animation completes
+    #   "text_end:<id>"        — when text part <id>'s crawl finishes
+    #
+    # Reserved event names:
+    #   "text_start:<id>"      — triggers the text crawl for text part <id>
+    #
+    # All other event names are user-defined, fired via EventCue entries.
+    # -------------------------------------------------------------------------
+    IcMessage:
+      type: object
+      properties:
+        objects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObjectComposition"
+          description: Animated objects to display.
+        text:
+          type: array
+          items:
+            $ref: "#/components/schemas/IcText"
+          description: |
+            Text parts. Each is triggered independently via its `on` field.
+            Parts with `additive: true` append to the existing text.
+        audio:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudioCue"
+          description: Sound effects triggered during playback.
+        effects:
+          type: array
+          items:
+            $ref: "#/components/schemas/EffectCue"
+          description: Shader effects triggered during playback.
+        transitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transition"
+          description: Event-driven state changes across objects.
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventCue"
+          description: |
+            Event queue. Processed in order. Each cue fires once — the first
+            time its trigger event occurs, it fires the named event and is
+            consumed. Subsequent occurrences of the same trigger advance to
+            the next matching cue.
+
+    ObjectComposition:
+      type: object
+      required: [id, states, initial_state, transform, z, visible]
+      properties:
+        id:
+          type: string
+          description: |
+            Opaque identifier for this object. Referenced by transitions,
+            effect targets, and auto-fired events (animation_end:<id>).
+        states:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of state name to asset hash. Each state is an animation or image.
+        initial_state:
+          type: string
+          description: Which state to start in.
+        transform:
+          $ref: "#/components/schemas/Transform"
+        animation:
+          $ref: "#/components/schemas/TransformAnimation"
+        z:
+          type: integer
+          description: Z-order. Higher values render on top.
+        visible:
+          type: boolean
+          description: Whether this object is initially visible.
+
+    Transform:
+      type: object
+      properties:
+        x:
+          type: number
+          description: Horizontal position.
+        y:
+          type: number
+          description: Vertical position.
+        scale_x:
+          type: number
+          description: Horizontal scale. Default 1.0.
+        scale_y:
+          type: number
+          description: Vertical scale. Default 1.0.
+        rotation:
+          type: number
+          description: Rotation in degrees. Default 0.
+
+    TransformAnimation:
+      type: object
+      required: [keyframes]
+      properties:
+        keyframes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Keyframe"
+          description: Ordered sequence of keyframes.
+        easing:
+          type: string
+          enum: [linear, quad_in, quad_out, quad_in_out, cubic_in_out]
+          description: Easing function. Default "linear".
+        looping:
+          type: boolean
+          description: Whether the animation loops. Default false.
+
+    Keyframe:
+      type: object
+      required: [time_ms]
+      properties:
+        time_ms:
+          type: integer
+          description: Time offset in milliseconds from animation start.
+        x:
+          type: number
+        y:
+          type: number
+        scale_x:
+          type: number
+        scale_y:
+          type: number
+        rotation:
+          type: number
+
+    IcText:
+      type: object
+      required: [id, content, on]
+      properties:
+        id:
+          type: string
+          description: |
+            Identifier for this text part. Auto-fires "text_end:<id>" when
+            the crawl finishes. Triggered by "text_start:<id>".
+        content:
+          type: string
+          description: The message text to display.
+        showname:
+          type: string
+          description: Name displayed above the text box.
+        color:
+          type: integer
+          description: Text color index.
+        additive:
+          type: boolean
+          description: Append to existing text instead of replacing. Default false.
+        immediate:
+          type: boolean
+          description: Skip text crawl and display immediately. Default false.
+        on:
+          type: string
+          description: Event that triggers this text part (typically "text_start:<id>").
+
+    AudioCue:
+      type: object
+      required: [asset, on]
+      properties:
+        asset:
+          type: string
+          description: Asset hash of the sound file.
+        on:
+          type: string
+          description: Event that triggers playback.
+        delay_ms:
+          type: integer
+          description: Delay after the trigger event before playing. Default 0.
+
+    EffectCue:
+      type: object
+      required: [shader, on]
+      properties:
+        shader:
+          type: string
+          description: Asset hash of the shader program.
+        on:
+          type: string
+          description: Event that triggers the effect.
+        target:
+          type: string
+          description: Object id, "text", or omit for global scope.
+        duration_ms:
+          type: integer
+          description: Effect duration in milliseconds. Omit for one-shot effects.
+
+    Transition:
+      type: object
+      required: [object, to, on]
+      properties:
+        object:
+          type: string
+          description: Object id to transition.
+        to:
+          type: string
+          description: Target state name (must exist in the object's states map).
+        on:
+          type: string
+          description: Event that triggers the transition.
+
+    EventCue:
+      type: object
+      required: [name, on]
+      properties:
+        name:
+          type: string
+          description: |
+            Event name to fire. Use "text_start:<id>" to trigger a text part.
+            Any other name is user-defined and can be referenced by other cues.
+        on:
+          type: string
+          description: |
+            Trigger event. Can be "start", "animation_end:<id>",
+            "text_end:<id>", or any user-defined event name.
+
+    # -------------------------------------------------------------------------
+    # Character manifest
+    # -------------------------------------------------------------------------
     CharacterManifest:
       type: object
       properties:
@@ -374,6 +1257,164 @@ components:
             type: string
           description: Map of filename to SHA-256 content hash for every file in the bundle.
 
+    # -------------------------------------------------------------------------
+    # Evidence
+    # -------------------------------------------------------------------------
+    EvidenceItem:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Evidence display name.
+        description:
+          type: string
+          description: Evidence description text.
+        image:
+          type: string
+          description: Evidence image filename or asset hash.
+
+    # -------------------------------------------------------------------------
+    # SSE event schemas
+    # -------------------------------------------------------------------------
+    IcMessageEvent:
+      type: object
+      description: |
+        Wraps an IcMessage with sender metadata. The composition payload
+        is identical to what was submitted via POST /ic.
+      properties:
+        sender:
+          type: object
+          properties:
+            user_id:
+              type: string
+            char_id:
+              type: string
+              description: SHA-256 hash of the sender's character manifest.
+        message:
+          $ref: "#/components/schemas/IcMessage"
+
+    OocMessageEvent:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Sender display name.
+        message:
+          type: string
+          description: Message text.
+        system:
+          type: boolean
+          description: Whether this message is from the system rather than a user.
+
+    AreaUpdateEvent:
+      type: object
+      properties:
+        areas:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: Area display name.
+              players:
+                type: integer
+                description: Number of players currently in this area.
+              status:
+                type: string
+                description: Area status (e.g. "IDLE", "CASING", "RECESS").
+              cm:
+                type: string
+                description: Current case maker. Empty if none.
+              locked:
+                type: boolean
+                description: Whether the area is locked.
+
+    BackgroundChangeEvent:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Background name.
+        position:
+          type: string
+          description: Active position.
+
+    MusicChangeEvent:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Track name. Empty to stop.
+        looping:
+          type: boolean
+          description: Whether the track loops.
+        channel:
+          type: integer
+          description: Audio channel (0 = music, 1+ = ambience).
+        effects:
+          type: integer
+          description: Effect bitmask.
+
+    HealthUpdateEvent:
+      type: object
+      properties:
+        side:
+          type: integer
+          description: 1 = defense, 2 = prosecution.
+        value:
+          type: integer
+          description: Health bar value (0-10).
+
+    TimerUpdateEvent:
+      type: object
+      properties:
+        timer_id:
+          type: integer
+          description: Timer identifier (0-4).
+        action:
+          type: integer
+          description: 0 = start, 1 = pause, 2 = set value, 3 = hide.
+        value_ms:
+          type: integer
+          description: Timer value in milliseconds.
+
+    EvidenceUpdateEvent:
+      type: object
+      properties:
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+          description: Full evidence list for the area.
+
+    PlayerUpdateEvent:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [add, remove, update_name, update_character, update_charname, update_area]
+          description: What changed.
+        player_id:
+          type: integer
+          description: Player identifier.
+        data:
+          type: string
+          description: New value (for update actions).
+
+    CharTakenEvent:
+      type: object
+      properties:
+        char_id:
+          type: string
+          description: SHA-256 hash of the character manifest.
+        available:
+          type: boolean
+          description: Whether the character is now available.
+
+    # -------------------------------------------------------------------------
+    # Common
+    # -------------------------------------------------------------------------
     Error:
       type: object
       properties:
