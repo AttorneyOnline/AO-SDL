@@ -1424,8 +1424,10 @@ components:
         ref:
           type: string
           description: |
-            Reference to a layer in the current background manifest
-            (e.g. "def", "def:desk", "wit"). Mutually exclusive with `states`.
+            Reference to a layer from the current background manifest
+            (e.g. "def", "def:desk", "wit"), or the special value `_prev`
+            which captures the entire composed end-state of the previous
+            message as a static layer. Mutually exclusive with `states`.
         states:
           type: object
           additionalProperties:
@@ -1594,7 +1596,18 @@ components:
     # -------------------------------------------------------------------------
     CharacterManifest:
       type: object
+      description: |
+        Defines a character's emotes, default properties, and assets.
+        Each emote provides a `states` map that feeds directly into
+        ObjectComposition.states, plus optional suggested event wiring
+        and audio cues. State names (e.g. "idle", "talk", "pre") are
+        conventions, not protocol requirements.
       properties:
+        schema:
+          type: string
+          const: character
+        schema_version:
+          type: integer
         id:
           type: string
           description: Human-readable identifier (e.g. "saturday/phoenix-wright").
@@ -1603,7 +1616,7 @@ components:
           description: Display name (e.g. "Phoenix Wright").
         icon:
           type: string
-          description: Filename of the character icon within the bundle.
+          description: Asset hash of the character icon.
         defaults:
           type: object
           properties:
@@ -1612,61 +1625,119 @@ components:
               description: Default court position (e.g. "def", "pro", "wit").
             blip:
               type: string
-              description: Default blip sound category (e.g. "male", "female").
+              description: Asset hash of the default blip sound.
         emotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmoteDefinition"
+
+    EmoteDefinition:
+      type: object
+      description: |
+        An emote template. The client uses this to build an ObjectComposition
+        and event wiring for an IC message.
+      properties:
+        name:
+          type: string
+          description: Emote display name.
+        button:
+          type: string
+          description: Asset hash of the emote picker button image.
+        states:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            Map of state name to asset hash. These become the
+            ObjectComposition.states in the IC message.
+        desk:
+          type: string
+          enum: [show, hide]
+          description: Whether to show the desk overlay for this emote.
+        sfx:
+          $ref: "#/components/schemas/AudioCue"
+        effects:
+          type: array
+          items:
+            $ref: "#/components/schemas/EffectCue"
+          description: Suggested shader effects for this emote.
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventCue"
+          description: |
+            Suggested event wiring for this emote. The client may use
+            this as-is or override it. For example, a pre-animation
+            emote would include an event that fires text_start on
+            animation_end.
+
+    # -------------------------------------------------------------------------
+    # Background manifest
+    # -------------------------------------------------------------------------
+    BackgroundManifest:
+      type: object
+      description: |
+        Defines a background's positions, layers, and transition timings.
+        Each position defines named layers that can be referenced via
+        ObjectComposition.ref in IC messages (e.g. "def", "def:desk").
+      properties:
+        schema:
+          type: string
+          const: background
+        schema_version:
+          type: integer
+        id:
+          type: string
+          description: Human-readable identifier (e.g. "saturday/courtroom").
+        name:
+          type: string
+          description: Display name (e.g. "Courtroom").
+        positions:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/BackgroundPosition"
+          description: |
+            Map of position id (e.g. "def", "pro", "wit") to position
+            definition. The position id is used in ObjectComposition.ref.
+        transitions:
           type: array
           items:
             type: object
             properties:
-              name:
+              from:
                 type: string
-                description: Emote display name.
-              idle:
+                description: Source position id.
+              to:
                 type: string
-                description: Filename of the idle animation.
-              talking:
-                type: string
-                description: Filename of the talking animation.
-              button:
-                type: string
-                description: Filename of the emote picker button image.
-              desk:
-                type: string
-                description: Desk visibility ("show" or "hide").
-              sfx:
-                type: object
-                properties:
-                  file:
-                    type: string
-                  delay_ms:
-                    type: integer
-                  loop:
-                    type: boolean
-              pre_animation:
-                type: object
-                properties:
-                  file:
-                    type: string
-                  duration_ms:
-                    type: integer
-              frame_effects:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    frame:
-                      type: integer
-                    type:
-                      type: string
-                      description: Effect type (e.g. "sfx", "screenshake", "realization").
-                    file:
-                      type: string
-                      description: Asset filename, if applicable.
-        files:
+                description: Target position id.
+              duration_ms:
+                type: integer
+                description: Suggested slide duration in milliseconds.
+          description: |
+            Suggested transition timings between positions. Clients use
+            these to build keyframed TransformAnimations for slides.
+
+    BackgroundPosition:
+      type: object
+      properties:
+        layers:
           type: object
           additionalProperties:
-            type: string
-          description: Map of filename to SHA-256 content hash for every file in the bundle.
+            type: object
+            properties:
+              asset:
+                type: string
+                description: Asset hash of the layer image.
+              z:
+                type: integer
+                description: Default z-order for this layer.
+          description: |
+            Named layers for this position. Referenced as "position:layer"
+            in ObjectComposition.ref (e.g. "def:desk"). The bare position
+            id (e.g. "def") resolves to the "bg" layer by convention.
+        origin_x:
+          type: integer
+          description: Horizontal origin for character placement at this position.
 
     # -------------------------------------------------------------------------
     # Evidence
