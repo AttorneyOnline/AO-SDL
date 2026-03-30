@@ -82,5 +82,62 @@ target_sources(aosdl_tests PRIVATE stubs/StubTexture.cpp)
 
 target_link_libraries(aosdl_tests PRIVATE ao_protocol nx_net GTest::gtest_main)
 
+# =============================================================================
+# SDL widget tests — headless ImGui via NullGPUBackend
+# =============================================================================
+
+# imgui_test: core ImGui + null backend (no SDL, no GL/Metal)
+set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/third-party/imgui)
+add_library(imgui_test STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_null.cpp
+)
+target_compile_definitions(imgui_test PUBLIC IMGUI_USE_WCHAR32)
+target_include_directories(imgui_test PUBLIC
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
+set_property(TARGET imgui_test PROPERTY CXX_STANDARD 20)
+
+# Widget source files from the SDL app (compiled into the test target)
+set(SDL_WIDGET_SOURCES
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/ChatWidget.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/HealthBarWidget.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/TimerWidget.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/PlayerListWidget.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/EvidenceWidget.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/DisconnectModalWidget.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/MusicAreaWidget.cpp
+)
+
+set(SDL_WIDGET_TEST_SOURCES
+    sdl/test_ChatWidget.cpp
+    sdl/test_HealthBarWidget.cpp
+    sdl/test_TimerWidget.cpp
+    sdl/test_PlayerListWidget.cpp
+    sdl/test_EvidenceWidget.cpp
+    sdl/test_DisconnectModalWidget.cpp
+    sdl/test_MusicAreaWidget.cpp
+    sdl/test_CourtroomState.cpp
+)
+
+add_executable(aosdl_widget_tests ${SDL_WIDGET_TEST_SOURCES} ${SDL_WIDGET_SOURCES})
+set_property(TARGET aosdl_widget_tests PROPERTY CXX_STANDARD 20)
+target_include_directories(aosdl_widget_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/sdl        # ui/widgets/*.h, render/IGPUBackend.h
+    ${CMAKE_SOURCE_DIR}/tests/sdl       # NullGPUBackend.h, ImGuiTestFixture.h
+    ${CMAKE_SOURCE_DIR}/engine          # engine internals
+)
+target_sources(aosdl_widget_tests PRIVATE stubs/StubTexture.cpp)
+target_link_libraries(aosdl_widget_tests PRIVATE
+    ao_protocol
+    imgui_test
+    GTest::gtest_main
+)
+
 include(GoogleTest)
 gtest_discover_tests(aosdl_tests)
+gtest_discover_tests(aosdl_widget_tests)

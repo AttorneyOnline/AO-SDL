@@ -87,7 +87,7 @@ jobs:
 
       - name: Build (coverage)
         if: matrix.coverage
-        run: cmake --build build-coverage --target aosdl_tests --config Debug --parallel
+        run: cmake --build build-coverage --target aosdl_tests aosdl_widget_tests --config Debug --parallel
 
       # ---- Test ----
       - name: Run tests
@@ -112,7 +112,7 @@ jobs:
           lcov --list coverage.info
 
       - name: Upload coverage to Codecov
-        if: matrix.coverage && github.event_name != 'pull_request'
+        if: matrix.coverage
         uses: codecov/codecov-action@v5
         with:
           files: coverage.info
