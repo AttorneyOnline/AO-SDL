@@ -133,3 +133,62 @@ TEST_F(MusicAreaWidgetTest, RenderSmokeTest_WithTracks) {
     widget_.handle_events();
     with_frame([&] { widget_.render(); });
 }
+
+// ===========================================================================
+// Issue #85: SIGSEGV when render() is called after widget recreation while
+// CourtroomState.tracks retains stale data from a previous session.
+// ===========================================================================
+
+TEST_F(MusicAreaWidgetTest, Render_StaleSingletonState_DoesNotCrash) {
+    // Simulate a previous session that populated CourtroomState.
+    auto& cs = CourtroomState::instance();
+    cs.tracks = {"Category", "song1.opus", "song2.opus", "song3.mp3"};
+    cs.areas = {"Lobby"};
+    cs.area_players = {5};
+    cs.area_status = {"CASING"};
+    cs.area_cm = {"FREE"};
+    cs.area_lock = {"FREE"};
+
+    // Create a NEW widget (simulating CourtroomController recreation after
+    // a character change). Its local caches are empty, but cs.tracks has
+    // 4 entries — the exact desync that caused the SIGSEGV.
+    ICMessageState fresh_state;
+    MusicAreaWidget fresh_widget(&fresh_state);
+
+    // handle_events() with no pending events — caches stay empty.
+    fresh_widget.handle_events();
+
+    // render() must survive: the fix detects the size mismatch and calls
+    // rebuild_track_caches() before accessing the local vectors.
+    with_frame([&] { EXPECT_NO_FATAL_FAILURE(fresh_widget.render()); });
+}
+
+TEST_F(MusicAreaWidgetTest, Render_SyncsTrackCachesFromSingleton) {
+    auto& cs = CourtroomState::instance();
+    cs.tracks = {"Jazz", "smooth.opus", "cool.mp3"};
+
+    ICMessageState fresh_state;
+    MusicAreaWidget fresh_widget(&fresh_state);
+
+    // First render syncs caches; second render confirms stability.
+    with_frame([&] { fresh_widget.render(); });
+    with_frame([&] { fresh_widget.render(); });
+}
+
+TEST_F(MusicAreaWidgetTest, Render_MultipleWidgetRecreations) {
+    EventManager::instance().get_channel<MusicListEvent>().publish(
+        MusicListEvent({"Area"}, {"Cat", "a.opus", "b.opus"}));
+    widget_.handle_events();
+    with_frame([&] { widget_.render(); });
+
+    // First recreation — no new events, stale singleton state.
+    ICMessageState state2;
+    MusicAreaWidget widget2(&state2);
+    widget2.handle_events();
+    with_frame([&] { EXPECT_NO_FATAL_FAILURE(widget2.render()); });
+
+    // Second recreation.
+    ICMessageState state3;
+    MusicAreaWidget widget3(&state3);
+    with_frame([&] { EXPECT_NO_FATAL_FAILURE(widget3.render()); });
+}

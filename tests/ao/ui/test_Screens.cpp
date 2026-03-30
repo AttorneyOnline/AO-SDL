@@ -2,6 +2,9 @@
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "ao/ui/screens/ServerListScreen.h"
 
+#include "event/EventManager.h"
+#include "event/UIEvent.h"
+
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -237,13 +240,85 @@ TEST(CharSelectScreen, SelectCharacterNegativeIndexIsNoOp) {
 // CourtroomScreen
 // ===========================================================================
 
-// CourtroomScreen's constructor launches an async background thread that
-// polls for character data with sleeps (up to 5 seconds). To avoid blocking
-// tests, we only verify the static ID constant and accessor values that can
-// be read without waiting for the async load to complete.
+// Stub subclass that skips the async asset loading (AOAssetLibrary, HTTP
+// prefetch, 5-second polling loop). Tests run instantly instead of ~5s each.
+class StubCourtroomScreen : public CourtroomScreen {
+  public:
+    StubCourtroomScreen(const std::string& name, int id) : CourtroomScreen(name, id, SkipLoad{}) {
+    }
+
+  protected:
+    void load_character_data() override {
+        // No-op: skip asset loading entirely.
+        loading_ = false;
+        load_generation_++;
+    }
+};
 
 TEST(CourtroomScreen, StaticIdIsCourtroomString) {
     EXPECT_EQ(CourtroomScreen::ID, "courtroom");
+}
+
+TEST(CourtroomScreen, HandleEventsConsumesEnteredCourtroomEvent) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    StubCourtroomScreen screen("TestChar", 0);
+
+    ch.publish(UIEvent(UIEventType::ENTERED_COURTROOM, "NewChar", 5));
+    screen.handle_events();
+    screen.exit(); // wait for any async spawned by change_character()
+
+    // The event should have been consumed — channel is now empty.
+    EXPECT_FALSE(ch.has_events());
+}
+
+TEST(CourtroomScreen, HandleEventsCallsChangeCharacter) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    StubCourtroomScreen screen("OldChar", 0);
+
+    EXPECT_EQ(screen.get_character_name(), "OldChar");
+    EXPECT_EQ(screen.get_char_id(), 0);
+
+    ch.publish(UIEvent(UIEventType::ENTERED_COURTROOM, "NewChar", 7));
+    screen.handle_events();
+
+    // change_character() should have been called, which re-launches
+    // load_character_data() (our stub). Wait for it to finish.
+    screen.exit();
+
+    EXPECT_EQ(screen.get_character_name(), "NewChar");
+    EXPECT_EQ(screen.get_char_id(), 7);
+}
+
+TEST(CourtroomScreen, HandleEventsIgnoresNonCourtroomEvents) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    StubCourtroomScreen screen("TestChar", 0);
+
+    ch.publish(UIEvent(UIEventType::CHAR_LOADING_DONE));
+    screen.handle_events();
+
+    // CHAR_LOADING_DONE should be consumed (drained) but not acted upon.
+    EXPECT_FALSE(ch.has_events());
+    // Character should be unchanged.
+    EXPECT_EQ(screen.get_character_name(), "TestChar");
+    EXPECT_EQ(screen.get_char_id(), 0);
+}
+
+TEST(CourtroomScreen, HandleEventsWithNoEventsDoesNotCrash) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    StubCourtroomScreen screen("TestChar", 0);
+    EXPECT_NO_FATAL_FAILURE(screen.handle_events());
 }
 
 // All three screen types have distinct IDs.

@@ -56,6 +56,9 @@ CourtroomController::~CourtroomController() {
 }
 
 void CourtroomController::apply_character_data() {
+    ic_state_.character = screen_.get_character_name();
+    ic_state_.char_id = screen_.get_char_id();
+
     auto sheet = screen_.get_character_sheet();
     if (sheet) {
         ic_state_.char_sheet = sheet;

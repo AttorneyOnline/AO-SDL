@@ -3,6 +3,8 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
+#include "event/EventManager.h"
+#include "event/UIEvent.h"
 #include "utils/Log.h"
 
 #include <chrono>
@@ -15,6 +17,10 @@ CourtroomScreen::CourtroomScreen(std::string character_name, int char_id)
 
     // Kick off async loading so the UI thread isn't blocked
     load_future_ = std::async(std::launch::async, &CourtroomScreen::load_character_data, this);
+}
+
+CourtroomScreen::CourtroomScreen(std::string character_name, int char_id, SkipLoad)
+    : character_name_(std::move(character_name)), char_id_(char_id), loading_(false) {
 }
 
 void CourtroomScreen::load_character_data() {
@@ -77,4 +83,10 @@ void CourtroomScreen::exit() {
 }
 
 void CourtroomScreen::handle_events() {
+    auto& ui_channel = EventManager::instance().get_channel<UIEvent>();
+    while (auto optev = ui_channel.get_event()) {
+        if (optev->get_type() == UIEventType::ENTERED_COURTROOM) {
+            change_character(optev->get_character_name(), optev->get_char_id());
+        }
+    }
 }

@@ -16,6 +16,18 @@
 
 #include <algorithm>
 
+void MusicAreaWidget::rebuild_track_caches() {
+    auto& cs = CourtroomState::instance();
+    tracks_trimmed_.resize(cs.tracks.size());
+    tracks_lower_.resize(cs.tracks.size());
+    for (size_t i = 0; i < cs.tracks.size(); i++) {
+        tracks_trimmed_[i] = StringHelpers::trim_song_name(cs.tracks[i]);
+        tracks_lower_[i] = tracks_trimmed_[i];
+        std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+    }
+}
+
 void MusicAreaWidget::handle_events() {
     auto& cs = CourtroomState::instance();
 
@@ -43,14 +55,7 @@ void MusicAreaWidget::handle_events() {
             cs.area_cm.assign(n, "Unknown");
             cs.area_lock.assign(n, "Unknown");
         }
-        tracks_trimmed_.resize(cs.tracks.size());
-        tracks_lower_.resize(cs.tracks.size());
-        for (size_t i = 0; i < cs.tracks.size(); i++) {
-            tracks_trimmed_[i] = StringHelpers::trim_song_name(cs.tracks[i]);
-            tracks_lower_[i] = tracks_trimmed_[i];
-            std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
-                           [](unsigned char c) { return std::tolower(c); });
-        }
+        rebuild_track_caches();
     }
 
     auto& arup_ch = EventManager::instance().get_channel<AreaUpdateEvent>();
@@ -105,6 +110,14 @@ static ImVec4 status_color(const std::string& status) {
 
 void MusicAreaWidget::render() {
     auto& cs = CourtroomState::instance();
+
+    // Synchronize local caches if they fell out of sync with the singleton
+    // (e.g., after a character change recreated this widget while cs.tracks persisted).
+    // A size check is sufficient: same-size list replacements go through handle_events()
+    // which already calls rebuild_track_caches().
+    if (tracks_trimmed_.size() != cs.tracks.size()) {
+        rebuild_track_caches();
+    }
 
     if (ImGui::BeginTabBar("##music_area_tabs")) {
         if (ImGui::BeginTabItem("Music")) {
