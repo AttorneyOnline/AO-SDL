@@ -14,6 +14,11 @@
 
 #include <algorithm>
 
+static std::string trim_song_name(const std::string& t) {
+    return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
+                    t.find_last_of('.') - (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
+}
+
 void MusicAreaWidget::handle_events() {
     auto& cs = CourtroomState::instance();
 
@@ -43,7 +48,7 @@ void MusicAreaWidget::handle_events() {
         }
         tracks_lower_.resize(cs.tracks.size());
         for (size_t i = 0; i < cs.tracks.size(); i++) {
-            tracks_lower_[i] = cs.tracks[i];
+            tracks_lower_[i] = trim_song_name(cs.tracks[i]);
             std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
                            [](unsigned char c) { return std::tolower(c); });
         }
@@ -107,14 +112,8 @@ void MusicAreaWidget::render() {
             ImGui::SetNextItemWidth(-1);
             ImGui::InputTextWithHint("##music_search", "Search...", search_buf_, sizeof(search_buf_));
 
-            auto beautify_song_fn = [](const std::string& t) {
-                return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
-                                t.find_last_of('.') -
-                                    (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
-            };
-
             if (!cs.now_playing.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", beautify_song_fn(cs.now_playing).c_str());
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", trim_song_name(cs.now_playing).c_str());
             }
 
             std::string lower_filter(search_buf_);
@@ -126,6 +125,7 @@ void MusicAreaWidget::render() {
             std::string current_category;
             bool tree_open = false;
             bool category_has_match = false;
+            bool category_is_match = false;
 
             auto is_category_fn = [](const std::string& t) { return !t.empty() && t.find('.') == std::string::npos; };
 
@@ -141,10 +141,17 @@ void MusicAreaWidget::render() {
                     current_category = item;
 
                     // we want to draw any categories which have tracks in them that match the filter
+                    // we also want to draw every song in a category which itself matches the filter
+                    category_is_match = false;
                     category_has_match = false;
                     for (int j = i + 1; j < (int)cs.tracks.size(); j++) {
                         if (is_category_fn(cs.tracks[j]))
                             break;
+
+                        if (matches_filter(tracks_lower_[i], lower_filter)) {
+                            category_is_match = true;
+                            break;
+                        }
 
                         if (j < (int)tracks_lower_.size() && matches_filter(tracks_lower_[j], lower_filter)) {
                             category_has_match = true;
@@ -152,7 +159,7 @@ void MusicAreaWidget::render() {
                         }
                     }
 
-                    if (lower_filter.empty() || category_has_match) {
+                    if (lower_filter.empty() || category_is_match || category_has_match) {
                         tree_open = ImGui::TreeNode(current_category.c_str());
                     }
                     else {
@@ -160,10 +167,11 @@ void MusicAreaWidget::render() {
                     }
                 }
                 else {
-                    bool matches = (i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter);
+                    bool matches = category_is_match ||
+                                   ((i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter));
 
                     if (tree_open && (lower_filter.empty() || matches)) {
-                        if (ImGui::Selectable(beautify_song_fn(item).c_str())) {
+                        if (ImGui::Selectable(trim_song_name(item).c_str())) {
                             std::string showname = state_->showname;
                             EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
                                 OutgoingMusicEvent(item, showname));
