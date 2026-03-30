@@ -231,6 +231,9 @@ paths:
                     items:
                       type: object
                       properties:
+                        id:
+                          type: string
+                          description: Area identifier. Use this in area-scoped endpoints.
                         name:
                           type: string
                           description: Area display name.
@@ -253,20 +256,127 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /areas/{area_id}/players:
+    get:
+      tags: [Server]
+      operationId: listAreaPlayers
+      summary: List Area Players
+      description: Returns the players currently in an area. Use `_` as area_id for the current area.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
+      responses:
+        "200":
+          description: Player list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  players:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          description: User identifier.
+                        display_name:
+                          type: string
+                          description: Display name.
+                        character:
+                          type: string
+                          nullable: true
+                          description: Character manifest hash, or null if no character selected.
+                        charname:
+                          type: string
+                          description: In-character showname.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Area not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /areas/{area_id}/join:
+    post:
+      tags: [Server]
+      operationId: joinArea
+      summary: Join Area
+      description: |
+        Move to a different area. Leaves the current area.
+        Triggers a `presence_update` event in both the old and new areas.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier.
+      responses:
+        "200":
+          description: Joined area.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Area is locked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Area not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   # ---------------------------------------------------------------------------
   # Chat
   # ---------------------------------------------------------------------------
-  /ic:
+  /areas/{area_id}/ic:
     post:
       tags: [Chat]
       operationId: sendIc
       summary: Send IC Message
       description: |
-        Send an in-character message to the current area. The message is a
+        Send an in-character message to an area. The message is a
         composition of animated objects, text, audio cues, shader effects,
-        and event-driven transitions.
+        and event-driven transitions. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       requestBody:
         required: true
         content:
@@ -302,14 +412,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /ooc:
+  /areas/{area_id}/ooc:
     post:
       tags: [Chat]
       operationId: sendOoc
       summary: Send OOC Message
-      description: Send an out-of-character chat message to the current area.
+      description: Send an out-of-character chat message to an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       requestBody:
         required: true
         content:
@@ -356,14 +473,21 @@ paths:
   # ---------------------------------------------------------------------------
   # Area
   # ---------------------------------------------------------------------------
-  /background:
+  /areas/{area_id}/background:
     post:
       tags: [Area]
       operationId: setBackground
       summary: Set Background
-      description: Change the background in the current area.
+      description: Change the background in an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       requestBody:
         required: true
         content:
@@ -401,14 +525,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /music/play:
+  /areas/{area_id}/music:
     post:
       tags: [Area]
       operationId: playMusic
       summary: Play Music
-      description: Play a music track in the current area.
+      description: Play a music track in an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       requestBody:
         required: true
         content:
@@ -452,14 +583,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /hp:
+  /areas/{area_id}/hp:
     post:
       tags: [Area]
       operationId: setHealthBar
       summary: Set Health Bar
-      description: Set the defense or prosecution health bar in the current area.
+      description: Set the defense or prosecution health bar in an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       requestBody:
         required: true
         content:
@@ -491,14 +629,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /timer:
+  /areas/{area_id}/timer:
     post:
       tags: [Area]
       operationId: setTimer
       summary: Set Timer
-      description: Create, start, pause, or set a timer in the current area.
+      description: Create, start, pause, or set a timer in an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       requestBody:
         required: true
         content:
@@ -536,14 +681,21 @@ paths:
   # ---------------------------------------------------------------------------
   # Evidence
   # ---------------------------------------------------------------------------
-  /evidence:
+  /areas/{area_id}/evidence:
     get:
       tags: [Evidence]
       operationId: listEvidence
       summary: List Evidence
-      description: Returns the evidence list for the current area.
+      description: Returns the evidence list for an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
       responses:
         "200":
           description: Evidence list.
@@ -566,7 +718,7 @@ paths:
       tags: [Evidence]
       operationId: addEvidence
       summary: Add Evidence
-      description: Add a piece of evidence to the current area.
+      description: Add a piece of evidence to an area. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
       requestBody:
@@ -592,15 +744,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /evidence/{index}:
+  /areas/{area_id}/evidence/{index}:
     put:
       tags: [Evidence]
       operationId: editEvidence
       summary: Edit Evidence
-      description: Edit a piece of evidence by index.
+      description: Edit a piece of evidence by index. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
       parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
         - name: index
           in: path
           required: true
@@ -639,10 +797,16 @@ paths:
       tags: [Evidence]
       operationId: deleteEvidence
       summary: Delete Evidence
-      description: Remove a piece of evidence by index.
+      description: Remove a piece of evidence by index. Use `_` as area_id for the current area.
       security:
         - sessionToken: []
       parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier, or `_` for current area.
         - name: index
           in: path
           required: true
@@ -1149,7 +1313,7 @@ paths:
         - `health_update` — Health bar changed
         - `timer_update` — Timer state changed
         - `evidence_update` — Evidence list changed
-        - `player_update` — Player joined, left, or changed state
+        - `presence_update` — Player joined, left, or changed state in an area
         - `char_taken` — Character availability changed
         - `moderation_action` — Moderation action applied or revoked
 
@@ -1626,19 +1790,33 @@ components:
             $ref: "#/components/schemas/EvidenceItem"
           description: Full evidence list for the area.
 
-    PlayerUpdateEvent:
+    PresenceUpdateEvent:
       type: object
+      description: |
+        Fired when a player joins, leaves, or changes state within an area.
+        Sent to all players in the affected area(s).
       properties:
         action:
           type: string
-          enum: [add, remove, update_name, update_character, update_charname, update_area]
-          description: What changed.
-        player_id:
-          type: integer
-          description: Player identifier.
-        data:
+          enum: [join, leave, update]
+          description: What happened.
+        area:
           type: string
-          description: New value (for update actions).
+          description: Area identifier where this occurred.
+        user:
+          type: object
+          properties:
+            user_id:
+              type: string
+            display_name:
+              type: string
+            character:
+              type: string
+              nullable: true
+              description: Character manifest hash.
+            charname:
+              type: string
+              description: In-character showname.
 
     ModerationActionEvent:
       type: object
