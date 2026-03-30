@@ -117,22 +117,63 @@ void MusicAreaWidget::render() {
 
             ImGui::BeginChild("##music_list", ImVec2(0, 0), ImGuiChildFlags_None);
 
-            for (int i = 0; i < (int)cs.tracks.size(); i++) {
-                const auto& track = cs.tracks[i];
-                if (i < (int)tracks_lower_.size() && !matches_filter(tracks_lower_[i], lower_filter))
-                    continue;
+            std::string current_category;
+            bool tree_open = false;
+            bool category_has_match = false;
 
-                bool is_category = !track.empty() && track.find('.') == std::string::npos;
-                if (is_category) {
-                    ImGui::SeparatorText(track.c_str());
-                }
-                else {
-                    if (ImGui::Selectable(track.c_str())) {
-                        std::string showname = state_->showname;
-                        EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
-                            OutgoingMusicEvent(track, showname));
+            // lambda to check if a track is or is not a category
+            auto is_category_fn = [](const std::string& t) { return !t.empty() && t.find('.') == std::string::npos; };
+
+            for (int i = 0; i < (int)cs.tracks.size(); i++) {
+                const auto& item = cs.tracks[i];
+
+                if (is_category_fn(item)) {
+                    // new category, so pop previous category if open
+                    if (tree_open) {
+                        ImGui::TreePop();
+                        tree_open = false;
+                    }
+
+                    current_category = item;
+
+                    // doing a lookahead to see if the category has any tracks that match the filter
+                    // imgui requires that we filter as we draw, which is annoying...
+                    category_has_match = false;
+                    for (int j = i + 1; j < (int)cs.tracks.size(); j++) {
+                        if (is_category_fn(cs.tracks[j]))
+                            break;
+
+                        if (j < (int)tracks_lower_.size() && matches_filter(tracks_lower_[j], lower_filter)) {
+                            category_has_match = true;
+                            break;
+                        }
+                    }
+
+                    // open tree if it has a match (or if filter is blank...)
+                    if (lower_filter.empty() || category_has_match) {
+                        tree_open = ImGui::TreeNode(current_category.c_str());
+                    }
+                    else {
+                        tree_open = false;
                     }
                 }
+                else {
+                    // not a category
+                    bool matches = (i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter);
+
+                    if (tree_open && (lower_filter.empty() || matches)) {
+                        if (ImGui::Selectable(item.c_str())) {
+                            std::string showname = state_->showname;
+                            EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
+                                OutgoingMusicEvent(item, showname));
+                        }
+                    }
+                }
+            }
+
+            // Close last open tree
+            if (tree_open) {
+                ImGui::TreePop();
             }
 
             ImGui::EndChild();
