@@ -22,6 +22,8 @@ class MusicAreaWidget : public IWidget {
     int sfx_vol_ = 50;
     int blip_vol_ = 50;
 
+    void rebuild_track_caches();
+
     std::vector<std::string> tracks_trimmed_;
     std::vector<std::string> tracks_lower_; // pre-lowercased for filtering
     char search_buf_[128] = "";
