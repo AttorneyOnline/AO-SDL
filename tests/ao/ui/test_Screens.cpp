@@ -2,6 +2,9 @@
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "ao/ui/screens/ServerListScreen.h"
 
+#include "event/EventManager.h"
+#include "event/UIEvent.h"
+
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -244,6 +247,71 @@ TEST(CharSelectScreen, SelectCharacterNegativeIndexIsNoOp) {
 
 TEST(CourtroomScreen, StaticIdIsCourtroomString) {
     EXPECT_EQ(CourtroomScreen::ID, "courtroom");
+}
+
+TEST(CourtroomScreen, HandleEventsConsumesEnteredCourtroomEvent) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    } // drain
+
+    CourtroomScreen screen("TestChar", 0);
+    // Wait for the async load to finish so handle_events() doesn't race.
+    // CourtroomScreen::exit() waits on the future.
+    screen.exit();
+
+    ch.publish(UIEvent(UIEventType::ENTERED_COURTROOM, "NewChar", 5));
+
+    screen.handle_events();
+
+    // The event should have been consumed — channel is now empty.
+    EXPECT_FALSE(ch.has_events());
+}
+
+TEST(CourtroomScreen, HandleEventsCallsChangeCharacter) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    CourtroomScreen screen("OldChar", 0);
+    screen.exit(); // wait for async load
+
+    EXPECT_EQ(screen.get_character_name(), "OldChar");
+    EXPECT_EQ(screen.get_char_id(), 0);
+
+    ch.publish(UIEvent(UIEventType::ENTERED_COURTROOM, "NewChar", 7));
+    screen.handle_events();
+
+    EXPECT_EQ(screen.get_character_name(), "NewChar");
+    EXPECT_EQ(screen.get_char_id(), 7);
+}
+
+TEST(CourtroomScreen, HandleEventsIgnoresNonCourtroomEvents) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    CourtroomScreen screen("TestChar", 0);
+    screen.exit();
+
+    ch.publish(UIEvent(UIEventType::CHAR_LOADING_DONE));
+    screen.handle_events();
+
+    // CHAR_LOADING_DONE should be consumed (drained) but not acted upon.
+    EXPECT_FALSE(ch.has_events());
+    // Character should be unchanged.
+    EXPECT_EQ(screen.get_character_name(), "TestChar");
+    EXPECT_EQ(screen.get_char_id(), 0);
+}
+
+TEST(CourtroomScreen, HandleEventsWithNoEventsDoesNotCrash) {
+    auto& ch = EventManager::instance().get_channel<UIEvent>();
+    while (ch.get_event()) {
+    }
+
+    CourtroomScreen screen("TestChar", 0);
+    screen.exit();
+
+    EXPECT_NO_FATAL_FAILURE(screen.handle_events());
 }
 
 // All three screen types have distinct IDs.
