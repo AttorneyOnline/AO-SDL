@@ -127,14 +127,12 @@ void MusicAreaWidget::render() {
             bool tree_open = false;
             bool category_has_match = false;
 
-            // lambda to check if a track is or is not a category
             auto is_category_fn = [](const std::string& t) { return !t.empty() && t.find('.') == std::string::npos; };
 
             for (int i = 0; i < (int)cs.tracks.size(); i++) {
                 const auto& item = cs.tracks[i];
 
                 if (is_category_fn(item)) {
-                    // new category, so pop previous category if open
                     if (tree_open) {
                         ImGui::TreePop();
                         tree_open = false;
@@ -142,8 +140,7 @@ void MusicAreaWidget::render() {
 
                     current_category = item;
 
-                    // doing a lookahead to see if the category has any tracks that match the filter
-                    // imgui requires that we filter as we draw, which is annoying...
+                    // we want to draw any categories which have tracks in them that match the filter
                     category_has_match = false;
                     for (int j = i + 1; j < (int)cs.tracks.size(); j++) {
                         if (is_category_fn(cs.tracks[j]))
@@ -155,7 +152,6 @@ void MusicAreaWidget::render() {
                         }
                     }
 
-                    // open tree if it has a match (or if filter is blank...)
                     if (lower_filter.empty() || category_has_match) {
                         tree_open = ImGui::TreeNode(current_category.c_str());
                     }
@@ -164,7 +160,6 @@ void MusicAreaWidget::render() {
                     }
                 }
                 else {
-                    // not a category
                     bool matches = (i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter);
 
                     if (tree_open && (lower_filter.empty() || matches)) {
@@ -177,7 +172,6 @@ void MusicAreaWidget::render() {
                 }
             }
 
-            // Close last open tree
             if (tree_open) {
                 ImGui::TreePop();
             }
