@@ -10,6 +10,8 @@
 #include "event/OutgoingMusicEvent.h"
 #include "event/VolumeChangeEvent.h"
 
+#include "utils/StringHelpers.h"
+
 #include <imgui.h>
 
 #include <algorithm>
@@ -43,7 +45,7 @@ void MusicAreaWidget::handle_events() {
         }
         tracks_lower_.resize(cs.tracks.size());
         for (size_t i = 0; i < cs.tracks.size(); i++) {
-            tracks_lower_[i] = trim_song_name(cs.tracks[i]);
+            tracks_lower_[i] = StringHelpers::trim_song_name(cs.tracks[i]);
             std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
                            [](unsigned char c) { return std::tolower(c); });
         }
@@ -99,15 +101,6 @@ static ImVec4 status_color(const std::string& status) {
     return {0.7f, 0.7f, 0.7f, 1.0f}; // default/unknown
 }
 
-// this is the std equivalent of AO2's QString manip for trimming song names:
-//          QString t = t.left(t.lastIndexOf("."));
-//          return t.right(t.length() - (t.lastIndexOf("/") + 1));
-// this is NOT SAFE for strings which do not contain "."!!!
-std::string MusicAreaWidget::trim_song_name(const std::string& t) {
-    return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
-                    t.find_last_of('.') - (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
-}
-
 void MusicAreaWidget::render() {
     auto& cs = CourtroomState::instance();
 
@@ -117,7 +110,8 @@ void MusicAreaWidget::render() {
             ImGui::InputTextWithHint("##music_search", "Search...", search_buf_, sizeof(search_buf_));
 
             if (!cs.now_playing.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", trim_song_name(cs.now_playing).c_str());
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s",
+                                   StringHelpers::trim_song_name(cs.now_playing).c_str());
             }
 
             std::string lower_filter(search_buf_);
@@ -175,7 +169,7 @@ void MusicAreaWidget::render() {
                                    ((i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter));
 
                     if (tree_open && (lower_filter.empty() || matches)) {
-                        if (ImGui::Selectable(trim_song_name(item).c_str())) {
+                        if (ImGui::Selectable(StringHelpers::trim_song_name(item).c_str())) {
                             std::string showname = state_->showname;
                             EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
                                 OutgoingMusicEvent(item, showname));
