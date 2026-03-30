@@ -29,3 +29,12 @@ TEST(StringHelpers, TrimSongName_OneDirectory) {
 TEST(StringHelpers, TrimSongName_MultiDirectory) {
     EXPECT_EQ(StringHelpers::trim_song_name("Ace Attorney/Logic/Logic & Trick.opus"), "Logic & Trick");
 }
+
+TEST(StringHelpers, TrimSongName_MultiExt) {
+    EXPECT_EQ(StringHelpers::trim_song_name("Logic & Trick.opus.opus"), "Logic & Trick.opus");
+}
+
+TEST(StringHelpers, TrimSongName_JustFuckMyShitUp) {
+    EXPECT_EQ(StringHelpers::trim_song_name(".git/Ace/Atto.rney/Logic/.Logic & Trick.opus.ogg.mp3.ass"),
+              ".Logic & Trick.opus.ogg.mp3");
+}
