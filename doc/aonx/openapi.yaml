@@ -20,6 +20,8 @@ tags:
     description: Area actions — background, music, health bars, timers.
   - name: Evidence
     description: Evidence CRUD within an area.
+  - name: Moderation
+    description: Moderation actions — kick, ban, mute, and server-defined extensions.
   - name: Events
     description: Server-sent event stream and event schemas.
 
@@ -894,6 +896,238 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   # ---------------------------------------------------------------------------
+  # Moderation
+  # ---------------------------------------------------------------------------
+  /moderation/actions:
+    post:
+      tags: [Moderation]
+      operationId: submitModerationAction
+      summary: Submit Moderation Action
+      description: |
+        Submit a moderation action. The `action` field is a free string —
+        the server defines what actions it supports. Standard actions include
+        kick, ban, mute, text_transform, lock_area, and notice. Servers may
+        define custom actions with an `x-` prefix.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  description: Action identifier (e.g. "kick", "ban", "mute", "x-custom").
+                target:
+                  type: string
+                  description: Session token or user ID of the affected user. Required for targeted actions.
+                area:
+                  type: string
+                  description: Area scope. Defaults to the moderator's current area.
+                reason:
+                  type: string
+                  description: Human-readable reason. Delivered to the target where applicable.
+                duration:
+                  type: integer
+                  nullable: true
+                  description: Duration in seconds. null = permanent. Interpretation is action-dependent.
+                params:
+                  type: object
+                  description: Action-specific parameters. Unconstrained — the server defines what each action accepts.
+      responses:
+        "200":
+          description: Action applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  action_id:
+                    type: string
+                    description: Server-assigned identifier for this action instance.
+                  action:
+                    type: string
+                  status:
+                    type: string
+                    description: '"applied" or "queued".'
+                  timestamp:
+                    type: string
+                    format: date-time
+        "400":
+          description: Missing required fields for this action.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Caller lacks moderator privileges for this action.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Target session or area not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      tags: [Moderation]
+      operationId: listModerationActions
+      summary: List Active Actions
+      description: Query active moderation state (current bans, mutes, area locks, etc.).
+      security:
+        - sessionToken: []
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: Filter by action type.
+        - name: area
+          in: query
+          schema:
+            type: string
+          description: Filter by area.
+      responses:
+        "200":
+          description: Active moderation actions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        action_id:
+                          type: string
+                        action:
+                          type: string
+                        target_user:
+                          type: string
+                        area:
+                          type: string
+                        reason:
+                          type: string
+                        duration:
+                          type: integer
+                          nullable: true
+                        applied_at:
+                          type: string
+                          format: date-time
+                        expires_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        moderator:
+                          type: string
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Caller lacks moderator privileges.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /moderation/actions/{action_id}:
+    delete:
+      tags: [Moderation]
+      operationId: revokeModerationAction
+      summary: Revoke Action
+      description: Revoke an active moderation action (unban, unmute, unlock, etc.).
+      security:
+        - sessionToken: []
+      parameters:
+        - name: action_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the action to revoke.
+      responses:
+        "204":
+          description: Action revoked.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Caller lacks moderator privileges.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Action not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /moderation/supported:
+    get:
+      tags: [Moderation]
+      operationId: listSupportedActions
+      summary: Supported Actions
+      description: |
+        Discover what moderation actions this server supports.
+        Enables clients to build dynamic moderation UIs.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Supported actions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        action:
+                          type: string
+                          description: Action identifier.
+                        description:
+                          type: string
+                          description: Human-readable description.
+                        requires_target:
+                          type: boolean
+                        supports_duration:
+                          type: boolean
+                        params_schema:
+                          type: object
+                          nullable: true
+                          description: JSON Schema for the params object, if applicable.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
   # Events (SSE)
   # ---------------------------------------------------------------------------
   /events:
@@ -917,6 +1151,7 @@ paths:
         - `evidence_update` — Evidence list changed
         - `player_update` — Player joined, left, or changed state
         - `char_taken` — Character availability changed
+        - `moderation_action` — Moderation action applied or revoked
 
         Clients MUST ignore unrecognized event types.
       security:
@@ -1404,6 +1639,35 @@ components:
         data:
           type: string
           description: New value (for update actions).
+
+    ModerationActionEvent:
+      type: object
+      description: |
+        Broadcast to affected clients when a moderation action is applied or revoked.
+        Uses display names, not session IDs, to prevent information leakage.
+      properties:
+        action:
+          type: string
+          description: Action identifier.
+        moderator:
+          type: string
+          description: Display name of the moderator. Omitted if the server hides moderator identity.
+        target:
+          type: string
+          description: Display name of the affected user.
+        area:
+          type: string
+        reason:
+          type: string
+        duration:
+          type: integer
+          nullable: true
+        revoked:
+          type: boolean
+          description: True if this is a revocation of a previous action.
+        params:
+          type: object
+          description: Action-specific data for client presentation.
 
     CharTakenEvent:
       type: object
