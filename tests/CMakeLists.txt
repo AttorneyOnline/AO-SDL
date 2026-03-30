@@ -64,7 +64,8 @@ set(TEST_SOURCES
     ao/net/test_AOServer.cpp
 )
 
-add_executable(aosdl_tests ${TEST_SOURCES})
+add_executable(aosdl_tests ${TEST_SOURCES}
+    utils/test_StringHelpers.cpp)
 set_property(TARGET aosdl_tests PROPERTY CXX_STANDARD 20)
 
 target_include_directories(aosdl_tests PRIVATE
