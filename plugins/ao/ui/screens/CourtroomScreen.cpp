@@ -19,6 +19,10 @@ CourtroomScreen::CourtroomScreen(std::string character_name, int char_id)
     load_future_ = std::async(std::launch::async, &CourtroomScreen::load_character_data, this);
 }
 
+CourtroomScreen::CourtroomScreen(std::string character_name, int char_id, SkipLoad)
+    : character_name_(std::move(character_name)), char_id_(char_id), loading_(false) {
+}
+
 void CourtroomScreen::load_character_data() {
     Log::log_print(DEBUG, "CourtroomScreen: loading character data for '%s'", character_name_.c_str());
 

@@ -55,8 +55,12 @@ class CourtroomScreen : public Screen {
         return load_generation_;
     }
 
-  private:
-    void load_character_data();
+  protected:
+    /// Tag type for a constructor that skips async asset loading (for tests).
+    struct SkipLoad {};
+    CourtroomScreen(std::string character_name, int char_id, SkipLoad);
+
+    virtual void load_character_data();
 
     std::string character_name_;
     int char_id_;
