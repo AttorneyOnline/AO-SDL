@@ -107,8 +107,14 @@ void MusicAreaWidget::render() {
             ImGui::SetNextItemWidth(-1);
             ImGui::InputTextWithHint("##music_search", "Search...", search_buf_, sizeof(search_buf_));
 
+            auto beautify_song_fn = [](const std::string& t) {
+                return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
+                                t.find_last_of('.') -
+                                    (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
+            };
+
             if (!cs.now_playing.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", cs.now_playing.c_str());
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", beautify_song_fn(cs.now_playing).c_str());
             }
 
             std::string lower_filter(search_buf_);
@@ -162,7 +168,7 @@ void MusicAreaWidget::render() {
                     bool matches = (i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter);
 
                     if (tree_open && (lower_filter.empty() || matches)) {
-                        if (ImGui::Selectable(item.c_str())) {
+                        if (ImGui::Selectable(beautify_song_fn(item).c_str())) {
                             std::string showname = state_->showname;
                             EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
                                 OutgoingMusicEvent(item, showname));
