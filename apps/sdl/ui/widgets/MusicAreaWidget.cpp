@@ -14,6 +14,10 @@
 
 #include <algorithm>
 
+// this is the std equivalent of AO2's QString manip for trimming song names:
+//          QString t = t.left(t.lastIndexOf("."));
+//          return t.right(t.length() - (t.lastIndexOf("/") + 1));
+// this is NOT SAFE for strings which do not contain "."!!!
 static std::string trim_song_name(const std::string& t) {
     return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
                     t.find_last_of('.') - (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
