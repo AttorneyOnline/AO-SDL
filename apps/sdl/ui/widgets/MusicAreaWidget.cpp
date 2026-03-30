@@ -106,6 +106,19 @@ static ImVec4 status_color(const std::string& status) {
 void MusicAreaWidget::render() {
     auto& cs = CourtroomState::instance();
 
+    // Synchronize local caches if they fell out of sync with the singleton
+    // (e.g., after a character change recreated this widget while cs.tracks persisted).
+    if (tracks_trimmed_.size() != cs.tracks.size()) {
+        tracks_trimmed_.resize(cs.tracks.size());
+        tracks_lower_.resize(cs.tracks.size());
+        for (size_t i = 0; i < cs.tracks.size(); i++) {
+            tracks_trimmed_[i] = StringHelpers::trim_song_name(cs.tracks[i]);
+            tracks_lower_[i] = tracks_trimmed_[i];
+            std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+        }
+    }
+
     if (ImGui::BeginTabBar("##music_area_tabs")) {
         if (ImGui::BeginTabItem("Music")) {
             ImGui::SetNextItemWidth(-1);

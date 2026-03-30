@@ -3,6 +3,8 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
+#include "event/EventManager.h"
+#include "event/UIEvent.h"
 #include "utils/Log.h"
 
 #include <chrono>
@@ -77,4 +79,10 @@ void CourtroomScreen::exit() {
 }
 
 void CourtroomScreen::handle_events() {
+    auto& ui_channel = EventManager::instance().get_channel<UIEvent>();
+    while (auto optev = ui_channel.get_event()) {
+        if (optev->get_type() == UIEventType::ENTERED_COURTROOM) {
+            change_character(optev->get_character_name(), optev->get_char_id());
+        }
+    }
 }
