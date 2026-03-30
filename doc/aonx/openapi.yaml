@@ -215,7 +215,10 @@ paths:
       tags: [Server]
       operationId: listAreas
       summary: List Areas
-      description: Returns all areas on the server with their current state.
+      description: |
+        Returns all areas on the server with their current state.
+        Areas have a hierarchical path (e.g. "courtroom/1", "basement/cells/a")
+        that defines their tree structure.
       security:
         - sessionToken: []
       responses:
@@ -229,28 +232,147 @@ paths:
                   areas:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          description: Area identifier. Use this in area-scoped endpoints.
-                        name:
-                          type: string
-                          description: Area display name.
-                        players:
-                          type: integer
-                          description: Number of players currently in this area.
-                        status:
-                          type: string
-                          description: Area status (e.g. "IDLE", "CASING", "RECESS").
-                        cm:
-                          type: string
-                          description: Current case maker / courtroom magistrate. Empty if none.
-                        locked:
-                          type: boolean
-                          description: Whether the area is locked.
+                      $ref: "#/components/schemas/Area"
         "401":
           description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags: [Server]
+      operationId: createArea
+      summary: Create Area
+      description: Create a new area. The path determines its position in the hierarchy.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, path]
+              properties:
+                name:
+                  type: string
+                  description: Area display name.
+                path:
+                  type: string
+                  description: Hierarchical path (e.g. "courtroom/3", "offices/defense").
+      responses:
+        "201":
+          description: Area created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions to create areas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: An area with this path already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /areas/{area_id}:
+    put:
+      tags: [Server]
+      operationId: updateArea
+      summary: Update Area
+      description: Update an area's name, path, or status.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: New display name.
+                path:
+                  type: string
+                  description: New hierarchical path.
+                status:
+                  type: string
+                  description: New area status.
+      responses:
+        "200":
+          description: Area updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Area not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Server]
+      operationId: deleteArea
+      summary: Delete Area
+      description: Delete an area. Players in the area are moved to a default area.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: area_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Area identifier.
+      responses:
+        "204":
+          description: Area deleted.
+        "401":
+          description: Token is invalid or already expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Area not found.
           content:
             application/json:
               schema:
@@ -1590,6 +1712,37 @@ components:
           description: |
             Trigger event. Can be "start", "animation_end:<id>",
             "text_end:<id>", or any user-defined event name.
+
+    # -------------------------------------------------------------------------
+    # Area
+    # -------------------------------------------------------------------------
+    Area:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Area identifier. Use this in area-scoped endpoints.
+        name:
+          type: string
+          description: Area display name.
+        path:
+          type: string
+          description: |
+            Hierarchical path (e.g. "courtroom/1", "basement/cells/a").
+            Defines the area's position in the tree. Clients can use
+            this to render a nested area list.
+        players:
+          type: integer
+          description: Number of players currently in this area.
+        status:
+          type: string
+          description: Area status (e.g. "IDLE", "CASING", "RECESS").
+        cm:
+          type: string
+          description: Current case maker / courtroom magistrate. Empty if none.
+        locked:
+          type: boolean
+          description: Whether the area is locked.
 
     # -------------------------------------------------------------------------
     # Character manifest
