@@ -14,15 +14,6 @@
 
 #include <algorithm>
 
-// this is the std equivalent of AO2's QString manip for trimming song names:
-//          QString t = t.left(t.lastIndexOf("."));
-//          return t.right(t.length() - (t.lastIndexOf("/") + 1));
-// this is NOT SAFE for strings which do not contain "."!!!
-static std::string trim_song_name(const std::string& t) {
-    return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
-                    t.find_last_of('.') - (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
-}
-
 void MusicAreaWidget::handle_events() {
     auto& cs = CourtroomState::instance();
 
@@ -106,6 +97,15 @@ static ImVec4 status_color(const std::string& status) {
     if (status == "GAMING")
         return {1.0f, 0.65f, 0.0f, 1.0f};
     return {0.7f, 0.7f, 0.7f, 1.0f}; // default/unknown
+}
+
+// this is the std equivalent of AO2's QString manip for trimming song names:
+//          QString t = t.left(t.lastIndexOf("."));
+//          return t.right(t.length() - (t.lastIndexOf("/") + 1));
+// this is NOT SAFE for strings which do not contain "."!!!
+std::string MusicAreaWidget::trim_song_name(const std::string& t) {
+    return t.substr((t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1),
+                    t.find_last_of('.') - (t.find_last_of('/') == std::string::npos ? 0 : t.find_last_of('/') + 1));
 }
 
 void MusicAreaWidget::render() {
