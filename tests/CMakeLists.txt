@@ -55,7 +55,6 @@ set(TEST_SOURCES
     ui/test_UIManager.cpp
     audio/test_AudioStream.cpp
     ao/ui/test_Screens.cpp
-    ao/ui/test_MusicAreaWidget.cpp
     render/test_TextMeshBuilder.cpp
     configuration/test_IConfiguration.cpp
     configuration/test_JsonConfiguration.cpp
@@ -66,15 +65,12 @@ set(TEST_SOURCES
 )
 
 add_executable(aosdl_tests ${TEST_SOURCES}
-    utils/test_StringHelpers.cpp
-    ${CMAKE_SOURCE_DIR}/apps/sdl/ui/widgets/MusicAreaWidget.cpp
-)
+    utils/test_StringHelpers.cpp)
 set_property(TARGET aosdl_tests PROPERTY CXX_STANDARD 20)
 
 target_include_directories(aosdl_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/tests/net   # MockTcpSocket.h
     ${CMAKE_SOURCE_DIR}/engine      # Access to engine internals (WebSocket.h, etc.)
-    ${CMAKE_SOURCE_DIR}/apps/sdl    # Widget headers (MusicAreaWidget, CourtroomState, etc.)
 )
 
 target_compile_definitions(aosdl_tests PRIVATE
@@ -84,7 +80,7 @@ target_compile_definitions(aosdl_tests PRIVATE
 # Stub Texture2D so tests don't need the GL renderer plugin
 target_sources(aosdl_tests PRIVATE stubs/StubTexture.cpp)
 
-target_link_libraries(aosdl_tests PRIVATE ao_protocol nx_net imgui GTest::gtest_main)
+target_link_libraries(aosdl_tests PRIVATE ao_protocol nx_net GTest::gtest_main)
 
 # =============================================================================
 # SDL widget tests — headless ImGui via NullGPUBackend
