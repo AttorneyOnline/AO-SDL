@@ -77,7 +77,7 @@ void MusicAreaWidget::handle_events() {
 
     auto& now_ch = EventManager::instance().get_channel<NowPlayingEvent>();
     while (auto ev = now_ch.get_event()) {
-        cs.now_playing = ev->track();
+        cs.now_playing = StringHelpers::trim_song_name(ev->track());
     }
 }
 
@@ -110,8 +110,7 @@ void MusicAreaWidget::render() {
             ImGui::InputTextWithHint("##music_search", "Search...", search_buf_, sizeof(search_buf_));
 
             if (!cs.now_playing.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s",
-                                   StringHelpers::trim_song_name(cs.now_playing).c_str());
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Now: %s", cs.now_playing.c_str());
             }
 
             std::string lower_filter(search_buf_);
@@ -140,20 +139,15 @@ void MusicAreaWidget::render() {
 
                     // we want to draw any categories which have tracks in them that match the filter
                     // we also want to draw every song in a category which itself matches the filter
-                    category_is_match = false;
-                    category_has_match = false;
-                    for (int j = i + 1; j < (int)cs.tracks.size(); j++) {
-                        if (is_category_fn(cs.tracks[j]))
-                            break;
-
-                        if (matches_filter(tracks_lower_[i], lower_filter)) {
-                            category_is_match = true;
-                            break;
-                        }
-
-                        if (j < (int)tracks_lower_.size() && matches_filter(tracks_lower_[j], lower_filter)) {
-                            category_has_match = true;
-                            break;
+                    category_is_match = matches_filter(tracks_lower_[i], lower_filter);
+                    if (!category_is_match) {
+                        for (int j = i + 1; j < (int)cs.tracks.size(); j++) {
+                            if (is_category_fn(cs.tracks[j]))
+                                break;
+                            if (j < (int)tracks_lower_.size() && matches_filter(tracks_lower_[j], lower_filter)) {
+                                category_has_match = true;
+                                break;
+                            }
                         }
                     }
 
