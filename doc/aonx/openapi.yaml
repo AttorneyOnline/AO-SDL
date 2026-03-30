@@ -389,7 +389,7 @@ paths:
       tags: [Area]
       operationId: listAreaPlayers
       summary: List Area Players
-      description: Returns the players currently in an area. Use `_` as area_id for the current area.
+      description: Returns the players currently in an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -398,7 +398,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       responses:
         "200":
           description: Player list.
@@ -495,7 +495,7 @@ paths:
       description: |
         Send an in-character message to an area. The message is a
         composition of animated objects, text, audio cues, shader effects,
-        and event-driven transitions. Use `_` as area_id for the current area.
+        and event-driven transitions. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -504,7 +504,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       requestBody:
         required: true
         content:
@@ -545,7 +545,7 @@ paths:
       tags: [Chat]
       operationId: sendOoc
       summary: Send OOC Message
-      description: Send an out-of-character chat message to an area. Use `_` as area_id for the current area.
+      description: Send an out-of-character chat message to an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -554,7 +554,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       requestBody:
         required: true
         content:
@@ -606,7 +606,7 @@ paths:
       tags: [Area]
       operationId: setBackground
       summary: Set Background
-      description: Change the background in an area. Use `_` as area_id for the current area.
+      description: Change the background in an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -615,7 +615,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       requestBody:
         required: true
         content:
@@ -658,7 +658,7 @@ paths:
       tags: [Area]
       operationId: playMusic
       summary: Play Music
-      description: Play a music track in an area. Use `_` as area_id for the current area.
+      description: Play a music track in an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -667,7 +667,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       requestBody:
         required: true
         content:
@@ -716,7 +716,7 @@ paths:
       tags: [Area]
       operationId: setHealthBar
       summary: Set Health Bar
-      description: Set the defense or prosecution health bar in an area. Use `_` as area_id for the current area.
+      description: Set the defense or prosecution health bar in an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -725,7 +725,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       requestBody:
         required: true
         content:
@@ -762,7 +762,7 @@ paths:
       tags: [Area]
       operationId: setTimer
       summary: Set Timer
-      description: Create, start, pause, or set a timer in an area. Use `_` as area_id for the current area.
+      description: Create, start, pause, or set a timer in an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -771,7 +771,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       requestBody:
         required: true
         content:
@@ -814,7 +814,7 @@ paths:
       tags: [Evidence]
       operationId: listEvidence
       summary: List Evidence
-      description: Returns the evidence list for an area. Use `_` as area_id for the current area.
+      description: Returns the evidence list for an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -823,7 +823,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
       responses:
         "200":
           description: Evidence list.
@@ -846,7 +846,7 @@ paths:
       tags: [Evidence]
       operationId: addEvidence
       summary: Add Evidence
-      description: Add a piece of evidence to an area. Use `_` as area_id for the current area.
+      description: Add a piece of evidence to an area. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       requestBody:
@@ -877,7 +877,7 @@ paths:
       tags: [Evidence]
       operationId: editEvidence
       summary: Edit Evidence
-      description: Edit a piece of evidence by index. Use `_` as area_id for the current area.
+      description: Edit a piece of evidence by index. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -886,7 +886,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
         - name: index
           in: path
           required: true
@@ -925,7 +925,7 @@ paths:
       tags: [Evidence]
       operationId: deleteEvidence
       summary: Delete Evidence
-      description: Remove a piece of evidence by index. Use `_` as area_id for the current area.
+      description: Remove a piece of evidence by index. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -934,7 +934,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, or `_` for current area.
+          description: Area identifier, `_` for current area, or `*` for all areas.
         - name: index
           in: path
           required: true
