@@ -43,9 +43,11 @@ void MusicAreaWidget::handle_events() {
             cs.area_cm.assign(n, "Unknown");
             cs.area_lock.assign(n, "Unknown");
         }
+        tracks_trimmed_.resize(cs.tracks.size());
         tracks_lower_.resize(cs.tracks.size());
         for (size_t i = 0; i < cs.tracks.size(); i++) {
-            tracks_lower_[i] = StringHelpers::trim_song_name(cs.tracks[i]);
+            tracks_trimmed_[i] = StringHelpers::trim_song_name(cs.tracks[i]);
+            tracks_lower_[i] = tracks_trimmed_[i];
             std::transform(tracks_lower_[i].begin(), tracks_lower_[i].end(), tracks_lower_[i].begin(),
                            [](unsigned char c) { return std::tolower(c); });
         }
@@ -163,7 +165,7 @@ void MusicAreaWidget::render() {
                                    ((i < (int)tracks_lower_.size()) && matches_filter(tracks_lower_[i], lower_filter));
 
                     if (tree_open && (lower_filter.empty() || matches)) {
-                        if (ImGui::Selectable(StringHelpers::trim_song_name(item).c_str())) {
+                        if (ImGui::Selectable(tracks_trimmed_[i].c_str())) {
                             std::string showname = state_->showname;
                             EventManager::instance().get_channel<OutgoingMusicEvent>().publish(
                                 OutgoingMusicEvent(item, showname));
