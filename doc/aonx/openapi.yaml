@@ -971,6 +971,9 @@ components:
     IcMessage:
       type: object
       properties:
+        position:
+          type: string
+          description: Background position to display at (e.g. "def", "pro", "wit"). Must match a position defined in the current background manifest.
         objects:
           type: array
           items:
