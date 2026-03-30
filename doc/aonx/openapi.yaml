@@ -317,6 +317,12 @@ paths:
                 status:
                   type: string
                   description: New area status.
+                locked:
+                  type: boolean
+                  description: Lock or unlock the area.
+                cm:
+                  type: string
+                  description: Set the case maker. Empty string to clear.
       responses:
         "200":
           description: Area updated.
