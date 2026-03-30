@@ -861,10 +861,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  accepted:
-                    type: boolean
+                $ref: "#/components/schemas/EvidenceItem"
         "401":
           description: Token is invalid or already expired.
           content:
@@ -872,12 +869,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /areas/{area_id}/evidence/{index}:
+  /areas/{area_id}/evidence/{evidence_id}:
     put:
       tags: [Evidence]
       operationId: editEvidence
       summary: Edit Evidence
-      description: Edit a piece of evidence by index. Use `_` for current area, `*` for all areas.
+      description: Edit a piece of evidence. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -887,12 +884,12 @@ paths:
           schema:
             type: string
           description: Area identifier, `_` for current area, or `*` for all areas.
-        - name: index
+        - name: evidence_id
           in: path
           required: true
           schema:
-            type: integer
-          description: Zero-based index of the evidence item.
+            type: string
+          description: Evidence identifier.
       requestBody:
         required: true
         content:
@@ -916,7 +913,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "404":
-          description: Evidence index out of range.
+          description: Evidence not found.
           content:
             application/json:
               schema:
@@ -925,7 +922,7 @@ paths:
       tags: [Evidence]
       operationId: deleteEvidence
       summary: Delete Evidence
-      description: Remove a piece of evidence by index. Use `_` for current area, `*` for all areas.
+      description: Remove a piece of evidence. Use `_` for current area, `*` for all areas.
       security:
         - sessionToken: []
       parameters:
@@ -935,12 +932,12 @@ paths:
           schema:
             type: string
           description: Area identifier, `_` for current area, or `*` for all areas.
-        - name: index
+        - name: evidence_id
           in: path
           required: true
           schema:
-            type: integer
-          description: Zero-based index of the evidence item.
+            type: string
+          description: Evidence identifier.
       responses:
         "204":
           description: Evidence removed.
@@ -1724,10 +1721,15 @@ components:
     # -------------------------------------------------------------------------
     Area:
       type: object
+      description: |
+        All identifiers (area id, evidence id, action id, etc.) are
+        opaque server-assigned tokens. Clients MUST NOT assume any
+        particular format. In practice, these are typically short
+        hex strings.
       properties:
         id:
           type: string
-          description: Area identifier. Use this in area-scoped endpoints.
+          description: Server-assigned unique identifier. Opaque string.
         name:
           type: string
           description: Area display name.
@@ -1904,6 +1906,9 @@ components:
     EvidenceItem:
       type: object
       properties:
+        id:
+          type: string
+          description: Server-assigned unique identifier. Opaque string.
         name:
           type: string
           description: Evidence display name.
@@ -1912,7 +1917,7 @@ components:
           description: Evidence description text.
         image:
           type: string
-          description: Evidence image filename or asset hash.
+          description: Asset hash of the evidence image.
 
     # -------------------------------------------------------------------------
     # SSE event schemas
