@@ -40,6 +40,7 @@ set(TEST_SOURCES
     game/test_ServerList.cpp
     game/test_Session.cpp
     game/test_TickProfiler.cpp
+    game/test_GameThread.cpp
     render/test_AnimationPlayer.cpp
     render/test_Layer.cpp
     render/test_StateBuffer.cpp

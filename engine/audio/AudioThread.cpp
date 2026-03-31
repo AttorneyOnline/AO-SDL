@@ -27,35 +27,26 @@ static constexpr int CH_BLIP_BASE = 7;
 static constexpr int CH_BLIP_COUNT = 5;
 
 AudioThread::AudioThread(IAudioDevice& device, MountManager& mounts)
-    : running_(true), device_(device), mounts_(mounts), thread_(&AudioThread::audio_loop, this) {
+    : device_(device), mounts_(mounts), thread_([this](std::stop_token st) { audio_loop(st); }) {
 }
 
 void AudioThread::stop() {
-    running_ = false;
+    thread_.request_stop();
     if (thread_.joinable())
         thread_.join();
 
-    // Join all download threads
+    // Request stop on each download thread, then clear the vector.
+    // jthread destructors join after request_stop().
     std::lock_guard lock(downloads_mutex_);
-    for (auto& t : download_threads_) {
-        if (t.joinable())
-            t.join();
-    }
+    for (auto& t : download_threads_)
+        t.request_stop();
     download_threads_.clear();
 }
 
 void AudioThread::cleanup_downloads() {
     std::lock_guard lock(downloads_mutex_);
     download_threads_.erase(std::remove_if(download_threads_.begin(), download_threads_.end(),
-                                           [](std::thread& t) {
-                                               if (t.joinable()) {
-                                                   // Try to join completed threads (non-blocking check isn't
-                                                   // directly available, so we accept a small leak of finished
-                                                   // threads until cleanup is called with joinable threads)
-                                                   return false;
-                                               }
-                                               return true;
-                                           }),
+                                           [](std::jthread& t) { return !t.joinable(); }),
                             download_threads_.end());
 }
 
@@ -123,13 +114,13 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
     auto stream_ref = stream; // capture shared_ptr
     std::lock_guard lock(downloads_mutex_);
     bool is_url = path.starts_with("http://") || path.starts_with("https://");
-    download_threads_.emplace_back([this, stream_ref, path, loop, is_url]() {
+    download_threads_.emplace_back([this, stream_ref, path, loop, is_url](std::stop_token st) {
         // Direct URL: stream from the URL without mount path resolution
         if (is_url) {
             Log::log_print(INFO, "AudioThread: streaming from URL: '%s'", path.c_str());
             bool found = mounts_.fetch_streaming_url(path, [&](const uint8_t* data, size_t len) -> bool {
                 stream_ref->feed(data, len);
-                return !stream_ref->is_cancelled();
+                return !stream_ref->is_cancelled() && !st.stop_requested();
             });
             stream_ref->mark_complete();
             if (!found) {
@@ -181,13 +172,13 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
             // Fall back to HTTP streaming
             bool found = mounts_.fetch_streaming("sounds/music/" + path, [&](const uint8_t* data, size_t len) -> bool {
                 stream_ref->feed(data, len);
-                return !stream_ref->is_cancelled();
+                return !stream_ref->is_cancelled() && !st.stop_requested();
             });
 
             if (!found) {
                 found = mounts_.fetch_streaming("music/" + path, [&](const uint8_t* data, size_t len) -> bool {
                     stream_ref->feed(data, len);
-                    return !stream_ref->is_cancelled();
+                    return !stream_ref->is_cancelled() && !st.stop_requested();
                 });
             }
 
@@ -204,7 +195,7 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
     });
 }
 
-void AudioThread::audio_loop() {
+void AudioThread::audio_loop(std::stop_token st) {
     int sfx_slot = 0;
     int blip_slot = 0;
 
@@ -214,7 +205,7 @@ void AudioThread::audio_loop() {
     float sfx_volume = 0.125f;
     float blip_volume = 0.125f;
 
-    while (running_) {
+    while (!st.stop_requested()) {
         auto tick_start = std::chrono::steady_clock::now();
 
         // --- Play SFX (pre-decoded) ---

@@ -97,9 +97,10 @@ int AudioStream::stream_read(uint8_t* buf, int count) {
     std::unique_lock lock(raw_mutex_);
 
     // Wait until data is available, EOF, or cancelled
-    raw_cv_.wait(lock, [&] { return raw_read_pos_ < raw_data_.size() || raw_complete_ || cancelled_.load(); });
+    raw_cv_.wait(lock,
+                 [&] { return raw_read_pos_ < raw_data_.size() || raw_complete_ || stop_source_.stop_requested(); });
 
-    if (cancelled_.load())
+    if (stop_source_.stop_requested())
         return 0;
 
     size_t avail = raw_data_.size() - raw_read_pos_;
@@ -159,8 +160,7 @@ AudioStream::AudioStream() : pcm_ring_(RING_CAPACITY) {
 
 AudioStream::~AudioStream() {
     cancel();
-    if (decode_thread_.joinable())
-        decode_thread_.join();
+    // jthread destructor auto-joins
 }
 
 void AudioStream::feed(const uint8_t* data, size_t len) {
@@ -179,8 +179,8 @@ void AudioStream::mark_complete() {
     raw_cv_.notify_one();
 
     // Start the decode thread now that all data is available.
-    if (!decode_thread_.joinable() && !cancelled_.load(std::memory_order_acquire) && !raw_data_.empty()) {
-        decode_thread_ = std::thread(&AudioStream::decode_thread_func, this);
+    if (!decode_thread_.joinable() && !stop_source_.stop_requested() && !raw_data_.empty()) {
+        decode_thread_ = std::jthread([this](std::stop_token) { decode_thread_func(stop_source_.get_token()); });
     }
     else if (!decode_thread_.joinable()) {
         finished_.store(true, std::memory_order_release);
@@ -194,7 +194,7 @@ int AudioStream::read_frames(float* output, int frame_count) {
 }
 
 void AudioStream::cancel() {
-    cancelled_.store(true, std::memory_order_release);
+    stop_source_.request_stop();
     raw_cv_.notify_all();
 }
 
@@ -211,7 +211,7 @@ void AudioStream::set_looping(bool loop) {
 // AudioStream — decode thread
 // =============================================================================
 
-void AudioStream::decode_thread_func() {
+void AudioStream::decode_thread_func(std::stop_token /*st*/) {
     float buf[5760 * 2]; // Max opus frame size * stereo
 
     bool first_pass = true;
@@ -245,7 +245,7 @@ void AudioStream::decode_thread_func() {
             bool ma_first_pass = true;
 
             for (;;) {
-                if (cancelled_.load(std::memory_order_acquire))
+                if (stop_source_.stop_requested())
                     break;
 
                 // On loop passes, seek to loop_start
@@ -261,7 +261,7 @@ void AudioStream::decode_thread_func() {
                 constexpr size_t CHUNK_FRAMES = 4096;
                 float ma_buf[CHUNK_FRAMES * 2];
                 bool reached_end = false;
-                while (!cancelled_.load(std::memory_order_acquire)) {
+                while (!stop_source_.stop_requested()) {
                     // Check loop end point
                     if (ma_loop_end > 0) {
                         ma_uint64 cursor = 0;
@@ -281,7 +281,7 @@ void AudioStream::decode_thread_func() {
 
                     size_t samples = static_cast<size_t>(frames_read) * 2;
                     size_t written = 0;
-                    while (written < samples && !cancelled_.load(std::memory_order_acquire)) {
+                    while (written < samples && !stop_source_.stop_requested()) {
                         size_t n = pcm_ring_.write(ma_buf + written, samples - written);
                         written += n;
                         if (written < samples)
@@ -289,7 +289,7 @@ void AudioStream::decode_thread_func() {
                     }
                 }
 
-                if (!reached_end || cancelled_.load(std::memory_order_acquire))
+                if (!reached_end || stop_source_.stop_requested())
                     break;
                 if (!looping_.load(std::memory_order_acquire))
                     break;
@@ -320,7 +320,7 @@ void AudioStream::decode_thread_func() {
         first_pass = false;
 
         // Decode loop
-        while (!cancelled_.load(std::memory_order_acquire)) {
+        while (!stop_source_.stop_requested()) {
             // Check loop end point
             if (loop_end > 0) {
                 ogg_int64_t current = op_pcm_tell(of);
@@ -338,7 +338,7 @@ void AudioStream::decode_thread_func() {
 
             size_t samples = static_cast<size_t>(ret) * 2;
             size_t written = 0;
-            while (written < samples && !cancelled_.load(std::memory_order_acquire)) {
+            while (written < samples && !stop_source_.stop_requested()) {
                 size_t n = pcm_ring_.write(buf + written, samples - written);
                 written += n;
                 if (written < samples)
@@ -348,12 +348,12 @@ void AudioStream::decode_thread_func() {
 
         op_free(of);
 
-        if (cancelled_.load(std::memory_order_acquire))
+        if (stop_source_.stop_requested())
             break;
 
         bool should_loop = looping_.load(std::memory_order_acquire);
         Log::log_print(INFO, "AudioStream: decode pass finished, looping=%d, cancelled=%d", should_loop,
-                       cancelled_.load());
+                       stop_source_.stop_requested());
 
         // If looping, reset raw read position and reopen the decoder
         if (should_loop) {
@@ -368,6 +368,5 @@ void AudioStream::decode_thread_func() {
         break; // Not looping → done
     }
 
-    decode_done_.store(true, std::memory_order_release);
     finished_.store(true, std::memory_order_release);
 }
