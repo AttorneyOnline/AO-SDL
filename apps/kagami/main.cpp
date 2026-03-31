@@ -4,8 +4,11 @@
 #include "kagami/ProtocolRouter.h"
 
 #include "game/GameRoom.h"
+#include "net/EndpointFactory.h"
 #include "net/KissnetServerSocket.h"
+#include "net/RestRouter.h"
 #include "net/WebSocketServer.h"
+#include "net/nx/NXEndpoint.h"
 #include "utils/Log.h"
 
 #include <httplib.h>
@@ -59,12 +62,37 @@ int main(int /*argc*/, char* argv[]) {
 
     Log::log_print(INFO, "Server: %s", cfg.server_name().c_str());
 
+    // --- Shared game state ---
+    GameRoom room;
+    room.server_name = cfg.server_name();
+    room.server_description = cfg.server_description();
+    room.max_players = cfg.max_players();
+    room.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
+    room.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
+    room.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
+    room.reset_taken();
+
+    // --- Protocol backends ---
+    AOServer ao_backend(room); // AO2: WebSocket bidirectional
+    NXServer nx_backend(room); // AONX: REST + SSE (no WebSocket)
+    ProtocolRouter router(ao_backend);
+
     // --- HTTP server (runs on its own thread pool) ---
     httplib::Server http;
 
     http.Get("/", [&](const httplib::Request&, httplib::Response& res) {
         res.set_content("Hello from " + cfg.server_name() + "\n", "text/plain");
     });
+
+    // --- REST API (AONX endpoints registered via EndpointFactory) ---
+    nx_register_endpoints();
+    NXEndpoint::set_server(&nx_backend);
+
+    RestRouter rest_router;
+    rest_router.set_auth_func(
+        [&room](const std::string& token) -> ServerSession* { return room.find_session_by_token(token); });
+    EndpointFactory::instance().populate(rest_router);
+    rest_router.bind(http);
 
     if (!http.bind_to_port(cfg.bind_address(), cfg.http_port())) {
         Log::log_print(ERR, "Failed to bind HTTP on %s:%d", cfg.bind_address().c_str(), cfg.http_port());
@@ -77,31 +105,12 @@ int main(int /*argc*/, char* argv[]) {
     // --- WebSocket server + protocol routing ---
     auto listener = std::make_unique<KissnetServerSocket>(cfg.bind_address());
     WebSocketServer ws(std::move(listener));
-    ws.set_supported_subprotocols({"aonx", "ao2"});
-
-    // --- Shared game state ---
-    GameRoom room;
-    room.server_name = cfg.server_name();
-    room.server_description = cfg.server_description();
-    room.max_players = cfg.max_players();
-    room.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
-    room.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
-    room.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
-    room.reset_taken();
-
-    // --- Protocol backends (thin serialization adapters over shared room) ---
-    AOServer ao_backend(room);
-    NXServer nx_backend(room);
-    ProtocolRouter router(ao_backend, nx_backend);
-
-    router.set_subprotocol_func([&ws](uint64_t id) { return ws.get_client_subprotocol(id); });
-
-    // Wire send functions to WebSocket transport
+    // Wire AO2 send function to WebSocket transport.
+    // AONX clients use REST+SSE — no WebSocket involvement.
     auto ws_send = [&ws](uint64_t id, const std::string& data) {
         ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
     };
     ao_backend.set_send_func(ws_send);
-    nx_backend.set_send_func(ws_send);
 
     ws.on_client_connected([&router](WebSocketServer::ClientId id) { router.on_client_connected(id); });
     ws.on_client_disconnected([&router](WebSocketServer::ClientId id) { router.on_client_disconnected(id); });
@@ -109,8 +118,9 @@ int main(int /*argc*/, char* argv[]) {
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
 
-    // --- WS poll thread ---
+    // --- WS poll + session expiry thread ---
     std::jthread ws_thread([&](std::stop_token st) {
+        auto last_sweep = std::chrono::steady_clock::now();
         while (!st.stop_requested()) {
             auto frames = ws.poll();
             for (auto& [client_id, frame] : frames) {
@@ -118,6 +128,14 @@ int main(int /*argc*/, char* argv[]) {
                 Log::log_print(VERBOSE, "WS frame from %llu: %s", (unsigned long long)client_id, data.c_str());
                 router.on_client_message(client_id, data);
             }
+
+            // Periodic session expiry sweep (~every 30s)
+            auto now = std::chrono::steady_clock::now();
+            if (now - last_sweep > std::chrono::seconds(30)) {
+                rest_router.with_lock([&] { room.expire_sessions(cfg.session_ttl_seconds()); });
+                last_sweep = now;
+            }
+
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     });

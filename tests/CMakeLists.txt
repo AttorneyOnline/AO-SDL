@@ -62,6 +62,7 @@ set(TEST_SOURCES
     net/test_WebSocketCommon.cpp
     net/test_WebSocketServer.cpp
     net/test_NXMessage.cpp
+    net/test_RestRouter.cpp
     ao/net/test_AOServer.cpp
 )
 

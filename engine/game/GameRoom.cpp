@@ -35,6 +35,39 @@ ServerSession* GameRoom::get_session(uint64_t client_id) {
     return it != sessions_.end() ? &it->second : nullptr;
 }
 
+ServerSession* GameRoom::find_session_by_token(const std::string& token) {
+    for (auto& [id, session] : sessions_) {
+        if (session.session_token == token)
+            return &session;
+    }
+    return nullptr;
+}
+
+int GameRoom::expire_sessions(int ttl_seconds) {
+    auto now = std::chrono::steady_clock::now();
+    int expired = 0;
+    for (auto it = sessions_.begin(); it != sessions_.end();) {
+        auto& session = it->second;
+        // Only expire REST sessions (those with tokens). AO2/WS sessions
+        // are managed by their transport layer.
+        if (!session.session_token.empty()) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session.last_activity).count();
+            if (elapsed > ttl_seconds) {
+                // Free character slot
+                if (session.character_id >= 0 && session.character_id < static_cast<int>(char_taken.size()))
+                    char_taken[session.character_id] = 0;
+                Log::log_print(INFO, "GameRoom: expired session %llu (inactive %llds)", (unsigned long long)it->first,
+                               (long long)elapsed);
+                it = sessions_.erase(it);
+                ++expired;
+                continue;
+            }
+        }
+        ++it;
+    }
+    return expired;
+}
+
 std::vector<ServerSession*> GameRoom::sessions_in_area(const std::string& area) {
     std::vector<ServerSession*> result;
     for (auto& [id, s] : sessions_) {

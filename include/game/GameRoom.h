@@ -58,6 +58,13 @@ class GameRoom {
         return sessions_.size();
     }
 
+    /// Find a session by its bearer token, or nullptr if not found.
+    ServerSession* find_session_by_token(const std::string& token);
+
+    /// Remove REST sessions that have been inactive for longer than ttl_seconds.
+    /// Returns the number of expired sessions removed.
+    int expire_sessions(int ttl_seconds);
+
     /// All sessions in a given area.
     std::vector<ServerSession*> sessions_in_area(const std::string& area);
 

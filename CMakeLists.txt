@@ -266,6 +266,8 @@ add_library(aoengine STATIC
     engine/render/GlyphCache.cpp
     engine/render/TextMeshBuilder.cpp
     engine/net/HttpPool.cpp
+    engine/net/EndpointFactory.cpp
+    engine/net/RestRouter.cpp
     engine/asset/MountHttp.cpp
     engine/asset/ImageDecoders.cpp
     engine/asset/formats/WebPDecoder.cpp
@@ -425,8 +427,11 @@ target_link_libraries(ao_net PUBLIC aoengine)
 
 add_library(nx_net STATIC
     plugins/net/nx/NXMessage.cpp
-    plugins/net/nx/NXClient.cpp
     plugins/net/nx/NXServer.cpp
+    plugins/net/nx/NXEndpoint.cpp
+    plugins/net/nx/endpoints/ServerPlayersEndpoint.cpp
+    plugins/net/nx/endpoints/SessionCreateEndpoint.cpp
+    plugins/net/nx/endpoints/SessionDeleteEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net

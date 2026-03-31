@@ -37,6 +37,10 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return value<std::string>("motd");
     }
 
+    int session_ttl_seconds() const {
+        return value<int>("session_ttl_seconds");
+    }
+
     static bool load_from_disk(const std::string& path);
     static bool save_to_disk(const std::string& path);
 
@@ -51,6 +55,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"bind_address", "0.0.0.0"},
             {"max_players", 100},
             {"motd", ""},
+            {"session_ttl_seconds", 300},
         });
     }
 };
