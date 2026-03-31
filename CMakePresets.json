@@ -94,6 +94,19 @@
             }
         },
         {
+            "name": "macos-release",
+            "displayName": "macOS Release",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
             "name": "ios-sim-debug",
             "displayName": "iOS Simulator Debug (Flutter)",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
