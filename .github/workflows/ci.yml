@@ -84,11 +84,11 @@ jobs:
 
       # ---- Configure ----
       - name: Configure
-        run: cmake -B build ${{ matrix.cmake_generator }} ${{ matrix.cmake_args }}
+        run: cmake -B build ${{ matrix.cmake_generator }} ${{ matrix.cmake_args }} -DPython3_ROOT_DIR="${pythonLocation}"
 
       - name: Configure (coverage)
         if: matrix.coverage
-        run: cmake -B build-coverage -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage"
+        run: cmake -B build-coverage -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage" -DPython3_ROOT_DIR="${pythonLocation}"
 
       # ---- Build ----
       - name: Build

@@ -498,6 +498,8 @@ target_link_libraries(nx_net PUBLIC aoengine)
 if(AOSDL_SCHEMAS_AVAILABLE)
     target_sources(nx_net PRIVATE "${AONX_SCHEMAS_CPP}")
     target_compile_definitions(nx_net PUBLIC AOSDL_HAS_GENERATED_SCHEMAS=1)
+else()
+    target_sources(nx_net PRIVATE engine/utils/GeneratedSchemasStub.cpp)
 endif()
 
 # --- kagami_server — server orchestration (protocol routing, room management) -
