@@ -71,6 +71,8 @@ int main(int /*argc*/, char* argv[]) {
     room.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
     room.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
     room.reset_taken();
+    room.build_char_id_index();
+    room.build_area_index();
 
     // --- Protocol backends ---
     AOServer ao_backend(room); // AO2: WebSocket bidirectional

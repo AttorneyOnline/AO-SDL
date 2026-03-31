@@ -114,41 +114,57 @@ TEST(MeshAsset, ConcurrentUpdateIndividualAccessorsAreAtomic) {
 // The snapshot() API returns vertices, indices, and generation atomically.
 // This is the pattern used by the renderer backends to get consistent data.
 TEST(MeshAsset, SnapshotIsAtomicallyConsistent) {
-    auto mesh = std::make_shared<MeshAsset>("test", make_quad_verts(), make_quad_indices());
+    // Start with vertices but no indices. The writer alternates between
+    // empty and populated indices, so the reader's generation > 0 check
+    // is only valid when indices came from an update (not the constructor).
+    auto mesh = std::make_shared<MeshAsset>("test", make_quad_verts(), std::vector<uint32_t>{});
 
     std::atomic<bool> done{false};
     std::atomic<int> reader_iters{0};
     std::atomic<int> safely_skipped{0};
 
+    // Both threads sleep on coprime intervals (7 and 11) to create varied
+    // interleaving without explicit coordination. The writer runs enough
+    // iterations with long enough sleeps that the reader is guaranteed to
+    // be scheduled and make progress before the writer finishes.
+    using ms = std::chrono::milliseconds;
+
     std::thread writer([&] {
-        for (int i = 0; i < 100'000 && !done; ++i) {
+        for (int i = 0; i < 1'000 && !done; ++i) {
             if (i % 2 == 0)
                 mesh->update(make_quad_verts(), {});
             else
                 mesh->update(make_quad_verts(), make_quad_indices());
+            if (i % 7 == 0)
+                std::this_thread::sleep_for(ms(1));
         }
         done = true;
     });
 
     std::thread reader([&] {
-        while (!done) {
+        // do-while guarantees at least one snapshot even if the reader
+        // thread starts after the writer finishes. In the common case
+        // both threads overlap and stress-test the mutex.
+        do {
             auto snap = mesh->snapshot();
 
             // Snapshot must be internally consistent: if indices are present,
             // vertices must also be present (and vice versa for our test data).
+            // Use EXPECT (not ASSERT) — ASSERT kills the thread on failure,
+            // swallowing the real error and leaving reader_iters at 0.
             if (!snap.indices.empty()) {
-                ASSERT_EQ(snap.indices.size(), 6u);
-                ASSERT_EQ(snap.vertices.size(), 4u);
-                // Generation is odd when indices are populated (update #1, #3, ...)
-                ASSERT_GT(snap.generation, 0u);
+                EXPECT_EQ(snap.indices.size(), 6u);
+                EXPECT_EQ(snap.vertices.size(), 4u);
+                EXPECT_GT(snap.generation, 0u);
             }
             else {
-                // Empty indices — vertices are still present in our test data
-                ASSERT_EQ(snap.vertices.size(), 4u);
+                EXPECT_EQ(snap.vertices.size(), 4u);
                 safely_skipped.fetch_add(1, std::memory_order_relaxed);
             }
             reader_iters.fetch_add(1, std::memory_order_relaxed);
-        }
+            if (reader_iters.load(std::memory_order_relaxed) % 11 == 0)
+                std::this_thread::sleep_for(ms(1));
+        } while (!done);
     });
 
     writer.join();

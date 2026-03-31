@@ -195,6 +195,35 @@ paths:
                     type: integer
                     description: Maximum player capacity.
 
+  /server/info:
+    get:
+      tags: [Server]
+      operationId: getServerInfo
+      summary: Server Info
+      description: |
+        Returns server software identity and the user-facing server name
+        and description. No authentication required.
+      responses:
+        "200":
+          description: Server info.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  software:
+                    type: string
+                    description: Server software name (e.g. "kagami").
+                  version:
+                    type: string
+                    description: Server software version (git short hash, e.g. "b5b570e").
+                  name:
+                    type: string
+                    description: User-facing server name.
+                  description:
+                    type: string
+                    description: User-facing server description. May be empty.
+
   /server/motd:
     get:
       tags: [Server]

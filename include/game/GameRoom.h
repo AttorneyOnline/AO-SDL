@@ -12,6 +12,7 @@
  */
 #pragma once
 
+#include "game/AreaState.h"
 #include "game/GameAction.h"
 #include "game/ServerSession.h"
 
@@ -94,6 +95,33 @@ class GameRoom {
         char_taken.assign(characters.size(), 0);
     }
 
+    // --- Character ID index (Phase 3) ---
+
+    /// Build the char_id ↔ index maps. Call after populating `characters`.
+    void build_char_id_index();
+
+    /// Find a character's vector index by its hash ID, or -1 if not found.
+    int find_char_index(const std::string& char_id) const;
+
+    /// Return the hash ID for a character at the given index.
+    const std::string& char_id_at(int index) const;
+
+    // --- Area state index (Phase 3) ---
+
+    /// Build per-area state structs. Call after populating `areas`.
+    void build_area_index();
+
+    /// Find area state by its hash ID, or nullptr.
+    AreaState* find_area(const std::string& area_id);
+
+    /// Find area state by display name, or nullptr.
+    AreaState* find_area_by_name(const std::string& area_name);
+
+    /// Read-only access to all area states (keyed by area_id).
+    const std::unordered_map<std::string, AreaState>& area_states() const {
+        return area_states_;
+    }
+
     // --- Actions (called by protocol backends) ---
 
     /// Process an IC message. Validates, then broadcasts to area via all delegates.
@@ -113,6 +141,15 @@ class GameRoom {
     std::unordered_map<uint64_t, ServerSession> sessions_;
     std::unordered_map<std::string, uint64_t> token_index_; ///< token → client_id for O(1) lookup.
     uint64_t next_session_id_ = 0;
+
+    // Character ID index (Phase 3)
+    std::vector<std::string> char_ids_;                     ///< Parallel to `characters`.
+    std::unordered_map<std::string, int> char_id_to_index_; ///< char_id hash → index.
+    static const std::string empty_char_id_;                ///< Returned for out-of-range index.
+
+    // Area state index (Phase 3)
+    std::unordered_map<std::string, AreaState> area_states_;       ///< area_id hash → state.
+    std::unordered_map<std::string, std::string> area_name_to_id_; ///< name → area_id.
 
     std::vector<ICBroadcast> ic_broadcasts_;
     std::vector<OOCBroadcast> ooc_broadcasts_;
