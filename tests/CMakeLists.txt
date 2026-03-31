@@ -50,6 +50,7 @@ set(TEST_SOURCES
     utils/test_Base64.cpp
     utils/test_BlendOps.cpp
     utils/test_JsonValidation.cpp
+    utils/test_JsonSchema.cpp
     utils/test_UTF8.cpp
     utils/test_Crypto.cpp
     utils/test_Log.cpp
