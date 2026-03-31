@@ -65,6 +65,10 @@ int GameRoom::expire_sessions(int ttl_seconds) {
         }
         ++it;
     }
+    if (expired > 0) {
+        for (auto& cb : chars_taken_broadcasts_)
+            cb(char_taken);
+    }
     return expired;
 }
 

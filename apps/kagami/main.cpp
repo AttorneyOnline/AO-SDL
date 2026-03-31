@@ -112,8 +112,12 @@ int main(int /*argc*/, char* argv[]) {
     };
     ao_backend.set_send_func(ws_send);
 
-    ws.on_client_connected([&router](WebSocketServer::ClientId id) { router.on_client_connected(id); });
-    ws.on_client_disconnected([&router](WebSocketServer::ClientId id) { router.on_client_disconnected(id); });
+    ws.on_client_connected([&rest_router, &router](WebSocketServer::ClientId id) {
+        rest_router.with_lock([&] { router.on_client_connected(id); });
+    });
+    ws.on_client_disconnected([&rest_router, &router](WebSocketServer::ClientId id) {
+        rest_router.with_lock([&] { router.on_client_disconnected(id); });
+    });
 
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
@@ -126,7 +130,7 @@ int main(int /*argc*/, char* argv[]) {
             for (auto& [client_id, frame] : frames) {
                 std::string data(frame.data.begin(), frame.data.end());
                 Log::log_print(VERBOSE, "WS frame from %llu: %s", (unsigned long long)client_id, data.c_str());
-                router.on_client_message(client_id, data);
+                rest_router.with_lock([&] { router.on_client_message(client_id, data); });
             }
 
             // Periodic session expiry sweep (~every 30s)
