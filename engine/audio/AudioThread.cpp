@@ -35,8 +35,11 @@ void AudioThread::stop() {
     if (thread_.joinable())
         thread_.join();
 
-    // jthread destructors auto-join download threads
+    // Request stop on each download thread, then clear the vector.
+    // jthread destructors join after request_stop().
     std::lock_guard lock(downloads_mutex_);
+    for (auto& t : download_threads_)
+        t.request_stop();
     download_threads_.clear();
 }
 
@@ -111,13 +114,13 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
     auto stream_ref = stream; // capture shared_ptr
     std::lock_guard lock(downloads_mutex_);
     bool is_url = path.starts_with("http://") || path.starts_with("https://");
-    download_threads_.emplace_back([this, stream_ref, path, loop, is_url]() {
+    download_threads_.emplace_back([this, stream_ref, path, loop, is_url](std::stop_token st) {
         // Direct URL: stream from the URL without mount path resolution
         if (is_url) {
             Log::log_print(INFO, "AudioThread: streaming from URL: '%s'", path.c_str());
             bool found = mounts_.fetch_streaming_url(path, [&](const uint8_t* data, size_t len) -> bool {
                 stream_ref->feed(data, len);
-                return !stream_ref->is_cancelled();
+                return !stream_ref->is_cancelled() && !st.stop_requested();
             });
             stream_ref->mark_complete();
             if (!found) {
@@ -169,13 +172,13 @@ void AudioThread::start_music_stream(const std::string& path, int channel, bool 
             // Fall back to HTTP streaming
             bool found = mounts_.fetch_streaming("sounds/music/" + path, [&](const uint8_t* data, size_t len) -> bool {
                 stream_ref->feed(data, len);
-                return !stream_ref->is_cancelled();
+                return !stream_ref->is_cancelled() && !st.stop_requested();
             });
 
             if (!found) {
                 found = mounts_.fetch_streaming("music/" + path, [&](const uint8_t* data, size_t len) -> bool {
                     stream_ref->feed(data, len);
-                    return !stream_ref->is_cancelled();
+                    return !stream_ref->is_cancelled() && !st.stop_requested();
                 });
             }
 
