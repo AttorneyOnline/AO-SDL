@@ -449,6 +449,47 @@ TEST(EndpointFactoryTest, GlobalRegistrarPopulatesToRouter) {
     Log::set_sink(nullptr);
 }
 
+TEST(EndpointFactoryTest, SessionCreateRejects503WhenFull) {
+    nx_register_endpoints();
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    GameRoom room;
+    room.areas = {"Lobby"};
+    room.max_players = 1;
+    NXServer nx(room);
+    NXEndpoint::set_server(&nx);
+
+    RestRouter router;
+    EndpointFactory::instance().populate(router);
+
+    httplib::Server http;
+    router.bind(http);
+    int port = http.bind_to_any_port("127.0.0.1");
+    ASSERT_GT(port, 0);
+
+    std::thread t([&] { http.listen_after_bind(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    httplib::Client cli("127.0.0.1", port);
+    std::string session_body = R"({"client_name":"test","client_version":"1.0","hdid":"abc"})";
+
+    // First session should succeed
+    auto res1 = cli.Post("/aonx/v1/session", session_body, "application/json");
+    ASSERT_TRUE(res1);
+    EXPECT_EQ(res1->status, 201);
+
+    // Second session should be rejected — server is full (max_players=1)
+    auto res2 = cli.Post("/aonx/v1/session", session_body, "application/json");
+    ASSERT_TRUE(res2);
+    EXPECT_EQ(res2->status, 503);
+    auto body = nlohmann::json::parse(res2->body);
+    EXPECT_EQ(body["reason"], "Server is full");
+
+    http.stop();
+    t.join();
+    Log::set_sink(nullptr);
+}
+
 // -- with_lock concurrency test ----------------------------------------------
 
 TEST_F(RestRouterTest, WithLockSerializesAccess) {
