@@ -173,7 +173,7 @@ jobs:
   # ---- Build & push Kagami Docker image to GHCR ----
   docker:
     name: Docker (Kagami)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [build]
     permissions:
