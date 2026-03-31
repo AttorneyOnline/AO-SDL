@@ -32,7 +32,7 @@ servers:
         default: http
         enum: [https, http]
       host:
-        default: 35.95.250.121
+        default: canary.attorneyoffline.de
 
 paths:
   # ---------------------------------------------------------------------------
