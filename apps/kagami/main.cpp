@@ -1,13 +1,12 @@
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
-#include "kagami/ProtocolRouter.h"
-
 #include "game/GameRoom.h"
 #include "net/EndpointFactory.h"
 #include "net/KissnetServerSocket.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketServer.h"
+#include "net/ao/AOServer.h"
 #include "net/nx/NXEndpoint.h"
 #include "utils/Log.h"
 
@@ -75,8 +74,6 @@ int main(int /*argc*/, char* argv[]) {
     // --- Protocol backends ---
     AOServer ao_backend(room); // AO2: WebSocket bidirectional
     NXServer nx_backend(room); // AONX: REST + SSE (no WebSocket)
-    ProtocolRouter router(ao_backend);
-
     // --- HTTP server (runs on its own thread pool) ---
     httplib::Server http;
 
@@ -113,11 +110,11 @@ int main(int /*argc*/, char* argv[]) {
     };
     ao_backend.set_send_func(ws_send);
 
-    ws.on_client_connected([&rest_router, &router](WebSocketServer::ClientId id) {
-        rest_router.with_lock([&] { router.on_client_connected(id); });
+    ws.on_client_connected([&rest_router, &ao_backend](WebSocketServer::ClientId id) {
+        rest_router.with_lock([&] { ao_backend.on_client_connected(id); });
     });
-    ws.on_client_disconnected([&rest_router, &router](WebSocketServer::ClientId id) {
-        rest_router.with_lock([&] { router.on_client_disconnected(id); });
+    ws.on_client_disconnected([&rest_router, &ao_backend](WebSocketServer::ClientId id) {
+        rest_router.with_lock([&] { ao_backend.on_client_disconnected(id); });
     });
 
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
@@ -131,7 +128,7 @@ int main(int /*argc*/, char* argv[]) {
             for (auto& [client_id, frame] : frames) {
                 std::string data(frame.data.begin(), frame.data.end());
                 Log::log_print(VERBOSE, "WS frame from %llu: %s", (unsigned long long)client_id, data.c_str());
-                rest_router.with_lock([&] { router.on_client_message(client_id, data); });
+                rest_router.with_lock([&] { ao_backend.on_client_message(client_id, data); });
             }
 
             // Periodic session expiry sweep (~every 30s)
