@@ -37,6 +37,16 @@ class SessionCreateEndpoint : public NXEndpoint {
             return RestResponse::error(400, "Missing required fields: client_name, client_version, hdid");
         }
 
+        // Sanitize: cap lengths and strip control characters.
+        auto sanitize = [](std::string& s, size_t max_len) {
+            if (s.size() > max_len)
+                s.resize(max_len);
+            std::erase_if(s, [](unsigned char c) { return c < 0x20; });
+        };
+        sanitize(client_name, 64);
+        sanitize(client_version, 32);
+        sanitize(hdid, 128);
+
         auto token = server().create_session(hdid, client_name, client_version);
 
         return RestResponse::json(201, {
