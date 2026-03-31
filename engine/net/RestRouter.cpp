@@ -63,7 +63,6 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const httplib::Request& req, h
         RestRequest rest_req;
         rest_req.method = req.method;
         rest_req.path = req.path;
-        rest_req.raw = &req;
 
         for (auto& [key, value] : req.path_params)
             rest_req.path_params[key] = value;

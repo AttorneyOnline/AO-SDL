@@ -6,10 +6,6 @@
 #include <string>
 #include <unordered_map>
 
-namespace httplib {
-struct Request;
-}
-
 struct ServerSession;
 
 /// Protocol-agnostic representation of an incoming REST request.
@@ -22,5 +18,4 @@ struct RestRequest {
     std::optional<nlohmann::json> body;
     std::string bearer_token;
     ServerSession* session = nullptr; ///< Non-null after successful auth.
-    const httplib::Request* raw = nullptr;
 };
