@@ -14,6 +14,7 @@
 #include "asset/ShaderAsset.h"
 
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
 
 static std::string load_metal_source(const std::string &path) {
@@ -217,19 +218,37 @@ struct MetalRendererImpl {
     };
     std::unordered_map<const MeshAsset *, MeshCacheEntry> mesh_cache;
 
-    std::pair<id<MTLBuffer>, id<MTLBuffer>> get_mesh_buffers(const std::shared_ptr<MeshAsset> &mesh) {
+    struct MeshBuffers {
+        id<MTLBuffer> vb;
+        id<MTLBuffer> ib;
+        size_t index_count;
+    };
+
+    std::optional<MeshBuffers> get_mesh_buffers(const std::shared_ptr<MeshAsset> &mesh) {
         auto it = mesh_cache.find(mesh.get());
         if (it != mesh_cache.end() && it->second.generation == mesh->generation())
-            return {it->second.vb, it->second.ib};
+            return MeshBuffers{it->second.vb, it->second.ib, it->second.index_count};
 
-        id<MTLBuffer> vb = [device newBufferWithBytes:mesh->vertices().data()
-                                               length:mesh->vertices().size() * sizeof(MeshVertex)
+        // Take an atomic snapshot so vertex/index data is consistent.
+        auto snap = mesh->snapshot();
+        size_t vert_bytes = snap.vertices.size() * sizeof(MeshVertex);
+        size_t idx_bytes = snap.indices.size() * sizeof(uint32_t);
+        size_t idx_count = snap.indices.size();
+
+        if (vert_bytes == 0 || idx_bytes == 0)
+            return std::nullopt;
+
+        id<MTLBuffer> vb = [device newBufferWithBytes:snap.vertices.data()
+                                               length:vert_bytes
                                               options:MTLResourceStorageModeShared];
-        id<MTLBuffer> ib = [device newBufferWithBytes:mesh->indices().data()
-                                               length:mesh->indices().size() * sizeof(uint32_t)
+        id<MTLBuffer> ib = [device newBufferWithBytes:snap.indices.data()
+                                               length:idx_bytes
                                               options:MTLResourceStorageModeShared];
-        mesh_cache[mesh.get()] = {mesh, vb, ib, mesh->generation(), mesh->index_count()};
-        return {vb, ib};
+        if (!vb || !ib)
+            return std::nullopt;
+
+        mesh_cache[mesh.get()] = {mesh, vb, ib, snap.generation, idx_count};
+        return MeshBuffers{vb, ib, idx_count};
     }
 
     void evict_expired_meshes() {
@@ -806,13 +825,13 @@ struct MetalRendererImpl {
                         } // end !wireframe
 
                         const auto &mesh = layer.get_mesh();
-                        if (mesh && mesh->index_count() > 0) {
-                            auto [mvb, mib] = get_mesh_buffers(mesh);
-                            [enc setVertexBuffer:mvb offset:0 atIndex:0];
+                        auto mesh_bufs = (mesh && mesh->index_count() > 0) ? get_mesh_buffers(mesh) : std::nullopt;
+                        if (mesh_bufs) {
+                            [enc setVertexBuffer:mesh_bufs->vb offset:0 atIndex:0];
                             [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-                                            indexCount:mesh->index_count()
+                                            indexCount:mesh_bufs->index_count
                                              indexType:MTLIndexTypeUInt32
-                                           indexBuffer:mib
+                                           indexBuffer:mesh_bufs->ib
                                      indexBufferOffset:0];
                             // Restore default quad VB for subsequent layers
                             [enc setVertexBuffer:quad_vb offset:0 atIndex:0];

@@ -59,6 +59,7 @@ set(TEST_SOURCES
     audio/test_AudioStream.cpp
     ao/ui/test_Screens.cpp
     render/test_TextMeshBuilder.cpp
+    render/test_MeshAsset.cpp
     configuration/test_IConfiguration.cpp
     configuration/test_JsonConfiguration.cpp
     net/test_WebSocketCommon.cpp

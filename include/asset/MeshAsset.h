@@ -7,6 +7,7 @@
 #include "Asset.h"
 
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 /// Vertex layout matching the existing GL/Metal quad vertex format.
@@ -32,32 +33,50 @@ class MeshAsset : public Asset {
         : Asset(path, "mesh"), vertices_(std::move(vertices)), indices_(std::move(indices)) {
     }
 
-    const std::vector<MeshVertex>& vertices() const {
+    std::vector<MeshVertex> vertices() const {
+        std::lock_guard lock(mutex_);
         return vertices_;
     }
-    const std::vector<uint32_t>& indices() const {
+    std::vector<uint32_t> indices() const {
+        std::lock_guard lock(mutex_);
         return indices_;
     }
     size_t index_count() const {
+        std::lock_guard lock(mutex_);
         return indices_.size();
+    }
+
+    /// Snapshot all mesh data atomically for rendering.
+    struct Snapshot {
+        std::vector<MeshVertex> vertices;
+        std::vector<uint32_t> indices;
+        uint64_t generation;
+    };
+    Snapshot snapshot() const {
+        std::lock_guard lock(mutex_);
+        return {vertices_, indices_, generation_};
     }
 
     /// Update vertex and index data (bumps generation for renderer cache invalidation).
     void update(std::vector<MeshVertex> vertices, std::vector<uint32_t> indices) {
+        std::lock_guard lock(mutex_);
         vertices_ = std::move(vertices);
         indices_ = std::move(indices);
         generation_++;
     }
 
     uint64_t generation() const {
+        std::lock_guard lock(mutex_);
         return generation_;
     }
 
     size_t memory_size() const override {
+        std::lock_guard lock(mutex_);
         return vertices_.size() * sizeof(MeshVertex) + indices_.size() * sizeof(uint32_t);
     }
 
   private:
+    mutable std::mutex mutex_;
     std::vector<MeshVertex> vertices_;
     std::vector<uint32_t> indices_;
     uint64_t generation_ = 0;

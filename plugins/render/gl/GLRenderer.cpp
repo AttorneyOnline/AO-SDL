@@ -187,13 +187,13 @@ GLRenderer::MeshCacheEntry& GLRenderer::get_mesh_entry(const std::shared_ptr<Mes
         glGenBuffers(1, &entry.ebo);
     }
 
+    auto snap = mesh->snapshot();
+
     glBindVertexArray(entry.vao);
     glBindBuffer(GL_ARRAY_BUFFER, entry.vbo);
-    glBufferData(GL_ARRAY_BUFFER, mesh->vertices().size() * sizeof(MeshVertex), mesh->vertices().data(),
-                 GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, snap.vertices.size() * sizeof(MeshVertex), snap.vertices.data(), GL_DYNAMIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entry.ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices().size() * sizeof(uint32_t), mesh->indices().data(),
-                 GL_DYNAMIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, snap.indices.size() * sizeof(uint32_t), snap.indices.data(), GL_DYNAMIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)0);
@@ -204,8 +204,8 @@ GLRenderer::MeshCacheEntry& GLRenderer::get_mesh_entry(const std::shared_ptr<Mes
     glBindVertexArray(0);
 
     entry.asset = mesh;
-    entry.generation = mesh->generation();
-    entry.index_count = mesh->index_count();
+    entry.generation = snap.generation;
+    entry.index_count = snap.indices.size();
     mesh_cache_[mesh.get()] = entry;
     return mesh_cache_[mesh.get()];
 }
