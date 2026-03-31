@@ -1,15 +1,7 @@
 #include "net/WebSocketCommon.h"
 
-// sha1.h uses htonl — include platform network headers before it.
-#ifdef _WIN32
-#include <winsock2.h>
-#else
-#include <arpa/inet.h>
-#endif
-
 #include "utils/Base64.h"
-
-#include <sha1.h>
+#include "utils/Crypto.h"
 
 #include <cctype>
 #include <stdexcept>
@@ -174,14 +166,8 @@ std::vector<std::string> get_lines(std::span<uint8_t> input, std::vector<uint8_t
 
 std::string compute_accept_key(const std::string& client_key_b64) {
     static const std::string magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    std::string concat = client_key_b64 + magic_string;
-
-    SHA1 sha;
-    sha.update(concat);
-    const std::string hashstr = sha.final();
-    const std::vector<uint8_t> hash(hashstr.begin(), hashstr.end());
-
-    return Base64::encode(hash);
+    auto raw = crypto::sha1_raw(client_key_b64 + magic_string);
+    return Base64::encode(raw);
 }
 
 } // namespace ws

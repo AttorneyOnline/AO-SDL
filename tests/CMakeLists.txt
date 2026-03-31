@@ -51,6 +51,7 @@ set(TEST_SOURCES
     utils/test_BlendOps.cpp
     utils/test_JsonValidation.cpp
     utils/test_UTF8.cpp
+    utils/test_Crypto.cpp
     utils/test_Log.cpp
     net/test_NetworkThread.cpp
     ui/test_UIManager.cpp
@@ -62,6 +63,7 @@ set(TEST_SOURCES
     net/test_WebSocketCommon.cpp
     net/test_WebSocketServer.cpp
     net/test_NXMessage.cpp
+    net/test_RestRouter.cpp
     ao/net/test_AOServer.cpp
 )
 

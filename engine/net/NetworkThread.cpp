@@ -57,6 +57,11 @@ void NetworkThread::net_loop(std::stop_token st) {
         handler.on_connect();
         EventManager::instance().get_channel<SessionStartEvent>().publish(SessionStartEvent());
 
+        // Drain any disconnect requests that arrived between the connect
+        // attempt and now (e.g., user dismissing a prior error modal).
+        while (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
+        }
+
         std::vector<WebSocket::WebSocketFrame> msgs;
 
         while (!st.stop_requested()) {

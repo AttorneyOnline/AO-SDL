@@ -14,6 +14,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -54,6 +55,15 @@ inline const char* to_string(Error err) {
 struct Response {
     int status = 0;
     std::string body;
+    // Server-side stub (unused on iOS, needed for RestRouter compilation)
+    void set_content(const std::string& b, const std::string& /*content_type*/) {
+        body = b;
+    }
+    void set_header(const std::string& /*key*/, const std::string& /*value*/) {
+    }
+    std::string get_header_value(const std::string& /*key*/) const {
+        return {};
+    }
 };
 
 /// Result wraps a Response or an Error, matching httplib::Result's interface.
@@ -107,6 +117,71 @@ class Client {
   private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
+};
+
+// -- Server-side stubs (unimplemented) ---------------------------------------
+// These exist only so that engine code (RestRouter, EndpointFactory) compiles
+// on iOS. The server is never instantiated in the Flutter app.
+
+struct Request {
+    std::string method;
+    std::string path;
+    std::string body;
+    std::map<std::string, std::string> path_params;
+    std::map<std::string, std::string> params;
+    std::string get_header_value(const std::string& /*key*/) const {
+        return {};
+    }
+};
+
+using Handler = std::function<void(const Request&, Response&)>;
+
+// Server stub — not functional on iOS. All methods log a fatal error if called.
+// Exists only so engine code (RestRouter, EndpointFactory) compiles.
+class Server {
+  public:
+    Server& Get(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
+    Server& Post(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
+    Server& Put(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
+    Server& Patch(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
+    Server& Delete(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
+    Server& Options(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
+    bool bind_to_port(const std::string&, int, int = 0) {
+        fatal();
+        return false;
+    }
+    int bind_to_any_port(const std::string&, int = 0) {
+        fatal();
+        return -1;
+    }
+    bool listen_after_bind() {
+        fatal();
+        return false;
+    }
+    void stop() {
+        fatal();
+    }
+
+  private:
+    [[noreturn]] static void fatal();
 };
 
 } // namespace httplib

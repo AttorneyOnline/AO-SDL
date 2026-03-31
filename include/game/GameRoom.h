@@ -58,6 +58,24 @@ class GameRoom {
         return sessions_.size();
     }
 
+    /// Register a session token for O(1) lookup. Call after setting
+    /// session.session_token on a newly created session.
+    void register_session_token(const std::string& token, uint64_t client_id);
+
+    /// Find a session by its bearer token, or nullptr if not found.
+    ServerSession* find_session_by_token(const std::string& token);
+
+    /// Remove REST sessions that have been inactive for longer than ttl_seconds.
+    /// Returns the number of expired sessions removed.
+    int expire_sessions(int ttl_seconds);
+
+    /// Invoke a callback for each active session.
+    template <typename F>
+    void for_each_session(F&& func) const {
+        for (auto& [id, session] : sessions_)
+            func(session);
+    }
+
     /// All sessions in a given area.
     std::vector<ServerSession*> sessions_in_area(const std::string& area);
 
@@ -93,6 +111,7 @@ class GameRoom {
 
   private:
     std::unordered_map<uint64_t, ServerSession> sessions_;
+    std::unordered_map<std::string, uint64_t> token_index_; ///< token → client_id for O(1) lookup.
     uint64_t next_session_id_ = 0;
 
     std::vector<ICBroadcast> ic_broadcasts_;

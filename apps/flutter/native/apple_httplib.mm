@@ -182,4 +182,10 @@ Result Client::Get(const std::string &path, std::function<bool(const char *data,
     }
 }
 
+[[noreturn]] void Server::fatal() {
+    Log::log_print(ERR,
+                   "FATAL: httplib::Server is not implemented on iOS — server code must not run in the client app");
+    std::abort();
+}
+
 } // namespace httplib

@@ -2,6 +2,7 @@
 
 #include "configuration/JsonConfiguration.h"
 
+#include <algorithm>
 #include <string>
 
 /// Server-specific configuration backed by kagami.json.
@@ -37,6 +38,15 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return value<std::string>("motd");
     }
 
+    /// Session TTL in seconds. 0 = no expiry.
+    int session_ttl_seconds() const {
+        return std::max(0, value<int>("session_ttl_seconds"));
+    }
+
+    std::string cors_origin() const {
+        return value<std::string>("cors_origin");
+    }
+
     static bool load_from_disk(const std::string& path);
     static bool save_to_disk(const std::string& path);
 
@@ -51,6 +61,8 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"bind_address", "0.0.0.0"},
             {"max_players", 100},
             {"motd", ""},
+            {"session_ttl_seconds", 300},
+            {"cors_origin", "https://web.aceattorneyonline.com"},
         });
     }
 };
