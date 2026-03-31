@@ -54,8 +54,10 @@ else()
     endfunction()
 endif()
 
-# Set CMP0069 so LTO applies to all targets including bundled SDL2
-cmake_policy(SET CMP0069 NEW)
+# CMP0069 NEW: honor INTERPROCEDURAL_OPTIMIZATION on all targets.
+# CMAKE_POLICY_DEFAULT propagates into subdirectories (unlike cmake_policy
+# which is scope-local), so bundled SDL2, freetype, etc. participate in LTO.
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
