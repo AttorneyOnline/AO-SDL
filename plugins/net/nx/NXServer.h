@@ -3,6 +3,7 @@
 #include "game/GameAction.h"
 #include "game/GameRoom.h"
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -28,5 +29,6 @@ class NXServer {
     void broadcast_chars_taken(const std::vector<int>& taken);
 
     GameRoom& room_;
-    uint64_t next_rest_id_ = 0x8000'0000'0000'0000ULL; ///< High bit set to avoid collision with WS client IDs.
+    std::atomic<uint64_t> next_rest_id_ =
+        0x8000'0000'0000'0000ULL; ///< High bit set to avoid collision with WS client IDs.
 };
