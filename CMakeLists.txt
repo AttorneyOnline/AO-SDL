@@ -202,7 +202,7 @@ embed_assets(EMBEDDED_ASSETS_SRC
 # =============================================================================
 # Schema generation from OpenAPI spec (optional, requires Python3 + PyYAML)
 # =============================================================================
-option(AOSDL_GENERATE_SCHEMAS "Generate JSON schema validators from openapi.yaml (requires Python3 + PyYAML)" OFF)
+option(AOSDL_GENERATE_SCHEMAS "Generate JSON schema validators from openapi.yaml (requires Python3 + PyYAML)" ON)
 
 if(AOSDL_GENERATE_SCHEMAS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
