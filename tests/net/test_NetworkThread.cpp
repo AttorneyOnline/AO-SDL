@@ -98,6 +98,21 @@ TEST(NetworkThread, NoCallbacksWithoutConnection) {
 }
 
 // ---------------------------------------------------------------------------
+// jthread auto-join: destructor must not call std::terminate
+// ---------------------------------------------------------------------------
+
+TEST(NetworkThread, DestructorAutoJoinsWithoutExplicitStop) {
+    // Before jthread migration, forgetting stop() would call std::terminate.
+    // jthread's destructor calls request_stop() + join() automatically.
+    MockProtocolHandler handler;
+    {
+        NetworkThread nt(handler);
+        // Intentionally NOT calling nt.stop().
+    }
+    SUCCEED();
+}
+
+// ---------------------------------------------------------------------------
 // Multiple sequential instances
 // ---------------------------------------------------------------------------
 

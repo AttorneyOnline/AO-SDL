@@ -95,7 +95,7 @@ class AudioStream : public std::enable_shared_from_this<AudioStream> {
     }
 
     bool is_cancelled() const {
-        return cancelled_.load(std::memory_order_acquire);
+        return stop_source_.stop_requested();
     }
 
     uint32_t sample_rate() const {
@@ -137,7 +137,7 @@ class AudioStream : public std::enable_shared_from_this<AudioStream> {
     int64_t stream_tell();
 
   private:
-    void decode_thread_func();
+    void decode_thread_func(std::stop_token st);
 
     // --- StreamBuffer: raw compressed data ---
     std::vector<uint8_t> raw_data_;
@@ -157,8 +157,7 @@ class AudioStream : public std::enable_shared_from_this<AudioStream> {
     // --- State ---
     std::atomic<bool> ready_{false};
     std::atomic<bool> finished_{false};
-    std::atomic<bool> cancelled_{false};
-    std::atomic<bool> decode_done_{false}; // decode thread has exited
 
+    std::stop_source stop_source_;
     std::jthread decode_thread_;
 };
