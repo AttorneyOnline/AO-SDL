@@ -51,6 +51,7 @@ set(TEST_SOURCES
     utils/test_BlendOps.cpp
     utils/test_JsonValidation.cpp
     utils/test_UTF8.cpp
+    utils/test_Crypto.cpp
     utils/test_Log.cpp
     net/test_NetworkThread.cpp
     ui/test_UIManager.cpp

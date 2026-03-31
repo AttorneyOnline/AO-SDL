@@ -1,17 +1,41 @@
 #include "NXServer.h"
 
 #include "game/ClientId.h"
+#include "utils/Crypto.h"
 #include "utils/Log.h"
 
+#include <cstdio>
 #include <random>
 
-static std::string generate_token() {
-    thread_local std::mt19937 rng(std::random_device{}());
-    thread_local std::uniform_int_distribution<uint32_t> dist;
-    char buf[33];
-    std::snprintf(buf, sizeof(buf), "%08x%08x%08x%08x", dist(rng), dist(rng), dist(rng), dist(rng));
+// -- Token generation --------------------------------------------------------
+// Tokens are SHA-256("kagamitok:{server_iv}:{csprng_random}").
+// The server IV is a 64-bit value generated once at startup from the system
+// CSPRNG, providing per-instance uniqueness. The random component is 128 bits
+// of CSPRNG output per token.
+
+static std::string generate_server_iv() {
+    std::random_device rd;
+    uint32_t hi = rd();
+    uint32_t lo = rd();
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%08x%08x", hi, lo);
     return buf;
 }
+
+static const std::string& server_iv() {
+    static const std::string iv = generate_server_iv();
+    return iv;
+}
+
+static std::string generate_token() {
+    std::random_device rd;
+    char rand_hex[33];
+    std::snprintf(rand_hex, sizeof(rand_hex), "%08x%08x%08x%08x", rd(), rd(), rd(), rd());
+
+    return crypto::sha256("kagamitok:" + server_iv() + ":" + rand_hex);
+}
+
+// -- NXServer ----------------------------------------------------------------
 
 NXServer::NXServer(GameRoom& room) : room_(room) {
     room_.add_ic_broadcast([this](const std::string& area, const ICEvent& evt) { broadcast_ic(area, evt); });
