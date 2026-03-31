@@ -34,6 +34,31 @@ class JsonSchema {
     /// String constrained to a set of allowed values.
     static JsonSchema string_enum(std::vector<std::string> allowed);
 
+    // -- Constraint modifiers (chainable) -------------------------------------
+
+    /// Set minimum string length (minLength).
+    JsonSchema& min_length(int n) {
+        min_length_ = n;
+        return *this;
+    }
+    /// Set maximum string length (maxLength).
+    JsonSchema& max_length(int n) {
+        max_length_ = n;
+        return *this;
+    }
+    /// Set minimum numeric value (minimum).
+    JsonSchema& minimum(double n) {
+        minimum_ = n;
+        has_range_ = true;
+        return *this;
+    }
+    /// Set maximum numeric value (maximum).
+    JsonSchema& maximum(double n) {
+        maximum_ = n;
+        has_range_ = true;
+        return *this;
+    }
+
     // -- Composite type factories ---------------------------------------------
 
     /// Array where each element must match item_schema.
@@ -90,4 +115,9 @@ class JsonSchema {
     std::vector<std::string> allowed_values_; // string_enum
     std::shared_ptr<JsonSchema> item_schema_; // array, string_map
     std::vector<Field> fields_;               // object
+    int min_length_ = 0;                      // string minLength
+    int max_length_ = 0;                      // string maxLength (0 = no limit)
+    double minimum_ = 0;                      // integer/number minimum
+    double maximum_ = 0;                      // integer/number maximum
+    bool has_range_ = false;                  // whether min/max are set
 };

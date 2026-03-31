@@ -126,15 +126,29 @@ std::string JsonSchema::validate_impl(const nlohmann::json& value, const std::st
     case Type::none:
         return {};
 
-    case Type::string_t:
+    case Type::string_t: {
         if (!value.is_string())
             return err(std::format("expected string, got {}", json_type_name(value)));
+        auto len = static_cast<int>(value.get_ref<const std::string&>().size());
+        if (min_length_ > 0 && len < min_length_)
+            return err(std::format("string length {} is below minimum {}", len, min_length_));
+        if (max_length_ > 0 && len > max_length_)
+            return err(std::format("string length {} exceeds maximum {}", len, max_length_));
         return {};
+    }
 
-    case Type::integer_t:
+    case Type::integer_t: {
         if (!value.is_number_integer() && !value.is_number_unsigned())
             return err(std::format("expected integer, got {}", json_type_name(value)));
+        if (has_range_) {
+            auto v = value.get<double>();
+            if (v < minimum_)
+                return err(std::format("value {} is below minimum {}", v, minimum_));
+            if (v > maximum_)
+                return err(std::format("value {} exceeds maximum {}", v, maximum_));
+        }
         return {};
+    }
 
     case Type::number_t:
         if (!value.is_number())

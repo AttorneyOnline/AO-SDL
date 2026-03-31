@@ -62,16 +62,35 @@ def ref_name(ref: str) -> str:
     return ref.split("/")[-1]
 
 
-def schema_to_cpp(spec: dict, schema: dict, indent: int = 0) -> str:
+# Keywords we handle or can safely ignore (documentation-only).
+SUPPORTED_KEYWORDS = {
+    "type", "$ref", "properties", "required", "items", "enum",
+    "additionalProperties", "description", "format", "nullable",
+    "minLength", "maxLength", "minimum", "maximum",
+}
+
+
+def check_unsupported_keywords(schema: dict, context: str) -> None:
+    """Warn about JSON Schema keywords the generator doesn't enforce."""
+    for key in schema:
+        if key not in SUPPORTED_KEYWORDS:
+            print(f"WARNING: unsupported keyword \"{key}\" in {context} "
+                  f"— this constraint will NOT be enforced at runtime",
+                  file=sys.stderr)
+
+
+def schema_to_cpp(spec: dict, schema: dict, indent: int = 0, context: str = "") -> str:
     """Convert a JSON Schema node to a C++ JsonSchema builder expression."""
     pad = "    " * indent
+
+    check_unsupported_keywords(schema, context or "schema")
 
     # Handle $ref — inline the resolved schema.
     # (Top-level $refs in request bodies are handled separately in generate_cpp
     # to emit calls to the named schema function instead of duplicating.)
     if "$ref" in schema:
         resolved = resolve_ref(spec, schema["$ref"])
-        return schema_to_cpp(spec, resolved, indent)
+        return schema_to_cpp(spec, resolved, indent, context)
 
     typ = schema.get("type", "object")
 
@@ -82,9 +101,21 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0) -> str:
 
     # Leaf types
     if typ == "string":
-        return "JsonSchema::string_type()"
+        expr = "JsonSchema::string_type()"
+        if "minLength" in schema:
+            expr += f".min_length({schema['minLength']})"
+        if "maxLength" in schema:
+            expr += f".max_length({schema['maxLength']})"
+        return expr
     if typ == "integer":
-        return "JsonSchema::integer_type()"
+        expr = "JsonSchema::integer_type()"
+        if "minimum" in schema and "maximum" in schema:
+            expr += f".minimum({schema['minimum']}).maximum({schema['maximum']})"
+        elif "minimum" in schema:
+            expr += f".minimum({schema['minimum']})"
+        elif "maximum" in schema:
+            expr += f".maximum({schema['maximum']})"
+        return expr
     if typ == "number":
         return "JsonSchema::number_type()"
     if typ == "boolean":
@@ -93,13 +124,13 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0) -> str:
     # Array
     if typ == "array":
         items = schema.get("items", {})
-        item_expr = schema_to_cpp(spec, items, indent)
+        item_expr = schema_to_cpp(spec, items, indent, context=f"{context}[]")
         return f"JsonSchema::array({item_expr})"
 
     # Object with additionalProperties (string_map)
     if typ == "object" and "additionalProperties" in schema and "properties" not in schema:
         val_schema = schema["additionalProperties"]
-        val_expr = schema_to_cpp(spec, val_schema, indent)
+        val_expr = schema_to_cpp(spec, val_schema, indent, context=f"{context}[*]")
         return f"JsonSchema::string_map({val_expr})"
 
     # Object with properties
@@ -115,7 +146,8 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0) -> str:
         for prop_name, prop_schema in props.items():
             is_req = prop_name in required_set
             method = "required" if is_req else "optional"
-            prop_expr = schema_to_cpp(spec, prop_schema, indent + 1)
+            prop_ctx = f"{context}.{prop_name}" if context else prop_name
+            prop_expr = schema_to_cpp(spec, prop_schema, indent + 1, context=prop_ctx)
             lines.append(f'{pad}    .{method}("{prop_name}", {prop_expr})')
         lines.append(f"{pad}    .build()")
         return "\n".join(lines)
@@ -176,7 +208,7 @@ def generate_cpp(spec: dict, output_path: str, prefix: str = "aonx") -> None:
 
     # Generate component schemas
     for name, schema in component_schemas.items():
-        cpp_expr = schema_to_cpp(spec, schema, 0)
+        cpp_expr = schema_to_cpp(spec, schema, 0, context=name)
         lines.append(f"static const JsonSchema& schema_{name}() {{")
         lines.append(f"    static const JsonSchema s =")
         # Indent the expression
@@ -200,7 +232,7 @@ def generate_cpp(spec: dict, output_path: str, prefix: str = "aonx") -> None:
             lines.append(f"    return schema_{ref}();")
             lines.append(f"}}")
         else:
-            cpp_expr = schema_to_cpp(spec, schema, 0)
+            cpp_expr = schema_to_cpp(spec, schema, 0, context=op_id)
             lines.append(f"static const JsonSchema& request_{op_id}() {{")
             lines.append(f"    static const JsonSchema s =")
             for i, line in enumerate(cpp_expr.split("\n")):

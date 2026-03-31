@@ -56,6 +56,30 @@ TEST(JsonSchemaTest, BooleanTypeRejectsNonBooleans) {
     EXPECT_NE(s.validate(json("true")), "");
 }
 
+// -- String length constraints ------------------------------------------------
+
+TEST(JsonSchemaTest, MinLengthRejectsEmpty) {
+    auto s = JsonSchema::string_type().min_length(1);
+    EXPECT_NE(s.validate(json("")), "");
+    EXPECT_EQ(s.validate(json("a")), "");
+}
+
+TEST(JsonSchemaTest, MaxLengthRejectsTooLong) {
+    auto s = JsonSchema::string_type().max_length(3);
+    EXPECT_EQ(s.validate(json("abc")), "");
+    EXPECT_NE(s.validate(json("abcd")), "");
+}
+
+// -- Integer range constraints ------------------------------------------------
+
+TEST(JsonSchemaTest, IntegerMinimumRejectsBelowRange) {
+    auto s = JsonSchema::integer_type().minimum(0).maximum(10);
+    EXPECT_EQ(s.validate(json(0)), "");
+    EXPECT_EQ(s.validate(json(10)), "");
+    EXPECT_NE(s.validate(json(-1)), "");
+    EXPECT_NE(s.validate(json(11)), "");
+}
+
 // -- String enum tests --------------------------------------------------------
 
 TEST(JsonSchemaTest, StringEnumAcceptsAllowed) {

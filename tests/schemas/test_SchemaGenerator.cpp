@@ -46,6 +46,31 @@ TEST(SchemaGeneratorTest, CreateWidgetRejectsWrongType) {
     EXPECT_NE(err.find("count"), std::string::npos);
 }
 
+TEST(SchemaGeneratorTest, CreateWidgetRejectsEmptyName) {
+    const auto& s = test_schema_request_schema("createWidget");
+    auto err = s.validate(json({{"name", ""}, {"count", 1}}));
+    EXPECT_NE(err, "");
+    EXPECT_NE(err.find("minimum"), std::string::npos);
+}
+
+TEST(SchemaGeneratorTest, CreateWidgetRejectsTooLongName) {
+    const auto& s = test_schema_request_schema("createWidget");
+    auto err = s.validate(json({{"name", std::string(65, 'x')}, {"count", 1}}));
+    EXPECT_NE(err, "");
+    EXPECT_NE(err.find("maximum"), std::string::npos);
+}
+
+TEST(SchemaGeneratorTest, CreateWidgetRejectsCountOutOfRange) {
+    const auto& s = test_schema_request_schema("createWidget");
+    auto err = s.validate(json({{"name", "ok"}, {"count", 101}}));
+    EXPECT_NE(err, "");
+    EXPECT_NE(err.find("maximum"), std::string::npos);
+
+    auto err2 = s.validate(json({{"name", "ok"}, {"count", -1}}));
+    EXPECT_NE(err2, "");
+    EXPECT_NE(err2.find("minimum"), std::string::npos);
+}
+
 // -- fireEvent: YAML boolean trap ("on" key) ----------------------------------
 
 TEST(SchemaGeneratorTest, FireEventOnFieldSurvivesBooleanTrap) {

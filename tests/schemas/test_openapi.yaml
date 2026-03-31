@@ -17,8 +17,12 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 64
                 count:
                   type: integer
+                  minimum: 0
+                  maximum: 100
                 label:
                   type: string
 

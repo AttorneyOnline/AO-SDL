@@ -1,10 +1,7 @@
 #include "net/nx/NXEndpoint.h"
 
 #include "net/EndpointRegistrar.h"
-
-#ifdef AOSDL_HAS_GENERATED_SCHEMAS
 #include "utils/GeneratedSchemas.h"
-#endif
 
 namespace {
 
@@ -33,16 +30,9 @@ class SessionCreateEndpoint : public NXEndpoint {
 
         auto& body = *req.body;
 
-#ifdef AOSDL_HAS_GENERATED_SCHEMAS
         if (auto err = aonx_request_schema("createSession").validate(body); !err.empty()) {
             return RestResponse::error(400, err);
         }
-#else
-        if (body.value("client_name", std::string{}).empty() || body.value("client_version", std::string{}).empty() ||
-            body.value("hdid", std::string{}).empty()) {
-            return RestResponse::error(400, "Missing required fields: client_name, client_version, hdid");
-        }
-#endif
 
         auto client_name = body.value("client_name", std::string{});
         auto client_version = body.value("client_version", std::string{});
