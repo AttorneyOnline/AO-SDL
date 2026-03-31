@@ -220,7 +220,7 @@ jobs:
             docker stop kagami 2>/dev/null || true
             docker rm kagami 2>/dev/null || true
             docker run -d --name kagami --restart unless-stopped \
-              -p 80:80 -p 27015:27015 \
+              -p 127.0.0.1:8080:80 -p 27015:27015 \
               -v /opt/kagami/kagami.json:/app/kagami.json \
               ghcr.io/attorneyonline/kagami:latest
           EOF
