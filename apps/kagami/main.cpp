@@ -75,6 +75,8 @@ int main(int /*argc*/, char* argv[]) {
     // --- Protocol backends ---
     AOServer ao_backend(room); // AO2: WebSocket bidirectional
     NXServer nx_backend(room); // AONX: REST + SSE (no WebSocket)
+    nx_backend.set_motd(cfg.motd());
+    nx_backend.set_session_ttl_seconds(cfg.session_ttl_seconds());
     // --- HTTP server (runs on its own thread pool) ---
     httplib::Server http;
 
