@@ -66,9 +66,10 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0) -> str:
     """Convert a JSON Schema node to a C++ JsonSchema builder expression."""
     pad = "    " * indent
 
-    # Handle $ref
+    # Handle $ref — inline the resolved schema.
+    # (Top-level $refs in request bodies are handled separately in generate_cpp
+    # to emit calls to the named schema function instead of duplicating.)
     if "$ref" in schema:
-        name = ref_name(schema["$ref"])
         resolved = resolve_ref(spec, schema["$ref"])
         return schema_to_cpp(spec, resolved, indent)
 
@@ -224,8 +225,8 @@ def generate_cpp(spec: dict, output_path: str, prefix: str = "aonx") -> None:
     lines.append("")
     lines.append(f"const JsonSchema& {prefix}_component_schema(const std::string& name) {{")
     lines.append("    static const std::unordered_map<std::string, const JsonSchema& (*)()> map = {")
-    for name in component_schemas:
-        lines.append(f'        {{"{name}", &schema_{name}}},')
+    for schema_name in component_schemas:
+        lines.append(f'        {{"{schema_name}", &schema_{schema_name}}},')
     lines.append("    };")
     lines.append("    auto it = map.find(name);")
     lines.append('    if (it == map.end()) throw std::runtime_error("Unknown schema: " + name);')

@@ -551,41 +551,61 @@ TEST_F(RestRouterTest, WithLockExecutesUnderMutex) {
     EXPECT_TRUE(executed);
 }
 
+// -- NX endpoint test fixture -------------------------------------------------
+// Eliminates per-test boilerplate: sets up GameRoom, NXServer, RestRouter,
+// httplib server, and provides a client() helper and create_session().
+
+class NXEndpointTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        nx_register_endpoints();
+        Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+        room_.areas = {"Lobby"};
+        nx_ = std::make_unique<NXServer>(room_);
+        NXEndpoint::set_server(nx_.get());
+        router_.set_auth_func(
+            [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
+        EndpointFactory::instance().populate(router_);
+        router_.bind(http_);
+        port_ = http_.bind_to_any_port("127.0.0.1");
+        server_thread_ = std::thread([this] { http_.listen_after_bind(); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    void TearDown() override {
+        http_.stop();
+        if (server_thread_.joinable())
+            server_thread_.join();
+        Log::set_sink(nullptr);
+    }
+
+    httplib::Client client() {
+        return httplib::Client("127.0.0.1", port_);
+    }
+
+    /// Create a session and return the bearer token.
+    std::string create_session() {
+        auto cli = client();
+        auto res = cli.Post("/aonx/v1/session", R"({"client_name":"test","client_version":"1.0","hdid":"abc"})",
+                            "application/json");
+        return nlohmann::json::parse(res->body)["token"].get<std::string>();
+    }
+
+    GameRoom room_;
+    std::unique_ptr<NXServer> nx_;
+    RestRouter router_;
+    httplib::Server http_;
+    int port_ = 0;
+    std::thread server_thread_;
+};
+
 // -- Phase 2 endpoint tests --------------------------------------------------
 
-TEST(EndpointFactoryTest, SessionRenewExtendsTTL) {
-    nx_register_endpoints();
-    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+TEST_F(NXEndpointTest, SessionRenewExtendsTTL) {
+    nx_->set_session_ttl_seconds(600);
+    auto token = create_session();
 
-    GameRoom room;
-    room.areas = {"Lobby"};
-    NXServer nx(room);
-    nx.set_session_ttl_seconds(600);
-    NXEndpoint::set_server(&nx);
-
-    RestRouter router;
-    router.set_auth_func(
-        [&room](const std::string& token) -> ServerSession* { return room.find_session_by_token(token); });
-    EndpointFactory::instance().populate(router);
-
-    httplib::Server http;
-    router.bind(http);
-    int port = http.bind_to_any_port("127.0.0.1");
-    ASSERT_GT(port, 0);
-
-    std::thread t([&] { http.listen_after_bind(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    httplib::Client cli("127.0.0.1", port);
-
-    // Create a session first
-    std::string session_body = R"({"client_name":"test","client_version":"1.0","hdid":"abc"})";
-    auto create_res = cli.Post("/aonx/v1/session", session_body, "application/json");
-    ASSERT_TRUE(create_res);
-    ASSERT_EQ(create_res->status, 201);
-    auto token = nlohmann::json::parse(create_res->body)["token"].get<std::string>();
-
-    // Renew the session
+    auto cli = client();
     httplib::Headers headers = {{"Authorization", "Bearer " + token}};
     auto res = cli.Patch("/aonx/v1/session", headers, "", "application/json");
     ASSERT_TRUE(res);
@@ -594,48 +614,16 @@ TEST(EndpointFactoryTest, SessionRenewExtendsTTL) {
     auto body = nlohmann::json::parse(res->body);
     EXPECT_EQ(body["token"], token);
     EXPECT_TRUE(body.contains("expires_at"));
-    // expires_at should be an ISO 8601 string containing 'T' and 'Z'
     auto expires_at = body["expires_at"].get<std::string>();
     EXPECT_NE(expires_at.find('T'), std::string::npos);
     EXPECT_NE(expires_at.find('Z'), std::string::npos);
-
-    http.stop();
-    t.join();
-    Log::set_sink(nullptr);
 }
 
-TEST(EndpointFactoryTest, SessionRenewOmitsExpiresAtWhenTTLZero) {
-    nx_register_endpoints();
-    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+TEST_F(NXEndpointTest, SessionRenewOmitsExpiresAtWhenTTLZero) {
+    nx_->set_session_ttl_seconds(0);
+    auto token = create_session();
 
-    GameRoom room;
-    room.areas = {"Lobby"};
-    NXServer nx(room);
-    nx.set_session_ttl_seconds(0); // No expiry
-    NXEndpoint::set_server(&nx);
-
-    RestRouter router;
-    router.set_auth_func(
-        [&room](const std::string& token) -> ServerSession* { return room.find_session_by_token(token); });
-    EndpointFactory::instance().populate(router);
-
-    httplib::Server http;
-    router.bind(http);
-    int port = http.bind_to_any_port("127.0.0.1");
-    ASSERT_GT(port, 0);
-
-    std::thread t([&] { http.listen_after_bind(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    httplib::Client cli("127.0.0.1", port);
-
-    // Create a session
-    std::string session_body = R"({"client_name":"test","client_version":"1.0","hdid":"abc"})";
-    auto create_res = cli.Post("/aonx/v1/session", session_body, "application/json");
-    ASSERT_TRUE(create_res);
-    auto token = nlohmann::json::parse(create_res->body)["token"].get<std::string>();
-
-    // Renew — should not include expires_at when TTL is 0
+    auto cli = client();
     httplib::Headers headers = {{"Authorization", "Bearer " + token}};
     auto res = cli.Patch("/aonx/v1/session", headers, "", "application/json");
     ASSERT_TRUE(res);
@@ -644,143 +632,38 @@ TEST(EndpointFactoryTest, SessionRenewOmitsExpiresAtWhenTTLZero) {
     auto body = nlohmann::json::parse(res->body);
     EXPECT_EQ(body["token"], token);
     EXPECT_FALSE(body.contains("expires_at"));
-
-    http.stop();
-    t.join();
-    Log::set_sink(nullptr);
 }
 
-TEST(EndpointFactoryTest, SessionRenewRequiresAuth) {
-    nx_register_endpoints();
-    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
-
-    GameRoom room;
-    room.areas = {"Lobby"};
-    NXServer nx(room);
-    NXEndpoint::set_server(&nx);
-
-    RestRouter router;
-    router.set_auth_func(
-        [&room](const std::string& token) -> ServerSession* { return room.find_session_by_token(token); });
-    EndpointFactory::instance().populate(router);
-
-    httplib::Server http;
-    router.bind(http);
-    int port = http.bind_to_any_port("127.0.0.1");
-    ASSERT_GT(port, 0);
-
-    std::thread t([&] { http.listen_after_bind(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    httplib::Client cli("127.0.0.1", port);
-
-    // PATCH without auth should return 401
+TEST_F(NXEndpointTest, SessionRenewRequiresAuth) {
+    auto cli = client();
     auto res = cli.Patch("/aonx/v1/session", "", "application/json");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 401);
-
-    http.stop();
-    t.join();
-    Log::set_sink(nullptr);
 }
 
-TEST(EndpointFactoryTest, ServerMotdReturnsMessage) {
-    nx_register_endpoints();
-    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+TEST_F(NXEndpointTest, ServerMotdReturnsMessage) {
+    nx_->set_motd("Welcome to the courtroom!");
 
-    GameRoom room;
-    room.areas = {"Lobby"};
-    NXServer nx(room);
-    nx.set_motd("Welcome to the courtroom!");
-    NXEndpoint::set_server(&nx);
-
-    RestRouter router;
-    EndpointFactory::instance().populate(router);
-
-    httplib::Server http;
-    router.bind(http);
-    int port = http.bind_to_any_port("127.0.0.1");
-    ASSERT_GT(port, 0);
-
-    std::thread t([&] { http.listen_after_bind(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    httplib::Client cli("127.0.0.1", port);
+    auto cli = client();
     auto res = cli.Get("/aonx/v1/server/motd");
-
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-    auto body = nlohmann::json::parse(res->body);
-    EXPECT_EQ(body["message"], "Welcome to the courtroom!");
-
-    http.stop();
-    t.join();
-    Log::set_sink(nullptr);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["message"], "Welcome to the courtroom!");
 }
 
-TEST(EndpointFactoryTest, ServerMotdReturnsEmptyWhenUnset) {
-    nx_register_endpoints();
-    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
-
-    GameRoom room;
-    room.areas = {"Lobby"};
-    NXServer nx(room);
-    // motd defaults to empty
-    NXEndpoint::set_server(&nx);
-
-    RestRouter router;
-    EndpointFactory::instance().populate(router);
-
-    httplib::Server http;
-    router.bind(http);
-    int port = http.bind_to_any_port("127.0.0.1");
-    ASSERT_GT(port, 0);
-
-    std::thread t([&] { http.listen_after_bind(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    httplib::Client cli("127.0.0.1", port);
+TEST_F(NXEndpointTest, ServerMotdReturnsEmptyWhenUnset) {
+    auto cli = client();
     auto res = cli.Get("/aonx/v1/server/motd");
-
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-    auto body = nlohmann::json::parse(res->body);
-    EXPECT_EQ(body["message"], "");
-
-    http.stop();
-    t.join();
-    Log::set_sink(nullptr);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["message"], "");
 }
 
-TEST(EndpointFactoryTest, ServerMotdNoAuthRequired) {
-    nx_register_endpoints();
-    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+TEST_F(NXEndpointTest, ServerMotdNoAuthRequired) {
+    nx_->set_motd("Test MOTD");
 
-    GameRoom room;
-    room.areas = {"Lobby"};
-    NXServer nx(room);
-    nx.set_motd("Test MOTD");
-    NXEndpoint::set_server(&nx);
-
-    RestRouter router;
-    // No auth func set — endpoint should still work since it doesn't require auth
-    EndpointFactory::instance().populate(router);
-
-    httplib::Server http;
-    router.bind(http);
-    int port = http.bind_to_any_port("127.0.0.1");
-    ASSERT_GT(port, 0);
-
-    std::thread t([&] { http.listen_after_bind(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    httplib::Client cli("127.0.0.1", port);
+    auto cli = client();
     auto res = cli.Get("/aonx/v1/server/motd");
-
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-
-    http.stop();
-    t.join();
-    Log::set_sink(nullptr);
 }

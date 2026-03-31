@@ -207,12 +207,12 @@ option(AOSDL_GENERATE_SCHEMAS "Generate JSON schema validators from openapi.yaml
 if(AOSDL_GENERATE_SCHEMAS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(NOT Python3_FOUND)
-        message(WARNING
+        message(FATAL_ERROR
             "\n"
             "  ╔══════════════════════════════════════════════════════════════╗\n"
             "  ║  AOSDL_GENERATE_SCHEMAS=ON but Python3 was not found!      ║\n"
-            "  ║  Schema validation will NOT be available.                   ║\n"
-            "  ║  Install Python 3 and PyYAML: pip install pyyaml           ║\n"
+            "  ║  Install Python 3 and PyYAML, or pass:                     ║\n"
+            "  ║    -DAOSDL_GENERATE_SCHEMAS=OFF                            ║\n"
             "  ╚══════════════════════════════════════════════════════════════╝\n"
         )
     else()
@@ -223,12 +223,12 @@ if(AOSDL_GENERATE_SCHEMAS)
             OUTPUT_QUIET ERROR_QUIET
         )
         if(NOT _pyyaml_result EQUAL 0)
-            message(WARNING
+            message(FATAL_ERROR
                 "\n"
                 "  ╔══════════════════════════════════════════════════════════════╗\n"
                 "  ║  AOSDL_GENERATE_SCHEMAS=ON but PyYAML is not installed!    ║\n"
-                "  ║  Schema validation will NOT be available.                   ║\n"
                 "  ║  Install with: pip install pyyaml                           ║\n"
+                "  ║  Or pass: -DAOSDL_GENERATE_SCHEMAS=OFF                     ║\n"
                 "  ╚══════════════════════════════════════════════════════════════╝\n"
             )
         else()
