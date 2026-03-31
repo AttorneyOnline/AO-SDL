@@ -110,6 +110,10 @@ int main(int /*argc*/, char* argv[]) {
     };
     ao_backend.set_send_func(ws_send);
 
+    // All GameRoom mutations (WS and REST) share the dispatch mutex to
+    // prevent concurrent access. This couples WS latency to REST handler
+    // latency — acceptable at current scale, but worth revisiting if REST
+    // handlers ever do slow work (e.g., asset I/O).
     ws.on_client_connected([&rest_router, &ao_backend](WebSocketServer::ClientId id) {
         rest_router.with_lock([&] { ao_backend.on_client_connected(id); });
     });
