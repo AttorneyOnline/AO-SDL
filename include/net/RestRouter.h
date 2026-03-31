@@ -47,7 +47,7 @@ class RestRouter {
     void set_cors(httplib::Response& res);
 
     AuthFunc auth_func_;
-    std::string cors_origin_ = "*";
+    std::string cors_origin_;
     std::vector<std::unique_ptr<RestEndpoint>> endpoints_;
     std::mutex dispatch_mutex_; ///< Serializes handler access to game state.
 };

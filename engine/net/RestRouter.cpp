@@ -20,6 +20,8 @@ void RestRouter::set_cors_origin(const std::string& origin) {
 }
 
 void RestRouter::set_cors(httplib::Response& res) {
+    if (cors_origin_.empty())
+        return;
     res.set_header("Access-Control-Allow-Origin", cors_origin_);
     res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
