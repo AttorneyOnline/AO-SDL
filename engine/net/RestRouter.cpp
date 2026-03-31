@@ -103,7 +103,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const httplib::Request& req, h
                 }
                 if (!auth_func_) {
                     res.status = 500;
-                    res.set_content(R"({"reason":"Auth not configured"})", "application/json");
+                    res.set_content(R"({"reason":"Server authentication is not configured"})", "application/json");
                     return;
                 }
 
@@ -132,6 +132,6 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const httplib::Request& req, h
         Log::log_print(ERR, "REST: exception in %s %s: %s", endpoint.method().c_str(), endpoint.path_pattern().c_str(),
                        e.what());
         res.status = 500;
-        res.set_content(R"({"reason":"Internal server error"})", "application/json");
+        res.set_content(R"({"reason":"An internal server error occurred"})", "application/json");
     }
 }

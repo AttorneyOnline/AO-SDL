@@ -20,11 +20,11 @@ class SessionCreateEndpoint : public NXEndpoint {
 
     RestResponse handle(const RestRequest& req) override {
         if (room().session_count() >= static_cast<size_t>(room().max_players)) {
-            return RestResponse::error(503, "Server full");
+            return RestResponse::error(503, "Server is full");
         }
 
         if (!req.body) {
-            return RestResponse::error(400, "Request body required");
+            return RestResponse::error(400, "Request body is required");
         }
 
         auto& body = *req.body;
