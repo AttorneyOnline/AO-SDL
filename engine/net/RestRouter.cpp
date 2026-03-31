@@ -15,8 +15,12 @@ void RestRouter::register_endpoint(std::unique_ptr<RestEndpoint> endpoint) {
     endpoints_.push_back(std::move(endpoint));
 }
 
-static void set_cors_headers(httplib::Response& res) {
-    res.set_header("Access-Control-Allow-Origin", "*");
+void RestRouter::set_cors_origin(const std::string& origin) {
+    cors_origin_ = origin;
+}
+
+void RestRouter::set_cors(httplib::Response& res) {
+    res.set_header("Access-Control-Allow-Origin", cors_origin_);
     res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
@@ -45,15 +49,15 @@ void RestRouter::bind(httplib::Server& server) {
             Log::log_print(ERR, "REST: unknown method '%s' for %s", method.c_str(), pattern.c_str());
 
         // Preflight handler for this route
-        server.Options(pattern, [](const httplib::Request&, httplib::Response& res) {
-            set_cors_headers(res);
+        server.Options(pattern, [this](const httplib::Request&, httplib::Response& res) {
+            set_cors(res);
             res.status = 204;
         });
     }
 }
 
 void RestRouter::dispatch(RestEndpoint& endpoint, const httplib::Request& req, httplib::Response& res) {
-    set_cors_headers(res);
+    set_cors(res);
     try {
         // Build RestRequest from httplib::Request (no lock needed — pure parsing)
         RestRequest rest_req;

@@ -89,6 +89,7 @@ int main(int /*argc*/, char* argv[]) {
     NXEndpoint::set_server(&nx_backend);
 
     RestRouter rest_router;
+    rest_router.set_cors_origin(cfg.cors_origin());
     rest_router.set_auth_func(
         [&room](const std::string& token) -> ServerSession* { return room.find_session_by_token(token); });
     EndpointFactory::instance().populate(rest_router);

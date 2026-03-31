@@ -42,6 +42,10 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return std::max(60, value<int>("session_ttl_seconds"));
     }
 
+    std::string cors_origin() const {
+        return value<std::string>("cors_origin");
+    }
+
     static bool load_from_disk(const std::string& path);
     static bool save_to_disk(const std::string& path);
 
@@ -57,6 +61,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"max_players", 100},
             {"motd", ""},
             {"session_ttl_seconds", 300},
+            {"cors_origin", "https://web.aceattorneyonline.com"},
         });
     }
 };

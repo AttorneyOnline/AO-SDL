@@ -24,6 +24,7 @@ class RestRouter {
     using AuthFunc = std::function<ServerSession*(const std::string& token)>;
 
     void set_auth_func(AuthFunc func);
+    void set_cors_origin(const std::string& origin);
 
     /// Takes ownership of an endpoint.
     void register_endpoint(std::unique_ptr<RestEndpoint> endpoint);
@@ -43,8 +44,10 @@ class RestRouter {
 
   private:
     void dispatch(RestEndpoint& endpoint, const httplib::Request& req, httplib::Response& res);
+    void set_cors(httplib::Response& res);
 
     AuthFunc auth_func_;
+    std::string cors_origin_ = "*";
     std::vector<std::unique_ptr<RestEndpoint>> endpoints_;
     std::mutex dispatch_mutex_; ///< Serializes handler access to game state.
 };
