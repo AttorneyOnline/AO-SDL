@@ -1,6 +1,7 @@
 #include "net/nx/NXEndpoint.h"
 
 #include "net/EndpointRegistrar.h"
+#include "utils/GeneratedSchemas.h"
 
 namespace {
 
@@ -29,13 +30,13 @@ class SessionCreateEndpoint : public NXEndpoint {
 
         auto& body = *req.body;
 
+        if (auto err = aonx_request_schema("createSession").validate(body); !err.empty()) {
+            return RestResponse::error(400, err);
+        }
+
         auto client_name = body.value("client_name", std::string{});
         auto client_version = body.value("client_version", std::string{});
         auto hdid = body.value("hdid", std::string{});
-
-        if (client_name.empty() || client_version.empty() || hdid.empty()) {
-            return RestResponse::error(400, "Missing required fields: client_name, client_version, hdid");
-        }
 
         // Sanitize: cap lengths and strip control characters.
         auto sanitize = [](std::string& s, size_t max_len) {

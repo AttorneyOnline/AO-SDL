@@ -200,6 +200,58 @@ embed_assets(EMBEDDED_ASSETS_SRC
 )
 
 # =============================================================================
+# Schema generation from OpenAPI spec (optional, requires Python3 + PyYAML)
+# =============================================================================
+option(AOSDL_GENERATE_SCHEMAS "Generate JSON schema validators from openapi.yaml (requires Python3 + PyYAML)" ON)
+
+if(AOSDL_GENERATE_SCHEMAS AND NOT AO_BUILD_FLUTTER)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(NOT Python3_FOUND)
+        message(FATAL_ERROR
+            "\n"
+            "  ╔══════════════════════════════════════════════════════════════╗\n"
+            "  ║  AOSDL_GENERATE_SCHEMAS=ON but Python3 was not found!      ║\n"
+            "  ║  Install Python 3 and PyYAML, or pass:                     ║\n"
+            "  ║    -DAOSDL_GENERATE_SCHEMAS=OFF                            ║\n"
+            "  ╚══════════════════════════════════════════════════════════════╝\n"
+        )
+    else()
+        # Verify PyYAML is available
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} -c "import yaml"
+            RESULT_VARIABLE _pyyaml_result
+            OUTPUT_QUIET ERROR_QUIET
+        )
+        if(NOT _pyyaml_result EQUAL 0)
+            message(FATAL_ERROR
+                "\n"
+                "  ╔══════════════════════════════════════════════════════════════╗\n"
+                "  ║  AOSDL_GENERATE_SCHEMAS=ON but PyYAML is not installed!    ║\n"
+                "  ║  Install with: pip install pyyaml                           ║\n"
+                "  ║  Or pass: -DAOSDL_GENERATE_SCHEMAS=OFF                     ║\n"
+                "  ╚══════════════════════════════════════════════════════════════╝\n"
+            )
+        else()
+            set(AONX_OPENAPI_SPEC "${CMAKE_SOURCE_DIR}/doc/aonx/openapi.yaml")
+            set(AONX_SCHEMAS_CPP "${CMAKE_BINARY_DIR}/generated/AonxSchemas.cpp")
+
+            add_custom_command(
+                OUTPUT  "${AONX_SCHEMAS_CPP}"
+                COMMAND ${Python3_EXECUTABLE}
+                        "${CMAKE_SOURCE_DIR}/scripts/generate_schemas.py"
+                        "${AONX_OPENAPI_SPEC}"
+                        "${AONX_SCHEMAS_CPP}"
+                DEPENDS "${AONX_OPENAPI_SPEC}"
+                        "${CMAKE_SOURCE_DIR}/scripts/generate_schemas.py"
+                COMMENT "Generating JSON schema validators from openapi.yaml"
+            )
+            set(AOSDL_SCHEMAS_AVAILABLE ON)
+            message(STATUS "Schema generation enabled (Python ${Python3_VERSION})")
+        endif()
+    endif()
+endif()
+
+# =============================================================================
 # aoengine — core engine library (no GL, no SDL)
 #
 # Public include root: engine/
@@ -223,6 +275,7 @@ add_library(aoengine STATIC
 
     engine/utils/Log.cpp
     engine/utils/Base64.cpp
+    engine/utils/JsonSchema.cpp
     engine/utils/JsonValidation.cpp
     engine/utils/StringHelpers.cpp
 
@@ -429,9 +482,11 @@ add_library(nx_net STATIC
     plugins/net/nx/NXMessage.cpp
     plugins/net/nx/NXServer.cpp
     plugins/net/nx/NXEndpoint.cpp
+    plugins/net/nx/endpoints/ServerMotdEndpoint.cpp
     plugins/net/nx/endpoints/ServerPlayersEndpoint.cpp
     plugins/net/nx/endpoints/SessionCreateEndpoint.cpp
     plugins/net/nx/endpoints/SessionDeleteEndpoint.cpp
+    plugins/net/nx/endpoints/SessionRenewEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net
@@ -439,6 +494,13 @@ target_include_directories(nx_net
     PRIVATE plugins/net/nx
 )
 target_link_libraries(nx_net PUBLIC aoengine)
+
+if(AOSDL_SCHEMAS_AVAILABLE)
+    target_sources(nx_net PRIVATE "${AONX_SCHEMAS_CPP}")
+    target_compile_definitions(nx_net PUBLIC AOSDL_HAS_GENERATED_SCHEMAS=1)
+else()
+    target_sources(nx_net PRIVATE engine/utils/GeneratedSchemasStub.cpp)
+endif()
 
 # --- kagami_server — server orchestration (protocol routing, room management) -
 

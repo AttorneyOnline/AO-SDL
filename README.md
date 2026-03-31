@@ -80,6 +80,22 @@ Install `clang-format` via your package manager (`brew install clang-format`, `a
 - **`docs`** — Generate API documentation with Doxygen (requires `doxygen` installed)
 - **`run-clang-tidy`** — Run clang-tidy static analysis across the project (requires `clang-tidy` installed)
 
+### Schema Generation (Optional)
+
+The AONX REST API validates request bodies against JSON schemas generated from the OpenAPI spec (`doc/aonx/openapi.yaml`). This is **enabled by default**.
+
+**Requirements:** Python 3 + [PyYAML](https://pypi.org/project/PyYAML/) (`pip install pyyaml`).
+
+CMake runs `scripts/generate_schemas.py` at build time to produce `AonxSchemas.cpp` from the OpenAPI spec. The generated file is compiled into `nx_net` and defines `AOSDL_HAS_GENERATED_SCHEMAS=1`. Endpoints validate request bodies against the spec at runtime.
+
+To disable (e.g. if Python is unavailable):
+
+```sh
+cmake -B build -DAOSDL_GENERATE_SCHEMAS=OFF
+```
+
+Without schema generation, endpoints log an ERROR on every request but do not validate bodies. If the flag is ON (default) but Python or PyYAML is missing, CMake will fail with an error directing you to install the dependencies or pass `-DAOSDL_GENERATE_SCHEMAS=OFF`.
+
 ---
 
 ## Flutter Mobile App (iOS / Android)
@@ -231,6 +247,8 @@ All settings are stored in `kagami.json` and can be edited while the server is s
 | `ws_port` | `8081` | WebSocket game port |
 | `max_players` | `100` | Maximum concurrent players |
 | `motd` | `""` | Message of the day |
+| `session_ttl_seconds` | `300` | REST session TTL in seconds (0 = no expiry) |
+| `cors_origin` | `"https://web.aceattorneyonline.com"` | CORS allowed origin |
 
 ### Architecture
 

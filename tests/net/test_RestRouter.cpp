@@ -550,3 +550,120 @@ TEST_F(RestRouterTest, WithLockExecutesUnderMutex) {
     router_.with_lock([&] { executed = true; });
     EXPECT_TRUE(executed);
 }
+
+// -- NX endpoint test fixture -------------------------------------------------
+// Eliminates per-test boilerplate: sets up GameRoom, NXServer, RestRouter,
+// httplib server, and provides a client() helper and create_session().
+
+class NXEndpointTest : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        nx_register_endpoints();
+        Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+        room_.areas = {"Lobby"};
+        nx_ = std::make_unique<NXServer>(room_);
+        NXEndpoint::set_server(nx_.get());
+        router_.set_auth_func(
+            [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
+        EndpointFactory::instance().populate(router_);
+        router_.bind(http_);
+        port_ = http_.bind_to_any_port("127.0.0.1");
+        server_thread_ = std::thread([this] { http_.listen_after_bind(); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    void TearDown() override {
+        http_.stop();
+        if (server_thread_.joinable())
+            server_thread_.join();
+        Log::set_sink(nullptr);
+    }
+
+    httplib::Client client() {
+        return httplib::Client("127.0.0.1", port_);
+    }
+
+    /// Create a session and return the bearer token.
+    std::string create_session() {
+        auto cli = client();
+        auto res = cli.Post("/aonx/v1/session", R"({"client_name":"test","client_version":"1.0","hdid":"abc"})",
+                            "application/json");
+        return nlohmann::json::parse(res->body)["token"].get<std::string>();
+    }
+
+    GameRoom room_;
+    std::unique_ptr<NXServer> nx_;
+    RestRouter router_;
+    httplib::Server http_;
+    int port_ = 0;
+    std::thread server_thread_;
+};
+
+// -- Phase 2 endpoint tests --------------------------------------------------
+
+TEST_F(NXEndpointTest, SessionRenewExtendsTTL) {
+    nx_->set_session_ttl_seconds(600);
+    auto token = create_session();
+
+    auto cli = client();
+    httplib::Headers headers = {{"Authorization", "Bearer " + token}};
+    auto res = cli.Patch("/aonx/v1/session", headers, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["token"], token);
+    EXPECT_TRUE(body.contains("expires_at"));
+    auto expires_at = body["expires_at"].get<std::string>();
+    EXPECT_NE(expires_at.find('T'), std::string::npos);
+    EXPECT_NE(expires_at.find('Z'), std::string::npos);
+}
+
+TEST_F(NXEndpointTest, SessionRenewOmitsExpiresAtWhenTTLZero) {
+    nx_->set_session_ttl_seconds(0);
+    auto token = create_session();
+
+    auto cli = client();
+    httplib::Headers headers = {{"Authorization", "Bearer " + token}};
+    auto res = cli.Patch("/aonx/v1/session", headers, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["token"], token);
+    EXPECT_FALSE(body.contains("expires_at"));
+}
+
+TEST_F(NXEndpointTest, SessionRenewRequiresAuth) {
+    auto cli = client();
+    auto res = cli.Patch("/aonx/v1/session", "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, ServerMotdReturnsMessage) {
+    nx_->set_motd("Welcome to the courtroom!");
+
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/server/motd");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["message"], "Welcome to the courtroom!");
+}
+
+TEST_F(NXEndpointTest, ServerMotdReturnsEmptyWhenUnset) {
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/server/motd");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["message"], "");
+}
+
+TEST_F(NXEndpointTest, ServerMotdNoAuthRequired) {
+    nx_->set_motd("Test MOTD");
+
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/server/motd");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+}

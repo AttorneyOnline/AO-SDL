@@ -59,14 +59,17 @@ paths:
                   description: Authentication token. Format is TBD and server-dependent. Omitted for anonymous sessions.
                 hdid:
                   type: string
+                  minLength: 1
                   description: |
                     Hardware identifier. SHA-256 hash of a string in the format:
                     `client_name:platform:platform_specific_fingerprint`
                 client_name:
                   type: string
+                  minLength: 1
                   description: Client software name.
                 client_version:
                   type: string
+                  minLength: 1
                   description: Client software version.
       responses:
         "200":
