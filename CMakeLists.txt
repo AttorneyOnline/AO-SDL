@@ -532,6 +532,7 @@ add_library(nx_net STATIC
     plugins/net/nx/NXMessage.cpp
     plugins/net/nx/NXServer.cpp
     plugins/net/nx/NXEndpoint.cpp
+    plugins/net/nx/endpoints/ServerInfoEndpoint.cpp
     plugins/net/nx/endpoints/ServerMotdEndpoint.cpp
     plugins/net/nx/endpoints/ServerPlayersEndpoint.cpp
     plugins/net/nx/endpoints/SessionCreateEndpoint.cpp

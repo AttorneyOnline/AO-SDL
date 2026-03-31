@@ -3,6 +3,7 @@
 #include "AOServer.h"
 #include "game/ClientId.h"
 #include "utils/Log.h"
+#include "utils/Version.h"
 
 // Handshake
 
@@ -16,7 +17,7 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
     proto->hardware_id = hardware_id;
     Log::log_print(INFO, "AO: %s HWID: %s", format_client_id(session.client_id).c_str(), hardware_id.c_str());
 
-    server.send(session.client_id, AOPacket("ID", {std::to_string(session.session_id), "kagami", "1.0.0"}));
+    server.send(session.client_id, AOPacket("ID", {std::to_string(session.session_id), "kagami", ao_sdl_version()}));
 
     proto->state = AOProtocolState::IDENTIFIED;
 }
