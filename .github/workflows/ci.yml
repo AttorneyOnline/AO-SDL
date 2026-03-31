@@ -191,14 +191,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Repository owner (lowercase)
+        run: echo "REPO_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/kagami:latest
-            ghcr.io/${{ github.repository_owner }}/kagami:${{ github.sha }}
+            ghcr.io/${{ env.REPO_OWNER }}/kagami:latest
+            ghcr.io/${{ env.REPO_OWNER }}/kagami:${{ github.sha }}
 
   # ---- Deploy Kagami canary to EC2 ----
   deploy:
