@@ -29,7 +29,7 @@ servers:
   - url: "{scheme}://{host}/aonx/v1"
     variables:
       scheme:
-        default: http
+        default: https
         enum: [https, http]
       host:
         default: canary.attorneyoffline.de
