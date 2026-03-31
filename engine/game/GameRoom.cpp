@@ -1,7 +1,11 @@
 #include "game/GameRoom.h"
 
 #include "game/ClientId.h"
+#include "utils/Crypto.h"
 #include "utils/Log.h"
+
+#include <algorithm>
+#include <cctype>
 
 ServerSession& GameRoom::create_session(uint64_t client_id, const std::string& protocol) {
     ServerSession session;
@@ -168,4 +172,70 @@ void GameRoom::handle_music(const MusicAction& action) {
     MusicEvent evt{session->area, action};
     for (auto& cb : music_broadcasts_)
         cb(evt.area, evt);
+}
+
+// -- Character ID index (Phase 3) -------------------------------------------
+
+const std::string GameRoom::empty_char_id_;
+
+void GameRoom::build_char_id_index() {
+    char_ids_.clear();
+    char_id_to_index_.clear();
+    char_ids_.reserve(characters.size());
+    for (int i = 0; i < static_cast<int>(characters.size()); ++i) {
+        auto id = crypto::sha256("character:" + characters[i]);
+        char_id_to_index_[id] = i;
+        char_ids_.push_back(std::move(id));
+    }
+}
+
+int GameRoom::find_char_index(const std::string& char_id) const {
+    auto it = char_id_to_index_.find(char_id);
+    return it != char_id_to_index_.end() ? it->second : -1;
+}
+
+const std::string& GameRoom::char_id_at(int index) const {
+    if (index < 0 || index >= static_cast<int>(char_ids_.size()))
+        return empty_char_id_;
+    return char_ids_[index];
+}
+
+// -- Area state index (Phase 3) ----------------------------------------------
+
+/// Slugify: lowercase, spaces/underscores → hyphens, strip non-alnum.
+static std::string slugify(const std::string& name) {
+    std::string slug;
+    slug.reserve(name.size());
+    for (char c : name) {
+        if (c == ' ' || c == '_')
+            slug += '-';
+        else if (std::isalnum(static_cast<unsigned char>(c)) || c == '-')
+            slug += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return slug;
+}
+
+void GameRoom::build_area_index() {
+    area_states_.clear();
+    area_name_to_id_.clear();
+    for (const auto& name : areas) {
+        AreaState state;
+        state.id = crypto::sha256("area:" + name);
+        state.name = name;
+        state.path = slugify(name);
+        area_name_to_id_[name] = state.id;
+        area_states_.emplace(state.id, std::move(state));
+    }
+}
+
+AreaState* GameRoom::find_area(const std::string& area_id) {
+    auto it = area_states_.find(area_id);
+    return it != area_states_.end() ? &it->second : nullptr;
+}
+
+AreaState* GameRoom::find_area_by_name(const std::string& area_name) {
+    auto it = area_name_to_id_.find(area_name);
+    if (it == area_name_to_id_.end())
+        return nullptr;
+    return find_area(it->second);
 }

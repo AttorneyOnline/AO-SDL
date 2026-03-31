@@ -537,6 +537,12 @@ add_library(nx_net STATIC
     plugins/net/nx/endpoints/SessionCreateEndpoint.cpp
     plugins/net/nx/endpoints/SessionDeleteEndpoint.cpp
     plugins/net/nx/endpoints/SessionRenewEndpoint.cpp
+    plugins/net/nx/endpoints/CharacterListEndpoint.cpp
+    plugins/net/nx/endpoints/CharacterGetEndpoint.cpp
+    plugins/net/nx/endpoints/CharacterSelectEndpoint.cpp
+    plugins/net/nx/endpoints/AreaListEndpoint.cpp
+    plugins/net/nx/endpoints/AreaGetEndpoint.cpp
+    plugins/net/nx/endpoints/AreaPlayersEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net

@@ -560,7 +560,11 @@ class NXEndpointTest : public ::testing::Test {
     void SetUp() override {
         nx_register_endpoints();
         Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
-        room_.areas = {"Lobby"};
+        room_.characters = {"Phoenix", "Edgeworth", "Maya"};
+        room_.areas = {"Lobby", "Courtroom 1"};
+        room_.reset_taken();
+        room_.build_char_id_index();
+        room_.build_area_index();
         nx_ = std::make_unique<NXServer>(room_);
         NXEndpoint::set_server(nx_.get());
         router_.set_auth_func(
@@ -666,4 +670,242 @@ TEST_F(NXEndpointTest, ServerMotdNoAuthRequired) {
     auto res = cli.Get("/aonx/v1/server/motd");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
+}
+
+// -- Phase 3: Character endpoint tests ---------------------------------------
+
+TEST_F(NXEndpointTest, CharacterListReturnsAll) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Get("/aonx/v1/characters", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    ASSERT_TRUE(body.contains("characters"));
+    auto& chars = body["characters"];
+    EXPECT_EQ(chars.size(), 3);
+    for (auto& c : chars) {
+        EXPECT_TRUE(c.contains("char_id"));
+        EXPECT_TRUE(c.contains("available"));
+        EXPECT_TRUE(c["available"].get<bool>());
+    }
+}
+
+TEST_F(NXEndpointTest, CharacterListShowsTaken) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Select the first character
+    auto list_res = cli.Get("/aonx/v1/characters", h);
+    auto chars = nlohmann::json::parse(list_res->body)["characters"];
+    std::string first_id = chars[0]["char_id"].get<std::string>();
+
+    cli.Post("/aonx/v1/characters/select", h, nlohmann::json({{"char_id", first_id}}).dump(), "application/json");
+
+    // Re-list — the selected character should be taken
+    auto res = cli.Get("/aonx/v1/characters", h);
+    auto updated = nlohmann::json::parse(res->body)["characters"];
+    bool found_taken = false;
+    for (auto& c : updated) {
+        if (c["char_id"] == first_id) {
+            EXPECT_FALSE(c["available"].get<bool>());
+            found_taken = true;
+        }
+    }
+    EXPECT_TRUE(found_taken);
+}
+
+TEST_F(NXEndpointTest, CharacterListRequiresAuth) {
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/characters");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, CharacterGetReturnsManifest) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    std::string char_id = room_.char_id_at(0);
+    auto res = cli.Get("/aonx/v1/characters/" + char_id, h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["schema"], "character");
+    EXPECT_EQ(body["schema_version"], 1);
+    EXPECT_EQ(body["name"], "Phoenix");
+    EXPECT_TRUE(body["emotes"].is_array());
+}
+
+TEST_F(NXEndpointTest, CharacterGetNotFound) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Get("/aonx/v1/characters/nonexistent", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+}
+
+TEST_F(NXEndpointTest, CharacterSelectSuccess) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    std::string char_id = room_.char_id_at(0);
+    auto res =
+        cli.Post("/aonx/v1/characters/select", h, nlohmann::json({{"char_id", char_id}}).dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_TRUE(nlohmann::json::parse(res->body)["accepted"].get<bool>());
+}
+
+TEST_F(NXEndpointTest, CharacterSelectAlreadyTaken) {
+    // Session A takes a character
+    auto token_a = create_session();
+    auto cli_a = client();
+    httplib::Headers h_a = {{"Authorization", "Bearer " + token_a}};
+
+    std::string char_id = room_.char_id_at(0);
+    cli_a.Post("/aonx/v1/characters/select", h_a, nlohmann::json({{"char_id", char_id}}).dump(), "application/json");
+
+    // Session B tries the same character
+    auto token_b = create_session();
+    auto cli_b = client();
+    httplib::Headers h_b = {{"Authorization", "Bearer " + token_b}};
+
+    auto res = cli_b.Post("/aonx/v1/characters/select", h_b, nlohmann::json({{"char_id", char_id}}).dump(),
+                          "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 409);
+}
+
+TEST_F(NXEndpointTest, CharacterSelectNotFound) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/characters/select", h, R"({"char_id":"nonexistent"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+}
+
+// -- Phase 3: Area endpoint tests --------------------------------------------
+
+TEST_F(NXEndpointTest, AreaListReturnsAll) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Get("/aonx/v1/areas", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    ASSERT_TRUE(body.contains("areas"));
+    EXPECT_EQ(body["areas"].size(), 2);
+
+    for (auto& a : body["areas"]) {
+        EXPECT_TRUE(a.contains("id"));
+        EXPECT_TRUE(a.contains("name"));
+        EXPECT_TRUE(a.contains("path"));
+        EXPECT_TRUE(a.contains("players"));
+        EXPECT_TRUE(a.contains("status"));
+    }
+}
+
+TEST_F(NXEndpointTest, AreaListRequiresAuth) {
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/areas");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, AreaGetReturnsState) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res = cli.Get("/aonx/v1/areas/" + lobby->id, h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["area"]["name"], "Lobby");
+    EXPECT_TRUE(body.contains("hp"));
+    EXPECT_EQ(body["hp"]["defense"], 10);
+    EXPECT_EQ(body["hp"]["prosecution"], 10);
+    EXPECT_TRUE(body.contains("timers"));
+    EXPECT_TRUE(body["timers"].is_array());
+    // background and music should be null (no state set)
+    EXPECT_TRUE(body["background"].is_null());
+    EXPECT_TRUE(body["music"].is_null());
+}
+
+TEST_F(NXEndpointTest, AreaGetUnderscore) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Session defaults to first area ("Lobby")
+    auto res = cli.Get("/aonx/v1/areas/_", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["area"]["name"], "Lobby");
+}
+
+TEST_F(NXEndpointTest, AreaGetNotFound) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Get("/aonx/v1/areas/nonexistent", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+}
+
+TEST_F(NXEndpointTest, AreaPlayersInArea) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res = cli.Get("/aonx/v1/areas/" + lobby->id + "/players", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    ASSERT_TRUE(body.contains("players"));
+    // The session we created should be in the Lobby
+    EXPECT_GE(body["players"].size(), 1);
+}
+
+TEST_F(NXEndpointTest, AreaPlayersEmpty) {
+    auto token = create_session();
+    auto cli = client();
+    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Courtroom 1 should have no players (session defaults to Lobby)
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    ASSERT_NE(cr1, nullptr);
+
+    auto res = cli.Get("/aonx/v1/areas/" + cr1->id + "/players", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["players"].size(), 0);
 }
