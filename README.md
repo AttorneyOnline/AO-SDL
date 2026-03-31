@@ -94,7 +94,7 @@ To disable (e.g. if Python is unavailable):
 cmake -B build -DAOSDL_GENERATE_SCHEMAS=OFF
 ```
 
-Without schema generation, endpoints fall back to manual field checking. If the flag is ON but Python or PyYAML is missing, CMake prints a warning and continues without schema generation.
+Without schema generation, endpoints log an ERROR on every request but do not validate bodies. If the flag is ON (default) but Python or PyYAML is missing, CMake will fail with an error directing you to install the dependencies or pass `-DAOSDL_GENERATE_SCHEMAS=OFF`.
 
 ---
 
