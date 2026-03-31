@@ -1,0 +1,7 @@
+build/
+out/
+.github/
+docs/html/
+*.tar.gz
+*.dmp
+.DS_Store

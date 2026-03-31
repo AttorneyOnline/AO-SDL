@@ -170,6 +170,58 @@ jobs:
             aosdl-*.tar.gz
             artifact/
 
+  # ---- Build & push Kagami Docker image to GHCR ----
+  docker:
+    name: Docker (Kagami)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/kagami:latest
+            ghcr.io/${{ github.repository_owner }}/kagami:${{ github.sha }}
+
+  # ---- Deploy Kagami canary to EC2 ----
+  deploy:
+    name: Deploy (canary)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [docker]
+    steps:
+      - name: Deploy via SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ubuntu@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            docker pull ghcr.io/attorneyonline/kagami:latest
+            docker stop kagami 2>/dev/null || true
+            docker rm kagami 2>/dev/null || true
+            docker run -d --name kagami --restart unless-stopped \
+              -p 80:80 -p 27015:27015 \
+              -v /opt/kagami/kagami.json:/app/kagami.json \
+              ghcr.io/attorneyonline/kagami:latest
+          EOF
+
   # ---- iOS build verification (no signing) ----
   ios:
     name: iOS (Flutter)
