@@ -160,6 +160,10 @@ class Server {
         fatal();
         return *this;
     }
+    Server& Options(const std::string&, Handler) {
+        fatal();
+        return *this;
+    }
     bool bind_to_port(const std::string&, int, int = 0) {
         fatal();
         return false;
