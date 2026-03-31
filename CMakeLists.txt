@@ -39,11 +39,17 @@ if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel" AND NOT MSVC)
     find_program(STRIP_EXECUTABLE strip)
     if(STRIP_EXECUTABLE)
         function(aosdl_strip target)
+            # Linker map: per-target to avoid clobbering when multiple exes build
+            if(APPLE)
+                target_link_options(${target} PRIVATE "LINKER:-map,$<TARGET_FILE:${target}>.map")
+            else()
+                target_link_options(${target} PRIVATE "LINKER:-Map,$<TARGET_FILE:${target}>.map")
+            endif()
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${STRIP_EXECUTABLE} "$<TARGET_FILE:${target}>"
                 COMMENT "Stripping ${target}")
         endfunction()
-        message(STATUS "Strip enabled (post-build)")
+        message(STATUS "Strip + linker map enabled (post-build)")
     else()
         function(aosdl_strip target)
         endfunction()
