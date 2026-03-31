@@ -158,6 +158,28 @@ int main(int /*argc*/, char* argv[]) {
                   }
               }});
 
+    repl.add({"/sessions", "List active sessions", [&](auto&) {
+                  rest_router.with_lock([&] {
+                      if (room.session_count() == 0) {
+                          ui.print("  No active sessions.");
+                          return;
+                      }
+                      room.for_each_session([&](const ServerSession& s) {
+                          std::string info = "  " + format_client_id(s.client_id);
+                          if (!s.display_name.empty())
+                              info += " \"" + s.display_name + "\"";
+                          if (s.character_id >= 0)
+                              info += " char=" + std::to_string(s.character_id);
+                          if (!s.area.empty())
+                              info += " area=" + s.area;
+                          if (!s.client_software.empty())
+                              info += " (" + s.client_software + ")";
+                          ui.print(info);
+                      });
+                      ui.print("  Total: " + std::to_string(room.session_count()));
+                  });
+              }});
+
     repl.add({"/status", "Show server status", [&](auto&) {
                   ui.print("Server:     " + cfg.server_name());
                   ui.print("HTTP:       " + cfg.bind_address() + ":" + std::to_string(cfg.http_port()));

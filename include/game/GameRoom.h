@@ -69,6 +69,13 @@ class GameRoom {
     /// Returns the number of expired sessions removed.
     int expire_sessions(int ttl_seconds);
 
+    /// Invoke a callback for each active session.
+    template <typename F>
+    void for_each_session(F&& func) const {
+        for (auto& [id, session] : sessions_)
+            func(session);
+    }
+
     /// All sessions in a given area.
     std::vector<ServerSession*> sessions_in_area(const std::string& area);
 
