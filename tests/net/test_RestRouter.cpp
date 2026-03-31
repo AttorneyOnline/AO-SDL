@@ -377,9 +377,7 @@ TEST(RestResponseTest, NoContentFactory) {
 
 // -- EndpointFactory / EndpointRegistrar tests -------------------------------
 
-TEST(EndpointFactoryTest, RegisterAndPopulate) {
-    // Use a local factory to avoid polluting the global singleton.
-    // We test the same logic by calling register_endpoint + populate directly.
+TEST(EndpointFactoryTest, RouterServesRegisteredEndpoint) {
     RestRouter router;
     auto ep =
         std::make_unique<StubEndpoint>("GET", "/factory-test", false, RestResponse::json(200, {{"from", "factory"}}));

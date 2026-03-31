@@ -2,6 +2,7 @@
 
 #include "configuration/JsonConfiguration.h"
 
+#include <algorithm>
 #include <string>
 
 /// Server-specific configuration backed by kagami.json.
@@ -38,7 +39,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
     }
 
     int session_ttl_seconds() const {
-        return value<int>("session_ttl_seconds");
+        return std::max(60, value<int>("session_ttl_seconds"));
     }
 
     static bool load_from_disk(const std::string& path);
