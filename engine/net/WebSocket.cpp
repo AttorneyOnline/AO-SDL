@@ -67,18 +67,19 @@ void WebSocket::connect(const std::string& endpoint) {
     try {
         handshake_good = validate_handshake(handshake_response);
     }
-    catch (const WebSocketException& ex) {
-        throw ex;
+    catch (const WebSocketException&) {
+        connecting = false;
+        throw;
     }
 
     if (!handshake_good) {
+        connecting = false;
         throw WebSocketException("Unspecified error occurred while validating handshake response");
     }
-    else {
-        ready = true;
-        connecting = false;
-        socket->set_non_blocking(true);
-    }
+
+    ready = true;
+    connecting = false;
+    socket->set_non_blocking(true);
 }
 
 std::vector<::WebSocketFrame> WebSocket::read() {
