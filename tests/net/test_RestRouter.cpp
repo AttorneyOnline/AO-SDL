@@ -216,6 +216,7 @@ TEST_F(RestRouterTest, AuthSuccessPassesSession) {
 
     auto& session = room_.create_session(1, "aonx");
     session.session_token = "validtoken";
+    room_.register_session_token("validtoken", 1);
     session.joined = true;
 
     router_.set_auth_func(
@@ -238,6 +239,7 @@ TEST_F(RestRouterTest, AuthTouchesSession) {
 
     auto& session = room_.create_session(1, "aonx");
     session.session_token = "tok";
+    room_.register_session_token("tok", 1);
     session.joined = true;
 
     // Backdate the last_activity
@@ -302,8 +304,10 @@ TEST(GameRoomTest, FindSessionByToken) {
     room.areas = {"Lobby"};
     auto& s1 = room.create_session(1, "aonx");
     s1.session_token = "token_a";
+    room.register_session_token("token_a", 1);
     auto& s2 = room.create_session(2, "aonx");
     s2.session_token = "token_b";
+    room.register_session_token("token_b", 2);
 
     EXPECT_EQ(room.find_session_by_token("token_a"), &s1);
     EXPECT_EQ(room.find_session_by_token("token_b"), &s2);
@@ -318,10 +322,12 @@ TEST(GameRoomTest, ExpireSessionsRemovesStale) {
 
     auto& s1 = room.create_session(1, "aonx");
     s1.session_token = "active";
+    room.register_session_token("active", 1);
     s1.touch();
 
     auto& s2 = room.create_session(2, "aonx");
     s2.session_token = "stale";
+    room.register_session_token("stale", 2);
     s2.character_id = 0;
     room.char_taken[0] = 1;
     s2.last_activity = std::chrono::steady_clock::now() - std::chrono::seconds(600);

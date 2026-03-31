@@ -26,6 +26,9 @@ void GameRoom::destroy_session(uint64_t client_id) {
     if (char_id >= 0 && char_id < static_cast<int>(char_taken.size()))
         char_taken[char_id] = 0;
 
+    if (!it->second.session_token.empty())
+        token_index_.erase(it->second.session_token);
+
     Log::log_print(INFO, "GameRoom: session destroyed for client %llu", (unsigned long long)client_id);
     sessions_.erase(it);
 }
@@ -35,12 +38,16 @@ ServerSession* GameRoom::get_session(uint64_t client_id) {
     return it != sessions_.end() ? &it->second : nullptr;
 }
 
+void GameRoom::register_session_token(const std::string& token, uint64_t client_id) {
+    if (!token.empty())
+        token_index_[token] = client_id;
+}
+
 ServerSession* GameRoom::find_session_by_token(const std::string& token) {
-    for (auto& [id, session] : sessions_) {
-        if (session.session_token == token)
-            return &session;
-    }
-    return nullptr;
+    auto it = token_index_.find(token);
+    if (it == token_index_.end())
+        return nullptr;
+    return get_session(it->second);
 }
 
 int GameRoom::expire_sessions(int ttl_seconds) {
@@ -56,6 +63,7 @@ int GameRoom::expire_sessions(int ttl_seconds) {
                 // Free character slot
                 if (session.character_id >= 0 && session.character_id < static_cast<int>(char_taken.size()))
                     char_taken[session.character_id] = 0;
+                token_index_.erase(session.session_token);
                 Log::log_print(INFO, "GameRoom: expired session %llu (inactive %llds)", (unsigned long long)it->first,
                                (long long)elapsed);
                 it = sessions_.erase(it);

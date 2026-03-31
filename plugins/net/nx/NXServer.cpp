@@ -26,6 +26,7 @@ std::string NXServer::create_session(const std::string& hdid, const std::string&
     uint64_t id = next_rest_id_++;
     auto& session = room_.create_session(id, "aonx");
     session.session_token = generate_token();
+    room_.register_session_token(session.session_token, id);
     session.display_name = client_name;
     session.client_software = client_name + "/" + client_version;
     session.joined = true;
