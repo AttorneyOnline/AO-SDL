@@ -30,14 +30,12 @@ class CharacterSelectEndpoint : public NXEndpoint {
         if (index < 0)
             return RestResponse::error(404, "Character not found");
 
-        // Check taken before calling handle_char_select so we can
-        // distinguish 409 (taken) from a generic false return.
-        if (index < static_cast<int>(room().char_taken.size()) && room().char_taken[index])
+        // handle_char_select is the single source of truth for taken state.
+        // After a valid index, false always means the character is taken.
+        if (!room().handle_char_select({req.session->client_id, index}))
             return RestResponse::error(409, "Character is already taken");
 
-        bool accepted = room().handle_char_select({req.session->client_id, index});
-
-        return RestResponse::json(200, {{"accepted", accepted}});
+        return RestResponse::json(200, {{"accepted", true}});
     }
 };
 
