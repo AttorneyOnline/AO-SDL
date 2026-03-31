@@ -59,6 +59,8 @@ struct Response {
     void set_content(const std::string& b, const std::string& /*content_type*/) {
         body = b;
     }
+    void set_header(const std::string& /*key*/, const std::string& /*value*/) {
+    }
     std::string get_header_value(const std::string& /*key*/) const {
         return {};
     }
