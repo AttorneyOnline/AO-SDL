@@ -67,12 +67,15 @@ set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Server-only builds skip the SDL client, renderers, and their dependencies.
+option(AO_BUILD_SERVER_ONLY "Build only the Kagami server (no SDL client, renderer, or GUI)" OFF)
+
 # =============================================================================
 # Third-party dependencies
 # =============================================================================
 
 # --- SDL2 — only needed for the desktop SDL app, not for Flutter/mobile ------
-if(NOT AO_BUILD_FLUTTER)
+if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
@@ -160,8 +163,8 @@ target_include_directories(opusfile
 target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
 target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
 
-# ImGui (static lib — desktop only, not needed for Flutter)
-if(NOT AO_BUILD_FLUTTER)
+# ImGui (static lib — desktop only, not needed for Flutter or server)
+if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
     set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
@@ -453,6 +456,7 @@ endif()
 # Plugins
 # =============================================================================
 
+if(NOT AO_BUILD_SERVER_ONLY)
 if(APPLE)
     # --- aorender_metal — Metal renderer backend (macOS / iOS) ----------------
 
@@ -503,6 +507,7 @@ else()
         target_link_libraries(aorender_gl PUBLIC ${GLEW_LIBRARIES})
     endif()
 endif()
+endif() # NOT AO_BUILD_SERVER_ONLY
 
 # --- ao_net — AO2 network protocol (packet parsing, serialization) -----------
 
@@ -555,6 +560,7 @@ target_link_libraries(kagami_server INTERFACE aoengine ao_net nx_net)
 
 # --- ao_game — AO2 game logic (courtroom, emotes, textbox, effects) ---------
 
+if(NOT AO_BUILD_SERVER_ONLY)
 add_library(ao_game STATIC
     plugins/ao/asset/AOAssetLibrary.cpp
     plugins/ao/asset/AOCharacterSheet.cpp
@@ -588,15 +594,19 @@ add_library(ao_protocol STATIC
 set_property(TARGET ao_protocol PROPERTY CXX_STANDARD 20)
 target_include_directories(ao_protocol PUBLIC plugins)
 target_link_libraries(ao_protocol PUBLIC ao_net ao_game)
+endif() # NOT AO_BUILD_SERVER_ONLY
 
 # =============================================================================
 # Applications — one per backend
 # =============================================================================
 
-if(NOT AO_BUILD_FLUTTER)
+if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     add_subdirectory(apps/sdl)
-    add_subdirectory(apps/kagami)
     # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
+endif()
+
+if(NOT AO_BUILD_FLUTTER)
+    add_subdirectory(apps/kagami)
 endif()
 
 # --- ao_bridge — C API for Flutter/Dart FFI (mobile) -------------------------
@@ -645,7 +655,7 @@ endif()
 # Tests
 # =============================================================================
 
-if(NOT AO_BUILD_FLUTTER)
+if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     enable_testing()
     add_subdirectory(tests)
 endif()

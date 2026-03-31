@@ -29,10 +29,10 @@ servers:
   - url: "{scheme}://{host}/aonx/v1"
     variables:
       scheme:
-        default: https
+        default: http
         enum: [https, http]
       host:
-        default: example.com
+        default: 35.95.250.121
 
 paths:
   # ---------------------------------------------------------------------------
