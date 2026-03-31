@@ -145,8 +145,15 @@ def collect_request_schemas(spec: dict) -> dict[str, dict]:
     return result
 
 
-def generate_cpp(spec: dict, output_path: str) -> None:
-    """Generate the C++ source file."""
+def generate_cpp(spec: dict, output_path: str, prefix: str = "aonx") -> None:
+    """Generate the C++ source file.
+
+    Args:
+        prefix: Function name prefix. Default "aonx" produces
+                aonx_request_schema() / aonx_component_schema().
+                Use a different prefix to avoid symbol collisions
+                when multiple specs are compiled into the same binary.
+    """
     request_schemas = collect_request_schemas(spec)
     component_schemas = spec.get("components", {}).get("schemas", {})
 
@@ -205,7 +212,7 @@ def generate_cpp(spec: dict, output_path: str) -> None:
     # Lookup functions
     lines.append("// -- Public lookup functions --")
     lines.append("")
-    lines.append("const JsonSchema& aonx_request_schema(const std::string& operation_id) {")
+    lines.append(f"const JsonSchema& {prefix}_request_schema(const std::string& operation_id) {{")
     lines.append("    static const std::unordered_map<std::string, const JsonSchema& (*)()> map = {")
     for op_id in request_schemas:
         lines.append(f'        {{"{op_id}", &request_{op_id}}},')
@@ -215,7 +222,7 @@ def generate_cpp(spec: dict, output_path: str) -> None:
     lines.append("    return it->second();")
     lines.append("}")
     lines.append("")
-    lines.append("const JsonSchema& aonx_component_schema(const std::string& name) {")
+    lines.append(f"const JsonSchema& {prefix}_component_schema(const std::string& name) {{")
     lines.append("    static const std::unordered_map<std::string, const JsonSchema& (*)()> map = {")
     for name in component_schemas:
         lines.append(f'        {{"{name}", &schema_{name}}},')
@@ -233,17 +240,18 @@ def generate_cpp(spec: dict, output_path: str) -> None:
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <openapi.yaml> <output.cpp>", file=sys.stderr)
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate C++ JsonSchema definitions from an OpenAPI spec.")
+    parser.add_argument("spec", help="Path to OpenAPI YAML file")
+    parser.add_argument("output", help="Path to output C++ file")
+    parser.add_argument("--prefix", default="aonx",
+                        help="Function name prefix (default: aonx)")
+    args = parser.parse_args()
 
-    spec_path = sys.argv[1]
-    output_path = sys.argv[2]
-
-    with open(spec_path) as f:
+    with open(args.spec) as f:
         spec = fix_yaml_booleans(yaml.safe_load(f))
 
-    generate_cpp(spec, output_path)
+    generate_cpp(spec, args.output, prefix=args.prefix)
 
 
 if __name__ == "__main__":

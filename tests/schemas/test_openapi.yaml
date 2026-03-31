@@ -1,0 +1,111 @@
+openapi: 3.1.0
+info:
+  title: Test API
+  version: "1"
+
+paths:
+  /widget:
+    post:
+      operationId: createWidget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, count]
+              properties:
+                name:
+                  type: string
+                count:
+                  type: integer
+                label:
+                  type: string
+
+  /gadget:
+    post:
+      operationId: createGadget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Gadget"
+
+  /event:
+    post:
+      operationId: fireEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, on]
+              properties:
+                name:
+                  type: string
+                on:
+                  type: string
+
+  /action:
+    post:
+      operationId: submitAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                params:
+                  type: object
+
+components:
+  schemas:
+    Gadget:
+      type: object
+      required: [id, parts]
+      properties:
+        id:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Part"
+        config:
+          $ref: "#/components/schemas/Config"
+
+    Part:
+      type: object
+      required: [name, on]
+      properties:
+        name:
+          type: string
+        on:
+          type: string
+        weight:
+          type: number
+        active:
+          type: boolean
+
+    Config:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [fast, slow, auto]
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        nested:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number

@@ -86,6 +86,29 @@ target_sources(aosdl_tests PRIVATE stubs/StubTexture.cpp)
 
 target_link_libraries(aosdl_tests PRIVATE ao_protocol nx_net GTest::gtest_main)
 
+# -- Schema generator tests (generate from test YAML, compile, assert) --------
+if(AOSDL_SCHEMAS_AVAILABLE)
+    set(_TEST_SCHEMA_YAML "${CMAKE_CURRENT_SOURCE_DIR}/schemas/test_openapi.yaml")
+    set(_TEST_SCHEMA_CPP  "${CMAKE_CURRENT_BINARY_DIR}/generated/TestSchemas.cpp")
+
+    add_custom_command(
+        OUTPUT  "${_TEST_SCHEMA_CPP}"
+        COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_SOURCE_DIR}/scripts/generate_schemas.py"
+                "${_TEST_SCHEMA_YAML}"
+                "${_TEST_SCHEMA_CPP}"
+                --prefix test_schema
+        DEPENDS "${_TEST_SCHEMA_YAML}"
+                "${CMAKE_SOURCE_DIR}/scripts/generate_schemas.py"
+        COMMENT "Generating test schemas from test_openapi.yaml"
+    )
+    target_sources(aosdl_tests PRIVATE
+        "${_TEST_SCHEMA_CPP}"
+        schemas/test_SchemaGenerator.cpp
+    )
+    target_compile_definitions(aosdl_tests PRIVATE AOSDL_HAS_TEST_SCHEMAS=1)
+endif()
+
 # =============================================================================
 # SDL widget tests — headless ImGui via NullGPUBackend
 # =============================================================================
