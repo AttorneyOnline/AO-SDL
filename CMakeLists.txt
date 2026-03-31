@@ -205,7 +205,7 @@ embed_assets(EMBEDDED_ASSETS_SRC
 option(AOSDL_GENERATE_SCHEMAS "Generate JSON schema validators from openapi.yaml (requires Python3 + PyYAML)" ON)
 
 if(AOSDL_GENERATE_SCHEMAS AND NOT AO_BUILD_FLUTTER)
-    find_package(Python3 COMPONENTS Interpreter QUIET)
+    find_package(Python3 COMPONENTS Interpreter)
     if(NOT Python3_FOUND)
         message(FATAL_ERROR
             "\n"
