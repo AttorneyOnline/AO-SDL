@@ -1,6 +1,7 @@
 #include "PacketTypes.h"
 
 #include "AOServer.h"
+#include "game/ClientId.h"
 #include "utils/Log.h"
 
 // Handshake
@@ -8,12 +9,12 @@
 void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
     auto* proto = server.get_protocol_state(session.client_id);
     if (!proto || proto->state != AOProtocolState::CONNECTED) {
-        Log::log_print(WARNING, "AO: unexpected HI from client %llu", (unsigned long long)session.client_id);
+        Log::log_print(WARNING, "AO: unexpected HI from %s", format_client_id(session.client_id).c_str());
         return;
     }
 
     proto->hardware_id = hardware_id;
-    Log::log_print(INFO, "AO: client %llu HWID: %s", (unsigned long long)session.client_id, hardware_id.c_str());
+    Log::log_print(INFO, "AO: %s HWID: %s", format_client_id(session.client_id).c_str(), hardware_id.c_str());
 
     server.send(session.client_id, AOPacket("ID", {std::to_string(session.session_id), "kagami", "1.0.0"}));
 
@@ -23,11 +24,11 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
 void AOPacketIDClient::handle_server(AOServer& server, ServerSession& session) {
     auto* proto = server.get_protocol_state(session.client_id);
     if (!proto || proto->state != AOProtocolState::IDENTIFIED) {
-        Log::log_print(WARNING, "AO: unexpected ID from client %llu", (unsigned long long)session.client_id);
+        Log::log_print(WARNING, "AO: unexpected ID from %s", format_client_id(session.client_id).c_str());
         return;
     }
 
-    Log::log_print(INFO, "AO: client %llu identifies as %s %s", (unsigned long long)session.client_id, software.c_str(),
+    Log::log_print(INFO, "AO: %s identifies as %s %s", format_client_id(session.client_id).c_str(), software.c_str(),
                    version.c_str());
 
     auto& room = server.room();
@@ -93,8 +94,7 @@ void AOPacketRD::handle_server(AOServer& server, ServerSession& session) {
         server.send(session.client_id, AOPacket("CT", {room.server_name, room.server_description, "1"}));
     }
 
-    Log::log_print(INFO, "AO: client %llu joined (area: %s)", (unsigned long long)session.client_id,
-                   session.area.c_str());
+    Log::log_print(INFO, "AO: %s joined (area: %s)", format_client_id(session.client_id).c_str(), session.area.c_str());
 }
 
 // Actions — delegated to GameRoom

@@ -1,6 +1,7 @@
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
+#include "game/ClientId.h"
 #include "game/GameRoom.h"
 #include "net/EndpointFactory.h"
 #include "net/KissnetServerSocket.h"
@@ -131,7 +132,7 @@ int main(int /*argc*/, char* argv[]) {
             auto frames = ws.poll();
             for (auto& [client_id, frame] : frames) {
                 std::string data(frame.data.begin(), frame.data.end());
-                Log::log_print(VERBOSE, "WS frame from %llu: %s", (unsigned long long)client_id, data.c_str());
+                Log::log_print(VERBOSE, "WS frame from %s: %s", format_client_id(client_id).c_str(), data.c_str());
                 rest_router.with_lock([&] { ao_backend.on_client_message(client_id, data); });
             }
 

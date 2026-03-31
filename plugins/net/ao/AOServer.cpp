@@ -1,6 +1,7 @@
 #include "AOServer.h"
 
 #include "PacketTypes.h"
+#include "game/ClientId.h"
 #include "utils/Log.h"
 
 AOServer::AOServer(GameRoom& room) : room_(room) {
@@ -19,14 +20,14 @@ void AOServer::set_send_func(SendFunc func) {
 void AOServer::on_client_connected(uint64_t client_id) {
     room_.create_session(client_id, "ao2");
     proto_state_.emplace(client_id, AOProtocolState{});
-    Log::log_print(INFO, "AO: client %llu connected", (unsigned long long)client_id);
+    Log::log_print(INFO, "AO: %s connected", format_client_id(client_id).c_str());
     send(client_id, AOPacket("decryptor", {"NOENCRYPT"}));
 }
 
 void AOServer::on_client_disconnected(uint64_t client_id) {
     room_.destroy_session(client_id);
     proto_state_.erase(client_id);
-    Log::log_print(INFO, "AO: client %llu disconnected", (unsigned long long)client_id);
+    Log::log_print(INFO, "AO: %s disconnected", format_client_id(client_id).c_str());
 }
 
 void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
@@ -45,7 +46,7 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
         std::string packet_str = buf.substr(0, pos + delim.size());
         buf.erase(0, pos + delim.size());
 
-        Log::log_print(VERBOSE, "AO [%llu] <<< %s", (unsigned long long)client_id, packet_str.c_str());
+        Log::log_print(VERBOSE, "AO [%s] <<< %s", format_client_id(client_id).c_str(), packet_str.c_str());
 
         auto packet = AOPacket::deserialize(packet_str);
         if (packet) {
@@ -53,7 +54,7 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
                 dispatch(client_id, *packet);
             }
             catch (const std::exception& e) {
-                Log::log_print(WARNING, "AO: error handling packet from client %llu: %s", (unsigned long long)client_id,
+                Log::log_print(WARNING, "AO: error handling packet from %s: %s", format_client_id(client_id).c_str(),
                                e.what());
             }
         }
@@ -69,7 +70,7 @@ void AOServer::send(uint64_t client_id, const AOPacket& packet) {
     if (!send_func_)
         return;
     auto serialized = packet.serialize();
-    Log::log_print(VERBOSE, "AO [%llu] >>> %s", (unsigned long long)client_id, serialized.c_str());
+    Log::log_print(VERBOSE, "AO [%s] >>> %s", format_client_id(client_id).c_str(), serialized.c_str());
     send_func_(client_id, serialized);
 }
 

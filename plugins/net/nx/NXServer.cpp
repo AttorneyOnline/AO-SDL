@@ -1,5 +1,6 @@
 #include "NXServer.h"
 
+#include "game/ClientId.h"
 #include "utils/Log.h"
 
 #include <random>
@@ -30,14 +31,14 @@ std::string NXServer::create_session(const std::string& hdid, const std::string&
     session.display_name = client_name;
     session.client_software = client_name + "/" + client_version;
     session.joined = true;
-    Log::log_print(INFO, "NX: session created (id=%llu, client=%s)", (unsigned long long)id,
+    Log::log_print(INFO, "NX: session created (%s, client=%s)", format_client_id(id).c_str(),
                    session.client_software.c_str());
     return session.session_token;
 }
 
 void NXServer::destroy_session(uint64_t client_id) {
     room_.destroy_session(client_id);
-    Log::log_print(INFO, "NX: session destroyed for client %llu", (unsigned long long)client_id);
+    Log::log_print(INFO, "NX: session destroyed for %s", format_client_id(client_id).c_str());
 }
 
 // -- Broadcast stubs (will push to SSE streams in Phase 5) -------------------
