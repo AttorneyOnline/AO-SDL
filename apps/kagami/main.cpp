@@ -105,6 +105,7 @@ int main(int /*argc*/, char* argv[]) {
     // --- WebSocket server + protocol routing ---
     auto listener = std::make_unique<KissnetServerSocket>(cfg.bind_address());
     WebSocketServer ws(std::move(listener));
+    ws.set_supported_subprotocols({"ao2"});
     // Wire AO2 send function to WebSocket transport.
     // AONX clients use REST+SSE — no WebSocket involvement.
     auto ws_send = [&ws](uint64_t id, const std::string& data) {
