@@ -51,6 +51,8 @@ ServerSession* GameRoom::find_session_by_token(const std::string& token) {
 }
 
 int GameRoom::expire_sessions(int ttl_seconds) {
+    if (ttl_seconds <= 0)
+        return 0;
     auto now = std::chrono::steady_clock::now();
     int expired = 0;
     for (auto it = sessions_.begin(); it != sessions_.end();) {

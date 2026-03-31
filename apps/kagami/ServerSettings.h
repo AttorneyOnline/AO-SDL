@@ -38,8 +38,9 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return value<std::string>("motd");
     }
 
+    /// Session TTL in seconds. 0 = no expiry.
     int session_ttl_seconds() const {
-        return std::max(60, value<int>("session_ttl_seconds"));
+        return std::max(0, value<int>("session_ttl_seconds"));
     }
 
     std::string cors_origin() const {
