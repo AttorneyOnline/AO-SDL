@@ -20,6 +20,43 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel"
     endif()
 endif()
 
+# Dead code elimination for MinSizeRel builds.
+# -ffunction-sections/-fdata-sections put each symbol in its own section;
+# -Wl,-dead_strip (macOS) or -Wl,--gc-sections (Linux) discards unreferenced ones.
+if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel" AND NOT MSVC)
+    add_compile_options(-ffunction-sections -fdata-sections)
+    if(APPLE)
+        add_link_options(-Wl,-dead_strip)
+    else()
+        add_link_options(-Wl,--gc-sections)
+    endif()
+    message(STATUS "Dead code elimination enabled")
+endif()
+
+# Strip executables in MinSizeRel builds (post-link step).
+# Call aosdl_strip(target) on executable targets to add the post-build step.
+if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel" AND NOT MSVC)
+    find_program(STRIP_EXECUTABLE strip)
+    if(STRIP_EXECUTABLE)
+        function(aosdl_strip target)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${STRIP_EXECUTABLE} "$<TARGET_FILE:${target}>"
+                COMMENT "Stripping ${target}")
+        endfunction()
+        message(STATUS "Strip enabled (post-build)")
+    else()
+        function(aosdl_strip target)
+        endfunction()
+        message(WARNING "strip not found — binaries will not be stripped")
+    endif()
+else()
+    function(aosdl_strip target)
+    endfunction()
+endif()
+
+# Set CMP0069 so LTO applies to all targets including bundled SDL2
+cmake_policy(SET CMP0069 NEW)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =============================================================================

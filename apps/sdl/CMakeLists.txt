@@ -72,3 +72,5 @@ if(WIN32)
         VERBATIM
     )
 endif()
+
+aosdl_strip(aosdl)

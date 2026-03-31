@@ -6,3 +6,4 @@ add_executable(kagami
 set_property(TARGET kagami PROPERTY CXX_STANDARD 20)
 target_include_directories(kagami PRIVATE ${CMAKE_SOURCE_DIR}/engine)
 target_link_libraries(kagami PRIVATE kagami_server)
+aosdl_strip(kagami)

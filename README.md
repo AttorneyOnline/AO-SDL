@@ -55,7 +55,7 @@ cmake --preset x64-debug
 cmake --build out/build/x64-debug
 ```
 
-Available presets: `x64-debug`, `x64-release`, `x86-debug`, `x86-release`, `linux-debug`, `macos-debug`.
+Available presets: `x64-debug`, `x64-release`, `x86-debug`, `x86-release`, `linux-debug`, `macos-debug`, `macos-release`.
 
 ### Run Tests
 
@@ -134,6 +134,7 @@ cd apps/flutter && flutter run -d <device-name>
 | Preset | Target | Use |
 |---|---|---|
 | `macos-debug` | macOS desktop (SDL) | Desktop development |
+| `macos-release` | macOS desktop (SDL) | Release build (-Os, LTO, strip) |
 | `ios-sim-debug` | iOS Simulator (Flutter) | Mobile development |
 | `ios-device-release` | iOS device (Flutter) | Device testing / release |
 
