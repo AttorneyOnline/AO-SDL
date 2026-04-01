@@ -20,13 +20,7 @@
 // Scheme parsing for ws:// / wss:// URLs
 // ---------------------------------------------------------------------------
 
-struct ParsedWsUrl {
-    std::string host;
-    uint16_t port;
-    bool ssl;
-};
-
-static ParsedWsUrl parse_ws_url(const std::string& host_in, uint16_t port_in) {
+ParsedWsUrl parse_ws_url(const std::string& host_in, uint16_t port_in) {
     ParsedWsUrl result;
     std::string rest = host_in;
 

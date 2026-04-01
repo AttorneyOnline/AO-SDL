@@ -10,7 +10,21 @@
 
 #include "ProtocolHandler.h"
 
+#include <cstdint>
+#include <string>
 #include <thread>
+
+/// Parsed ws:// or wss:// URL components.
+struct ParsedWsUrl {
+    std::string host;
+    uint16_t port = 0;
+    bool ssl = false;
+};
+
+/// Parse a WebSocket URL into host, port, and TLS flag.
+/// Handles ws://, wss://, embedded host:port, IPv6, and trailing paths.
+/// If port_in is non-zero it overrides the port in the URL.
+ParsedWsUrl parse_ws_url(const std::string& host_in, uint16_t port_in);
 
 /**
  * @brief Manages a dedicated WebSocket client I/O thread.
