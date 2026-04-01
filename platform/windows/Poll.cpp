@@ -88,8 +88,11 @@ void Poller::remove(const Socket& sock) {
 // -- poll -------------------------------------------------------------------
 
 int Poller::poll(Event* out, int max_events, int timeout_ms) {
-    if (impl_->pollfds.empty())
+    if (impl_->pollfds.empty()) {
+        if (timeout_ms > 0)
+            Sleep(static_cast<DWORD>(timeout_ms));
         return 0;
+    }
 
     int n = WSAPoll(impl_->pollfds.data(), static_cast<ULONG>(impl_->pollfds.size()), timeout_ms);
     if (n <= 0)
