@@ -54,7 +54,12 @@ set(TEST_SOURCES
     utils/test_UTF8.cpp
     utils/test_Crypto.cpp
     utils/test_Log.cpp
-    net/test_NetworkThread.cpp
+    net/test_WSClientThread.cpp
+    net/test_HttpClient.cpp
+    net/test_HttpServer.cpp
+    net/test_PlatformSocket.cpp
+    platform/test_Socket.cpp
+    platform/test_Poll.cpp
     ui/test_UIManager.cpp
     audio/test_AudioStream.cpp
     ao/ui/test_Screens.cpp

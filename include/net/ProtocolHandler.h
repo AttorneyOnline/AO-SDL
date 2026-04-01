@@ -2,7 +2,7 @@
  * @file ProtocolHandler.h
  * @brief Abstract interface for protocol plugins (e.g. AOClient).
  *
- * ProtocolHandler defines the callbacks that NetworkThread invokes as
+ * ProtocolHandler defines the callbacks that WSClientThread invokes as
  * transport-level events occur, plus a method to drain outgoing messages.
  */
 #pragma once
@@ -14,7 +14,7 @@
  * @brief Abstract protocol handler that bridges game logic and the network transport.
  *
  * Concrete implementations (e.g. AOClient) translate between raw wire messages
- * and higher-level game events. NetworkThread owns a reference to this interface
+ * and higher-level game events. WSClientThread owns a reference to this interface
  * and calls its methods from the network thread.
  */
 class ProtocolHandler {
@@ -46,7 +46,7 @@ class ProtocolHandler {
     /**
      * @brief Returns any outgoing messages queued since the last call, then clears the queue.
      *
-     * NetworkThread drains this every tick and writes each message to the socket.
+     * WSClientThread drains this every tick and writes each message to the socket.
      *
      * @return A vector of serialized messages ready to be sent over the wire.
      */

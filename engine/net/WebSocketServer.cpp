@@ -25,6 +25,11 @@ void WebSocketServer::start(uint16_t port) {
     listener_->bind_and_listen(port);
     listener_->set_non_blocking(true);
     running_ = true;
+
+    // Register the listener with the poller for accept readiness.
+    int lfd = listener_->fd();
+    if (lfd >= 0)
+        poller_.add(lfd, platform::Poller::Readable);
 }
 
 void WebSocketServer::stop() {
@@ -63,7 +68,17 @@ void WebSocketServer::stop() {
     }
 }
 
-std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll() {
+std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) {
+    // Wait for socket activity before acquiring the lock.
+    // This replaces the caller's sleep_for() with kernel-level waiting.
+    {
+        constexpr int MAX_POLL_EVENTS = 64;
+        platform::Poller::Event events[MAX_POLL_EVENTS];
+        poller_.poll(events, MAX_POLL_EVENTS, timeout_ms);
+        // We don't inspect the events — we just needed the wake-up.
+        // The actual accept/read logic below handles all sockets.
+    }
+
     std::vector<ClientFrame> result;
     std::vector<ClientId> newly_connected;
     std::vector<ClientId> newly_disconnected;
@@ -276,6 +291,12 @@ void WebSocketServer::accept_new_clients() {
     // Accept all pending connections (non-blocking)
     while (auto client_socket = listener_->accept()) {
         client_socket->set_non_blocking(true);
+
+        // Register with poller for read readiness
+        int cfd = client_socket->fd();
+        if (cfd >= 0)
+            poller_.add(cfd, platform::Poller::Readable);
+
         ClientConnection conn;
         conn.id = next_client_id_++;
         conn.socket = std::move(client_socket);
@@ -549,5 +570,11 @@ void WebSocketServer::remove_client(ClientId id) {
     auto it = clients_.find(id);
     if (it == clients_.end())
         return;
+
+    // Remove from poller before destroying the socket
+    int cfd = it->second.socket->fd();
+    if (cfd >= 0)
+        poller_.remove(cfd);
+
     clients_.erase(it);
 }

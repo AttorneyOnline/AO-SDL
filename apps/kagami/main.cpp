@@ -4,14 +4,14 @@
 #include "game/ClientId.h"
 #include "game/GameRoom.h"
 #include "net/EndpointFactory.h"
-#include "net/KissnetServerSocket.h"
+#include "net/PlatformServerSocket.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketServer.h"
 #include "net/ao/AOServer.h"
 #include "net/nx/NXEndpoint.h"
 #include "utils/Log.h"
 
-#include <httplib.h>
+#include "net/Http.h"
 
 #include <csignal>
 #include <filesystem>
@@ -80,9 +80,9 @@ int main(int /*argc*/, char* argv[]) {
     nx_backend.set_motd(cfg.motd());
     nx_backend.set_session_ttl_seconds(cfg.session_ttl_seconds());
     // --- HTTP server (runs on its own thread pool) ---
-    httplib::Server http;
+    http::Server http;
 
-    http.Get("/", [&](const httplib::Request&, httplib::Response& res) {
+    http.Get("/", [&](const http::Request&, http::Response& res) {
         res.set_content("Hello from " + cfg.server_name() + "\n", "text/plain");
     });
 
@@ -106,7 +106,7 @@ int main(int /*argc*/, char* argv[]) {
     std::jthread http_thread([&](std::stop_token) { http.listen_after_bind(); });
 
     // --- WebSocket server + protocol routing ---
-    auto listener = std::make_unique<KissnetServerSocket>(cfg.bind_address());
+    auto listener = std::make_unique<PlatformServerSocket>(cfg.bind_address());
     WebSocketServer ws(std::move(listener));
     // Wire AO2 send function to WebSocket transport.
     // AONX clients use REST+SSE — no WebSocket involvement.
@@ -133,7 +133,9 @@ int main(int /*argc*/, char* argv[]) {
     std::jthread ws_thread([&](std::stop_token st) {
         auto last_sweep = std::chrono::steady_clock::now();
         while (!st.stop_requested()) {
-            auto frames = ws.poll();
+            // Block up to 10ms in the kernel waiting for socket activity.
+            // Replaces sleep_for — wakes instantly when data arrives.
+            auto frames = ws.poll(10);
             for (auto& [client_id, frame] : frames) {
                 std::string data(frame.data.begin(), frame.data.end());
                 Log::log_print(VERBOSE, "WS frame from %s: %s", format_client_id(client_id).c_str(), data.c_str());
@@ -146,8 +148,6 @@ int main(int /*argc*/, char* argv[]) {
                 rest_router.with_lock([&] { room.expire_sessions(cfg.session_ttl_seconds()); });
                 last_sweep = now;
             }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     });
 

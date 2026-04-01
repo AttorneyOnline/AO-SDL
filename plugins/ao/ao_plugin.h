@@ -14,7 +14,7 @@
 // Usage:
 //   auto protocol  = ao::create_protocol();
 //   auto presenter = ao::create_presenter();
-//   NetworkThread net_thread(*protocol);
+//   WSClientThread net_thread(*protocol);
 //   GameThread game_logic(buffer, *presenter);
 // =============================================================================
 

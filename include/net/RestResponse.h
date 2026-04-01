@@ -5,7 +5,7 @@
 #include <string>
 
 /// Response from a REST endpoint handler. RestRouter translates this
-/// into an httplib::Response.
+/// into an http::Response.
 struct RestResponse {
     int status = 200;
     nlohmann::json body;

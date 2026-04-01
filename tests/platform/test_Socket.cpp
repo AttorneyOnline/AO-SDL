@@ -1,0 +1,210 @@
+#include <gtest/gtest.h>
+
+#include "platform/Socket.h"
+
+#include <arpa/inet.h>
+#include <cstring>
+#include <string>
+#include <thread>
+#include <vector>
+
+using namespace platform;
+
+// -- Construction and validity ------------------------------------------------
+
+TEST(PlatformSocket, DefaultConstructedIsInvalid) {
+    Socket s;
+    EXPECT_FALSE(s.valid());
+    EXPECT_EQ(s.fd(), -1);
+    EXPECT_FALSE(s.is_ssl());
+}
+
+TEST(PlatformSocket, MoveConstructTransfersOwnership) {
+    auto s1 = tcp_create();
+    ASSERT_TRUE(s1.valid());
+    int fd = s1.fd();
+
+    Socket s2 = std::move(s1);
+    EXPECT_FALSE(s1.valid());
+    EXPECT_TRUE(s2.valid());
+    EXPECT_EQ(s2.fd(), fd);
+}
+
+TEST(PlatformSocket, MoveAssignTransfersOwnership) {
+    auto s1 = tcp_create();
+    ASSERT_TRUE(s1.valid());
+    int fd = s1.fd();
+
+    Socket s2;
+    s2 = std::move(s1);
+    EXPECT_FALSE(s1.valid());
+    EXPECT_TRUE(s2.valid());
+    EXPECT_EQ(s2.fd(), fd);
+}
+
+TEST(PlatformSocket, CloseInvalidatesSocket) {
+    auto s = tcp_create();
+    ASSERT_TRUE(s.valid());
+    s.close();
+    EXPECT_FALSE(s.valid());
+    EXPECT_EQ(s.fd(), -1);
+}
+
+TEST(PlatformSocket, DoubleCloseIsSafe) {
+    auto s = tcp_create();
+    s.close();
+    s.close(); // should not crash
+    EXPECT_FALSE(s.valid());
+}
+
+// -- TCP listen + accept + connect (loopback) ---------------------------------
+
+TEST(PlatformSocket, ListenAcceptConnect) {
+    auto listener = tcp_listen("127.0.0.1", 0); // port 0 = OS-assigned
+    ASSERT_TRUE(listener.valid());
+
+    // Get the assigned port
+    struct sockaddr_in addr{};
+    socklen_t len = sizeof(addr);
+    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&addr), &len);
+    uint16_t port = ntohs(addr.sin_port);
+    ASSERT_GT(port, 0);
+
+    listener.set_non_blocking(true);
+
+    // Connect from a client thread
+    std::thread client_thread([port] {
+        auto client = tcp_connect("127.0.0.1", port);
+        EXPECT_TRUE(client.valid());
+        const char* msg = "hello";
+        client.send(msg, strlen(msg));
+    });
+
+    // Accept with a brief busy-wait (non-blocking listener)
+    Socket accepted;
+    for (int i = 0; i < 100 && !accepted.valid(); ++i) {
+        std::string remote_addr;
+        uint16_t remote_port = 0;
+        accepted = tcp_accept(listener, remote_addr, remote_port);
+        if (!accepted.valid())
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    ASSERT_TRUE(accepted.valid());
+
+    // Read the message
+    char buf[64] = {};
+    // Brief wait for data
+    accepted.set_non_blocking(false);
+    ssize_t n = accepted.recv(buf, sizeof(buf));
+    EXPECT_EQ(n, 5);
+    EXPECT_STREQ(buf, "hello");
+
+    client_thread.join();
+}
+
+TEST(PlatformSocket, AcceptReturnsInvalidWhenNoPending) {
+    auto listener = tcp_listen("127.0.0.1", 0);
+    listener.set_non_blocking(true);
+
+    std::string addr;
+    uint16_t port = 0;
+    auto result = tcp_accept(listener, addr, port);
+    EXPECT_FALSE(result.valid());
+}
+
+// -- Send / recv roundtrip ----------------------------------------------------
+
+TEST(PlatformSocket, SendRecvRoundtrip) {
+    auto listener = tcp_listen("127.0.0.1", 0);
+    struct sockaddr_in sa{};
+    socklen_t len = sizeof(sa);
+    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
+    uint16_t port = ntohs(sa.sin_port);
+
+    std::thread sender([port] {
+        auto s = tcp_connect("127.0.0.1", port);
+        std::string data(4096, 'X'); // larger than typical kernel buffer splits
+        s.send(data.data(), data.size());
+        s.shutdown();
+    });
+
+    std::string remote;
+    uint16_t rport = 0;
+    listener.set_non_blocking(false);
+    auto accepted = tcp_accept(listener, remote, rport);
+    ASSERT_TRUE(accepted.valid());
+
+    std::string received;
+    char buf[1024];
+    while (true) {
+        ssize_t n = accepted.recv(buf, sizeof(buf));
+        if (n <= 0)
+            break;
+        received.append(buf, static_cast<size_t>(n));
+    }
+
+    EXPECT_EQ(received.size(), 4096u);
+    EXPECT_EQ(received, std::string(4096, 'X'));
+
+    sender.join();
+}
+
+// -- Socket options -----------------------------------------------------------
+
+TEST(PlatformSocket, SetOptionsDoNotCrash) {
+    auto s = tcp_create();
+    ASSERT_TRUE(s.valid());
+    s.set_non_blocking(true);
+    s.set_non_blocking(false);
+    s.set_reuse_addr(true);
+    s.set_tcp_nodelay(true);
+}
+
+TEST(PlatformSocket, BytesAvailableOnFreshSocket) {
+    auto s = tcp_create();
+    EXPECT_FALSE(s.bytes_available());
+}
+
+// -- Connect failure ----------------------------------------------------------
+
+TEST(PlatformSocket, ConnectToClosedPortThrows) {
+    // Port 1 is almost certainly not listening
+    EXPECT_THROW(tcp_connect("127.0.0.1", 1), std::runtime_error);
+}
+
+TEST(PlatformSocket, ConnectToUnresolvableHostThrows) {
+    EXPECT_THROW(tcp_connect("this.host.does.not.exist.invalid", 80), std::runtime_error);
+}
+
+// -- Bidirectional simultaneous I/O -------------------------------------------
+
+TEST(PlatformSocket, BidirectionalIO) {
+    auto listener = tcp_listen("127.0.0.1", 0);
+    struct sockaddr_in sa{};
+    socklen_t len = sizeof(sa);
+    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
+    uint16_t port = ntohs(sa.sin_port);
+
+    std::thread peer([port] {
+        auto s = tcp_connect("127.0.0.1", port);
+        s.send("ping", 4);
+        char buf[5] = {};
+        ssize_t n = s.recv(buf, 4);
+        EXPECT_EQ(n, 4);
+        EXPECT_EQ(std::string(buf, 4), "pong");
+    });
+
+    listener.set_non_blocking(false);
+    std::string remote;
+    uint16_t rport = 0;
+    auto accepted = tcp_accept(listener, remote, rport);
+
+    char buf[5] = {};
+    ssize_t n = accepted.recv(buf, 4);
+    EXPECT_EQ(n, 4);
+    EXPECT_EQ(std::string(buf, 4), "ping");
+    accepted.send("pong", 4);
+
+    peer.join();
+}

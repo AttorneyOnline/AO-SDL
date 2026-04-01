@@ -7,17 +7,17 @@
 #include <mutex>
 #include <vector>
 
-namespace httplib {
+namespace http {
 class Server;
 struct Request;
 struct Response;
-} // namespace httplib
+} // namespace http
 
 struct ServerSession;
 
 /// Routes HTTP requests to registered RestEndpoint handlers.
 /// Handles JSON parsing, bearer-token auth, error formatting, and
-/// thread-safe dispatch (httplib runs handlers on its own thread pool).
+/// thread-safe dispatch (http runs handlers on its own thread pool).
 class RestRouter {
   public:
     /// Given a bearer token, return the owning session or nullptr.
@@ -29,9 +29,9 @@ class RestRouter {
     /// Takes ownership of an endpoint.
     void register_endpoint(std::unique_ptr<RestEndpoint> endpoint);
 
-    /// Bind all registered endpoints to the httplib server.
+    /// Bind all registered endpoints to the http server.
     /// Call once after all endpoints have been registered.
-    void bind(httplib::Server& server);
+    void bind(http::Server& server);
 
     /// Execute a callable under the dispatch mutex.
     /// Use for operations that must be serialized with endpoint handlers
@@ -43,8 +43,8 @@ class RestRouter {
     }
 
   private:
-    void dispatch(RestEndpoint& endpoint, const httplib::Request& req, httplib::Response& res);
-    void set_cors(httplib::Response& res);
+    void dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res);
+    void set_cors(http::Response& res);
 
     AuthFunc auth_func_;
     std::string cors_origin_;

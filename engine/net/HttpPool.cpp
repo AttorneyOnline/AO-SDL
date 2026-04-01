@@ -2,7 +2,7 @@
 
 #include "utils/Log.h"
 
-#include <httplib.h>
+#include "net/Http.h"
 
 #include <algorithm>
 
@@ -100,17 +100,17 @@ int HttpPool::poll() {
 }
 
 void HttpPool::worker_loop(std::stop_token st) {
-    // Keep one persistent httplib::Client per host so TCP+SSL connections are
+    // Keep one persistent http::Client per host so TCP+SSL connections are
     // reused via HTTP keep-alive.  This avoids creating a new SSL_CTX, loading
     // the Windows certificate store, and performing a full TLS handshake for
     // every single request.
-    std::unordered_map<std::string, std::unique_ptr<httplib::Client>> clients;
+    std::unordered_map<std::string, std::unique_ptr<http::Client>> clients;
 
-    auto get_client = [&](const std::string& host) -> httplib::Client& {
+    auto get_client = [&](const std::string& host) -> http::Client& {
         auto it = clients.find(host);
         if (it != clients.end())
             return *it->second;
-        auto cli = std::make_unique<httplib::Client>(host);
+        auto cli = std::make_unique<http::Client>(host);
         cli->set_connection_timeout(5);
         cli->set_read_timeout(10);
         cli->set_keep_alive(true);
@@ -145,7 +145,7 @@ void HttpPool::worker_loop(std::stop_token st) {
                         resp.status = res->status;
                     }
                     else {
-                        resp.error = httplib::to_string(res.error());
+                        resp.error = http::to_string(res.error());
                         clients.erase(req.host);
                     }
                 }
@@ -156,7 +156,7 @@ void HttpPool::worker_loop(std::stop_token st) {
                         resp.body = std::move(res->body);
                     }
                     else {
-                        resp.error = httplib::to_string(res.error());
+                        resp.error = http::to_string(res.error());
                         clients.erase(req.host);
                     }
                 }

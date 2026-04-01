@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #endif
 
-#include "net/KissnetTcpSocket.h"
+#include "net/PlatformTcpSocket.h"
 #include "utils/Base64.h"
 #include "utils/Version.h"
 
@@ -16,7 +16,7 @@
 #include <format>
 
 WebSocket::WebSocket(const std::string& host, uint16_t port)
-    : WebSocket(host, port, std::make_unique<KissnetTcpSocket>(host, port)) {
+    : WebSocket(host, port, std::make_unique<PlatformTcpSocket>(host, port)) {
 }
 
 WebSocket::WebSocket(const std::string& host, uint16_t port, std::unique_ptr<ITcpSocket> socket)

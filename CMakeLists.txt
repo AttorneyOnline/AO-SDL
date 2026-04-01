@@ -347,9 +347,11 @@ add_library(aoengine STATIC
     engine/net/WebSocketFrame.cpp
     engine/net/WebSocketCommon.cpp
     engine/net/WebSocketServer.cpp
-    engine/net/KissnetTcpSocket.cpp
-    engine/net/KissnetServerSocket.cpp
-    engine/net/NetworkThread.cpp
+    engine/net/Http.cpp
+    engine/net/HttpServer.cpp
+    engine/net/PlatformTcpSocket.cpp
+    engine/net/PlatformServerSocket.cpp
+    engine/net/WSClientThread.cpp
 
     engine/event/ICMessageEvent.cpp
     engine/event/OutgoingICMessageEvent.cpp
@@ -388,18 +390,24 @@ if(APPLE)
         platform/macos/SystemFonts.mm
         platform/macos/HardwareId.mm
         platform/macos/Time.cpp
+        platform/macos/Socket.mm
+        platform/macos/Poll.cpp
     )
 elseif(WIN32)
     target_sources(aoengine PRIVATE
         platform/windows/SystemFonts.cpp
         platform/windows/HardwareId.cpp
         platform/windows/Time.cpp
+        platform/windows/Socket.cpp
+        platform/windows/Poll.cpp
     )
 else()
     target_sources(aoengine PRIVATE
         platform/linux/SystemFonts.cpp
         platform/linux/HardwareId.cpp
         platform/linux/Time.cpp
+        platform/linux/Socket.cpp
+        platform/linux/Poll.cpp
     )
 endif()
 
@@ -411,36 +419,17 @@ target_include_directories(aoengine
             third-party/header-libs
     PRIVATE engine
             third-party/stb
-            third-party/kissnet
             third-party/bit7z
 )
 
-# HTTPS support: OpenSSL on desktop, native Apple TLS on iOS via apple_httplib shim
-if(AO_BUILD_FLUTTER AND APPLE)
-    # Use our NSURLSession-based httplib replacement instead of cpp-httplib+OpenSSL.
-    # The shim header (apple_httplib.h renamed to httplib.h) must shadow the real one.
-    # We achieve this by creating a shim directory with a symlink.
-    set(HTTPLIB_SHIM_DIR "${CMAKE_BINARY_DIR}/httplib_shim")
-    file(MAKE_DIRECTORY "${HTTPLIB_SHIM_DIR}")
-    file(CREATE_LINK
-        "${CMAKE_SOURCE_DIR}/apps/flutter/native/apple_httplib.h"
-        "${HTTPLIB_SHIM_DIR}/httplib.h"
-        SYMBOLIC)
-    # Put the shim dir BEFORE third-party/header-libs so it shadows the real httplib.h
-    target_include_directories(aoengine BEFORE PUBLIC "${HTTPLIB_SHIM_DIR}")
-    # Compile the NSURLSession implementation (requires ARC for ObjC memory management)
-    target_sources(aoengine PRIVATE apps/flutter/native/apple_httplib.mm)
-    set_source_files_properties(apps/flutter/native/apple_httplib.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+# TLS support: Secure Transport on Apple, OpenSSL on Linux/Windows
+if(APPLE)
     target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile)
+    set_source_files_properties(platform/macos/Socket.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 else()
     set(OPENSSL_USE_STATIC_LIBS ON)
-    find_package(OpenSSL)
-    if(OPENSSL_FOUND)
-        target_compile_definitions(aoengine PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
-        target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile OpenSSL::SSL OpenSSL::Crypto)
-    else()
-        target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile)
-    endif()
+    find_package(OpenSSL REQUIRED)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile OpenSSL::SSL OpenSSL::Crypto)
 endif()
 target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 
@@ -449,6 +438,7 @@ if(APPLE)
         "-framework CoreText"
         "-framework Foundation"
         "-framework IOKit"
+        "-framework Security"
     )
 endif()
 

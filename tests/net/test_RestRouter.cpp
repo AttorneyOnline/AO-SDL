@@ -9,7 +9,7 @@
 #include "net/nx/NXServer.h"
 #include "utils/Log.h"
 
-#include <httplib.h>
+#include "net/Http.h"
 
 #include <thread>
 
@@ -77,11 +77,11 @@ class RestRouterTest : public ::testing::Test {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    httplib::Client client() {
-        return httplib::Client("127.0.0.1", port_);
+    http::Client client() {
+        return http::Client("127.0.0.1", port_);
     }
 
-    httplib::Server http_;
+    http::Server http_;
     RestRouter router_;
     int port_ = 0;
     std::thread server_thread_;
@@ -200,7 +200,7 @@ TEST_F(RestRouterTest, AuthRequiredWithBadToken) {
 
     start();
     auto cli = client();
-    httplib::Headers headers = {{"Authorization", "Bearer badtoken"}};
+    http::Headers headers = {{"Authorization", "Bearer badtoken"}};
     auto res = cli.Get("/secret", headers);
 
     ASSERT_TRUE(res);
@@ -224,7 +224,7 @@ TEST_F(RestRouterTest, AuthSuccessPassesSession) {
 
     start();
     auto cli = client();
-    httplib::Headers headers = {{"Authorization", "Bearer validtoken"}};
+    http::Headers headers = {{"Authorization", "Bearer validtoken"}};
     auto res = cli.Get("/secret", headers);
 
     ASSERT_TRUE(res);
@@ -251,7 +251,7 @@ TEST_F(RestRouterTest, AuthTouchesSession) {
 
     start();
     auto cli = client();
-    httplib::Headers headers = {{"Authorization", "Bearer tok"}};
+    http::Headers headers = {{"Authorization", "Bearer tok"}};
     auto res = cli.Get("/secret", headers);
 
     ASSERT_TRUE(res);
@@ -390,7 +390,7 @@ TEST(EndpointFactoryTest, RouterServesRegisteredEndpoint) {
     router.register_endpoint(std::move(ep));
 
     // Verify the router received it by binding and hitting the endpoint.
-    httplib::Server http;
+    http::Server http;
     router.bind(http);
     int port = http.bind_to_any_port("127.0.0.1");
     ASSERT_GT(port, 0);
@@ -398,7 +398,7 @@ TEST(EndpointFactoryTest, RouterServesRegisteredEndpoint) {
     std::thread t([&] { http.listen_after_bind(); });
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    httplib::Client cli("127.0.0.1", port);
+    http::Client cli("127.0.0.1", port);
     auto res = cli.Get("/factory-test");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
@@ -426,7 +426,7 @@ TEST(EndpointFactoryTest, GlobalRegistrarPopulatesToRouter) {
     RestRouter router;
     EndpointFactory::instance().populate(router);
 
-    httplib::Server http;
+    http::Server http;
     router.bind(http);
     int port = http.bind_to_any_port("127.0.0.1");
     ASSERT_GT(port, 0);
@@ -434,7 +434,7 @@ TEST(EndpointFactoryTest, GlobalRegistrarPopulatesToRouter) {
     std::thread t([&] { http.listen_after_bind(); });
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    httplib::Client cli("127.0.0.1", port);
+    http::Client cli("127.0.0.1", port);
 
     // The global factory should have registered GET /aonx/v1/server/players
     auto res = cli.Get("/aonx/v1/server/players");
@@ -462,7 +462,7 @@ TEST(EndpointFactoryTest, SessionCreateRejects503WhenFull) {
     RestRouter router;
     EndpointFactory::instance().populate(router);
 
-    httplib::Server http;
+    http::Server http;
     router.bind(http);
     int port = http.bind_to_any_port("127.0.0.1");
     ASSERT_GT(port, 0);
@@ -470,7 +470,7 @@ TEST(EndpointFactoryTest, SessionCreateRejects503WhenFull) {
     std::thread t([&] { http.listen_after_bind(); });
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    httplib::Client cli("127.0.0.1", port);
+    http::Client cli("127.0.0.1", port);
     std::string session_body = R"({"client_name":"test","client_version":"1.0","hdid":"abc"})";
 
     // First session should succeed
@@ -583,8 +583,8 @@ class NXEndpointTest : public ::testing::Test {
         Log::set_sink(nullptr);
     }
 
-    httplib::Client client() {
-        return httplib::Client("127.0.0.1", port_);
+    http::Client client() {
+        return http::Client("127.0.0.1", port_);
     }
 
     /// Create a session and return the bearer token.
@@ -598,7 +598,7 @@ class NXEndpointTest : public ::testing::Test {
     GameRoom room_;
     std::unique_ptr<NXServer> nx_;
     RestRouter router_;
-    httplib::Server http_;
+    http::Server http_;
     int port_ = 0;
     std::thread server_thread_;
 };
@@ -610,7 +610,7 @@ TEST_F(NXEndpointTest, SessionRenewExtendsTTL) {
     auto token = create_session();
 
     auto cli = client();
-    httplib::Headers headers = {{"Authorization", "Bearer " + token}};
+    http::Headers headers = {{"Authorization", "Bearer " + token}};
     auto res = cli.Patch("/aonx/v1/session", headers, "", "application/json");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
@@ -628,7 +628,7 @@ TEST_F(NXEndpointTest, SessionRenewOmitsExpiresAtWhenTTLZero) {
     auto token = create_session();
 
     auto cli = client();
-    httplib::Headers headers = {{"Authorization", "Bearer " + token}};
+    http::Headers headers = {{"Authorization", "Bearer " + token}};
     auto res = cli.Patch("/aonx/v1/session", headers, "", "application/json");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
@@ -677,7 +677,7 @@ TEST_F(NXEndpointTest, ServerMotdNoAuthRequired) {
 TEST_F(NXEndpointTest, CharacterListReturnsAll) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Get("/aonx/v1/characters", h);
     ASSERT_TRUE(res);
@@ -697,7 +697,7 @@ TEST_F(NXEndpointTest, CharacterListReturnsAll) {
 TEST_F(NXEndpointTest, CharacterListShowsTaken) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     // Select the first character
     auto list_res = cli.Get("/aonx/v1/characters", h);
@@ -729,7 +729,7 @@ TEST_F(NXEndpointTest, CharacterListRequiresAuth) {
 TEST_F(NXEndpointTest, CharacterGetReturnsManifest) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     std::string char_id = room_.char_id_at(0);
     auto res = cli.Get("/aonx/v1/characters/" + char_id, h);
@@ -746,7 +746,7 @@ TEST_F(NXEndpointTest, CharacterGetReturnsManifest) {
 TEST_F(NXEndpointTest, CharacterGetNotFound) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Get("/aonx/v1/characters/nonexistent", h);
     ASSERT_TRUE(res);
@@ -756,7 +756,7 @@ TEST_F(NXEndpointTest, CharacterGetNotFound) {
 TEST_F(NXEndpointTest, CharacterSelectSuccess) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     std::string char_id = room_.char_id_at(0);
     auto res =
@@ -770,7 +770,7 @@ TEST_F(NXEndpointTest, CharacterSelectAlreadyTaken) {
     // Session A takes a character
     auto token_a = create_session();
     auto cli_a = client();
-    httplib::Headers h_a = {{"Authorization", "Bearer " + token_a}};
+    http::Headers h_a = {{"Authorization", "Bearer " + token_a}};
 
     std::string char_id = room_.char_id_at(0);
     cli_a.Post("/aonx/v1/characters/select", h_a, nlohmann::json({{"char_id", char_id}}).dump(), "application/json");
@@ -778,7 +778,7 @@ TEST_F(NXEndpointTest, CharacterSelectAlreadyTaken) {
     // Session B tries the same character
     auto token_b = create_session();
     auto cli_b = client();
-    httplib::Headers h_b = {{"Authorization", "Bearer " + token_b}};
+    http::Headers h_b = {{"Authorization", "Bearer " + token_b}};
 
     auto res = cli_b.Post("/aonx/v1/characters/select", h_b, nlohmann::json({{"char_id", char_id}}).dump(),
                           "application/json");
@@ -789,7 +789,7 @@ TEST_F(NXEndpointTest, CharacterSelectAlreadyTaken) {
 TEST_F(NXEndpointTest, CharacterSelectNotFound) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Post("/aonx/v1/characters/select", h, R"({"char_id":"nonexistent"})", "application/json");
     ASSERT_TRUE(res);
@@ -801,7 +801,7 @@ TEST_F(NXEndpointTest, CharacterSelectNotFound) {
 TEST_F(NXEndpointTest, AreaListReturnsAll) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Get("/aonx/v1/areas", h);
     ASSERT_TRUE(res);
@@ -830,7 +830,7 @@ TEST_F(NXEndpointTest, AreaListRequiresAuth) {
 TEST_F(NXEndpointTest, AreaGetReturnsState) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -854,7 +854,7 @@ TEST_F(NXEndpointTest, AreaGetReturnsState) {
 TEST_F(NXEndpointTest, AreaGetUnderscore) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     // Session defaults to first area ("Lobby")
     auto res = cli.Get("/aonx/v1/areas/_", h);
@@ -868,7 +868,7 @@ TEST_F(NXEndpointTest, AreaGetUnderscore) {
 TEST_F(NXEndpointTest, AreaGetNotFound) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Get("/aonx/v1/areas/nonexistent", h);
     ASSERT_TRUE(res);
@@ -878,7 +878,7 @@ TEST_F(NXEndpointTest, AreaGetNotFound) {
 TEST_F(NXEndpointTest, AreaPlayersInArea) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -896,7 +896,7 @@ TEST_F(NXEndpointTest, AreaPlayersInArea) {
 TEST_F(NXEndpointTest, AreaPlayersEmpty) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     // Courtroom 1 should have no players (session defaults to Lobby)
     auto* cr1 = room_.find_area_by_name("Courtroom 1");

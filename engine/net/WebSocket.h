@@ -41,7 +41,7 @@ class WebSocket {
     static constexpr ::Opcode PONG = ::PONG;
 
     /**
-     * @brief Construct a WebSocket client using the default kissnet TCP socket.
+     * @brief Construct a WebSocket client using the default platform TCP socket.
      * @param host The remote hostname or IP address.
      * @param port The remote TCP port number.
      */
