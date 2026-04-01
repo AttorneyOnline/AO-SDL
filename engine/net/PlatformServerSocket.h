@@ -1,14 +1,17 @@
 #pragma once
 
 #include "net/IServerSocket.h"
+#include "platform/Socket.h"
 
 #include <memory>
 #include <string>
 
-class KissnetServerSocket : public IServerSocket {
+class PlatformServerSocket : public IServerSocket {
   public:
-    explicit KissnetServerSocket(const std::string& bind_address = "0.0.0.0");
-    ~KissnetServerSocket() override;
+    explicit PlatformServerSocket(const std::string& bind_address = "0.0.0.0");
+    ~PlatformServerSocket() override;
+
+    int fd() const override { return sock_.fd(); }
 
     void bind_and_listen(uint16_t port, int backlog = 128) override;
     std::unique_ptr<ITcpSocket> accept() override;
@@ -16,7 +19,6 @@ class KissnetServerSocket : public IServerSocket {
     void close() override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
     std::string bind_address_;
+    platform::Socket sock_;
 };

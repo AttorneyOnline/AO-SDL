@@ -11,6 +11,7 @@
 #include "net/IServerSocket.h"
 #include "net/ITcpSocket.h"
 #include "net/WebSocketFrame.h"
+#include "platform/Poll.h"
 
 #include <cstdint>
 #include <functional>
@@ -67,12 +68,14 @@ class WebSocketServer {
     /**
      * @brief Accept pending connections and read frames from all clients.
      *
-     * Non-blocking. Returns data frames received from clients (TEXT/BINARY).
+     * Blocks up to timeout_ms waiting for socket activity via platform::Poller.
+     * Returns data frames received from clients (TEXT/BINARY).
      * Control frames (PING, CLOSE) are handled internally.
      *
+     * @param timeout_ms Max milliseconds to wait. 0 = non-blocking, -1 = indefinite.
      * @return Vector of client frames received since the last poll.
      */
-    std::vector<ClientFrame> poll();
+    std::vector<ClientFrame> poll(int timeout_ms = 0);
 
     /**
      * @brief Send a text message to a specific client.
@@ -148,6 +151,7 @@ class WebSocketServer {
     uint64_t next_client_id_ = 1;
     bool running_ = false;
     mutable std::mutex mutex_;
+    platform::Poller poller_;
 
     std::function<void(ClientId)> on_connected_;
     std::function<void(ClientId)> on_disconnected_;

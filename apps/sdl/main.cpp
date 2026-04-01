@@ -6,7 +6,7 @@
 #include "event/ServerListEvent.h"
 #include "game/GameThread.h"
 #include "game/ServerList.h"
-#include "net/NetworkThread.h"
+#include "net/WSClientThread.h"
 #include "render/RenderManager.h"
 #include "render/StateBuffer.h"
 #include "ui/UIManager.h"
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
 
     // Protocol plugin — swap this line to change protocols
     auto protocol = ao::create_protocol();
-    NetworkThread net_thread(*protocol);
+    WSClientThread net_thread(*protocol);
 
     // Render backend — scaled internal resolution (256x192 base, 4:3 aspect)
     auto& debug_ctx = DebugContext::instance();

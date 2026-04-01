@@ -67,4 +67,12 @@ class ITcpSocket {
      * @return True if one or more bytes are available for reading.
      */
     virtual bool bytes_available() = 0;
+
+    /**
+     * @brief Raw file descriptor for use with platform::Poller.
+     * @return The OS socket fd, or -1 if not available (e.g. mock sockets).
+     */
+    virtual int fd() const {
+        return -1;
+    }
 };

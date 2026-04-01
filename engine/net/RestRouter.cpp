@@ -3,7 +3,7 @@
 #include "game/ServerSession.h"
 #include "utils/Log.h"
 
-#include <httplib.h>
+#include "net/Http.h"
 
 // -- RestRouter --------------------------------------------------------------
 
@@ -19,7 +19,7 @@ void RestRouter::set_cors_origin(const std::string& origin) {
     cors_origin_ = origin;
 }
 
-void RestRouter::set_cors(httplib::Response& res) {
+void RestRouter::set_cors(http::Response& res) {
     if (cors_origin_.empty())
         return;
     res.set_header("Access-Control-Allow-Origin", cors_origin_);
@@ -27,7 +27,7 @@ void RestRouter::set_cors(httplib::Response& res) {
     res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
-void RestRouter::bind(httplib::Server& server) {
+void RestRouter::bind(http::Server& server) {
     // Apply CORS headers to all responses, including httplib's built-in
     // 404 for unmatched routes (which bypasses our dispatch method).
     if (!cors_origin_.empty()) {
@@ -40,9 +40,7 @@ void RestRouter::bind(httplib::Server& server) {
 
     for (auto& ep : endpoints_) {
         auto* raw_ep = ep.get();
-        auto handler = [this, raw_ep](const httplib::Request& req, httplib::Response& res) {
-            dispatch(*raw_ep, req, res);
-        };
+        auto handler = [this, raw_ep](const http::Request& req, http::Response& res) { dispatch(*raw_ep, req, res); };
 
         const auto& method = raw_ep->method();
         const auto& pattern = raw_ep->path_pattern();
@@ -61,17 +59,17 @@ void RestRouter::bind(httplib::Server& server) {
             Log::log_print(ERR, "REST: unknown method '%s' for %s", method.c_str(), pattern.c_str());
 
         // Preflight handler for this route
-        server.Options(pattern, [this](const httplib::Request&, httplib::Response& res) {
+        server.Options(pattern, [this](const http::Request&, http::Response& res) {
             set_cors(res);
             res.status = 204;
         });
     }
 }
 
-void RestRouter::dispatch(RestEndpoint& endpoint, const httplib::Request& req, httplib::Response& res) {
+void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res) {
     // CORS headers are set globally via set_default_headers in bind().
     try {
-        // Build RestRequest from httplib::Request (no lock needed — pure parsing)
+        // Build RestRequest from http::Request (no lock needed — pure parsing)
         RestRequest rest_req;
         rest_req.method = req.method;
         rest_req.path = req.path;

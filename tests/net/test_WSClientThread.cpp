@@ -1,4 +1,4 @@
-#include "net/NetworkThread.h"
+#include "net/WSClientThread.h"
 
 #include "event/EventManager.h"
 #include "event/ServerConnectEvent.h"
@@ -39,12 +39,12 @@ class MockProtocolHandler : public ProtocolHandler {
 // Construction / Destruction
 // ---------------------------------------------------------------------------
 
-TEST(NetworkThread, ConstructAndStopImmediately) {
+TEST(WSClientThread, ConstructAndStopImmediately) {
     // The thread starts in the constructor and blocks waiting for a
     // ServerConnectEvent. Calling stop() before any event is published
     // must terminate cleanly without hanging or crashing.
     MockProtocolHandler handler;
-    NetworkThread nt(handler);
+    WSClientThread nt(handler);
     nt.stop();
 
     // The handler should never have been connected.
@@ -52,10 +52,10 @@ TEST(NetworkThread, ConstructAndStopImmediately) {
     EXPECT_EQ(handler.disconnect_count, 0);
 }
 
-TEST(NetworkThread, StopIsIdempotent) {
+TEST(WSClientThread, StopIsIdempotent) {
     // Calling stop() multiple times must not crash or deadlock.
     MockProtocolHandler handler;
-    NetworkThread nt(handler);
+    WSClientThread nt(handler);
     nt.stop();
     nt.stop(); // second call — thread already joined
 }
@@ -64,13 +64,13 @@ TEST(NetworkThread, StopIsIdempotent) {
 // Lifecycle: thread runs and can be stopped
 // ---------------------------------------------------------------------------
 
-TEST(NetworkThread, ThreadIsJoinableBeforeStop) {
+TEST(WSClientThread, ThreadIsJoinableBeforeStop) {
     // After construction, the internal thread must be running (joinable).
     // We cannot inspect the private member directly, but we can verify that
     // stop() completes in bounded time, which proves the thread was alive
     // and is now joined.
     MockProtocolHandler handler;
-    NetworkThread nt(handler);
+    WSClientThread nt(handler);
 
     auto start = std::chrono::steady_clock::now();
     nt.stop();
@@ -81,11 +81,11 @@ TEST(NetworkThread, ThreadIsJoinableBeforeStop) {
     EXPECT_LT(elapsed, std::chrono::seconds(2));
 }
 
-TEST(NetworkThread, NoCallbacksWithoutConnection) {
+TEST(WSClientThread, NoCallbacksWithoutConnection) {
     // If no ServerConnectEvent is published, the handler receives no
     // callbacks at all.
     MockProtocolHandler handler;
-    NetworkThread nt(handler);
+    WSClientThread nt(handler);
 
     // Let the thread spin a few iterations.
     std::this_thread::sleep_for(std::chrono::milliseconds(120));
@@ -101,12 +101,12 @@ TEST(NetworkThread, NoCallbacksWithoutConnection) {
 // jthread auto-join: destructor must not call std::terminate
 // ---------------------------------------------------------------------------
 
-TEST(NetworkThread, DestructorAutoJoinsWithoutExplicitStop) {
+TEST(WSClientThread, DestructorAutoJoinsWithoutExplicitStop) {
     // Before jthread migration, forgetting stop() would call std::terminate.
     // jthread's destructor calls request_stop() + join() automatically.
     MockProtocolHandler handler;
     {
-        NetworkThread nt(handler);
+        WSClientThread nt(handler);
         // Intentionally NOT calling nt.stop().
     }
     SUCCEED();
@@ -116,13 +116,13 @@ TEST(NetworkThread, DestructorAutoJoinsWithoutExplicitStop) {
 // Multiple sequential instances
 // ---------------------------------------------------------------------------
 
-TEST(NetworkThread, MultipleSequentialInstances) {
-    // Creating, stopping, and destroying multiple NetworkThread instances
+TEST(WSClientThread, MultipleSequentialInstances) {
+    // Creating, stopping, and destroying multiple WSClientThread instances
     // sequentially must work — no leaked state.
     MockProtocolHandler handler;
 
     for (int i = 0; i < 3; ++i) {
-        NetworkThread nt(handler);
+        WSClientThread nt(handler);
         nt.stop();
     }
 
@@ -133,11 +133,11 @@ TEST(NetworkThread, MultipleSequentialInstances) {
 // Event channel interaction (no actual network)
 // ---------------------------------------------------------------------------
 
-TEST(NetworkThread, StopWhileWaitingForEvent) {
+TEST(WSClientThread, StopWhileWaitingForEvent) {
     // The thread polls EventManager for ServerConnectEvent. Publishing an
     // unrelated event and then calling stop() must still terminate cleanly.
     MockProtocolHandler handler;
-    NetworkThread nt(handler);
+    WSClientThread nt(handler);
 
     // The thread is spinning in the "wait for ServerConnectEvent" loop.
     // Give it a moment, then stop.

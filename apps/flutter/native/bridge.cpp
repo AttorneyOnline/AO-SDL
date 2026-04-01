@@ -38,7 +38,7 @@
 #include "game/GameThread.h"
 #include "game/ServerList.h"
 #include "net/HttpPool.h"
-#include "net/NetworkThread.h"
+#include "net/WSClientThread.h"
 #include "render/IRenderer.h"
 #include "render/RenderManager.h"
 #include "render/StateBuffer.h"
@@ -77,7 +77,7 @@ struct Engine {
     UIManager ui_mgr;
     StateBuffer buffer;
     std::unique_ptr<ProtocolHandler> protocol;
-    std::unique_ptr<NetworkThread> net_thread;
+    std::unique_ptr<WSClientThread> net_thread;
     std::unique_ptr<RenderManager> render_mgr;
     std::unique_ptr<IScenePresenter> presenter;
     std::unique_ptr<GameThread> game_thread;
@@ -231,7 +231,7 @@ void ao_init(const char* base_path) {
 
     // Protocol + network
     g_engine->protocol = ao::create_protocol();
-    g_engine->net_thread = std::make_unique<NetworkThread>(*g_engine->protocol);
+    g_engine->net_thread = std::make_unique<WSClientThread>(*g_engine->protocol);
 
     // Scene presenter + game thread (created but renderer may not exist yet)
     g_engine->presenter = ao::create_presenter();

@@ -47,4 +47,12 @@ class IServerSocket {
      * @brief Close the listener socket.
      */
     virtual void close() = 0;
+
+    /**
+     * @brief Raw file descriptor for use with platform::Poller.
+     * @return The OS listener fd, or -1 if not available.
+     */
+    virtual int fd() const {
+        return -1;
+    }
 };

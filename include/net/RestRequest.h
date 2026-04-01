@@ -9,7 +9,7 @@
 struct ServerSession;
 
 /// Protocol-agnostic representation of an incoming REST request.
-/// Built by RestRouter from httplib::Request before dispatching to handlers.
+/// Built by RestRouter from http::Request before dispatching to handlers.
 struct RestRequest {
     std::string method;
     std::string path;
