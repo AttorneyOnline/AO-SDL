@@ -53,13 +53,15 @@ class EventChannel {
      * @param ev The event to enqueue (moved into the queue).
      */
     void publish(T&& ev) {
+        std::function<void()> cb;
         {
             const std::lock_guard<std::mutex> lock(event_queue_mutex);
             event_queue.push_back(std::move(ev));
             ++publish_count_;
+            cb = on_publish_; // copy under lock to avoid data race
         }
-        if (on_publish_)
-            on_publish_();
+        if (cb)
+            cb();
     }
 
     /**
@@ -72,6 +74,7 @@ class EventChannel {
      * @param cb Callback to invoke, or nullptr to clear.
      */
     void set_on_publish(std::function<void()> cb) {
+        const std::lock_guard<std::mutex> lock(event_queue_mutex);
         on_publish_ = std::move(cb);
     }
 
