@@ -28,6 +28,16 @@ void RestRouter::set_cors(httplib::Response& res) {
 }
 
 void RestRouter::bind(httplib::Server& server) {
+    // Apply CORS headers to all responses, including httplib's built-in
+    // 404 for unmatched routes (which bypasses our dispatch method).
+    if (!cors_origin_.empty()) {
+        server.set_default_headers({
+            {"Access-Control-Allow-Origin", cors_origin_},
+            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
+            {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+        });
+    }
+
     for (auto& ep : endpoints_) {
         auto* raw_ep = ep.get();
         auto handler = [this, raw_ep](const httplib::Request& req, httplib::Response& res) {
@@ -59,7 +69,7 @@ void RestRouter::bind(httplib::Server& server) {
 }
 
 void RestRouter::dispatch(RestEndpoint& endpoint, const httplib::Request& req, httplib::Response& res) {
-    set_cors(res);
+    // CORS headers are set globally via set_default_headers in bind().
     try {
         // Build RestRequest from httplib::Request (no lock needed — pure parsing)
         RestRequest rest_req;
