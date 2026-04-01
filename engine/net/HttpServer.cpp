@@ -12,8 +12,10 @@
  * global EventManager singleton) to avoid contention.
  */
 #include "net/Http.h"
+#include "net/SSEEvent.h"
 
 #include "event/EventChannel.h"
+#include "event/EventManager.h"
 #include "platform/Poll.h"
 #include "platform/Socket.h"
 #include "utils/Log.h"
@@ -90,6 +92,17 @@ struct Server::ServerState {
     std::vector<HandlerEntry> options_handlers;
 
     Headers default_headers;
+
+    // SSE
+    using SSEHandlerEntry = std::pair<std::string, Server::SSEHandler>;
+    std::vector<SSEHandlerEntry> sse_handlers;
+
+    struct SSEConnection {
+        uint64_t id;
+        platform::Socket socket;
+        std::string area;
+    };
+    std::vector<SSEConnection> sse_connections;
 };
 
 // ===========================================================================
@@ -440,6 +453,11 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
             else if (ev.fd == state.notifier_fd) {
                 state.poller.drain_notifier();
 
+                // Drain SSE events from global EventManager
+                while (auto sse = EventManager::instance().get_channel<SSEEvent>().get_event()) {
+                    srv->push_sse(sse->event, sse->data, sse->area);
+                }
+
                 // Process completed results
                 while (auto result = state.result_channel.get_event()) {
                     // Find the connection
@@ -475,6 +493,24 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                 }
             }
             else {
+                // Check if this is an SSE connection (client disconnect detection)
+                bool is_sse = false;
+                for (auto it = state.sse_connections.begin(); it != state.sse_connections.end(); ++it) {
+                    if (it->socket.fd() == ev.fd) {
+                        // Readable on SSE socket = client closed
+                        char discard[64];
+                        ssize_t n = it->socket.recv(discard, sizeof(discard));
+                        if (n <= 0) {
+                            state.poller.remove(ev.fd);
+                            state.sse_connections.erase(it);
+                        }
+                        is_sse = true;
+                        break;
+                    }
+                }
+                if (is_sse)
+                    continue;
+
                 // O(1) fd → connection lookup
                 auto fd_it = state.fd_to_conn.find(ev.fd);
                 if (fd_it == state.fd_to_conn.end())
@@ -593,6 +629,59 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         continue;
                     }
 
+                    // Check SSE handlers first (GET only, before normal dispatch)
+                    if (req.method == "GET") {
+                        bool handled_as_sse = false;
+                        for (auto& [pattern, sse_handler] : state.sse_handlers) {
+                            detail::PathParamsMatcher matcher(pattern);
+                            if (pattern == req.path || matcher.match(req)) {
+                                Response res;
+                                res.status = 200;
+                                if (sse_handler(req, res)) {
+                                    // Accepted — send SSE headers and move to SSE connections
+                                    std::string headers = "HTTP/1.1 200 OK\r\n"
+                                                          "Content-Type: text/event-stream\r\n"
+                                                          "Cache-Control: no-cache\r\n"
+                                                          "Connection: keep-alive\r\n";
+                                    // Add Date header
+                                    headers += "Date: " + generate_date_header() + "\r\n";
+                                    headers += "\r\n";
+                                    conn->socket.set_non_blocking(false);
+                                    conn->socket.send(headers.data(), headers.size());
+                                    conn->socket.set_non_blocking(true);
+
+                                    // Extract area from query params
+                                    std::string area;
+                                    auto area_it = req.params.find("area");
+                                    if (area_it != req.params.end())
+                                        area = area_it->second;
+
+                                    ServerState::SSEConnection sse_conn;
+                                    sse_conn.id = conn->id;
+                                    sse_conn.socket = std::move(conn->socket);
+                                    sse_conn.area = area;
+                                    // Keep in poller for disconnect detection
+                                    state.sse_connections.push_back(std::move(sse_conn));
+                                    // Remove from normal connections (fd_to_conn already points here)
+                                    state.fd_to_conn.erase(ev.fd);
+                                    state.connections.erase(conn->id);
+                                }
+                                else {
+                                    // Rejected by handler
+                                    std::string resp_data = serialize_response(res, state.default_headers);
+                                    conn->socket.set_non_blocking(false);
+                                    conn->socket.send(resp_data.data(), resp_data.size());
+                                    state.poller.remove(ev.fd);
+                                    remove_connection(state, conn->id);
+                                }
+                                handled_as_sse = true;
+                                break;
+                            }
+                        }
+                        if (handled_as_sse)
+                            continue;
+                    }
+
                     // Track if this is a HEAD request
                     bool is_head = (req.method == "HEAD");
 
@@ -687,6 +776,35 @@ Server& Server::Options(const std::string& pattern, Handler handler) {
     return *this;
 }
 
+Server& Server::SSE(const std::string& pattern, SSEHandler handler) {
+    state_->sse_handlers.emplace_back(pattern, std::move(handler));
+    return *this;
+}
+
+void Server::push_sse(const std::string& event, const std::string& data, const std::string& area) {
+    if (!state_)
+        return;
+    std::string frame = "event: " + event + "\ndata: " + data + "\n\n";
+
+    auto it = state_->sse_connections.begin();
+    while (it != state_->sse_connections.end()) {
+        // Area filter: empty area = broadcast to all
+        if (!area.empty() && !it->area.empty() && it->area != area) {
+            ++it;
+            continue;
+        }
+        ssize_t n = it->socket.send(frame.data(), frame.size());
+        if (n <= 0) {
+            // Client disconnected — remove
+            state_->poller.remove(it->socket.fd());
+            it = state_->sse_connections.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
 // Configuration
 Server& Server::set_default_headers(Headers headers) {
     state_->default_headers = std::move(headers);
@@ -724,6 +842,9 @@ bool Server::listen_after_bind() {
     state.running.store(true);
     is_running_.store(true);
 
+    // Wire SSE event channel to poller notification
+    EventManager::instance().get_channel<SSEEvent>().set_on_publish([&state] { state.poller.notify(); });
+
     // Start worker threads
     size_t num_workers = CPPHTTPLIB_THREAD_POOL_COUNT;
     for (size_t i = 0; i < num_workers; ++i) {
@@ -733,11 +854,13 @@ bool Server::listen_after_bind() {
     // Run poll loop on this thread (blocks)
     poll_loop(this, state);
 
-    // Cleanup workers
+    // Cleanup
+    EventManager::instance().get_channel<SSEEvent>().set_on_publish(nullptr);
     for (auto& w : state.workers)
         w.request_stop();
     state.work_cv.notify_all();
     state.workers.clear();
+    state.sse_connections.clear();
 
     is_running_.store(false);
     return true;

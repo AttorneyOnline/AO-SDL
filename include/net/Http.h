@@ -750,6 +750,19 @@ class Server {
     Server& Delete(const std::string& pattern, HandlerWithContentReader handler);
     Server& Options(const std::string& pattern, Handler handler);
 
+    /// Register an SSE (Server-Sent Events) endpoint.
+    /// The handler is called once when a client connects. It receives the
+    /// Request (for auth/params) and a Response (for setting status/headers).
+    /// Return true to accept the SSE stream, false to reject.
+    /// Accepted connections are held open and receive SSEEvents published
+    /// to EventManager.
+    using SSEHandler = std::function<bool(const Request& req, Response& res)>;
+    Server& SSE(const std::string& pattern, SSEHandler handler);
+
+    /// Push an SSE event to all matching connections. Called by the poll loop;
+    /// not intended for direct use — publish SSEEvent to EventManager instead.
+    void push_sse(const std::string& event, const std::string& data, const std::string& area);
+
     bool set_base_dir(const std::string& dir, const std::string& mount_point = std::string());
     bool set_mount_point(const std::string& mount_point, const std::string& dir, Headers headers = Headers());
     bool remove_mount_point(const std::string& mount_point);
