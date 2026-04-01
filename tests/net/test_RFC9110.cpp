@@ -762,19 +762,45 @@ TEST_F(RFC9110Test, ServerMustReject4xxForOversizedHeaders) {
     server_.Get("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
     start();
 
-    // Send a request with an extremely large header
-    std::string huge_value(1024 * 1024, 'X'); // 1MB header value
+    // Send a request with an extremely large header.
+    // We send in a separate thread because the blocking send() can deadlock:
+    // the 1MB payload exceeds the kernel TCP buffer, so send() blocks waiting
+    // for the server to drain — but the server rejects at 64KB and closes,
+    // which unblocks the client via EPIPE/RST.
+    std::string huge_value(1024 * 1024, 'X');
     std::string req = "GET /test HTTP/1.1\r\n"
                       "Host: 127.0.0.1\r\n"
                       "X-Huge: " +
                       huge_value +
                       "\r\n"
                       "\r\n";
-    auto resp = raw_request_9110(port(), req);
-    int status = extract_status_9110(resp);
 
-    // Server MUST respond with 4xx if it can't/won't process the huge header
-    // 200 is also acceptable if the server is willing to process it
+    auto sock = platform::tcp_connect("127.0.0.1", port());
+    set_recv_timeout_9110(sock, TEST_TIMEOUT_SEC);
+
+    // Send in background — may get EPIPE when server closes
+    std::thread sender([&sock, &req] {
+        size_t total = 0;
+        while (total < req.size()) {
+            ssize_t n = sock.send(req.data() + total, req.size() - total);
+            if (n <= 0)
+                break; // server closed / EPIPE
+            total += static_cast<size_t>(n);
+        }
+    });
+
+    // Read response — server should respond with 431 before we finish sending
+    std::string resp;
+    char buf[8192];
+    while (true) {
+        ssize_t n = sock.recv(buf, sizeof(buf));
+        if (n <= 0)
+            break;
+        resp.append(buf, static_cast<size_t>(n));
+    }
+    sender.join();
+
+    int status = extract_status_9110(resp);
     EXPECT_TRUE((status >= 400 && status < 500) || status == 200)
         << "Server should respond 4xx for oversized headers or process them; got " << status;
 }

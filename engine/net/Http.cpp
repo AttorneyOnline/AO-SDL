@@ -151,7 +151,6 @@ static ParsedResponse parse_response_headers(const std::string& raw) {
     auto first_line_end = pr.header_raw.find("\r\n");
     std::string status_line = pr.header_raw.substr(0, first_line_end);
 
-    // Find first space -> version, second space -> status code
     auto sp1 = status_line.find(' ');
     if (sp1 != std::string::npos) {
         auto sp2 = status_line.find(' ', sp1 + 1);
@@ -160,26 +159,74 @@ static ParsedResponse parse_response_headers(const std::string& raw) {
         std::from_chars(code_str.data(), code_str.data() + code_str.size(), pr.status);
     }
 
-    // Parse headers
+    // Parse headers with obs-fold handling (RFC 9112 §5.2).
+    // obs-fold: CRLF followed by SP or HTAB continues the previous header value.
+    // Client MUST replace obs-fold with SP before interpreting.
     size_t pos = first_line_end + 2;
+    std::string current_key;
+    std::string current_val;
+
+    auto flush_header = [&]() {
+        if (!current_key.empty()) {
+            while (!current_val.empty() && current_val[0] == ' ')
+                current_val.erase(current_val.begin());
+            pr.headers.emplace(std::move(current_key), std::move(current_val));
+            current_key.clear();
+            current_val.clear();
+        }
+    };
+
     while (pos < pr.header_raw.size()) {
         auto line_end = pr.header_raw.find("\r\n", pos);
         if (line_end == std::string::npos)
             line_end = pr.header_raw.size();
         std::string line = pr.header_raw.substr(pos, line_end - pos);
-        auto colon = line.find(':');
-        if (colon != std::string::npos) {
-            std::string key = line.substr(0, colon);
-            std::string val = line.substr(colon + 1);
-            // Trim leading whitespace from value
-            while (!val.empty() && val[0] == ' ')
-                val.erase(val.begin());
-            pr.headers.emplace(std::move(key), std::move(val));
+
+        if (!line.empty() && (line[0] == ' ' || line[0] == '\t')) {
+            // obs-fold continuation — replace with SP and append
+            if (!current_key.empty()) {
+                current_val += ' ';
+                size_t start = 0;
+                while (start < line.size() && (line[start] == ' ' || line[start] == '\t'))
+                    start++;
+                current_val += line.substr(start);
+            }
+        }
+        else {
+            flush_header();
+            auto colon = line.find(':');
+            if (colon != std::string::npos) {
+                current_key = line.substr(0, colon);
+                current_val = line.substr(colon + 1);
+            }
         }
         pos = line_end + 2;
     }
+    flush_header();
 
     return pr;
+}
+
+/// Read headers, skipping any 1xx informational responses (RFC 9110 §15.2).
+static std::string read_final_headers(platform::Socket& sock) {
+    while (true) {
+        std::string raw = read_headers(sock);
+        if (raw.empty())
+            return raw;
+
+        // Check if this is a 1xx response — skip and read next
+        auto sp1 = raw.find(' ');
+        if (sp1 != std::string::npos) {
+            int status = 0;
+            auto sp2 = raw.find(' ', sp1 + 1);
+            std::string code_str =
+                (sp2 != std::string::npos) ? raw.substr(sp1 + 1, sp2 - sp1 - 1) : raw.substr(sp1 + 1, 3);
+            std::from_chars(code_str.data(), code_str.data() + code_str.size(), status);
+            if (status >= 100 && status < 200)
+                continue; // skip 1xx, read next response
+        }
+        return raw;
+    }
 }
 
 static std::string read_body(platform::Socket& sock, const ParsedResponse& pr, size_t content_length) {
@@ -811,7 +858,7 @@ static Result execute_request(const std::string& method, const std::string& host
             return Result(nullptr, Error::Write);
         }
 
-        std::string raw_resp = read_headers(sock);
+        std::string raw_resp = read_final_headers(sock);
         if (raw_resp.empty()) {
             return Result(nullptr, Error::Read);
         }

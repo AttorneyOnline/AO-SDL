@@ -46,11 +46,13 @@ struct WorkItem : public Event {
     uint64_t connection_id;
     Request request;
     Server::Handler handler;
+    bool is_head = false;
 };
 
 struct WorkResult : public Event {
     uint64_t connection_id;
     Response response;
+    bool is_head = false;
 };
 
 // ===========================================================================
@@ -115,6 +117,11 @@ static void remove_state(Server* srv) {
 // HTTP parsing helpers
 // ===========================================================================
 
+// -- Size limits (RFC 9112 §3, RFC 9112 §5) ----------------------------------
+
+static constexpr size_t MAX_URI_LENGTH = 8192;
+static constexpr size_t MAX_HEADER_SECTION_LENGTH = 65536;
+
 static bool find_header_end(const std::string& buf) {
     return buf.find("\r\n\r\n") != std::string::npos;
 }
@@ -122,16 +129,113 @@ static bool find_header_end(const std::string& buf) {
 static Server::Handler find_handler(const std::vector<ServerState::HandlerEntry>& handlers, const std::string& path,
                                     Request& req) {
     for (auto& [pattern, handler] : handlers) {
-        // Simple prefix/exact match. PathParamsMatcher handles :params.
         if (pattern == path)
             return handler;
-
-        // Try path params pattern (e.g. "/api/users/:id")
         detail::PathParamsMatcher matcher(pattern);
         if (matcher.match(req))
             return handler;
     }
     return nullptr;
+}
+
+// -- RFC-compliant request validation -----------------------------------------
+
+/// Return non-zero HTTP error status if the raw request is malformed, 0 if ok.
+static int validate_raw_request(const std::string& raw) {
+    auto header_end = raw.find("\r\n\r\n");
+    if (header_end == std::string::npos)
+        return 0; // incomplete, not an error yet
+
+    // RFC 9112 §3: URI Too Long
+    auto first_line_end = raw.find("\r\n");
+    if (first_line_end != std::string::npos) {
+        std::string req_line = raw.substr(0, first_line_end);
+        auto sp1 = req_line.find(' ');
+        auto sp2 = (sp1 != std::string::npos) ? req_line.find(' ', sp1 + 1) : std::string::npos;
+        if (sp1 != std::string::npos && sp2 != std::string::npos) {
+            size_t uri_len = sp2 - sp1 - 1;
+            if (uri_len > MAX_URI_LENGTH)
+                return 414;
+        }
+    }
+
+    // RFC 9112 §5: Header section too large
+    if (header_end > MAX_HEADER_SECTION_LENGTH)
+        return 431;
+
+    // RFC 9112 §5.2: obs-fold detection — scan for CRLF followed by SP/HTAB
+    // in the header section (after request-line, before empty line)
+    std::string header_section = raw.substr(0, header_end);
+    for (size_t i = 0; i + 2 < header_section.size(); ++i) {
+        if (header_section[i] == '\r' && header_section[i + 1] == '\n') {
+            if (i + 2 < header_section.size()) {
+                char next = header_section[i + 2];
+                // Skip the request-line terminator — obs-fold only applies to headers
+                if (i < first_line_end)
+                    continue;
+                if (next == ' ' || next == '\t')
+                    return 400;
+            }
+        }
+    }
+
+    // RFC 9112 §5.1: whitespace between field name and colon
+    size_t pos = (first_line_end != std::string::npos) ? first_line_end + 2 : 0;
+    while (pos < header_section.size()) {
+        auto line_end = header_section.find("\r\n", pos);
+        if (line_end == std::string::npos || line_end == pos)
+            break;
+        std::string line = header_section.substr(pos, line_end - pos);
+
+        auto colon = line.find(':');
+        if (colon != std::string::npos && colon > 0) {
+            if (line[colon - 1] == ' ' || line[colon - 1] == '\t') {
+                return 400;
+            }
+        }
+        pos = line_end + 2;
+    }
+
+    return 0;
+}
+
+static int validate_parsed_request(const Request& req) {
+    // RFC 9112 §3.2: Missing Host header in HTTP/1.1
+    if (req.version == "HTTP/1.1") {
+        size_t host_count = req.get_header_value_count("Host");
+        if (host_count == 0)
+            return 400;
+        if (host_count > 1)
+            return 400; // duplicate Host
+    }
+
+    // RFC 9112 §6.2: Invalid Content-Length
+    auto cl_val = req.get_header_value("Content-Length", "");
+    if (!cl_val.empty()) {
+        for (char c : cl_val) {
+            if (c < '0' || c > '9')
+                return 400;
+        }
+    }
+
+    // RFC 9112 §6.1: Transfer-Encoding present but chunked is not the final encoding
+    auto te_val = req.get_header_value("Transfer-Encoding", "");
+    if (!te_val.empty()) {
+        // The final encoding must be "chunked"
+        std::string te = te_val;
+        // Trim trailing whitespace
+        while (!te.empty() && (te.back() == ' ' || te.back() == '\t'))
+            te.pop_back();
+        // Get the last comma-separated value
+        auto last_comma = te.rfind(',');
+        std::string final_te = (last_comma != std::string::npos) ? te.substr(last_comma + 1) : te;
+        while (!final_te.empty() && final_te[0] == ' ')
+            final_te.erase(final_te.begin());
+        if (final_te != "chunked")
+            return 400;
+    }
+
+    return 0;
 }
 
 static Request parse_http_request(const std::string& raw_headers, const std::string& body) {
@@ -150,6 +254,18 @@ static Request parse_http_request(const std::string& raw_headers, const std::str
         req.method = req_line.substr(0, sp1);
         req.path = req_line.substr(sp1 + 1, sp2 - sp1 - 1);
         req.version = req_line.substr(sp2 + 1);
+    }
+
+    // Handle absolute-form URIs: "http://host/path" → extract "/path"
+    if (req.path.find("://") != std::string::npos) {
+        auto scheme_end = req.path.find("://");
+        auto path_start = req.path.find('/', scheme_end + 3);
+        if (path_start != std::string::npos) {
+            req.path = req.path.substr(path_start);
+        }
+        else {
+            req.path = "/";
+        }
     }
 
     // Parse query params from path
@@ -182,8 +298,11 @@ static Request parse_http_request(const std::string& raw_headers, const std::str
         if (colon != std::string::npos) {
             std::string key = line.substr(0, colon);
             std::string val = line.substr(colon + 1);
-            while (!val.empty() && val[0] == ' ')
+            // RFC 9110 §5.5: Trim leading and trailing OWS from field values
+            while (!val.empty() && (val.front() == ' ' || val.front() == '\t'))
                 val.erase(val.begin());
+            while (!val.empty() && (val.back() == ' ' || val.back() == '\t'))
+                val.pop_back();
             req.headers.emplace(std::move(key), std::move(val));
         }
         pos = line_end + 2;
@@ -195,27 +314,53 @@ static Request parse_http_request(const std::string& raw_headers, const std::str
     return req;
 }
 
-static std::string serialize_response(const Response& res, const Headers& default_headers) {
+// -- RFC 9110 §6.6.1: Date header (IMF-fixdate) ------------------------------
+
+static std::string generate_date_header() {
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    struct tm gmt{};
+#ifdef _WIN32
+    gmtime_s(&gmt, &t);
+#else
+    gmtime_r(&t, &gmt);
+#endif
+    char buf[64];
+    std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &gmt);
+    return buf;
+}
+
+static std::string serialize_response(const Response& res, const Headers& default_headers, bool is_head = false) {
     std::string out;
-    out.reserve(256 + res.body.size());
+    out.reserve(256 + (is_head ? 0 : res.body.size()));
     out += "HTTP/1.1 " + std::to_string(res.status) + " " + status_message(res.status) + "\r\n";
 
-    // Default headers first
+    // RFC 9110 §6.6.1: Date header on 2xx, 3xx, 4xx responses
+    if (res.status >= 200 && res.status < 500) {
+        out += "Date: " + generate_date_header() + "\r\n";
+    }
+
+    // Default headers
     for (auto& [k, v] : default_headers) {
         out += k + ": " + v + "\r\n";
     }
 
-    // Response headers (may override defaults)
+    // Response headers
     for (auto& [k, v] : res.headers) {
         out += k + ": " + v + "\r\n";
     }
 
-    if (!res.body.empty()) {
+    // RFC 9110 §8.6: No Content-Length in 204
+    if (res.status != 204 && !res.body.empty()) {
         out += "Content-Length: " + std::to_string(res.body.size()) + "\r\n";
     }
 
     out += "\r\n";
-    out += res.body;
+
+    // RFC 9110 §9.3.2: HEAD response MUST NOT contain a body
+    if (!is_head) {
+        out += res.body;
+    }
     return out;
 }
 
@@ -259,6 +404,7 @@ static void worker_loop(ServerState& state, std::stop_token st) {
         WorkResult result;
         result.connection_id = item->connection_id;
         result.response = std::move(res);
+        result.is_head = item->is_head;
         state.result_channel.publish(std::move(result));
 
         // Wake the poll thread
@@ -316,7 +462,8 @@ static void poll_loop(Server* srv, ServerState& state) {
                     if (!conn)
                         continue;
 
-                    std::string response_data = serialize_response(result->response, state.default_headers);
+                    std::string response_data =
+                        serialize_response(result->response, state.default_headers, result->is_head);
 
                     // Switch to blocking for the write — non-blocking send
                     // can't flush large responses in one go.
@@ -358,19 +505,100 @@ static void poll_loop(Server* srv, ServerState& state) {
                 }
                 conn->recv_buf.append(buf, static_cast<size_t>(r));
 
+                // RFC 9112 §3: URI length check — early reject before headers complete
+                if (!conn->headers_complete) {
+                    auto first_line_end = conn->recv_buf.find("\r\n");
+                    if (first_line_end != std::string::npos) {
+                        std::string req_line = conn->recv_buf.substr(0, first_line_end);
+                        auto sp1 = req_line.find(' ');
+                        auto sp2 = (sp1 != std::string::npos) ? req_line.find(' ', sp1 + 1) : std::string::npos;
+                        if (sp1 != std::string::npos && sp2 != std::string::npos) {
+                            size_t uri_len = sp2 - sp1 - 1;
+                            if (uri_len > MAX_URI_LENGTH) {
+                                Response err_res;
+                                err_res.status = 414;
+                                err_res.set_content("URI Too Long", "text/plain");
+                                std::string resp_data = serialize_response(err_res, state.default_headers);
+                                conn->socket.set_non_blocking(false);
+                                conn->socket.send(resp_data.data(), resp_data.size());
+                                state.poller.remove(ev.fd);
+                                state.connections.erase(conn->id);
+                                continue;
+                            }
+                        }
+                    }
+                    else if (conn->recv_buf.size() > MAX_URI_LENGTH + 100) {
+                        // Haven't even seen the first \r\n yet and buffer is huge
+                        Response err_res;
+                        err_res.status = 414;
+                        err_res.set_content("URI Too Long", "text/plain");
+                        std::string resp_data = serialize_response(err_res, state.default_headers);
+                        conn->socket.set_non_blocking(false);
+                        conn->socket.send(resp_data.data(), resp_data.size());
+                        state.poller.remove(ev.fd);
+                        state.connections.erase(conn->id);
+                        continue;
+                    }
+                }
+
+                // RFC 9112 §5: Header section size limit
+                if (conn->recv_buf.size() > MAX_HEADER_SECTION_LENGTH && !find_header_end(conn->recv_buf)) {
+                    Response err_res;
+                    err_res.status = 431;
+                    err_res.set_content("Request Header Fields Too Large", "text/plain");
+                    std::string resp_data = serialize_response(err_res, state.default_headers);
+                    conn->socket.set_non_blocking(false);
+                    conn->socket.send(resp_data.data(), resp_data.size());
+                    conn->socket.shutdown();
+                    state.poller.remove(ev.fd);
+                    state.connections.erase(conn->id);
+                    continue;
+                }
+
                 // Check if headers are complete
                 if (!conn->headers_complete && find_header_end(conn->recv_buf)) {
                     conn->headers_complete = true;
 
-                    auto header_end = conn->recv_buf.find("\r\n\r\n");
-                    std::string headers_str = conn->recv_buf.substr(0, header_end + 4);
-                    std::string body = conn->recv_buf.substr(header_end + 4);
+                    // RFC validation on raw bytes (before parsing)
+                    int raw_err = validate_raw_request(conn->recv_buf);
+                    if (raw_err != 0) {
+                        Response err_res;
+                        err_res.status = raw_err;
+                        err_res.set_content(status_message(raw_err), "text/plain");
+                        std::string resp_data = serialize_response(err_res, state.default_headers);
+                        conn->socket.set_non_blocking(false);
+                        conn->socket.send(resp_data.data(), resp_data.size());
+                        state.poller.remove(ev.fd);
+                        state.connections.erase(conn->id);
+                        continue;
+                    }
+
+                    auto header_end_pos = conn->recv_buf.find("\r\n\r\n");
+                    std::string headers_str = conn->recv_buf.substr(0, header_end_pos + 4);
+                    std::string body = conn->recv_buf.substr(header_end_pos + 4);
 
                     Request req = parse_http_request(headers_str, body);
 
-                    // Find handler
+                    // RFC validation on parsed request
+                    int parsed_err = validate_parsed_request(req);
+                    if (parsed_err != 0) {
+                        Response err_res;
+                        err_res.status = parsed_err;
+                        err_res.set_content(status_message(parsed_err), "text/plain");
+                        std::string resp_data = serialize_response(err_res, state.default_headers);
+                        conn->socket.set_non_blocking(false);
+                        conn->socket.send(resp_data.data(), resp_data.size());
+                        state.poller.remove(ev.fd);
+                        state.connections.erase(conn->id);
+                        continue;
+                    }
+
+                    // Track if this is a HEAD request
+                    bool is_head = (req.method == "HEAD");
+
+                    // Find handler — HEAD dispatches to GET handlers (RFC 9110 §9.3.2)
                     Server::Handler handler;
-                    if (req.method == "GET")
+                    if (req.method == "GET" || req.method == "HEAD")
                         handler = find_handler(state.get_handlers, req.path, req);
                     else if (req.method == "POST")
                         handler = find_handler(state.post_handlers, req.path, req);
@@ -386,6 +614,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                     WorkItem item;
                     item.connection_id = conn->id;
                     item.request = std::move(req);
+                    item.is_head = is_head;
                     item.handler = std::move(handler);
 
                     state.work_channel.publish(std::move(item));
