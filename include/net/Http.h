@@ -900,6 +900,12 @@ class Server {
 
     Headers default_headers_;
     std::function<ssize_t(Stream&, Headers&)> header_writer_ = detail::write_headers;
+
+  public:
+    struct ServerState; // defined in HttpServer.cpp
+
+  private:
+    std::unique_ptr<ServerState> state_;
 };
 
 // ===========================================================================
@@ -1153,6 +1159,7 @@ class ClientImpl {
     bool ipv6_v6only_ = CPPHTTPLIB_IPV6_V6ONLY;
     SocketOptions socket_options_ = nullptr;
 
+    bool ssl_ = false;
     bool compress_ = false;
     bool decompress_ = true;
 

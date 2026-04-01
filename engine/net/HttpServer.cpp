@@ -59,19 +59,14 @@ struct WorkResult : public Event {
 // Server implementation
 // ===========================================================================
 
-// The actual server state. Server's public methods delegate here.
-// This is stored as opaque data inside Server's private members.
-// Since Server has many private members already declared in the header
-// for API compatibility, we store our event-loop state in a separate struct
-// accessed via a static map keyed by Server*.
-
-struct ServerState {
+struct Server::ServerState {
     platform::Poller poller;
     platform::Socket listener;
     int listener_fd = -1;
     int notifier_fd = -1;
 
     std::unordered_map<uint64_t, HttpConnection> connections;
+    std::unordered_map<int, uint64_t> fd_to_conn; // fd → connection_id for O(1) lookup
     uint64_t next_conn_id = 1;
 
     // Private channels — no global EventManager contention
@@ -85,7 +80,7 @@ struct ServerState {
 
     std::atomic<bool> running{false};
 
-    // Handler tables (copied from Server on listen)
+    // Handler tables
     using HandlerEntry = std::pair<std::string, Server::Handler>;
     std::vector<HandlerEntry> get_handlers;
     std::vector<HandlerEntry> post_handlers;
@@ -96,22 +91,6 @@ struct ServerState {
 
     Headers default_headers;
 };
-
-static std::mutex g_state_mutex;
-static std::unordered_map<Server*, std::unique_ptr<ServerState>> g_states;
-
-static ServerState& get_state(Server* srv) {
-    std::lock_guard lock(g_state_mutex);
-    auto& ptr = g_states[srv];
-    if (!ptr)
-        ptr = std::make_unique<ServerState>();
-    return *ptr;
-}
-
-static void remove_state(Server* srv) {
-    std::lock_guard lock(g_state_mutex);
-    g_states.erase(srv);
-}
 
 // ===========================================================================
 // HTTP parsing helpers
@@ -124,6 +103,17 @@ static constexpr size_t MAX_HEADER_SECTION_LENGTH = 65536;
 
 static bool find_header_end(const std::string& buf) {
     return buf.find("\r\n\r\n") != std::string::npos;
+}
+
+using ServerState = Server::ServerState;
+
+static void remove_connection(ServerState& state, uint64_t conn_id) {
+    auto it = state.connections.find(conn_id);
+    if (it != state.connections.end()) {
+        int fd = it->second.socket.fd();
+        state.fd_to_conn.erase(fd);
+        state.connections.erase(it);
+    }
 }
 
 static Server::Handler find_handler(const std::vector<ServerState::HandlerEntry>& handlers, const std::string& path,
@@ -368,7 +358,7 @@ static std::string serialize_response(const Response& res, const Headers& defaul
 // Worker thread loop
 // ===========================================================================
 
-static void worker_loop(ServerState& state, std::stop_token st) {
+static void worker_loop(Server::ServerState& state, std::stop_token st) {
     while (!st.stop_requested()) {
         // Wait for work
         {
@@ -416,7 +406,7 @@ static void worker_loop(ServerState& state, std::stop_token st) {
 // Poll loop (runs on the thread that called listen_after_bind)
 // ===========================================================================
 
-static void poll_loop(Server* srv, ServerState& state) {
+static void poll_loop(Server* srv, Server::ServerState& state) {
     constexpr int MAX_EVENTS = 128;
     platform::Poller::Event events[MAX_EVENTS];
 
@@ -443,6 +433,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                     conn.socket = std::move(client);
 
                     state.poller.add(cfd, platform::Poller::Readable);
+                    state.fd_to_conn[cfd] = conn.id;
                     state.connections.emplace(conn.id, std::move(conn));
                 }
             }
@@ -465,8 +456,9 @@ static void poll_loop(Server* srv, ServerState& state) {
                     std::string response_data =
                         serialize_response(result->response, state.default_headers, result->is_head);
 
-                    // Switch to blocking for the write — non-blocking send
-                    // can't flush large responses in one go.
+                    // TODO: A slow client here blocks the poll thread. Acceptable
+                    // for LAN game servers but should use writable-event queuing
+                    // for internet-facing deployments.
                     conn->socket.set_non_blocking(false);
                     size_t total = 0;
                     while (total < response_data.size()) {
@@ -479,20 +471,18 @@ static void poll_loop(Server* srv, ServerState& state) {
 
                     // Close connection (no keep-alive for now)
                     state.poller.remove(conn->socket.fd());
-                    state.connections.erase(result->connection_id);
+                    remove_connection(state, result->connection_id);
                 }
             }
             else {
-                // Client socket readable — find connection by fd
-                HttpConnection* conn = nullptr;
-                for (auto& [id, c] : state.connections) {
-                    if (c.socket.fd() == ev.fd) {
-                        conn = &c;
-                        break;
-                    }
-                }
-                if (!conn)
+                // O(1) fd → connection lookup
+                auto fd_it = state.fd_to_conn.find(ev.fd);
+                if (fd_it == state.fd_to_conn.end())
                     continue;
+                auto conn_it = state.connections.find(fd_it->second);
+                if (conn_it == state.connections.end())
+                    continue;
+                HttpConnection* conn = &conn_it->second;
 
                 // Drain all available data (edge-triggered poller won't re-fire
                 // for data already in the kernel buffer).
@@ -511,7 +501,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                 }
                 if (closed && conn->recv_buf.empty()) {
                     state.poller.remove(ev.fd);
-                    state.connections.erase(conn->id);
+                    remove_connection(state, conn->id);
                     continue;
                 }
 
@@ -532,7 +522,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                                 conn->socket.set_non_blocking(false);
                                 conn->socket.send(resp_data.data(), resp_data.size());
                                 state.poller.remove(ev.fd);
-                                state.connections.erase(conn->id);
+                                remove_connection(state, conn->id);
                                 continue;
                             }
                         }
@@ -546,7 +536,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                         conn->socket.set_non_blocking(false);
                         conn->socket.send(resp_data.data(), resp_data.size());
                         state.poller.remove(ev.fd);
-                        state.connections.erase(conn->id);
+                        remove_connection(state, conn->id);
                         continue;
                     }
                 }
@@ -561,7 +551,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                     conn->socket.send(resp_data.data(), resp_data.size());
                     conn->socket.shutdown();
                     state.poller.remove(ev.fd);
-                    state.connections.erase(conn->id);
+                    remove_connection(state, conn->id);
                     continue;
                 }
 
@@ -579,7 +569,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                         conn->socket.set_non_blocking(false);
                         conn->socket.send(resp_data.data(), resp_data.size());
                         state.poller.remove(ev.fd);
-                        state.connections.erase(conn->id);
+                        remove_connection(state, conn->id);
                         continue;
                     }
 
@@ -599,7 +589,7 @@ static void poll_loop(Server* srv, ServerState& state) {
                         conn->socket.set_non_blocking(false);
                         conn->socket.send(resp_data.data(), resp_data.size());
                         state.poller.remove(ev.fd);
-                        state.connections.erase(conn->id);
+                        remove_connection(state, conn->id);
                         continue;
                     }
 
@@ -639,14 +629,11 @@ static void poll_loop(Server* srv, ServerState& state) {
 // Server public methods
 // ===========================================================================
 
-Server::Server() {
-    get_state(this); // ensure state exists
-    new_task_queue = [] { return static_cast<TaskQueue*>(new ThreadPool(CPPHTTPLIB_THREAD_POOL_COUNT)); };
+Server::Server() : state_(std::make_unique<ServerState>()) {
 }
 
 Server::~Server() {
     stop();
-    remove_state(this);
 }
 
 bool Server::is_valid() const {
@@ -655,12 +642,12 @@ bool Server::is_valid() const {
 
 // Route registration — store handler with pattern string
 Server& Server::Get(const std::string& pattern, Handler handler) {
-    get_state(this).get_handlers.emplace_back(pattern, std::move(handler));
+    state_->get_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
 Server& Server::Post(const std::string& pattern, Handler handler) {
-    get_state(this).post_handlers.emplace_back(pattern, std::move(handler));
+    state_->post_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
@@ -669,7 +656,7 @@ Server& Server::Post(const std::string&, HandlerWithContentReader) {
 }
 
 Server& Server::Put(const std::string& pattern, Handler handler) {
-    get_state(this).put_handlers.emplace_back(pattern, std::move(handler));
+    state_->put_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
@@ -678,7 +665,7 @@ Server& Server::Put(const std::string&, HandlerWithContentReader) {
 }
 
 Server& Server::Patch(const std::string& pattern, Handler handler) {
-    get_state(this).patch_handlers.emplace_back(pattern, std::move(handler));
+    state_->patch_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
@@ -687,7 +674,7 @@ Server& Server::Patch(const std::string&, HandlerWithContentReader) {
 }
 
 Server& Server::Delete(const std::string& pattern, Handler handler) {
-    get_state(this).delete_handlers.emplace_back(pattern, std::move(handler));
+    state_->delete_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
@@ -696,19 +683,19 @@ Server& Server::Delete(const std::string&, HandlerWithContentReader) {
 }
 
 Server& Server::Options(const std::string& pattern, Handler handler) {
-    get_state(this).options_handlers.emplace_back(pattern, std::move(handler));
+    state_->options_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
 // Configuration
 Server& Server::set_default_headers(Headers headers) {
-    get_state(this).default_headers = std::move(headers);
-    default_headers_ = get_state(this).default_headers;
+    state_->default_headers = std::move(headers);
+    default_headers_ = state_->default_headers;
     return *this;
 }
 
 bool Server::bind_to_port(const std::string& host, int port, int) {
-    auto& state = get_state(this);
+    auto& state = *state_;
     try {
         state.listener = platform::tcp_listen(host, static_cast<uint16_t>(port));
         state.listener.set_non_blocking(true);
@@ -727,13 +714,13 @@ int Server::bind_to_any_port(const std::string& host, int socket_flags) {
     if (!bind_to_port(host, 0, socket_flags))
         return -1;
 
-    auto& state = get_state(this);
+    auto& state = *state_;
     uint16_t port = state.listener.local_port();
     return (port > 0) ? static_cast<int>(port) : -1;
 }
 
 bool Server::listen_after_bind() {
-    auto& state = get_state(this);
+    auto& state = *state_;
     state.running.store(true);
     is_running_.store(true);
 
@@ -769,7 +756,7 @@ void Server::wait_until_ready() const { /* poll loop starts immediately */
 }
 
 void Server::stop() {
-    auto& state = get_state(this);
+    auto& state = *state_;
     state.running.store(false);
     is_running_.store(false);
     state.poller.notify(); // wake poll loop

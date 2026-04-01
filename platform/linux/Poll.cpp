@@ -45,17 +45,17 @@ static uint32_t to_epoll_events(uint32_t interest) {
 
 // -- fd-based (core) --------------------------------------------------------
 
-void Poller::add(int fd, uint32_t interest, void* user_data) {
+void Poller::add(int fd, uint32_t interest, void* /*user_data*/) {
     struct epoll_event ev{};
     ev.events = to_epoll_events(interest);
-    ev.data.ptr = user_data;
+    ev.data.fd = fd;
     epoll_ctl(impl_->epfd, EPOLL_CTL_ADD, fd, &ev);
 }
 
-void Poller::modify(int fd, uint32_t interest, void* user_data) {
+void Poller::modify(int fd, uint32_t interest, void* /*user_data*/) {
     struct epoll_event ev{};
     ev.events = to_epoll_events(interest);
-    ev.data.ptr = user_data;
+    ev.data.fd = fd;
     epoll_ctl(impl_->epfd, EPOLL_CTL_MOD, fd, &ev);
 }
 
@@ -96,7 +96,7 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
             flags |= Error;
         if (ep.events & (EPOLLHUP | EPOLLRDHUP))
             flags |= HangUp;
-        out[i] = Event{-1, flags, ep.data.ptr};
+        out[i] = Event{ep.data.fd, flags, nullptr};
     }
     return n;
 }
