@@ -1133,9 +1133,9 @@ class ClientImpl {
     bool write_content_with_provider(Stream& strm, const Request& req, Error& error) const;
     void copy_settings(const ClientImpl& rhs);
 
-    const std::string host_;
-    const int port_;
-    const std::string host_and_port_;
+    std::string host_;
+    int port_;
+    std::string host_and_port_;
 
     Socket socket_;
     mutable std::mutex socket_mutex_;

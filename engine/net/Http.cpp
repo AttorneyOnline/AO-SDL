@@ -739,12 +739,11 @@ ssize_t Stream::write(const std::string& s) {
 // ===========================================================================
 
 ClientImpl::ClientImpl(const std::string& host) : ClientImpl(host, 80) {
-    // Re-parse to detect scheme for port default
     auto parsed = parse_scheme_host_port(host);
-    const_cast<std::string&>(host_) = parsed.host;
-    const_cast<int&>(port_) = parsed.port;
-    const_cast<std::string&>(host_and_port_) = parsed.host + ":" + std::to_string(parsed.port);
-    const_cast<bool&>(ssl_) = parsed.ssl;
+    host_ = parsed.host;
+    port_ = parsed.port;
+    host_and_port_ = parsed.host + ":" + std::to_string(parsed.port);
+    ssl_ = parsed.ssl;
 }
 
 ClientImpl::ClientImpl(const std::string& host, int port)

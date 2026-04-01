@@ -102,7 +102,7 @@ struct Server::ServerState {
         platform::Socket socket;
         std::string area;
     };
-    std::vector<SSEConnection> sse_connections;
+    std::unordered_map<int, SSEConnection> sse_by_fd; // fd → SSEConnection for O(1) lookup
 };
 
 // ===========================================================================
@@ -460,16 +460,10 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
 
                 // Process completed results
                 while (auto result = state.result_channel.get_event()) {
-                    // Find the connection
-                    HttpConnection* conn = nullptr;
-                    for (auto& [id, c] : state.connections) {
-                        if (id == result->connection_id) {
-                            conn = &c;
-                            break;
-                        }
-                    }
-                    if (!conn)
+                    auto conn_it = state.connections.find(result->connection_id);
+                    if (conn_it == state.connections.end())
                         continue;
+                    HttpConnection* conn = &conn_it->second;
 
                     std::string response_data =
                         serialize_response(result->response, state.default_headers, result->is_head);
@@ -493,23 +487,17 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                 }
             }
             else {
-                // Check if this is an SSE connection (client disconnect detection)
-                bool is_sse = false;
-                for (auto it = state.sse_connections.begin(); it != state.sse_connections.end(); ++it) {
-                    if (it->socket.fd() == ev.fd) {
-                        // Readable on SSE socket = client closed
-                        char discard[64];
-                        ssize_t n = it->socket.recv(discard, sizeof(discard));
-                        if (n <= 0) {
-                            state.poller.remove(ev.fd);
-                            state.sse_connections.erase(it);
-                        }
-                        is_sse = true;
-                        break;
+                // O(1) SSE connection disconnect detection
+                auto sse_it = state.sse_by_fd.find(ev.fd);
+                if (sse_it != state.sse_by_fd.end()) {
+                    char discard[64];
+                    ssize_t n = sse_it->second.socket.recv(discard, sizeof(discard));
+                    if (n <= 0) {
+                        state.poller.remove(ev.fd);
+                        state.sse_by_fd.erase(sse_it);
                     }
-                }
-                if (is_sse)
                     continue;
+                }
 
                 // O(1) fd → connection lookup
                 auto fd_it = state.fd_to_conn.find(ev.fd);
@@ -661,7 +649,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                     sse_conn.socket = std::move(conn->socket);
                                     sse_conn.area = area;
                                     // Keep in poller for disconnect detection
-                                    state.sse_connections.push_back(std::move(sse_conn));
+                                    int sse_fd = sse_conn.socket.fd();
+                                    state.sse_by_fd.emplace(sse_fd, std::move(sse_conn));
                                     // Remove from normal connections (fd_to_conn already points here)
                                     state.fd_to_conn.erase(ev.fd);
                                     state.connections.erase(conn->id);
@@ -786,22 +775,17 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
         return;
     std::string frame = "event: " + event + "\ndata: " + data + "\n\n";
 
-    auto it = state_->sse_connections.begin();
-    while (it != state_->sse_connections.end()) {
-        // Area filter: empty area = broadcast to all
-        if (!area.empty() && !it->area.empty() && it->area != area) {
-            ++it;
+    std::vector<int> dead_fds;
+    for (auto& [fd, sse] : state_->sse_by_fd) {
+        if (!area.empty() && !sse.area.empty() && sse.area != area)
             continue;
-        }
-        ssize_t n = it->socket.send(frame.data(), frame.size());
-        if (n <= 0) {
-            // Client disconnected — remove
-            state_->poller.remove(it->socket.fd());
-            it = state_->sse_connections.erase(it);
-        }
-        else {
-            ++it;
-        }
+        ssize_t n = sse.socket.send(frame.data(), frame.size());
+        if (n <= 0)
+            dead_fds.push_back(fd);
+    }
+    for (int fd : dead_fds) {
+        state_->poller.remove(fd);
+        state_->sse_by_fd.erase(fd);
     }
 }
 
@@ -860,7 +844,7 @@ bool Server::listen_after_bind() {
         w.request_stop();
     state.work_cv.notify_all();
     state.workers.clear();
-    state.sse_connections.clear();
+    state.sse_by_fd.clear();
 
     is_running_.store(false);
     return true;
