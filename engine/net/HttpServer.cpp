@@ -631,8 +631,9 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                                           "Content-Type: text/event-stream\r\n"
                                                           "Cache-Control: no-cache\r\n"
                                                           "Connection: keep-alive\r\n";
-                                    // Add Date header
                                     headers += "Date: " + generate_date_header() + "\r\n";
+                                    for (auto& [k, v] : state.default_headers)
+                                        headers += k + ": " + v + "\r\n";
                                     headers += "\r\n";
                                     conn->socket.set_non_blocking(false);
                                     conn->socket.send(headers.data(), headers.size());
