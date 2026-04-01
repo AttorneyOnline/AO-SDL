@@ -7,13 +7,15 @@
 #include <unistd.h>
 
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 namespace platform {
 
 struct Poller::Impl {
     int epfd = -1;
-    int efd = -1; // eventfd for notifications
+    int efd = -1;                                 // eventfd for notifications
+    std::unordered_map<int, void*> user_data_map; // fd → user_data (epoll can't store both)
 
     Impl() : epfd(epoll_create1(EPOLL_CLOEXEC)) {
         if (epfd < 0)
@@ -45,22 +47,25 @@ static uint32_t to_epoll_events(uint32_t interest) {
 
 // -- fd-based (core) --------------------------------------------------------
 
-void Poller::add(int fd, uint32_t interest, void* /*user_data*/) {
+void Poller::add(int fd, uint32_t interest, void* user_data) {
     struct epoll_event ev{};
     ev.events = to_epoll_events(interest);
     ev.data.fd = fd;
     epoll_ctl(impl_->epfd, EPOLL_CTL_ADD, fd, &ev);
+    impl_->user_data_map[fd] = user_data;
 }
 
-void Poller::modify(int fd, uint32_t interest, void* /*user_data*/) {
+void Poller::modify(int fd, uint32_t interest, void* user_data) {
     struct epoll_event ev{};
     ev.events = to_epoll_events(interest);
     ev.data.fd = fd;
     epoll_ctl(impl_->epfd, EPOLL_CTL_MOD, fd, &ev);
+    impl_->user_data_map[fd] = user_data;
 }
 
 void Poller::remove(int fd) {
     epoll_ctl(impl_->epfd, EPOLL_CTL_DEL, fd, nullptr);
+    impl_->user_data_map.erase(fd);
 }
 
 // -- Socket-based (delegate) ------------------------------------------------
@@ -96,7 +101,11 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
             flags |= Error;
         if (ep.events & (EPOLLHUP | EPOLLRDHUP))
             flags |= HangUp;
-        out[i] = Event{ep.data.fd, flags, nullptr};
+        void* ud = nullptr;
+        auto it = impl_->user_data_map.find(ep.data.fd);
+        if (it != impl_->user_data_map.end())
+            ud = it->second;
+        out[i] = Event{ep.data.fd, flags, ud};
     }
     return n;
 }
