@@ -118,15 +118,14 @@ static bool send_all(platform::Socket& sock, const std::string& data) {
 /// Read until we find `\r\n\r\n`. Returns all data read (headers + any body start).
 static std::string read_headers(platform::Socket& sock) {
     std::string buf;
-    char c;
+    char chunk[4096];
     while (true) {
-        ssize_t n = sock.recv(&c, 1);
+        ssize_t n = sock.recv(chunk, sizeof(chunk));
         if (n <= 0)
             break;
-        buf += c;
-        if (buf.size() >= 4 && buf.substr(buf.size() - 4) == "\r\n\r\n") {
+        buf.append(chunk, static_cast<size_t>(n));
+        if (buf.find("\r\n\r\n") != std::string::npos)
             break;
-        }
     }
     return buf;
 }
@@ -208,13 +207,29 @@ static ParsedResponse parse_response_headers(const std::string& raw) {
 }
 
 /// Read headers, skipping any 1xx informational responses (RFC 9110 §15.2).
+/// Handles the case where a chunk-read overshoots past the first \r\n\r\n
+/// and includes bytes from the next response.
 static std::string read_final_headers(platform::Socket& sock) {
+    std::string carry; // bytes carried over from a skipped 1xx response
     while (true) {
-        std::string raw = read_headers(sock);
+        std::string raw;
+        if (!carry.empty()) {
+            raw = std::move(carry);
+            carry.clear();
+            // If the carried bytes already contain a full header block, use them
+            if (raw.find("\r\n\r\n") == std::string::npos) {
+                // Need more data
+                std::string more = read_headers(sock);
+                raw += more;
+            }
+        }
+        else {
+            raw = read_headers(sock);
+        }
         if (raw.empty())
             return raw;
 
-        // Check if this is a 1xx response — skip and read next
+        // Check if this is a 1xx response — skip and carry over any extra bytes
         auto sp1 = raw.find(' ');
         if (sp1 != std::string::npos) {
             int status = 0;
@@ -222,8 +237,14 @@ static std::string read_final_headers(platform::Socket& sock) {
             std::string code_str =
                 (sp2 != std::string::npos) ? raw.substr(sp1 + 1, sp2 - sp1 - 1) : raw.substr(sp1 + 1, 3);
             std::from_chars(code_str.data(), code_str.data() + code_str.size(), status);
-            if (status >= 100 && status < 200)
-                continue; // skip 1xx, read next response
+            if (status >= 100 && status < 200) {
+                // Skip the 1xx headers; keep any bytes past \r\n\r\n
+                auto end = raw.find("\r\n\r\n");
+                if (end != std::string::npos && end + 4 < raw.size()) {
+                    carry = raw.substr(end + 4);
+                }
+                continue;
+            }
         }
         return raw;
     }
@@ -231,6 +252,10 @@ static std::string read_final_headers(platform::Socket& sock) {
 
 static std::string read_body(platform::Socket& sock, const ParsedResponse& pr, size_t content_length) {
     std::string body = pr.body_start;
+    if (body.size() >= content_length) {
+        body.resize(content_length);
+        return body;
+    }
     body.reserve(content_length);
     char buf[8192];
     while (body.size() < content_length) {
@@ -719,11 +744,7 @@ ClientImpl::ClientImpl(const std::string& host) : ClientImpl(host, 80) {
     const_cast<std::string&>(host_) = parsed.host;
     const_cast<int&>(port_) = parsed.port;
     const_cast<std::string&>(host_and_port_) = parsed.host + ":" + std::to_string(parsed.port);
-    if (parsed.ssl) {
-        // Store that we need SSL — use client_cert_path_ as a flag
-        // (hacky but avoids adding a member to match the original API)
-        const_cast<std::string&>(client_cert_path_) = "__ssl__";
-    }
+    const_cast<bool&>(ssl_) = parsed.ssl;
 }
 
 ClientImpl::ClientImpl(const std::string& host, int port)
@@ -916,7 +937,7 @@ static Result execute_request(const std::string& method, const std::string& host
 }
 
 bool ClientImpl::is_ssl() const {
-    return client_cert_path_ == "__ssl__";
+    return ssl_;
 }
 
 // GET overloads
@@ -1324,12 +1345,6 @@ bool Client::is_valid() const {
     return cli_ && cli_->is_valid();
 }
 
-// Delegate all methods to cli_
-#define DELEGATE(ret, name, args, call)                                                                                \
-    ret Client::name args {                                                                                            \
-        return cli_->name call;                                                                                        \
-    }
-
 Result Client::Get(const std::string& p) {
     return cli_->Get(p);
 }
@@ -1674,8 +1689,6 @@ void Client::set_proxy_bearer_token_auth(const std::string& t) {
 void Client::set_logger(Logger l) {
     cli_->set_logger(std::move(l));
 }
-
-#undef DELEGATE
 
 // ===========================================================================
 // detail::PathParamsMatcher (needed by Server — stub for now)
