@@ -62,10 +62,15 @@ class SSETest : public ::testing::Test {
 
     /// Read an SSE frame from the socket (blocks briefly).
     std::string read_sse_frame(platform::Socket& sock, int timeout_ms = 1000) {
+#ifdef _WIN32
+        DWORD tv = timeout_ms;
+        setsockopt(sock.fd(), SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+#else
         struct timeval tv;
         tv.tv_sec = timeout_ms / 1000;
         tv.tv_usec = (timeout_ms % 1000) * 1000;
         setsockopt(sock.fd(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
 
         std::string result;
         char buf[4096];
