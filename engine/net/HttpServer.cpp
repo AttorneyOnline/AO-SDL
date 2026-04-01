@@ -780,8 +780,19 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
     for (auto& [fd, sse] : state_->sse_by_fd) {
         if (!area.empty() && !sse.area.empty() && sse.area != area)
             continue;
-        ssize_t n = sse.socket.send(frame.data(), frame.size());
-        if (n <= 0)
+        sse.socket.set_non_blocking(false);
+        size_t total = 0;
+        bool failed = false;
+        while (total < frame.size()) {
+            ssize_t n = sse.socket.send(frame.data() + total, frame.size() - total);
+            if (n <= 0) {
+                failed = true;
+                break;
+            }
+            total += static_cast<size_t>(n);
+        }
+        sse.socket.set_non_blocking(true);
+        if (failed)
             dead_fds.push_back(fd);
     }
     for (int fd : dead_fds) {
