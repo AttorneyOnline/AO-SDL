@@ -18,9 +18,7 @@ class PlatformTcpSocket : public ITcpSocket {
     /// The hostname is used for SNI and certificate verification.
     void enable_ssl(const std::string& hostname);
 
-    int fd() const override {
-        return sock_.fd();
-    }
+    int fd() const override;
 
     void connect() override;
     void set_non_blocking(bool non_blocking) override;

@@ -11,7 +11,7 @@ class PlatformServerSocket : public IServerSocket {
     explicit PlatformServerSocket(const std::string& bind_address = "0.0.0.0");
     ~PlatformServerSocket() override;
 
-    int fd() const override { return sock_.fd(); }
+    int fd() const override;
 
     void bind_and_listen(uint16_t port, int backlog = 128) override;
     std::unique_ptr<ITcpSocket> accept() override;
