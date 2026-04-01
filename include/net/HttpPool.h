@@ -91,13 +91,17 @@ class HttpPool {
         HttpCallback callback;
     };
 
+    static constexpr int NUM_PRIORITIES = 4;
+
     void worker_loop(std::stop_token st);
+    bool pop_highest(Request& out);
 
     std::vector<std::jthread> workers_;
     std::atomic<int> pending_{0};
 
-    // Work queue sorted by priority (highest first)
-    std::deque<Request> work_queue_;
+    // Per-priority work queues — index 0 = LOW, 3 = CRITICAL.
+    // Avoids O(N) sorted insertion; enqueue is O(1), dequeue scans 4 buckets.
+    std::deque<Request> work_queues_[NUM_PRIORITIES];
     std::mutex work_mutex_;
     std::condition_variable work_cv_;
 

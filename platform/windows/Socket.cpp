@@ -146,6 +146,16 @@ void Socket::set_tcp_nodelay(bool enabled) {
     setsockopt(impl_->winsock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&val), sizeof(val));
 }
 
+void Socket::set_recv_timeout(int timeout_ms) {
+    DWORD tv = static_cast<DWORD>(timeout_ms);
+    setsockopt(impl_->winsock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+}
+
+void Socket::set_send_timeout(int timeout_ms) {
+    DWORD tv = static_cast<DWORD>(timeout_ms);
+    setsockopt(impl_->winsock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+}
+
 bool Socket::bytes_available() const {
     u_long count = 0;
     ioctlsocket(impl_->winsock, FIONREAD, &count);
@@ -226,7 +236,7 @@ Socket tcp_create() {
     return Socket(std::move(impl));
 }
 
-Socket tcp_connect(const std::string& host, uint16_t port) {
+Socket tcp_connect(const std::string& host, uint16_t port, int timeout_ms) {
     struct addrinfo hints{}, *res = nullptr;
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -242,10 +252,50 @@ Socket tcp_connect(const std::string& host, uint16_t port) {
         impl->winsock = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (impl->winsock == INVALID_SOCKET)
             continue;
-        if (::connect(impl->winsock, rp->ai_addr, static_cast<int>(rp->ai_addrlen)) == 0)
-            break;
-        closesocket(impl->winsock);
-        impl->winsock = INVALID_SOCKET;
+
+        if (timeout_ms >= 0) {
+            // Non-blocking connect with timeout
+            u_long mode = 1;
+            ioctlsocket(impl->winsock, FIONBIO, &mode);
+
+            int ret = ::connect(impl->winsock, rp->ai_addr, static_cast<int>(rp->ai_addrlen));
+            if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK) {
+                closesocket(impl->winsock);
+                impl->winsock = INVALID_SOCKET;
+                continue;
+            }
+            if (ret == SOCKET_ERROR) {
+                WSAPOLLFD pfd{};
+                pfd.fd = impl->winsock;
+                pfd.events = POLLWRNORM;
+                int poll_ret = WSAPoll(&pfd, 1, timeout_ms);
+                if (poll_ret <= 0) {
+                    closesocket(impl->winsock);
+                    impl->winsock = INVALID_SOCKET;
+                    continue;
+                }
+                int so_error = 0;
+                int so_len = sizeof(so_error);
+                getsockopt(impl->winsock, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&so_error), &so_len);
+                if (so_error != 0) {
+                    closesocket(impl->winsock);
+                    impl->winsock = INVALID_SOCKET;
+                    continue;
+                }
+            }
+
+            // Restore blocking mode
+            mode = 0;
+            ioctlsocket(impl->winsock, FIONBIO, &mode);
+        }
+        else {
+            if (::connect(impl->winsock, rp->ai_addr, static_cast<int>(rp->ai_addrlen)) != 0) {
+                closesocket(impl->winsock);
+                impl->winsock = INVALID_SOCKET;
+                continue;
+            }
+        }
+        break;
     }
     freeaddrinfo(res);
 

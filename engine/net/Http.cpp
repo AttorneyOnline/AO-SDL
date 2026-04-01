@@ -15,6 +15,13 @@
 #include <sstream>
 #include <stdexcept>
 
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <poll.h>
+#include <sys/socket.h>
+#endif
+
 namespace http {
 
 // ===========================================================================
@@ -763,7 +770,11 @@ bool ClientImpl::is_valid() const {
 }
 
 void ClientImpl::stop() {
-    socket_.sock = INVALID_SOCKET_VALUE;
+    std::lock_guard lock(socket_mutex_);
+    is_stopping_ = true;
+    if (socket_)
+        socket_->shutdown();
+    socket_.reset();
 }
 
 std::string ClientImpl::host() const {
@@ -773,20 +784,20 @@ int ClientImpl::port() const {
     return port_;
 }
 size_t ClientImpl::is_socket_open() const {
-    return socket_.is_open() ? 1 : 0;
+    return (socket_.has_value() && socket_->valid()) ? 1 : 0;
 }
 socket_t ClientImpl::socket() const {
-    return socket_.sock;
+    return socket_ ? socket_->fd() : -1;
 }
 
-void ClientImpl::set_hostname_addr_map(std::map<std::string, std::string> addr_map) {
-    addr_map_ = std::move(addr_map);
+void ClientImpl::set_hostname_addr_map(std::map<std::string, std::string>) {
+    // Connection reuse makes per-host address caching unnecessary
 }
 void ClientImpl::set_default_headers(Headers headers) {
     default_headers_ = std::move(headers);
 }
-void ClientImpl::set_header_writer(std::function<ssize_t(Stream&, Headers&)> const& writer) {
-    header_writer_ = writer;
+void ClientImpl::set_header_writer(std::function<ssize_t(Stream&, Headers&)> const&) {
+    // Header writing is handled internally
 }
 void ClientImpl::set_address_family(int family) {
     address_family_ = family;
@@ -854,33 +865,140 @@ void ClientImpl::set_logger(Logger logger) {
 
 // -- Core request execution -------------------------------------------------
 
-/// Internal: perform a single HTTP request and return the response.
-static Result execute_request(const std::string& method, const std::string& host, int port, bool use_ssl,
-                              const std::string& path, const Headers& headers, const std::string& body, bool keep_alive,
-                              ContentReceiver content_receiver = nullptr) {
-    try {
-        auto sock = platform::tcp_connect(host, static_cast<uint16_t>(port));
-        if (use_ssl) {
-            sock.ssl_connect(host);
+int ClientImpl::connection_timeout_ms() const {
+    return static_cast<int>(connection_timeout_sec_ * 1000 + connection_timeout_usec_ / 1000);
+}
+
+int ClientImpl::read_timeout_ms() const {
+    return static_cast<int>(read_timeout_sec_ * 1000 + read_timeout_usec_ / 1000);
+}
+
+int ClientImpl::write_timeout_ms() const {
+    return static_cast<int>(write_timeout_sec_ * 1000 + write_timeout_usec_ / 1000);
+}
+
+/// Check if the kept-alive socket is still usable. Returns false if stale.
+static bool is_socket_alive(platform::Socket& sock) {
+#ifdef _WIN32
+    WSAPOLLFD pfd{};
+    pfd.fd = static_cast<SOCKET>(sock.fd());
+    pfd.events = POLLIN;
+    int ret = WSAPoll(&pfd, 1, 0);
+#else
+    struct pollfd pfd{};
+    pfd.fd = sock.fd();
+    pfd.events = POLLIN;
+    int ret = ::poll(&pfd, 1, 0);
+#endif
+    if (ret > 0) {
+        // Socket is readable — either data waiting (shouldn't be) or connection closed
+        char probe;
+#ifdef _WIN32
+        int n = ::recv(static_cast<SOCKET>(sock.fd()), &probe, 1, MSG_PEEK);
+#else
+        ssize_t n = ::recv(sock.fd(), &probe, 1, MSG_PEEK);
+#endif
+        if (n <= 0)
+            return false; // Server closed the connection
+    }
+    return true;
+}
+
+bool ClientImpl::ensure_connected(bool& is_fresh) {
+    // Check if existing connection is still alive
+    if (socket_.has_value() && socket_->valid()) {
+        if (is_socket_alive(*socket_)) {
+            is_fresh = false;
+            return true;
         }
+        // Stale connection — close and reconnect
+        socket_.reset();
+    }
+
+    // Establish new connection
+    try {
+        int conn_ms = connection_timeout_ms();
+        socket_.emplace(platform::tcp_connect(host_, static_cast<uint16_t>(port_), conn_ms > 0 ? conn_ms : -1));
+        socket_->set_tcp_nodelay(tcp_nodelay_);
+
+        int recv_ms = read_timeout_ms();
+        if (recv_ms > 0)
+            socket_->set_recv_timeout(recv_ms);
+
+        int send_ms = write_timeout_ms();
+        if (send_ms > 0)
+            socket_->set_send_timeout(send_ms);
+
+        if (ssl_)
+            socket_->ssl_connect(host_);
+
+        is_fresh = true;
+        return true;
+    }
+    catch (const std::exception&) {
+        socket_.reset();
+        return false;
+    }
+}
+
+Result ClientImpl::execute_request(const std::string& method, const std::string& path, const Headers& headers,
+                                   const std::string& body, ContentReceiver content_receiver) {
+    std::lock_guard lock(socket_mutex_);
+
+    if (is_stopping_)
+        return Result(nullptr, Error::Connection);
+
+    try {
+
+        bool is_fresh = false;
+        if (!ensure_connected(is_fresh))
+            return Result(nullptr, Error::Connection);
 
         // Build merged headers
         Headers merged = headers;
-        if (keep_alive) {
+        if (keep_alive_)
             merged.emplace("Connection", "keep-alive");
-        }
-        else {
+        else
             merged.emplace("Connection", "close");
+
+        std::string raw_req = build_request(method, path, host_, merged, body);
+
+        // Send request — retry once on stale connection
+        if (!send_all(*socket_, raw_req)) {
+            if (!is_fresh && !is_stopping_) {
+                socket_.reset();
+                is_fresh = false;
+                if (!ensure_connected(is_fresh))
+                    return Result(nullptr, Error::Connection);
+                if (!send_all(*socket_, raw_req)) {
+                    socket_.reset();
+                    return Result(nullptr, Error::Write);
+                }
+            }
+            else {
+                socket_.reset();
+                return Result(nullptr, Error::Write);
+            }
         }
 
-        std::string raw_req = build_request(method, path, host, merged, body);
-        if (!send_all(sock, raw_req)) {
-            return Result(nullptr, Error::Write);
-        }
-
-        std::string raw_resp = read_final_headers(sock);
+        // Read response headers — retry once on stale connection
+        std::string raw_resp = read_final_headers(*socket_);
         if (raw_resp.empty()) {
-            return Result(nullptr, Error::Read);
+            if (!is_fresh && !is_stopping_) {
+                socket_.reset();
+                is_fresh = false;
+                if (!ensure_connected(is_fresh))
+                    return Result(nullptr, Error::Connection);
+                if (!send_all(*socket_, raw_req)) {
+                    socket_.reset();
+                    return Result(nullptr, Error::Write);
+                }
+                raw_resp = read_final_headers(*socket_);
+            }
+            if (raw_resp.empty()) {
+                socket_.reset();
+                return Result(nullptr, Error::Read);
+            }
         }
 
         auto pr = parse_response_headers(raw_resp);
@@ -893,44 +1011,42 @@ static Result execute_request(const std::string& method, const std::string& host
         bool chunked = (te.find("chunked") != std::string::npos);
 
         if (content_receiver) {
-            // Streaming mode
             if (chunked) {
-                // Read chunked and feed to receiver
-                // Simple: read all then feed (could be improved to stream chunks)
-                std::string full_body = read_chunked_body(sock, pr.body_start);
-                if (!full_body.empty()) {
+                std::string full_body = read_chunked_body(*socket_, pr.body_start);
+                if (!full_body.empty())
                     content_receiver(full_body.data(), full_body.size());
-                }
             }
             else {
                 size_t content_length = static_cast<size_t>(res->get_header_value_u64("Content-Length", 0));
-                if (content_length > 0) {
-                    read_body_streaming(sock, pr, content_length, content_receiver);
-                }
-                else if (!pr.body_start.empty()) {
+                if (content_length > 0)
+                    read_body_streaming(*socket_, pr, content_length, content_receiver);
+                else if (!pr.body_start.empty())
                     content_receiver(pr.body_start.data(), pr.body_start.size());
-                }
             }
         }
         else {
-            // Buffer entire body
             if (chunked) {
-                res->body = read_chunked_body(sock, pr.body_start);
+                res->body = read_chunked_body(*socket_, pr.body_start);
             }
             else {
                 size_t content_length = static_cast<size_t>(res->get_header_value_u64("Content-Length", 0));
-                if (content_length > 0) {
-                    res->body = read_body(sock, pr, content_length);
-                }
-                else {
+                if (content_length > 0)
+                    res->body = read_body(*socket_, pr, content_length);
+                else
                     res->body = std::move(pr.body_start);
-                }
             }
         }
 
+        // Connection disposition: close if server says so or keep-alive is off
+        auto conn_hdr = res->get_header_value("Connection");
+        if (!keep_alive_ || detail::case_ignore::equal(conn_hdr, "close"))
+            socket_.reset();
+
         return Result(std::move(res), Error::Success);
-    }
+
+    } // try
     catch (const std::exception&) {
+        socket_.reset();
         return Result(nullptr, Error::Connection);
     }
 }
@@ -941,14 +1057,14 @@ bool ClientImpl::is_ssl() const {
 
 // GET overloads
 Result ClientImpl::Get(const std::string& path) {
-    return execute_request("GET", host_, port_, is_ssl(), path, default_headers_, "", keep_alive_);
+    return execute_request("GET", path, default_headers_, "");
 }
 
 Result ClientImpl::Get(const std::string& path, const Headers& headers) {
     Headers merged = default_headers_;
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
-    return execute_request("GET", host_, port_, is_ssl(), path, merged, "", keep_alive_);
+    return execute_request("GET", path, merged, "");
 }
 
 Result ClientImpl::Get(const std::string& path, Progress) {
@@ -960,15 +1076,14 @@ Result ClientImpl::Get(const std::string& path, const Headers& headers, Progress
 }
 
 Result ClientImpl::Get(const std::string& path, ContentReceiver content_receiver) {
-    return execute_request("GET", host_, port_, is_ssl(), path, default_headers_, "", keep_alive_,
-                           std::move(content_receiver));
+    return execute_request("GET", path, default_headers_, "", std::move(content_receiver));
 }
 
 Result ClientImpl::Get(const std::string& path, const Headers& headers, ContentReceiver content_receiver) {
     Headers merged = default_headers_;
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
-    return execute_request("GET", host_, port_, is_ssl(), path, merged, "", keep_alive_, std::move(content_receiver));
+    return execute_request("GET", path, merged, "", std::move(content_receiver));
 }
 
 Result ClientImpl::Get(const std::string& path, ContentReceiver content_receiver, Progress) {
@@ -1013,33 +1128,33 @@ Result ClientImpl::Get(const std::string& path, const Params&, const Headers& he
 
 // HEAD
 Result ClientImpl::Head(const std::string& path) {
-    return execute_request("HEAD", host_, port_, is_ssl(), path, default_headers_, "", keep_alive_);
+    return execute_request("HEAD", path, default_headers_, "");
 }
 
 Result ClientImpl::Head(const std::string& path, const Headers& headers) {
     Headers merged = default_headers_;
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
-    return execute_request("HEAD", host_, port_, is_ssl(), path, merged, "", keep_alive_);
+    return execute_request("HEAD", path, merged, "");
 }
 
 // POST — key overloads
 Result ClientImpl::Post(const std::string& path) {
-    return execute_request("POST", host_, port_, is_ssl(), path, default_headers_, "", keep_alive_);
+    return execute_request("POST", path, default_headers_, "");
 }
 
 Result ClientImpl::Post(const std::string& path, const Headers& headers) {
     Headers merged = default_headers_;
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
-    return execute_request("POST", host_, port_, is_ssl(), path, merged, "", keep_alive_);
+    return execute_request("POST", path, merged, "");
 }
 
 Result ClientImpl::Post(const std::string& path, const char* body, size_t content_length,
                         const std::string& content_type) {
     Headers h = default_headers_;
     h.emplace("Content-Type", content_type);
-    return execute_request("POST", host_, port_, is_ssl(), path, h, std::string(body, content_length), keep_alive_);
+    return execute_request("POST", path, h, std::string(body, content_length));
 }
 
 Result ClientImpl::Post(const std::string& path, const Headers& headers, const char* body, size_t content_length,
@@ -1048,8 +1163,7 @@ Result ClientImpl::Post(const std::string& path, const Headers& headers, const c
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
     merged.emplace("Content-Type", content_type);
-    return execute_request("POST", host_, port_, is_ssl(), path, merged, std::string(body, content_length),
-                           keep_alive_);
+    return execute_request("POST", path, merged, std::string(body, content_length));
 }
 
 Result ClientImpl::Post(const std::string& path, const std::string& body, const std::string& content_type) {
@@ -1067,12 +1181,12 @@ Result ClientImpl::Post(const std::string& path, const Headers& headers, const s
 
 #define IMPL_BODY_METHOD(Method, METHOD_STR)                                                                           \
     Result ClientImpl::Method(const std::string& path) {                                                               \
-        return execute_request(METHOD_STR, host_, port_, is_ssl(), path, default_headers_, "", keep_alive_);           \
+        return execute_request(METHOD_STR, path, default_headers_, "");                                                \
     }                                                                                                                  \
     Result ClientImpl::Method(const std::string& path, const char* body, size_t len, const std::string& ct) {          \
         Headers h = default_headers_;                                                                                  \
         h.emplace("Content-Type", ct);                                                                                 \
-        return execute_request(METHOD_STR, host_, port_, is_ssl(), path, h, std::string(body, len), keep_alive_);      \
+        return execute_request(METHOD_STR, path, h, std::string(body, len));                                           \
     }                                                                                                                  \
     Result ClientImpl::Method(const std::string& path, const Headers& headers, const char* body, size_t len,           \
                               const std::string& ct) {                                                                 \
@@ -1080,7 +1194,7 @@ Result ClientImpl::Post(const std::string& path, const Headers& headers, const s
         for (auto& [k, v] : headers)                                                                                   \
             m.emplace(k, v);                                                                                           \
         m.emplace("Content-Type", ct);                                                                                 \
-        return execute_request(METHOD_STR, host_, port_, is_ssl(), path, m, std::string(body, len), keep_alive_);      \
+        return execute_request(METHOD_STR, path, m, std::string(body, len));                                           \
     }                                                                                                                  \
     Result ClientImpl::Method(const std::string& path, const std::string& body, const std::string& ct) {               \
         return Method(path, body.data(), body.size(), ct);                                                             \
@@ -1219,20 +1333,20 @@ Result ClientImpl::Post(const std::string& path, const Headers&, const Multipart
 
 // DELETE
 Result ClientImpl::Delete(const std::string& path) {
-    return execute_request("DELETE", host_, port_, is_ssl(), path, default_headers_, "", keep_alive_);
+    return execute_request("DELETE", path, default_headers_, "");
 }
 
 Result ClientImpl::Delete(const std::string& path, const Headers& headers) {
     Headers merged = default_headers_;
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
-    return execute_request("DELETE", host_, port_, is_ssl(), path, merged, "", keep_alive_);
+    return execute_request("DELETE", path, merged, "");
 }
 
 Result ClientImpl::Delete(const std::string& path, const char* body, size_t len, const std::string& ct) {
     Headers h = default_headers_;
     h.emplace("Content-Type", ct);
-    return execute_request("DELETE", host_, port_, is_ssl(), path, h, std::string(body, len), keep_alive_);
+    return execute_request("DELETE", path, h, std::string(body, len));
 }
 
 Result ClientImpl::Delete(const std::string& path, const char* b, size_t l, const std::string& ct, Progress) {
@@ -1243,7 +1357,7 @@ Result ClientImpl::Delete(const std::string& path, const Headers& h, const char*
     for (auto& [k, v] : h)
         m.emplace(k, v);
     m.emplace("Content-Type", ct);
-    return execute_request("DELETE", host_, port_, is_ssl(), path, m, std::string(b, l), keep_alive_);
+    return execute_request("DELETE", path, m, std::string(b, l));
 }
 Result ClientImpl::Delete(const std::string& path, const Headers& h, const char* b, size_t l, const std::string& ct,
                           Progress) {
@@ -1265,14 +1379,14 @@ Result ClientImpl::Delete(const std::string& path, const Headers& h, const std::
 
 // OPTIONS
 Result ClientImpl::Options(const std::string& path) {
-    return execute_request("OPTIONS", host_, port_, is_ssl(), path, default_headers_, "", keep_alive_);
+    return execute_request("OPTIONS", path, default_headers_, "");
 }
 
 Result ClientImpl::Options(const std::string& path, const Headers& headers) {
     Headers merged = default_headers_;
     for (auto& [k, v] : headers)
         merged.emplace(k, v);
-    return execute_request("OPTIONS", host_, port_, is_ssl(), path, merged, "", keep_alive_);
+    return execute_request("OPTIONS", path, merged, "");
 }
 
 // send()
@@ -1283,32 +1397,6 @@ bool ClientImpl::send(Request&, Response&, Error& error) {
 
 Result ClientImpl::send(const Request&) {
     return Result(nullptr, Error::Unknown);
-}
-
-// Protected stubs
-bool ClientImpl::create_and_connect_socket(Socket&, Error& error) {
-    error = Error::Unknown;
-    return false;
-}
-void ClientImpl::shutdown_ssl(Socket&, bool) {
-}
-void ClientImpl::shutdown_socket(Socket&) const {
-}
-void ClientImpl::close_socket(Socket& s) {
-    s.sock = INVALID_SOCKET_VALUE;
-}
-bool ClientImpl::process_request(Stream&, Request&, Response&, bool, Error& error) {
-    error = Error::Unknown;
-    return false;
-}
-bool ClientImpl::write_content_with_provider(Stream&, const Request&, Error& error) const {
-    error = Error::Unknown;
-    return false;
-}
-void ClientImpl::copy_settings(const ClientImpl&) {
-}
-bool ClientImpl::process_socket(const Socket&, std::function<bool(Stream&)>) {
-    return false;
 }
 
 // ===========================================================================

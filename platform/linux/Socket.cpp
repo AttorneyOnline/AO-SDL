@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -133,6 +134,20 @@ void Socket::set_tcp_nodelay(bool enabled) {
     setsockopt(impl_->fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
 }
 
+void Socket::set_recv_timeout(int timeout_ms) {
+    struct timeval tv{};
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    setsockopt(impl_->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+void Socket::set_send_timeout(int timeout_ms) {
+    struct timeval tv{};
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    setsockopt(impl_->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+}
+
 bool Socket::bytes_available() const {
     int count = 0;
     ioctl(impl_->fd, FIONREAD, &count);
@@ -215,7 +230,7 @@ Socket tcp_create() {
     return Socket(std::move(impl));
 }
 
-Socket tcp_connect(const std::string& host, uint16_t port) {
+Socket tcp_connect(const std::string& host, uint16_t port, int timeout_ms) {
     struct addrinfo hints{}, *res = nullptr;
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -231,10 +246,49 @@ Socket tcp_connect(const std::string& host, uint16_t port) {
         impl->fd = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (impl->fd < 0)
             continue;
-        if (::connect(impl->fd, rp->ai_addr, rp->ai_addrlen) == 0)
-            break;
-        ::close(impl->fd);
-        impl->fd = -1;
+
+        if (timeout_ms >= 0) {
+            // Non-blocking connect with timeout
+            int flags = fcntl(impl->fd, F_GETFL, 0);
+            fcntl(impl->fd, F_SETFL, flags | O_NONBLOCK);
+
+            int ret = ::connect(impl->fd, rp->ai_addr, rp->ai_addrlen);
+            if (ret < 0 && errno != EINPROGRESS) {
+                ::close(impl->fd);
+                impl->fd = -1;
+                continue;
+            }
+            if (ret != 0) {
+                struct pollfd pfd{};
+                pfd.fd = impl->fd;
+                pfd.events = POLLOUT;
+                int poll_ret = ::poll(&pfd, 1, timeout_ms);
+                if (poll_ret <= 0) {
+                    ::close(impl->fd);
+                    impl->fd = -1;
+                    continue;
+                }
+                int so_error = 0;
+                socklen_t so_len = sizeof(so_error);
+                getsockopt(impl->fd, SOL_SOCKET, SO_ERROR, &so_error, &so_len);
+                if (so_error != 0) {
+                    ::close(impl->fd);
+                    impl->fd = -1;
+                    continue;
+                }
+            }
+
+            // Restore blocking mode
+            fcntl(impl->fd, F_SETFL, flags);
+        }
+        else {
+            if (::connect(impl->fd, rp->ai_addr, rp->ai_addrlen) != 0) {
+                ::close(impl->fd);
+                impl->fd = -1;
+                continue;
+            }
+        }
+        break;
     }
     freeaddrinfo(res);
 

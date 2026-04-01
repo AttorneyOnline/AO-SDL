@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <regex>
 #include <string>
@@ -120,6 +121,8 @@ using ssize_t = long;
 #define CPPHTTPLIB_THREAD_POOL_COUNT                                                                                   \
     ((std::max)(8u, std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() - 1 : 0))
 #endif
+
+#include "platform/Socket.h"
 
 namespace http {
 
@@ -1116,38 +1119,14 @@ class ClientImpl {
     void set_logger(Logger logger);
 
   protected:
-    struct Socket {
-        socket_t sock = INVALID_SOCKET_VALUE;
-
-        bool is_open() const {
-            return sock != INVALID_SOCKET_VALUE;
-        }
-    };
-
-    virtual bool create_and_connect_socket(Socket& socket, Error& error);
-    virtual void shutdown_ssl(Socket& socket, bool shutdown_gracefully);
-    void shutdown_socket(Socket& socket) const;
-    void close_socket(Socket& socket);
-
-    bool process_request(Stream& strm, Request& req, Response& res, bool close_connection, Error& error);
-    bool write_content_with_provider(Stream& strm, const Request& req, Error& error) const;
-    void copy_settings(const ClientImpl& rhs);
-
     std::string host_;
     int port_;
     std::string host_and_port_;
 
-    Socket socket_;
+    std::optional<platform::Socket> socket_;
     mutable std::mutex socket_mutex_;
-    std::recursive_mutex request_mutex_;
 
-    size_t socket_requests_in_flight_ = 0;
-    std::thread::id socket_requests_are_from_thread_ = std::thread::id();
-    bool socket_should_be_closed_when_request_is_done_ = false;
-
-    std::map<std::string, std::string> addr_map_;
     Headers default_headers_;
-    std::function<ssize_t(Stream&, Headers&)> header_writer_ = detail::write_headers;
 
     std::string client_cert_path_;
     std::string client_key_path_;
@@ -1186,31 +1165,18 @@ class ClientImpl {
 
     Logger logger_;
 
+    std::atomic<bool> is_stopping_{false};
+
   private:
-    bool send_(Request& req, Response& res, Error& error);
-    Result send_(Request&& req);
+    Result execute_request(const std::string& method, const std::string& path, const Headers& headers,
+                           const std::string& body, ContentReceiver content_receiver = nullptr);
+    bool ensure_connected(bool& is_fresh);
 
-    socket_t create_client_socket(Error& error) const;
-    bool read_response_line(Stream& strm, const Request& req, Response& res) const;
-    bool write_request(Stream& strm, Request& req, bool close_connection, Error& error);
-    bool redirect(Request& req, Response& res, Error& error);
-    bool handle_request(Stream& strm, Request& req, Response& res, bool close_connection, Error& error);
-    std::unique_ptr<Response> send_with_content_provider(Request& req, const char* body, size_t content_length,
-                                                         ContentProvider content_provider,
-                                                         ContentProviderWithoutLength content_provider_without_length,
-                                                         const std::string& content_type, Error& error);
-    Result send_with_content_provider(const std::string& method, const std::string& path, const Headers& headers,
-                                      const char* body, size_t content_length, ContentProvider content_provider,
-                                      ContentProviderWithoutLength content_provider_without_length,
-                                      const std::string& content_type, Progress progress);
-    ContentProviderWithoutLength
-    get_multipart_content_provider(const std::string& boundary, const MultipartFormDataItems& items,
-                                   const MultipartFormDataProviderItems& provider_items) const;
+    int connection_timeout_ms() const;
+    int read_timeout_ms() const;
+    int write_timeout_ms() const;
 
-    std::string adjust_host_string(const std::string& host) const;
-
-    virtual bool process_socket(const Socket& socket, std::function<bool(Stream& strm)> callback);
-    virtual bool is_ssl() const;
+    bool is_ssl() const;
 };
 
 // ===========================================================================
