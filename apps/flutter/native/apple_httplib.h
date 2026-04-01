@@ -179,6 +179,10 @@ class Server {
     void stop() {
         fatal();
     }
+    Server& set_default_headers(std::multimap<std::string, std::string>) {
+        fatal();
+        return *this;
+    }
 
   private:
     [[noreturn]] static void fatal();
