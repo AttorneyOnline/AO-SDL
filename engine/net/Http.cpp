@@ -257,10 +257,15 @@ static std::string read_final_headers(platform::Socket& sock) {
     }
 }
 
-static std::string read_body(platform::Socket& sock, const ParsedResponse& pr, size_t content_length) {
+/// Read exactly content_length bytes of body. Sets `complete` to false if
+/// the read was truncated (timeout, disconnect). Callers must close the
+/// socket when incomplete — leftover bytes would corrupt the next request.
+static std::string read_body(platform::Socket& sock, const ParsedResponse& pr, size_t content_length, bool& complete) {
+    complete = false;
     std::string body = pr.body_start;
     if (body.size() >= content_length) {
         body.resize(content_length);
+        complete = true;
         return body;
     }
     body.reserve(content_length);
@@ -272,6 +277,7 @@ static std::string read_body(platform::Socket& sock, const ParsedResponse& pr, s
             break;
         body.append(buf, static_cast<size_t>(n));
     }
+    complete = (body.size() >= content_length);
     return body;
 }
 
@@ -877,8 +883,17 @@ int ClientImpl::write_timeout_ms() const {
     return static_cast<int>(write_timeout_sec_ * 1000 + write_timeout_usec_ / 1000);
 }
 
-/// Check if the kept-alive socket is still usable. Returns false if stale.
+/// Check if the kept-alive socket is still usable. Returns false if the
+/// server has closed the connection or if there is unexpected data waiting.
+///
+/// For TLS connections, we cannot MSG_PEEK through the TLS layer, but we
+/// can poll the underlying fd: if the fd is readable between requests,
+/// it means the server sent a TLS record (close_notify or unexpected data).
+/// Either way the connection cannot be safely reused.
 static bool is_socket_alive(platform::Socket& sock) {
+    if (!sock.valid())
+        return false;
+
 #ifdef _WIN32
     WSAPOLLFD pfd{};
     pfd.fd = static_cast<SOCKET>(sock.fd());
@@ -890,18 +905,11 @@ static bool is_socket_alive(platform::Socket& sock) {
     pfd.events = POLLIN;
     int ret = ::poll(&pfd, 1, 0);
 #endif
-    if (ret > 0) {
-        // Socket is readable — either data waiting (shouldn't be) or connection closed
-        char probe;
-#ifdef _WIN32
-        int n = ::recv(static_cast<SOCKET>(sock.fd()), &probe, 1, MSG_PEEK);
-#else
-        ssize_t n = ::recv(sock.fd(), &probe, 1, MSG_PEEK);
-#endif
-        if (n <= 0)
-            return false; // Server closed the connection
-    }
-    return true;
+
+    // ret <= 0: no events — socket is idle and alive.
+    // ret > 0:  readable between requests means server closed or sent
+    //           unexpected data — either way, connection is stale.
+    return ret <= 0;
 }
 
 bool ClientImpl::ensure_connected(bool& is_fresh) {
@@ -1009,6 +1017,7 @@ Result ClientImpl::execute_request(const std::string& method, const std::string&
         // Determine body length
         auto te = res->get_header_value("Transfer-Encoding");
         bool chunked = (te.find("chunked") != std::string::npos);
+        bool body_complete = true;
 
         if (content_receiver) {
             if (chunked) {
@@ -1031,15 +1040,18 @@ Result ClientImpl::execute_request(const std::string& method, const std::string&
             else {
                 size_t content_length = static_cast<size_t>(res->get_header_value_u64("Content-Length", 0));
                 if (content_length > 0)
-                    res->body = read_body(*socket_, pr, content_length);
+                    res->body = read_body(*socket_, pr, content_length, body_complete);
                 else
                     res->body = std::move(pr.body_start);
             }
         }
 
-        // Connection disposition: close if server says so or keep-alive is off
+        // Connection disposition:
+        // - Close if server says Connection: close
+        // - Close if client doesn't want keep-alive
+        // - Close if body was truncated (stale bytes would corrupt next request)
         auto conn_hdr = res->get_header_value("Connection");
-        if (!keep_alive_ || detail::case_ignore::equal(conn_hdr, "close"))
+        if (!keep_alive_ || !body_complete || detail::case_ignore::equal(conn_hdr, "close"))
             socket_.reset();
 
         return Result(std::move(res), Error::Success);
