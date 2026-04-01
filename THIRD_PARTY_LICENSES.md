@@ -22,35 +22,45 @@ This project uses several third-party libraries. Their licenses and attributions
 - Copyright: (C) 2002-2007 Milan Ikits, Marcelo E. Magallon
 - Source: [https://github.com/nigels-com/glew](https://github.com/nigels-com/glew)
 
-## GLM
-- License: Happy Bunny License or MIT
-- Copyright: (C) 2005 G-Truc Creation
-- Source: [https://github.com/g-truc/glm](https://github.com/g-truc/glm)
-
 ## Dear ImGui
 - License: MIT
 - Copyright: (C) 2014-2026 Omar Cornut
 - Source: [https://github.com/ocornut/imgui](https://github.com/ocornut/imgui)
 
-## kissnet
-- License: MIT
-- Copyright: (C) 2018-2024 Arthur Brainville (Ybalrid)
-- Source: [https://github.com/Ybalrid/kissnet](https://github.com/Ybalrid/kissnet)
+## libwebp
+- License: BSD-3-Clause
+- Copyright: (C) 2010 Google Inc.
+- Source: [https://chromium.googlesource.com/webm/libwebp](https://chromium.googlesource.com/webm/libwebp)
+
+## libogg
+- License: BSD-3-Clause
+- Copyright: (C) 2002 Xiph.org Foundation
+- Source: [https://github.com/xiph/ogg](https://github.com/xiph/ogg)
+
+## Opus
+- License: BSD-3-Clause
+- Copyright: (C) 2001-2023 Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin, Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo, Mozilla, Amazon
+- Source: [https://github.com/xiph/opus](https://github.com/xiph/opus)
+
+## opusfile
+- License: BSD-3-Clause
+- Copyright: (C) 1994-2013 Xiph.Org Foundation and contributors
+- Source: [https://github.com/xiph/opusfile](https://github.com/xiph/opusfile)
 
 ## stb
 - License: Public Domain (Unlicense) or MIT
 - Copyright: (C) 2017 Sean Barrett
 - Source: [https://github.com/nothings/stb](https://github.com/nothings/stb)
 
-## cpp-httplib
-- License: MIT
-- Copyright: (C) 2024 Yuji Hirose
-- Source: [https://github.com/yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib)
-
 ## nlohmann JSON
 - License: MIT
 - Copyright: (C) 2013-2023 Niels Lohmann
 - Source: [https://github.com/nlohmann/json](https://github.com/nlohmann/json)
+
+## miniaudio
+- License: Public Domain (Unlicense) or MIT-0
+- Copyright: (C) David Reid
+- Source: [https://github.com/mackron/miniaudio](https://github.com/mackron/miniaudio)
 
 ## sha1.hpp
 - License: Public Domain
@@ -63,4 +73,4 @@ This project uses several third-party libraries. Their licenses and attributions
 
 ---
 
-If you add/remove dependencies in the future, please update this file accordingly.
+If you add or remove dependencies, please update this file accordingly.
