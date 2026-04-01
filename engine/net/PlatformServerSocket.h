@@ -12,6 +12,9 @@ class PlatformServerSocket : public IServerSocket {
     ~PlatformServerSocket() override;
 
     int fd() const override;
+    uint16_t local_port() const {
+        return sock_.local_port();
+    }
 
     void bind_and_listen(uint16_t port, int backlog = 128) override;
     std::unique_ptr<ITcpSocket> accept() override;

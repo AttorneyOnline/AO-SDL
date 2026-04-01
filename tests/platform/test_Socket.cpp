@@ -2,7 +2,6 @@
 
 #include "platform/Socket.h"
 
-#include <arpa/inet.h>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -64,10 +63,7 @@ TEST(PlatformSocket, ListenAcceptConnect) {
     ASSERT_TRUE(listener.valid());
 
     // Get the assigned port
-    struct sockaddr_in addr{};
-    socklen_t len = sizeof(addr);
-    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&addr), &len);
-    uint16_t port = ntohs(addr.sin_port);
+    uint16_t port = listener.local_port();
     ASSERT_GT(port, 0);
 
     listener.set_non_blocking(true);
@@ -117,10 +113,7 @@ TEST(PlatformSocket, AcceptReturnsInvalidWhenNoPending) {
 
 TEST(PlatformSocket, SendRecvRoundtrip) {
     auto listener = tcp_listen("127.0.0.1", 0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = listener.local_port();
 
     std::thread sender([port] {
         auto s = tcp_connect("127.0.0.1", port);
@@ -181,10 +174,7 @@ TEST(PlatformSocket, ConnectToUnresolvableHostThrows) {
 
 TEST(PlatformSocket, BidirectionalIO) {
     auto listener = tcp_listen("127.0.0.1", 0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = listener.local_port();
 
     std::thread peer([port] {
         auto s = tcp_connect("127.0.0.1", port);
