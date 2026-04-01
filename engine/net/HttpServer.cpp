@@ -494,16 +494,26 @@ static void poll_loop(Server* srv, ServerState& state) {
                 if (!conn)
                     continue;
 
-                // Read data
+                // Drain all available data (edge-triggered poller won't re-fire
+                // for data already in the kernel buffer).
                 char buf[8192];
-                ssize_t r = conn->socket.recv(buf, sizeof(buf));
-                if (r <= 0) {
-                    // Connection closed or error
+                bool closed = false;
+                while (true) {
+                    ssize_t r = conn->socket.recv(buf, sizeof(buf));
+                    if (r > 0) {
+                        conn->recv_buf.append(buf, static_cast<size_t>(r));
+                    }
+                    else {
+                        if (r == 0)
+                            closed = true;
+                        break; // would-block or closed
+                    }
+                }
+                if (closed && conn->recv_buf.empty()) {
                     state.poller.remove(ev.fd);
                     state.connections.erase(conn->id);
                     continue;
                 }
-                conn->recv_buf.append(buf, static_cast<size_t>(r));
 
                 // RFC 9112 §3: URI length check — early reject before headers complete
                 if (!conn->headers_complete) {
