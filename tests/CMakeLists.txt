@@ -58,6 +58,7 @@ set(TEST_SOURCES
     net/test_HttpClient.cpp
     net/test_HttpServer.cpp
     net/test_HttpCoverage.cpp
+    net/test_SSE.cpp
     net/test_PlatformSocket.cpp
     platform/test_Socket.cpp
     platform/test_Poll.cpp
