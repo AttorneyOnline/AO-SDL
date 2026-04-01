@@ -14,10 +14,10 @@ See [Architecture.md](doc/Architecture.md) for a detailed overview of the design
 | **Compiler** | Xcode command line tools | GCC or Clang with C++20 | MSVC (Visual Studio 2019+) |
 | **Build tools** | CMake, Ninja | CMake, Ninja or Make | CMake, Ninja (via VS) |
 | **Graphics** | Metal (system) | `libglew-dev`, OpenGL drivers | Bundled GLEW in `third-party/` |
-| **SSL (optional)** | `brew install openssl` | `libssl-dev` | Install OpenSSL, set `OPENSSL_ROOT_DIR` |
+| **TLS** | Secure Transport (system) | `libssl-dev` | Install OpenSSL, set `OPENSSL_ROOT_DIR` |
 | **Other** | — | `libsdl2-dev` (optional, also built from source) | — |
 
-OpenSSL is optional — without it, HTTPS asset fetching is disabled and only HTTP connections will work.
+**TLS is required** on Linux and Windows (OpenSSL). On macOS/iOS, the platform's Secure Transport framework is used instead — no extra dependencies needed.
 
 ### Clone and Initialize Submodules
 
@@ -154,7 +154,7 @@ cd apps/flutter && flutter run -d <device-name>
 | `ios-sim-debug` | iOS Simulator (Flutter) | Mobile development |
 | `ios-device-release` | iOS device (Flutter) | Device testing / release |
 
-The `AO_BUILD_FLUTTER` flag (set automatically by the iOS presets) excludes SDL, ImGui, and tests from the build, and includes the Flutter FFI bridge, miniaudio audio backend, and NSURLSession HTTPS shim.
+The `AO_BUILD_FLUTTER` flag (set automatically by the iOS presets) excludes SDL, ImGui, and tests from the build, and includes the Flutter FFI bridge and miniaudio audio backend.
 
 ### VS Code Integration
 
@@ -187,7 +187,6 @@ apps/flutter/
 ├── native/                  # C bridge layer
 │   ├── bridge.h / .cpp      # C API (50+ functions) wrapping engine/plugins
 │   ├── MiniaudioDevice.*    # IAudioDevice using miniaudio (CoreAudio/AAudio)
-│   ├── apple_httplib.*      # NSURLSession-based httplib replacement
 │   └── miniaudio_device_impl.mm  # miniaudio device I/O (Obj-C++)
 ├── lib/
 │   ├── bridge/              # Dart FFI bindings
@@ -207,7 +206,7 @@ apps/flutter/
 - `bridge.cpp` provides a flat C API that Dart calls via `dart:ffi` — no Dart ↔ C++ object sharing
 - The Metal renderer draws to an offscreen texture; `AoTexturePlugin` blits it to a `CVPixelBuffer` for Flutter's `Texture` widget
 - Audio uses miniaudio's CoreAudio backend (iOS) instead of SDL
-- HTTPS uses `NSURLSession` via a drop-in `httplib::Client` shim (no OpenSSL dependency on iOS)
+- TLS uses Apple's Secure Transport via the platform socket abstraction (no OpenSSL dependency on iOS)
 - Platform widgets are abstracted so the same screens work with Cupertino (iOS) or Material (Android) by swapping one file
 
 ---
@@ -276,4 +275,4 @@ plugins/kagami_server/    # Protocol layer (engine plugin)
 **Key design decisions:**
 - **Multi-protocol**: A `ProtocolRouter` inspects the WebSocket subprotocol header (`ao2` or `aonx`) and routes each client to the correct backend — both protocol types can play in the same room
 - **Action/Event model**: Protocol backends parse wire formats into protocol-agnostic `GameAction`s; the `GameRoom` validates and processes them, then emits `GameEvent`s that each backend serializes back to its own wire format
-- **Transport**: WebSocket (RFC 6455) for game traffic, with a separate HTTP endpoint for status
+- **Transport**: WebSocket (RFC 6455) for game traffic; event-loop HTTP server for REST API and Server-Sent Events (SSE)
