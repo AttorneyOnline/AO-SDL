@@ -3,7 +3,6 @@
 #include "platform/Poll.h"
 #include "platform/Socket.h"
 
-#include <arpa/inet.h>
 #include <chrono>
 #include <thread>
 
@@ -12,10 +11,7 @@ using namespace platform;
 // Helper: create a connected pair of sockets on loopback.
 static std::pair<Socket, Socket> make_pair() {
     auto listener = tcp_listen("127.0.0.1", 0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = listener.local_port();
 
     auto client = tcp_connect("127.0.0.1", port);
 
@@ -235,10 +231,7 @@ TEST(PlatformPoller, NotifierCanBeCalledMultipleTimes) {
 
 TEST(PlatformPoller, ListenerReadableOnIncomingConnection) {
     auto listener = tcp_listen("127.0.0.1", 0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(listener.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = listener.local_port();
 
     listener.set_non_blocking(true);
 

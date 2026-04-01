@@ -3,7 +3,6 @@
 #include "net/PlatformServerSocket.h"
 #include "net/PlatformTcpSocket.h"
 
-#include <arpa/inet.h>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -17,10 +16,7 @@ TEST(PlatformTcpSocket, ConnectToListener) {
     server.bind_and_listen(0); // OS-assigned port
 
     // Get the actual port via fd
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     PlatformTcpSocket client("127.0.0.1", port);
     client.connect();
@@ -34,10 +30,7 @@ TEST(PlatformTcpSocket, ConnectToListener) {
 TEST(PlatformTcpSocket, SendRecvRoundtrip) {
     PlatformServerSocket server;
     server.bind_and_listen(0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     PlatformTcpSocket client("127.0.0.1", port);
     client.connect();
@@ -64,10 +57,7 @@ TEST(PlatformTcpSocket, FdIsValid) {
     server.bind_and_listen(0);
     EXPECT_GE(server.fd(), 0);
 
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     PlatformTcpSocket client("127.0.0.1", port);
     // fd is -1 before connect (socket not yet created)
@@ -78,10 +68,7 @@ TEST(PlatformTcpSocket, FdIsValid) {
 TEST(PlatformTcpSocket, BytesAvailable) {
     PlatformServerSocket server;
     server.bind_and_listen(0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     PlatformTcpSocket client("127.0.0.1", port);
     client.connect();
@@ -107,10 +94,7 @@ TEST(PlatformTcpSocket, ConnectFailureThrows) {
 TEST(PlatformTcpSocket, PeerCloseThrowsOnRecv) {
     PlatformServerSocket server;
     server.bind_and_listen(0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     PlatformTcpSocket client("127.0.0.1", port);
     client.connect();
@@ -149,10 +133,7 @@ TEST(PlatformServerSocket, AcceptReturnsNullWhenNoPending) {
 TEST(PlatformServerSocket, AcceptMultipleClients) {
     PlatformServerSocket server;
     server.bind_and_listen(0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     // Connect 3 clients
     std::vector<std::unique_ptr<PlatformTcpSocket>> clients;
@@ -186,10 +167,7 @@ TEST(PlatformServerSocket, BindThrowsOnInvalidAddress) {
 TEST(PlatformServerSocket, CloseAndRebind) {
     PlatformServerSocket server;
     server.bind_and_listen(0);
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sa), &len);
-    uint16_t port = ntohs(sa.sin_port);
+    uint16_t port = server.local_port();
 
     server.close();
 
