@@ -385,17 +385,40 @@ TEST_F(RFC9112Test, ServerMustRespond414ForURITooLong) {
     server_.Get("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
     start();
 
-    // Generate a very long path
+    // Generate a path longer than the server's 8KB URI limit.
+    // Send in a thread to avoid deadlock: the 64KB payload may exceed the
+    // kernel TCP buffer, and send() blocks until the server drains — but the
+    // server rejects early and closes, unblocking the client via EPIPE.
     std::string long_path(65536, 'a');
     std::string req = "GET /" + long_path +
                       " HTTP/1.1\r\n"
                       "Host: 127.0.0.1\r\n"
                       "\r\n";
-    auto resp = raw_request(port(), req);
-    int status = extract_status(resp);
 
-    // Should be 414 if server has a URI length limit, or could still process it
-    // The RFC says MUST respond 414 if it's longer than the server wishes to parse
+    auto sock = platform::tcp_connect("127.0.0.1", port());
+    set_recv_timeout(sock, TEST_TIMEOUT_SEC);
+
+    std::thread sender([&sock, &req] {
+        size_t total = 0;
+        while (total < req.size()) {
+            ssize_t n = sock.send(req.data() + total, req.size() - total);
+            if (n <= 0)
+                break;
+            total += static_cast<size_t>(n);
+        }
+    });
+
+    std::string resp;
+    char buf[8192];
+    while (true) {
+        ssize_t n = sock.recv(buf, sizeof(buf));
+        if (n <= 0)
+            break;
+        resp.append(buf, static_cast<size_t>(n));
+    }
+    sender.join();
+
+    int status = extract_status(resp);
     EXPECT_TRUE(status == 414 || status == 404 || status == 200)
         << "Server should respond 414 for extremely long URI; got " << status;
 }

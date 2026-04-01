@@ -9,6 +9,10 @@ PlatformTcpSocket::PlatformTcpSocket(const std::string& host, uint16_t port) : h
 PlatformTcpSocket::PlatformTcpSocket(platform::Socket&& connected_sock) : port_(0), sock_(std::move(connected_sock)) {
 }
 
+int PlatformTcpSocket::fd() const {
+    return sock_.fd();
+}
+
 void PlatformTcpSocket::enable_ssl(const std::string& hostname) {
     ssl_hostname_ = hostname;
 }

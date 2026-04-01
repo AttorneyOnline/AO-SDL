@@ -9,6 +9,10 @@ PlatformServerSocket::PlatformServerSocket(const std::string& bind_address) : bi
 
 PlatformServerSocket::~PlatformServerSocket() = default;
 
+int PlatformServerSocket::fd() const {
+    return sock_.fd();
+}
+
 void PlatformServerSocket::bind_and_listen(uint16_t port, int backlog) {
     sock_ = platform::tcp_listen(bind_address_, port, backlog);
 }

@@ -29,6 +29,13 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#if defined(_MSC_VER)
+#ifdef _WIN64
+using ssize_t = __int64;
+#else
+using ssize_t = long;
+#endif
+#endif // _MSC_VER
 #else
 #include <sys/socket.h>
 #endif
