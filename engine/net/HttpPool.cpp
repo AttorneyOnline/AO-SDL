@@ -23,7 +23,8 @@ void HttpPool::stop() {
         t.request_stop();
     {
         std::lock_guard lock(work_mutex_);
-        work_queue_.clear();
+        for (auto& q : work_queues_)
+            q.clear();
     }
     work_cv_.notify_all();
     // jthread destructors auto-join
@@ -34,9 +35,8 @@ void HttpPool::get(const std::string& host, const std::string& path, HttpCallbac
     pending_.fetch_add(1, std::memory_order_relaxed);
     {
         std::lock_guard lock(work_mutex_);
-        auto it = std::find_if(work_queue_.begin(), work_queue_.end(),
-                               [priority](const Request& r) { return r.priority < priority; });
-        work_queue_.insert(it, {host, path, std::move(cb), nullptr, priority});
+        int idx = static_cast<int>(priority);
+        work_queues_[idx].push_back({host, path, std::move(cb), nullptr, priority});
     }
     work_cv_.notify_one();
 }
@@ -46,9 +46,8 @@ void HttpPool::get_streaming(const std::string& host, const std::string& path, H
     pending_.fetch_add(1, std::memory_order_relaxed);
     {
         std::lock_guard lock(work_mutex_);
-        auto it = std::find_if(work_queue_.begin(), work_queue_.end(),
-                               [priority](const Request& r) { return r.priority < priority; });
-        work_queue_.insert(it, {host, path, std::move(cb), std::move(on_chunk), priority});
+        int idx = static_cast<int>(priority);
+        work_queues_[idx].push_back({host, path, std::move(cb), std::move(on_chunk), priority});
     }
     work_cv_.notify_one();
 }
@@ -57,16 +56,13 @@ void HttpPool::drop_below(HttpPriority threshold) {
     std::deque<Request> dropped_requests;
     {
         std::lock_guard lock(work_mutex_);
-        auto it = work_queue_.begin();
-        while (it != work_queue_.end()) {
-            if (it->priority < threshold) {
-                dropped_requests.push_back(std::move(*it));
-                it = work_queue_.erase(it);
-                pending_.fetch_sub(1, std::memory_order_relaxed);
-            }
-            else {
-                ++it;
-            }
+        // Iterate from highest priority down so callbacks fire in priority order
+        for (int i = static_cast<int>(threshold) - 1; i >= 0; --i) {
+            auto& q = work_queues_[i];
+            pending_.fetch_sub(static_cast<int>(q.size()), std::memory_order_relaxed);
+            for (auto& req : q)
+                dropped_requests.push_back(std::move(req));
+            q.clear();
         }
     }
     // Fire callbacks with empty response so callers can clean up (e.g. MountHttp::pending_)
@@ -99,6 +95,18 @@ int HttpPool::poll() {
     return count;
 }
 
+bool HttpPool::pop_highest(Request& out) {
+    // Scan from highest priority (CRITICAL=3) down to lowest (LOW=0)
+    for (int i = NUM_PRIORITIES - 1; i >= 0; --i) {
+        if (!work_queues_[i].empty()) {
+            out = std::move(work_queues_[i].front());
+            work_queues_[i].pop_front();
+            return true;
+        }
+    }
+    return false;
+}
+
 void HttpPool::worker_loop(std::stop_token st) {
     // Keep one persistent http::Client per host so TCP+SSL connections are
     // reused via HTTP keep-alive.  This avoids creating a new SSL_CTX, loading
@@ -123,11 +131,18 @@ void HttpPool::worker_loop(std::stop_token st) {
         Request req;
         {
             std::unique_lock lock(work_mutex_);
-            work_cv_.wait(lock, [this, &st] { return !work_queue_.empty() || st.stop_requested(); });
-            if (st.stop_requested() && work_queue_.empty())
+            work_cv_.wait(lock, [this, &st] {
+                if (st.stop_requested())
+                    return true;
+                for (auto& q : work_queues_)
+                    if (!q.empty())
+                        return true;
+                return false;
+            });
+            if (st.stop_requested() && !pop_highest(req))
                 return;
-            req = std::move(work_queue_.front());
-            work_queue_.pop_front();
+            if (!pop_highest(req))
+                continue;
         }
 
         HttpResponse resp;

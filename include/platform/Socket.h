@@ -47,6 +47,8 @@ class Socket {
     void set_non_blocking(bool enabled);
     void set_reuse_addr(bool enabled);
     void set_tcp_nodelay(bool enabled);
+    void set_recv_timeout(int timeout_ms);
+    void set_send_timeout(int timeout_ms);
 
     /// True if at least one byte can be read without blocking.
     bool bytes_available() const;
@@ -83,7 +85,7 @@ class Socket {
     /// Private: construct from an existing implementation (used by free fns).
     explicit Socket(std::unique_ptr<Impl> impl);
     friend Socket tcp_create();
-    friend Socket tcp_connect(const std::string& host, uint16_t port);
+    friend Socket tcp_connect(const std::string& host, uint16_t port, int timeout_ms);
     friend Socket tcp_listen(const std::string& addr, uint16_t port, int backlog);
     friend Socket tcp_accept(Socket& listener, std::string& remote_addr, uint16_t& remote_port);
 };
@@ -94,8 +96,9 @@ class Socket {
 Socket tcp_create();
 
 /// Resolve host, connect, and return the connected socket.
-/// Throws std::runtime_error on failure.
-Socket tcp_connect(const std::string& host, uint16_t port);
+/// @param timeout_ms  Connection timeout in milliseconds. -1 (default) = no timeout (blocking).
+/// Throws std::runtime_error on failure or timeout.
+Socket tcp_connect(const std::string& host, uint16_t port, int timeout_ms = -1);
 
 /// Bind to addr:port, start listening, and return the listener socket.
 /// Throws std::runtime_error on failure.

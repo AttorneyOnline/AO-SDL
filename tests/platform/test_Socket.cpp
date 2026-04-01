@@ -198,3 +198,71 @@ TEST(PlatformSocket, BidirectionalIO) {
 
     peer.join();
 }
+
+// -- Connection timeout -------------------------------------------------------
+
+TEST(PlatformSocket, TcpConnectWithTimeoutSucceeds) {
+    auto listener = tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+    listener.set_non_blocking(false);
+
+    std::thread server([&] {
+        std::string addr;
+        uint16_t rp;
+        auto conn = tcp_accept(listener, addr, rp);
+        // just accept and let it close
+    });
+
+    auto sock = tcp_connect("127.0.0.1", port, 5000); // 5s timeout — plenty for loopback
+    EXPECT_TRUE(sock.valid());
+
+    server.join();
+}
+
+TEST(PlatformSocket, TcpConnectWithTimeoutTimesOut) {
+    // Connect to a non-listening port with a very short timeout.
+    // Port 1 is almost certainly not listening on loopback.
+    auto start = std::chrono::steady_clock::now();
+    EXPECT_THROW(tcp_connect("127.0.0.1", 1, 100), std::runtime_error);
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    // Should complete within 2 seconds (the 100ms timeout + overhead)
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 2);
+}
+
+// -- Recv timeout -------------------------------------------------------------
+
+TEST(PlatformSocket, SetRecvTimeoutCausesReadToTimeout) {
+    auto listener = tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+    listener.set_non_blocking(false);
+
+    std::thread server([&] {
+        std::string addr;
+        uint16_t rp;
+        auto conn = tcp_accept(listener, addr, rp);
+        // Accept but never send anything — let the client timeout
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    });
+
+    auto sock = tcp_connect("127.0.0.1", port);
+    ASSERT_TRUE(sock.valid());
+    sock.set_recv_timeout(200); // 200ms timeout
+
+    char buf[64];
+    auto start = std::chrono::steady_clock::now();
+    ssize_t n = sock.recv(buf, sizeof(buf));
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    // recv should return -1 or 0 (timeout/error), not block for 2 seconds
+    EXPECT_LE(n, 0);
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 2);
+
+    server.join();
+}
+
+TEST(PlatformSocket, SetSendTimeoutDoesNotCrash) {
+    auto s = tcp_create();
+    ASSERT_TRUE(s.valid());
+    s.set_send_timeout(1000); // just verify it doesn't crash
+    s.set_recv_timeout(1000);
+}
