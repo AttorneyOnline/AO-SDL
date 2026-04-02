@@ -8,12 +8,23 @@
 #include "net/Http.h"
 
 #include "platform/Socket.h"
+#include "utils/Log.h"
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <sstream>
 #include <stdexcept>
+
+// Log once per stub to avoid log spam
+#define LOG_STUB_ONCE(method)                                                                                          \
+    do {                                                                                                               \
+        static bool warned = false;                                                                                    \
+        if (!warned) {                                                                                                 \
+            Log::log_print(WARNING, "http::ClientImpl::%s stub called — body/params silently dropped", method);        \
+            warned = true;                                                                                             \
+        }                                                                                                              \
+    } while (0)
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -61,7 +72,12 @@ static ParsedHost parse_scheme_host_port(const std::string& input) {
             p.host = rest.substr(1, bracket - 1);
             rest = rest.substr(bracket + 1);
             if (!rest.empty() && rest[0] == ':') {
-                p.port = std::stoi(rest.substr(1));
+                try {
+                    p.port = std::stoi(rest.substr(1));
+                }
+                catch (const std::exception&) {
+                    Log::log_print(ERR, "parse_scheme_host_port: invalid port in '%s'", input.c_str());
+                }
             }
         }
     }
@@ -74,7 +90,12 @@ static ParsedHost parse_scheme_host_port(const std::string& input) {
             if (slash != std::string::npos) {
                 port_str = port_str.substr(0, slash - colon - 1);
             }
-            p.port = std::stoi(port_str);
+            try {
+                p.port = std::stoi(port_str);
+            }
+            catch (const std::exception&) {
+                Log::log_print(ERR, "parse_scheme_host_port: invalid port in '%s'", input.c_str());
+            }
         }
         else {
             p.host = (slash != std::string::npos) ? rest.substr(0, slash) : rest;
@@ -1234,37 +1255,48 @@ Result ClientImpl::Put(const std::string& path, const Headers& h, const std::str
     return Put(path, h, b, ct);
 }
 Result ClientImpl::Put(const std::string& path, size_t, ContentProvider, const std::string&) {
+    LOG_STUB_ONCE("Put(ContentProvider)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, ContentProviderWithoutLength, const std::string&) {
+    LOG_STUB_ONCE("Put(ContentProviderWithoutLength)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Headers&, size_t, ContentProvider, const std::string&) {
+    LOG_STUB_ONCE("Put(Headers, ContentProvider)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Headers&, ContentProviderWithoutLength, const std::string&) {
+    LOG_STUB_ONCE("Put(Headers, ContentProviderWithoutLength)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Params&) {
+    LOG_STUB_ONCE("Put(Params)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Headers& h, const Params&) {
+    LOG_STUB_ONCE("Put(Headers, Params)");
     return Put(path, h, "", "");
 }
 Result ClientImpl::Put(const std::string& path, const Headers& h, const Params&, Progress) {
+    LOG_STUB_ONCE("Put(Headers, Params, Progress)");
     return Put(path, h, "", "");
 }
 Result ClientImpl::Put(const std::string& path, const MultipartFormDataItems&) {
+    LOG_STUB_ONCE("Put(MultipartFormDataItems)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Headers&, const MultipartFormDataItems&) {
+    LOG_STUB_ONCE("Put(Headers, MultipartFormDataItems)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Headers&, const MultipartFormDataItems&, const std::string&) {
+    LOG_STUB_ONCE("Put(Headers, MultipartFormDataItems, boundary)");
     return Put(path);
 }
 Result ClientImpl::Put(const std::string& path, const Headers&, const MultipartFormDataItems&,
                        const MultipartFormDataProviderItems&) {
+    LOG_STUB_ONCE("Put(Headers, MultipartFormDataItems, MultipartFormDataProviderItems)");
     return Put(path);
 }
 
@@ -1284,15 +1316,19 @@ Result ClientImpl::Patch(const std::string& path, const Headers& h, const std::s
     return Patch(path, h, b, ct);
 }
 Result ClientImpl::Patch(const std::string& path, size_t, ContentProvider, const std::string&) {
+    LOG_STUB_ONCE("Patch(ContentProvider)");
     return Patch(path);
 }
 Result ClientImpl::Patch(const std::string& path, ContentProviderWithoutLength, const std::string&) {
+    LOG_STUB_ONCE("Patch(ContentProviderWithoutLength)");
     return Patch(path);
 }
 Result ClientImpl::Patch(const std::string& path, const Headers&, size_t, ContentProvider, const std::string&) {
+    LOG_STUB_ONCE("Patch(Headers, ContentProvider)");
     return Patch(path);
 }
 Result ClientImpl::Patch(const std::string& path, const Headers&, ContentProviderWithoutLength, const std::string&) {
+    LOG_STUB_ONCE("Patch(Headers, ContentProviderWithoutLength)");
     return Patch(path);
 }
 
@@ -1309,37 +1345,48 @@ Result ClientImpl::Post(const std::string& path, const Headers& h, const std::st
     return Post(path, h, b, ct);
 }
 Result ClientImpl::Post(const std::string& path, size_t, ContentProvider, const std::string&) {
+    LOG_STUB_ONCE("Post(ContentProvider)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, ContentProviderWithoutLength, const std::string&) {
+    LOG_STUB_ONCE("Post(ContentProviderWithoutLength)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Headers&, size_t, ContentProvider, const std::string&) {
+    LOG_STUB_ONCE("Post(Headers, ContentProvider)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Headers&, ContentProviderWithoutLength, const std::string&) {
+    LOG_STUB_ONCE("Post(Headers, ContentProviderWithoutLength)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Params&) {
+    LOG_STUB_ONCE("Post(Params)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Headers& h, const Params&) {
+    LOG_STUB_ONCE("Post(Headers, Params)");
     return Post(path, h);
 }
 Result ClientImpl::Post(const std::string& path, const Headers& h, const Params&, Progress) {
+    LOG_STUB_ONCE("Post(Headers, Params, Progress)");
     return Post(path, h);
 }
 Result ClientImpl::Post(const std::string& path, const MultipartFormDataItems&) {
+    LOG_STUB_ONCE("Post(MultipartFormDataItems)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Headers&, const MultipartFormDataItems&) {
+    LOG_STUB_ONCE("Post(Headers, MultipartFormDataItems)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Headers&, const MultipartFormDataItems&, const std::string&) {
+    LOG_STUB_ONCE("Post(Headers, MultipartFormDataItems, boundary)");
     return Post(path);
 }
 Result ClientImpl::Post(const std::string& path, const Headers&, const MultipartFormDataItems&,
                         const MultipartFormDataProviderItems&) {
+    LOG_STUB_ONCE("Post(Headers, MultipartFormDataItems, MultipartFormDataProviderItems)");
     return Post(path);
 }
 

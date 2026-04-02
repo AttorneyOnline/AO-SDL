@@ -55,6 +55,7 @@ struct WorkResult : public Event {
     uint64_t connection_id;
     Response response;
     bool is_head = false;
+    bool request_keep_alive = false;
 };
 
 // ===========================================================================
@@ -333,10 +334,12 @@ static std::string generate_date_header() {
     return buf;
 }
 
-static std::string serialize_response(const Response& res, const Headers& default_headers, bool is_head = false) {
+static std::string serialize_response(const Response& res, const Headers& default_headers, bool is_head = false,
+                                      bool keep_alive = false) {
     std::string out;
     out.reserve(256 + (is_head ? 0 : res.body.size()));
     out += "HTTP/1.1 " + std::to_string(res.status) + " " + status_message(res.status) + "\r\n";
+    out += keep_alive ? "Connection: keep-alive\r\n" : "Connection: close\r\n";
 
     // RFC 9110 §6.6.1: Date header on 2xx, 3xx, 4xx responses
     if (res.status >= 200 && res.status < 500) {
@@ -408,6 +411,9 @@ static void worker_loop(Server::ServerState& state, std::stop_token st) {
         result.connection_id = item->connection_id;
         result.response = std::move(res);
         result.is_head = item->is_head;
+        // Propagate keep-alive from the request's Connection header
+        auto conn_hdr = item->request.get_header_value("Connection");
+        result.request_keep_alive = detail::case_ignore::equal(conn_hdr, "keep-alive");
         state.result_channel.publish(std::move(result));
 
         // Wake the poll thread
@@ -465,13 +471,19 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         continue;
                     HttpConnection* conn = &conn_it->second;
 
-                    std::string response_data =
-                        serialize_response(result->response, state.default_headers, result->is_head);
+                    // Determine keep-alive before serializing (so we can include
+                    // the Connection header in the response).
+                    auto resp_conn_hdr = result->response.get_header_value("Connection");
+                    bool should_keep_alive =
+                        result->request_keep_alive && !detail::case_ignore::equal(resp_conn_hdr, "close");
 
-                    // TODO: A slow client here blocks the poll thread. Acceptable
-                    // for LAN game servers but should use writable-event queuing
-                    // for internet-facing deployments.
+                    std::string response_data =
+                        serialize_response(result->response, state.default_headers, result->is_head, should_keep_alive);
+
+                    // Blocking write with a timeout so a slow/stalled client
+                    // can't block the poll thread indefinitely.
                     conn->socket.set_non_blocking(false);
+                    conn->socket.set_send_timeout(5000); // 5 second write timeout
                     size_t total = 0;
                     while (total < response_data.size()) {
                         ssize_t w = conn->socket.send(response_data.data() + total, response_data.size() - total);
@@ -481,9 +493,19 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     }
                     conn->socket.set_non_blocking(true);
 
-                    // Close connection (no keep-alive for now)
-                    state.poller.remove(conn->socket.fd());
-                    remove_connection(state, result->connection_id);
+                    // Only keep alive if the full response was written successfully
+                    should_keep_alive = should_keep_alive && (total == response_data.size());
+
+                    if (should_keep_alive) {
+                        // Reset connection state for the next request on this socket
+                        conn->headers_complete = false;
+                        conn->recv_buf.clear();
+                        conn->keep_alive = true;
+                    }
+                    else {
+                        state.poller.remove(conn->socket.fd());
+                        remove_connection(state, result->connection_id);
+                    }
                 }
             }
             else {
