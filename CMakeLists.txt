@@ -327,8 +327,9 @@ target_include_directories(nghttp2
     PRIVATE third-party/nghttp2/lib
 )
 target_compile_definitions(nghttp2
-    PRIVATE NGHTTP2_STATICLIB BUILDING_NGHTTP2
-    PUBLIC  NGHTTP2_NO_SSIZE_T  # consumers use *2 APIs (nghttp2_ssize, not ssize_t)
+    PRIVATE BUILDING_NGHTTP2
+    PUBLIC  NGHTTP2_STATICLIB    # suppress __declspec(dllimport) in nghttp2.h for static linking
+            NGHTTP2_NO_SSIZE_T  # consumers use *2 APIs (nghttp2_ssize, not ssize_t)
 )
 # MSVC lacks POSIX ssize_t — nghttp2's deprecated wrappers need it internally.
 # BUILDING_NGHTTP2 undefines NGHTTP2_NO_SSIZE_T inside the library, exposing
