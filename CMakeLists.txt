@@ -310,11 +310,20 @@ endif()
 # =============================================================================
 
 # --- nghttp2 — HTTP/2 C library (static, lib sources only) -------------------
+# Generate nghttp2ver.h from template (not committed in the nghttp2 repo).
+set(PACKAGE_VERSION "1.68.90")
+set(PACKAGE_VERSION_NUM 0x01445a)
+configure_file(
+    third-party/nghttp2/lib/includes/nghttp2/nghttp2ver.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/nghttp2/nghttp2/nghttp2ver.h
+    @ONLY
+)
 file(GLOB NGHTTP2_SOURCES third-party/nghttp2/lib/*.c)
 add_library(nghttp2 STATIC ${NGHTTP2_SOURCES})
 set_property(TARGET nghttp2 PROPERTY C_STANDARD 11)
 target_include_directories(nghttp2
     PUBLIC  third-party/nghttp2/lib/includes
+    PUBLIC  ${CMAKE_CURRENT_BINARY_DIR}/nghttp2  # for generated nghttp2ver.h
     PRIVATE third-party/nghttp2/lib
 )
 target_compile_definitions(nghttp2 PRIVATE NGHTTP2_STATICLIB)
