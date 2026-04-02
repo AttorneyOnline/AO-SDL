@@ -39,6 +39,11 @@ Http2Connection::Http2Connection(platform::Socket socket, const std::string& hos
     nghttp2_session_callbacks* callbacks = nullptr;
     nghttp2_session_callbacks_new(&callbacks);
 
+    // All nghttp2 callbacks below access streams_ without explicitly acquiring
+    // mutex_. This is safe because they are only invoked from
+    // nghttp2_session_mem_recv2() inside pump_once(), which holds the lock.
+    // Do NOT invoke nghttp2 session functions outside the mutex_ lock.
+
     nghttp2_session_callbacks_set_on_header_callback2(
         callbacks,
         [](nghttp2_session*, const nghttp2_frame* frame, nghttp2_rcbuf* name, nghttp2_rcbuf* value, uint8_t,
@@ -115,6 +120,11 @@ Http2Connection::Http2Connection(platform::Socket socket, const std::string& hos
 }
 
 Http2Connection::~Http2Connection() {
+    // shutdown() sets running_=false and calls socket_.shutdown(), which
+    // breaks any blocking recv() in the I/O thread. The 1ms recv timeout
+    // (set in constructor) ensures io_loop() exits promptly.
+    // join() blocks until io_loop() returns, so socket_ and session_ are
+    // safe to destroy afterwards — no thread is using them.
     shutdown();
     if (io_thread_.joinable())
         io_thread_.join();

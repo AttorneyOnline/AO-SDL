@@ -112,6 +112,14 @@ class WebSocket {
      */
     bool is_connected();
 
+    /**
+     * @brief Raw file descriptor for use with platform::Poller.
+     * @return The OS socket fd, or -1 if not available.
+     */
+    int socket_fd() const {
+        return socket ? socket->fd() : -1;
+    }
+
   private:
     void send_close(uint16_t code, const std::string& reason);
     std::vector<uint8_t> read_raw();

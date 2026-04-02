@@ -1,6 +1,6 @@
 #include "net/PlatformTcpSocket.h"
 
-#include <algorithm>
+#include <cerrno>
 #include <cstring>
 
 PlatformTcpSocket::PlatformTcpSocket(const std::string& host, uint16_t port) : host_(host), port_(port) {
@@ -17,8 +17,12 @@ void PlatformTcpSocket::enable_ssl(const std::string& hostname) {
     ssl_hostname_ = hostname;
 }
 
+void PlatformTcpSocket::set_connect_timeout(int timeout_ms) {
+    connect_timeout_ms_ = timeout_ms;
+}
+
 void PlatformTcpSocket::connect() {
-    sock_ = platform::tcp_connect(host_, port_);
+    sock_ = platform::tcp_connect(host_, port_, connect_timeout_ms_);
     if (!ssl_hostname_.empty()) {
         sock_.ssl_connect(ssl_hostname_);
     }
@@ -41,7 +45,10 @@ void PlatformTcpSocket::send(const uint8_t* data, size_t size) {
 
 std::vector<uint8_t> PlatformTcpSocket::recv() {
     uint8_t buf[RECV_BUF_SIZE];
-    ssize_t n = sock_.recv(buf, sizeof(buf));
+    ssize_t n;
+    do {
+        n = sock_.recv(buf, sizeof(buf));
+    } while (n < 0 && errno == EINTR);
 
     if (n < 0) {
         // Would-block in non-blocking mode: return empty

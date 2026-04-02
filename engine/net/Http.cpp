@@ -184,6 +184,8 @@ static ParsedResponse parse_response_headers(const std::string& raw) {
 
     // Parse status line: HTTP/1.1 200 OK
     auto first_line_end = pr.header_raw.find("\r\n");
+    if (first_line_end == std::string::npos)
+        return pr; // Malformed — no CRLF in header section
     std::string status_line = pr.header_raw.substr(0, first_line_end);
 
     auto sp1 = status_line.find(' ');
