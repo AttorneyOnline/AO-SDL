@@ -61,7 +61,7 @@ class EventChannel {
             ++publish_count_;
             cb = on_publish_; // shared_ptr copy is cheap (refcount bump, no allocation)
         }
-        if (cb && *cb)
+        if (cb)
             (*cb)();
     }
 

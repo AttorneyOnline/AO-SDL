@@ -16,6 +16,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "utils/Log.h"
+
 namespace platform {
 
 // ---------------------------------------------------------------------------
@@ -119,35 +121,44 @@ ssize_t Socket::recv(void* buf, size_t len) {
 
 void Socket::set_non_blocking(bool enabled) {
     int flags = fcntl(impl_->fd, F_GETFL, 0);
+    if (flags < 0) {
+        Log::warn("fcntl F_GETFL failed: {}", strerror(errno));
+        return;
+    }
     if (enabled)
         flags |= O_NONBLOCK;
     else
         flags &= ~O_NONBLOCK;
-    fcntl(impl_->fd, F_SETFL, flags);
+    if (fcntl(impl_->fd, F_SETFL, flags) < 0)
+        Log::warn("fcntl F_SETFL failed: {}", strerror(errno));
 }
 
 void Socket::set_reuse_addr(bool enabled) {
     int val = enabled ? 1 : 0;
-    setsockopt(impl_->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    if (setsockopt(impl_->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0)
+        Log::warn("setsockopt SO_REUSEADDR failed: {}", strerror(errno));
 }
 
 void Socket::set_tcp_nodelay(bool enabled) {
     int val = enabled ? 1 : 0;
-    setsockopt(impl_->fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
+    if (setsockopt(impl_->fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val)) < 0)
+        Log::warn("setsockopt TCP_NODELAY failed: {}", strerror(errno));
 }
 
 void Socket::set_recv_timeout(int timeout_ms) {
     struct timeval tv{};
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    setsockopt(impl_->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    if (setsockopt(impl_->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
+        Log::warn("setsockopt SO_RCVTIMEO failed: {}", strerror(errno));
 }
 
 void Socket::set_send_timeout(int timeout_ms) {
     struct timeval tv{};
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    setsockopt(impl_->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    if (setsockopt(impl_->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0)
+        Log::warn("setsockopt SO_SNDTIMEO failed: {}", strerror(errno));
 }
 
 bool Socket::bytes_available() const {

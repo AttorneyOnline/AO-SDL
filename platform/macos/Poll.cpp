@@ -5,8 +5,11 @@
 #include <sys/event.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <stdexcept>
 #include <vector>
+
+#include "utils/Log.h"
 
 namespace platform {
 
@@ -44,8 +47,10 @@ void Poller::add(int fd, uint32_t interest, void* user_data) {
         EV_SET(&changes[n++], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, user_data);
     if (interest & Writable)
         EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, user_data);
-    if (n > 0)
-        kevent(impl_->kq, changes, n, nullptr, 0, nullptr);
+    if (n > 0) {
+        if (kevent(impl_->kq, changes, n, nullptr, 0, nullptr) < 0)
+            Log::warn("kevent ADD failed for fd {}: {}", fd, strerror(errno));
+    }
 }
 
 void Poller::modify(int fd, uint32_t interest, void* user_data) {
@@ -53,6 +58,7 @@ void Poller::modify(int fd, uint32_t interest, void* user_data) {
     int n = 0;
     EV_SET(&changes[n++], fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
     EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    // Ignore errors on delete — filter may not exist
     kevent(impl_->kq, changes, n, nullptr, 0, nullptr);
 
     n = 0;
@@ -60,14 +66,17 @@ void Poller::modify(int fd, uint32_t interest, void* user_data) {
         EV_SET(&changes[n++], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, user_data);
     if (interest & Writable)
         EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, user_data);
-    if (n > 0)
-        kevent(impl_->kq, changes, n, nullptr, 0, nullptr);
+    if (n > 0) {
+        if (kevent(impl_->kq, changes, n, nullptr, 0, nullptr) < 0)
+            Log::warn("kevent MOD failed for fd {}: {}", fd, strerror(errno));
+    }
 }
 
 void Poller::remove(int fd) {
     struct kevent changes[2];
     EV_SET(&changes[0], fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
     EV_SET(&changes[1], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    // Ignore errors — filter may not exist (e.g. only Readable was added)
     kevent(impl_->kq, changes, 2, nullptr, 0, nullptr);
 }
 
@@ -126,7 +135,8 @@ int Poller::create_notifier() {
 
     // Make read end non-blocking
     int flags = fcntl(impl_->notify_pipe[0], F_GETFL, 0);
-    fcntl(impl_->notify_pipe[0], F_SETFL, flags | O_NONBLOCK);
+    if (flags < 0 || fcntl(impl_->notify_pipe[0], F_SETFL, flags | O_NONBLOCK) < 0)
+        Log::warn("Poller::create_notifier: fcntl O_NONBLOCK failed: {}", strerror(errno));
 
     add(impl_->notify_pipe[0], Readable);
     return impl_->notify_pipe[0];

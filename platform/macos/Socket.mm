@@ -27,6 +27,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "utils/Log.h"
+
 namespace platform {
 
 // ---------------------------------------------------------------------------
@@ -130,9 +132,13 @@ struct Socket::Impl {
             });
             nw_connection_cancel(nw_conn);
             dispatch_semaphore_wait(cancel_sem, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC));
+            // Under ARC, setting to nil releases the nw_connection
             nw_conn = nil;
         }
-        nw_queue = nil;
+        if (nw_queue) {
+            // Under ARC, dispatch objects are managed automatically
+            nw_queue = nil;
+        }
         if (fd >= 0) {
             ::close(fd);
             fd = -1;
@@ -194,6 +200,8 @@ ssize_t Socket::send(const void *data, size_t len) {
         // We must copy the data because nw_connection_send is async and the
         // caller's buffer may be invalidated before the send completes.
         void *copy = malloc(len);
+        if (!copy)
+            return -1;
         memcpy(copy, data, len);
         dispatch_data_t nw_data = dispatch_data_create(copy, len, dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
           free(copy);
@@ -281,7 +289,8 @@ void Socket::set_reuse_addr(bool enabled) {
     if (impl_->is_nw())
         return;
     int val = enabled ? 1 : 0;
-    setsockopt(impl_->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    if (setsockopt(impl_->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0)
+        Log::warn("setsockopt SO_REUSEADDR failed: {}", strerror(errno));
 }
 
 void Socket::set_tcp_nodelay(bool enabled) {
@@ -291,7 +300,8 @@ void Socket::set_tcp_nodelay(bool enabled) {
         return;
     }
     int val = enabled ? 1 : 0;
-    setsockopt(impl_->fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
+    if (setsockopt(impl_->fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val)) < 0)
+        Log::warn("setsockopt TCP_NODELAY failed: {}", strerror(errno));
 }
 
 void Socket::set_recv_timeout(int timeout_ms) {
@@ -302,7 +312,8 @@ void Socket::set_recv_timeout(int timeout_ms) {
     struct timeval tv{};
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    setsockopt(impl_->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    if (setsockopt(impl_->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
+        Log::warn("setsockopt SO_RCVTIMEO failed: {}", strerror(errno));
 }
 
 void Socket::set_send_timeout(int timeout_ms) {
@@ -311,7 +322,8 @@ void Socket::set_send_timeout(int timeout_ms) {
     struct timeval tv{};
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    setsockopt(impl_->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    if (setsockopt(impl_->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0)
+        Log::warn("setsockopt SO_SNDTIMEO failed: {}", strerror(errno));
 }
 
 bool Socket::bytes_available() const {
@@ -382,7 +394,8 @@ void Socket::ssl_connect(const std::string &hostname, const std::string &alpn_pr
     if (::pipe(impl_->wake_pipe) < 0)
         throw std::runtime_error("ssl_connect: pipe() failed");
     // Make read end non-blocking for drain operations
-    fcntl(impl_->wake_pipe[0], F_SETFL, O_NONBLOCK);
+    if (fcntl(impl_->wake_pipe[0], F_SETFL, O_NONBLOCK) < 0)
+        Log::warn("ssl_connect: fcntl O_NONBLOCK on wake pipe failed: {}", strerror(errno));
 
     // Configure TLS
     nw_parameters_t params = nw_parameters_create_secure_tcp(
@@ -410,6 +423,10 @@ void Socket::ssl_connect(const std::string &hostname, const std::string &alpn_pr
     std::string port_str = std::to_string(port);
     nw_endpoint_t endpoint = nw_endpoint_create_host(hostname.c_str(), port_str.c_str());
     nw_connection_t conn = nw_connection_create(endpoint, params);
+    // Under ARC, nw_connection retains what it needs. Setting to nil
+    // lets ARC release endpoint and params when they go out of scope.
+    endpoint = nil;
+    params = nil;
 
     impl_->nw_queue = dispatch_queue_create("platform.socket.nw", DISPATCH_QUEUE_SERIAL);
     impl_->nw_conn = conn;
@@ -425,8 +442,9 @@ void Socket::ssl_connect(const std::string &hostname, const std::string &alpn_pr
           dispatch_semaphore_signal(sem);
       } else if (state == nw_connection_state_failed || state == nw_connection_state_cancelled) {
           if (error) {
-              error_msg =
-                  [NSString stringWithFormat:@"%@", (__bridge NSError *)nw_error_copy_cf_error(error)].UTF8String;
+              CFErrorRef cf_err = nw_error_copy_cf_error(error);
+              NSError *ns_err = (__bridge_transfer NSError *)cf_err;
+              error_msg = ns_err.localizedDescription.UTF8String;
           } else {
               error_msg = "connection failed";
           }
