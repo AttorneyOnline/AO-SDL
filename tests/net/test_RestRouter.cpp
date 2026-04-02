@@ -1459,3 +1459,748 @@ TEST_F(NXEndpointTest, OocSendNotFoundArea) {
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 404);
 }
+
+// ==========================================================================
+// AONX API Integration Tests
+//
+// Full lifecycle tests exercised over real HTTP loopback sockets:
+// session management, player counts, character selection, area navigation,
+// auth semantics, and edge cases around special identifiers.
+// ==========================================================================
+
+// -- Session lifecycle -------------------------------------------------------
+
+TEST_F(NXEndpointTest, SessionLifecycle_CreateReturnsToken) {
+    auto cli = client();
+    auto res = cli.Post("/aonx/v1/session", R"({"client_name":"IntegTest","client_version":"2.0","hdid":"hw123"})",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 201);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_TRUE(body.contains("token"));
+    EXPECT_FALSE(body["token"].get<std::string>().empty());
+}
+
+TEST_F(NXEndpointTest, SessionLifecycle_PlayerCountIncrements) {
+    auto cli = client();
+
+    // Baseline: 0 players
+    auto res0 = cli.Get("/aonx/v1/server/players");
+    ASSERT_TRUE(res0);
+    EXPECT_EQ(nlohmann::json::parse(res0->body)["online"], 0);
+
+    // Create first session
+    create_session();
+    auto res1 = cli.Get("/aonx/v1/server/players");
+    ASSERT_TRUE(res1);
+    EXPECT_EQ(nlohmann::json::parse(res1->body)["online"], 1);
+
+    // Create second session
+    create_session();
+    auto res2 = cli.Get("/aonx/v1/server/players");
+    ASSERT_TRUE(res2);
+    EXPECT_EQ(nlohmann::json::parse(res2->body)["online"], 2);
+}
+
+TEST_F(NXEndpointTest, SessionLifecycle_DeleteDecrementsPlayerCount) {
+    auto cli = client();
+    auto token = create_session();
+
+    // Verify 1 player
+    auto res1 = cli.Get("/aonx/v1/server/players");
+    EXPECT_EQ(nlohmann::json::parse(res1->body)["online"], 1);
+
+    // Delete the session
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+    auto del = cli.Delete("/aonx/v1/session", h);
+    ASSERT_TRUE(del);
+    EXPECT_EQ(del->status, 204);
+
+    // Player count should be back to 0
+    auto res2 = cli.Get("/aonx/v1/server/players");
+    EXPECT_EQ(nlohmann::json::parse(res2->body)["online"], 0);
+}
+
+TEST_F(NXEndpointTest, SessionLifecycle_DeletedTokenBecomesInvalid) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Delete the session
+    auto del = cli.Delete("/aonx/v1/session", h);
+    ASSERT_TRUE(del);
+    EXPECT_EQ(del->status, 204);
+
+    // Using the same token for an authed endpoint should now fail
+    auto res = cli.Get("/aonx/v1/characters", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, SessionLifecycle_RenewRefreshesToken) {
+    nx_->set_session_ttl_seconds(600);
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Patch("/aonx/v1/session", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_EQ(body["token"], token);
+    EXPECT_TRUE(body.contains("expires_at"));
+    // expires_at should be an ISO 8601 timestamp
+    auto expires = body["expires_at"].get<std::string>();
+    EXPECT_NE(expires.find('T'), std::string::npos);
+    EXPECT_NE(expires.find('Z'), std::string::npos);
+}
+
+TEST_F(NXEndpointTest, SessionLifecycle_MaxPlayersEnforced) {
+    room_.max_players = 2;
+    auto cli = client();
+
+    // Fill up
+    auto first_token = create_session();
+    create_session();
+    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server/players")->body)["online"], 2);
+    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server/players")->body)["max"], 2);
+
+    // Third session should be rejected
+    auto res = cli.Post("/aonx/v1/session", R"({"client_name":"overflow","client_version":"1.0","hdid":"x"})",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 503);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["reason"], "Server is full");
+
+    // Delete one, then retry
+    http::Headers h1 = {{"Authorization", "Bearer " + first_token}};
+    cli.Delete("/aonx/v1/session", h1);
+
+    auto res2 = cli.Post("/aonx/v1/session", R"({"client_name":"latecomer","client_version":"1.0","hdid":"y"})",
+                         "application/json");
+    ASSERT_TRUE(res2);
+    EXPECT_EQ(res2->status, 201);
+}
+
+TEST_F(NXEndpointTest, SessionLifecycle_MultipleSessionsIndependent) {
+    auto cli = client();
+    auto token_a = create_session();
+    auto token_b = create_session();
+
+    // Delete session A
+    http::Headers ha = {{"Authorization", "Bearer " + token_a}};
+    cli.Delete("/aonx/v1/session", ha);
+
+    // Session B should still work
+    http::Headers hb = {{"Authorization", "Bearer " + token_b}};
+    auto res = cli.Get("/aonx/v1/characters", hb);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    // Session A should be gone
+    auto res2 = cli.Get("/aonx/v1/characters", ha);
+    ASSERT_TRUE(res2);
+    EXPECT_EQ(res2->status, 401);
+}
+
+// -- Session create validation -----------------------------------------------
+
+TEST_F(NXEndpointTest, SessionCreate_MissingBody) {
+    auto cli = client();
+    auto res = cli.Post("/aonx/v1/session", "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, SessionCreate_MissingRequiredFields) {
+    auto cli = client();
+    // Missing client_version and hdid
+    auto res = cli.Post("/aonx/v1/session", R"({"client_name":"test"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, SessionCreate_EmptyJsonObject) {
+    auto cli = client();
+    auto res = cli.Post("/aonx/v1/session", R"({})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+// -- Auth edge cases ---------------------------------------------------------
+
+TEST_F(NXEndpointTest, Auth_MissingAuthorizationHeader) {
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/characters");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, Auth_MalformedBearerPrefix) {
+    auto cli = client();
+    // "Token" instead of "Bearer"
+    http::Headers h = {{"Authorization", "Token abc123"}};
+    auto res = cli.Get("/aonx/v1/characters", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, Auth_EmptyBearerToken) {
+    auto cli = client();
+    // "Bearer " with nothing after it
+    http::Headers h = {{"Authorization", "Bearer "}};
+    auto res = cli.Get("/aonx/v1/characters", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, Auth_GarbageToken) {
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer not-a-real-token-at-all"}};
+    auto res = cli.Get("/aonx/v1/characters", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, Auth_TokensAreUniquePerSession) {
+    auto token_a = create_session();
+    auto token_b = create_session();
+    EXPECT_NE(token_a, token_b);
+}
+
+// -- Character selection lifecycle -------------------------------------------
+
+TEST_F(NXEndpointTest, CharacterSelect_FreesOnSessionDelete) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Select a character
+    std::string char_id = room_.char_id_at(0);
+    auto sel =
+        cli.Post("/aonx/v1/characters/select", h, nlohmann::json({{"char_id", char_id}}).dump(), "application/json");
+    ASSERT_TRUE(sel);
+    EXPECT_EQ(sel->status, 200);
+
+    // Verify it's taken
+    auto list1 = cli.Get("/aonx/v1/characters", h);
+    auto chars1 = nlohmann::json::parse(list1->body)["characters"];
+    for (auto& c : chars1) {
+        if (c["char_id"] == char_id) {
+            EXPECT_FALSE(c["available"].get<bool>());
+        }
+    }
+
+    // Delete session — character should be freed
+    cli.Delete("/aonx/v1/session", h);
+
+    // Create a new session and verify character is available again
+    auto token2 = create_session();
+    http::Headers h2 = {{"Authorization", "Bearer " + token2}};
+    auto list2 = cli.Get("/aonx/v1/characters", h2);
+    auto chars2 = nlohmann::json::parse(list2->body)["characters"];
+    for (auto& c : chars2) {
+        if (c["char_id"] == char_id) {
+            EXPECT_TRUE(c["available"].get<bool>());
+        }
+    }
+}
+
+TEST_F(NXEndpointTest, CharacterSelect_SameSessionCanReselect) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Select first character
+    std::string char0 = room_.char_id_at(0);
+    auto res1 =
+        cli.Post("/aonx/v1/characters/select", h, nlohmann::json({{"char_id", char0}}).dump(), "application/json");
+    ASSERT_TRUE(res1);
+    EXPECT_EQ(res1->status, 200);
+
+    // Select a different character — should succeed (releases the first)
+    std::string char1 = room_.char_id_at(1);
+    auto res2 =
+        cli.Post("/aonx/v1/characters/select", h, nlohmann::json({{"char_id", char1}}).dump(), "application/json");
+    ASSERT_TRUE(res2);
+    EXPECT_EQ(res2->status, 200);
+
+    // First character should be available again
+    auto list = cli.Get("/aonx/v1/characters", h);
+    auto chars = nlohmann::json::parse(list->body)["characters"];
+    for (auto& c : chars) {
+        if (c["char_id"] == char0) {
+            EXPECT_TRUE(c["available"].get<bool>());
+        }
+        if (c["char_id"] == char1) {
+            EXPECT_FALSE(c["available"].get<bool>());
+        }
+    }
+}
+
+TEST_F(NXEndpointTest, CharacterSelect_MissingCharIdField) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/characters/select", h, R"({"wrong":"field"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, CharacterGet_AllCharactersHaveManifest) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Get the character list
+    auto list = cli.Get("/aonx/v1/characters", h);
+    auto chars = nlohmann::json::parse(list->body)["characters"];
+
+    // Verify each character has a valid manifest
+    for (auto& c : chars) {
+        auto cid = c["char_id"].get<std::string>();
+        auto detail = cli.Get("/aonx/v1/characters/" + cid, h);
+        ASSERT_TRUE(detail);
+        EXPECT_EQ(detail->status, 200);
+
+        auto manifest = nlohmann::json::parse(detail->body);
+        EXPECT_EQ(manifest["schema"], "character");
+        EXPECT_EQ(manifest["schema_version"], 1);
+        EXPECT_TRUE(manifest.contains("name"));
+        EXPECT_TRUE(manifest.contains("emotes"));
+        EXPECT_TRUE(manifest["emotes"].is_array());
+    }
+}
+
+// -- Area navigation lifecycle -----------------------------------------------
+
+TEST_F(NXEndpointTest, AreaJoin_SessionStartsInFirstArea) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // "_" should resolve to the first area (Lobby) since session defaults there
+    auto res = cli.Get("/aonx/v1/areas/_", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["area"]["name"], "Lobby");
+}
+
+TEST_F(NXEndpointTest, AreaJoin_MoveUpdatesCurrentArea) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Move to Courtroom 1
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    ASSERT_NE(cr1, nullptr);
+
+    auto join = cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+    ASSERT_TRUE(join);
+    EXPECT_EQ(join->status, 200);
+
+    // "_" should now resolve to Courtroom 1
+    auto res = cli.Get("/aonx/v1/areas/_", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["area"]["name"], "Courtroom 1");
+}
+
+TEST_F(NXEndpointTest, AreaJoin_PlayerCountsReflectMovement) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    ASSERT_NE(lobby, nullptr);
+    ASSERT_NE(cr1, nullptr);
+
+    // Initially: 1 player in Lobby, 0 in Courtroom 1
+    auto lobby_players = cli.Get("/aonx/v1/areas/" + lobby->id + "/players", h);
+    EXPECT_EQ(nlohmann::json::parse(lobby_players->body)["players"].size(), 1);
+    auto cr1_players = cli.Get("/aonx/v1/areas/" + cr1->id + "/players", h);
+    EXPECT_EQ(nlohmann::json::parse(cr1_players->body)["players"].size(), 0);
+
+    // Move to Courtroom 1
+    cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+
+    // Now: 0 in Lobby, 1 in Courtroom 1
+    lobby_players = cli.Get("/aonx/v1/areas/" + lobby->id + "/players", h);
+    EXPECT_EQ(nlohmann::json::parse(lobby_players->body)["players"].size(), 0);
+    cr1_players = cli.Get("/aonx/v1/areas/" + cr1->id + "/players", h);
+    EXPECT_EQ(nlohmann::json::parse(cr1_players->body)["players"].size(), 1);
+}
+
+TEST_F(NXEndpointTest, AreaJoin_MultiplePlayersInSameArea) {
+    auto cli = client();
+    auto token_a = create_session();
+    create_session();
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    // Both sessions start in Lobby
+    http::Headers ha = {{"Authorization", "Bearer " + token_a}};
+    auto res = cli.Get("/aonx/v1/areas/" + lobby->id + "/players", ha);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["players"].size(), 2);
+}
+
+TEST_F(NXEndpointTest, AreaJoin_RejoinSameAreaIsIdempotent) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    // Join Lobby again (already there) — should succeed
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    // Still in Lobby
+    auto area_res = cli.Get("/aonx/v1/areas/_", h);
+    EXPECT_EQ(nlohmann::json::parse(area_res->body)["area"]["name"], "Lobby");
+}
+
+// -- Area special identifiers (_ and *) --------------------------------------
+
+TEST_F(NXEndpointTest, AreaSpecial_UnderscoreResolvesToCurrentArea) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Default area is Lobby
+    auto res = cli.Get("/aonx/v1/areas/_", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["area"]["name"], "Lobby");
+
+    // Move to Courtroom 1
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+
+    // _ now resolves to Courtroom 1
+    auto res2 = cli.Get("/aonx/v1/areas/_", h);
+    EXPECT_EQ(nlohmann::json::parse(res2->body)["area"]["name"], "Courtroom 1");
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_UnderscorePlayersShowsCurrentArea) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Players in "_" should list players in the session's current area
+    auto res = cli.Get("/aonx/v1/areas/_/players", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_GE(nlohmann::json::parse(res->body)["players"].size(), 1);
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_UnderscoreCannotBeJoined) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/_/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_StarCannotBeJoined) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/*/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_StarOocRequiresModerator) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Non-moderator should be rejected
+    auto res = cli.Post("/aonx/v1/areas/*/ooc", h, R"({"name":"Player","message":"broadcast"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_StarOocSucceedsForModerator) {
+    std::vector<OOCEvent> captured;
+    room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { captured.push_back(evt); });
+
+    auto cli = client();
+    auto token = create_session();
+    room_.find_session_by_token(token)->moderator = true;
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res =
+        cli.Post("/aonx/v1/areas/*/ooc", h, R"({"name":"Admin","message":"server announcement"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    // Should broadcast to all areas (Lobby + Courtroom 1)
+    EXPECT_EQ(captured.size(), 2u);
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_StarIcRequiresModerator) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "spam"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/*/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_UnderscoreOocSendsToCurrentArea) {
+    std::vector<OOCEvent> captured;
+    room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { captured.push_back(evt); });
+
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Move to Courtroom 1
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+
+    // Send OOC to "_" — should go to Courtroom 1
+    auto res = cli.Post("/aonx/v1/areas/_/ooc", h, R"({"name":"Player","message":"hello"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    ASSERT_FALSE(captured.empty());
+    EXPECT_EQ(captured.back().area, "Courtroom 1");
+}
+
+TEST_F(NXEndpointTest, AreaSpecial_UnderscoreIcSendsToCurrentArea) {
+    std::vector<ICEvent> captured;
+    room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { captured.push_back(evt); });
+
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Move to Courtroom 1
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "Objection!"}, {"on", "start"}}}},
+    };
+    auto res = cli.Post("/aonx/v1/areas/_/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    ASSERT_FALSE(captured.empty());
+    EXPECT_EQ(captured.back().area, "Courtroom 1");
+}
+
+// -- Area list and state -----------------------------------------------------
+
+TEST_F(NXEndpointTest, AreaList_ContainsAllAreas) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Get("/aonx/v1/areas", h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    auto& areas = body["areas"];
+    EXPECT_EQ(areas.size(), 2);
+
+    // Collect names
+    std::set<std::string> names;
+    for (auto& a : areas) {
+        names.insert(a["name"].get<std::string>());
+        EXPECT_TRUE(a.contains("id"));
+        EXPECT_TRUE(a.contains("path"));
+        EXPECT_TRUE(a.contains("players"));
+        EXPECT_TRUE(a.contains("status"));
+        EXPECT_TRUE(a.contains("locked"));
+    }
+    EXPECT_TRUE(names.count("Lobby"));
+    EXPECT_TRUE(names.count("Courtroom 1"));
+}
+
+TEST_F(NXEndpointTest, AreaList_PlayerCountsAreAccurate) {
+    auto cli = client();
+    auto token_a = create_session();
+    auto token_b = create_session();
+    http::Headers ha = {{"Authorization", "Bearer " + token_a}};
+    http::Headers hb = {{"Authorization", "Bearer " + token_b}};
+
+    // Move session B to Courtroom 1
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    cli.Post("/aonx/v1/areas/" + cr1->id + "/join", hb, "", "application/json");
+
+    // Area list should show 1 in each area
+    auto res = cli.Get("/aonx/v1/areas", ha);
+    auto areas = nlohmann::json::parse(res->body)["areas"];
+    for (auto& a : areas) {
+        EXPECT_EQ(a["players"].get<int>(), 1) << "Area: " << a["name"];
+    }
+}
+
+TEST_F(NXEndpointTest, AreaGet_LockedAreaShowsLocked) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    cr1->locked = true;
+
+    // The area list should report locked
+    auto res = cli.Get("/aonx/v1/areas", h);
+    auto areas = nlohmann::json::parse(res->body)["areas"];
+    for (auto& a : areas) {
+        if (a["name"] == "Courtroom 1") {
+            EXPECT_TRUE(a["locked"].get<bool>());
+        }
+    }
+}
+
+TEST_F(NXEndpointTest, AreaGet_DetailIncludesHPAndTimers) {
+    auto cli = client();
+    auto token = create_session();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    auto res = cli.Get("/aonx/v1/areas/" + lobby->id, h);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_TRUE(body.contains("hp"));
+    EXPECT_EQ(body["hp"]["defense"], 10);
+    EXPECT_EQ(body["hp"]["prosecution"], 10);
+    EXPECT_TRUE(body.contains("timers"));
+    EXPECT_TRUE(body["timers"].is_array());
+}
+
+// -- Server info endpoints ---------------------------------------------------
+
+TEST_F(NXEndpointTest, ServerInfo_ReturnsMetadata) {
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/server/info");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_TRUE(body.contains("software"));
+    EXPECT_TRUE(body.contains("version"));
+    EXPECT_TRUE(body.contains("name"));
+    EXPECT_TRUE(body.contains("description"));
+}
+
+TEST_F(NXEndpointTest, ServerInfo_PlayersMaxMatchesConfig) {
+    room_.max_players = 42;
+    auto cli = client();
+    auto res = cli.Get("/aonx/v1/server/players");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body)["max"], 42);
+}
+
+TEST_F(NXEndpointTest, ServerInfo_NoAuthRequiredForPublicEndpoints) {
+    auto cli = client();
+
+    auto info = cli.Get("/aonx/v1/server/info");
+    EXPECT_EQ(info->status, 200);
+
+    auto motd = cli.Get("/aonx/v1/server/motd");
+    EXPECT_EQ(motd->status, 200);
+
+    auto players = cli.Get("/aonx/v1/server/players");
+    EXPECT_EQ(players->status, 200);
+}
+
+// -- Full lifecycle: connect → pick char → join area → chat → leave ----------
+
+TEST_F(NXEndpointTest, FullLifecycle_ConnectSelectJoinChatLeave) {
+    std::vector<ICEvent> ic_captured;
+    std::vector<OOCEvent> ooc_captured;
+    room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { ic_captured.push_back(evt); });
+    room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { ooc_captured.push_back(evt); });
+
+    auto cli = client();
+
+    // 1. Create session
+    auto res1 = cli.Post("/aonx/v1/session", R"({"client_name":"AO-SDL","client_version":"3.0","hdid":"hwid_abc"})",
+                         "application/json");
+    ASSERT_TRUE(res1);
+    EXPECT_EQ(res1->status, 201);
+    auto token = nlohmann::json::parse(res1->body)["token"].get<std::string>();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // 2. List characters
+    auto chars_res = cli.Get("/aonx/v1/characters", h);
+    ASSERT_TRUE(chars_res);
+    EXPECT_EQ(chars_res->status, 200);
+    auto chars = nlohmann::json::parse(chars_res->body)["characters"];
+    EXPECT_EQ(chars.size(), 3);
+
+    // 3. Select a character
+    auto char_id = chars[0]["char_id"].get<std::string>();
+    auto sel =
+        cli.Post("/aonx/v1/characters/select", h, nlohmann::json({{"char_id", char_id}}).dump(), "application/json");
+    ASSERT_TRUE(sel);
+    EXPECT_EQ(sel->status, 200);
+
+    // 4. List areas
+    auto areas_res = cli.Get("/aonx/v1/areas", h);
+    auto areas = nlohmann::json::parse(areas_res->body)["areas"];
+    EXPECT_EQ(areas.size(), 2);
+
+    // 5. Join Courtroom 1
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    auto join = cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+    ASSERT_TRUE(join);
+    EXPECT_EQ(join->status, 200);
+
+    // 6. Send OOC message in current area
+    auto ooc =
+        cli.Post("/aonx/v1/areas/_/ooc", h, R"({"name":"Phoenix","message":"Ready for trial"})", "application/json");
+    ASSERT_TRUE(ooc);
+    EXPECT_EQ(ooc->status, 200);
+    ASSERT_FALSE(ooc_captured.empty());
+    EXPECT_EQ(ooc_captured.back().area, "Courtroom 1");
+    EXPECT_EQ(ooc_captured.back().action.message, "Ready for trial");
+
+    // 7. Send IC message
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "Hold it!"}, {"showname", "Phoenix"}, {"on", "start"}}}},
+    };
+    auto ic = cli.Post("/aonx/v1/areas/_/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(ic);
+    EXPECT_EQ(ic->status, 200);
+    ASSERT_FALSE(ic_captured.empty());
+    EXPECT_EQ(ic_captured.back().area, "Courtroom 1");
+    EXPECT_EQ(ic_captured.back().action.message, "Hold it!");
+
+    // 8. Verify player list shows our character
+    auto pl = cli.Get("/aonx/v1/areas/_/players", h);
+    auto players = nlohmann::json::parse(pl->body)["players"];
+    EXPECT_EQ(players.size(), 1);
+
+    // 9. Delete session
+    auto del = cli.Delete("/aonx/v1/session", h);
+    EXPECT_EQ(del->status, 204);
+
+    // 10. Verify everything is cleaned up
+    EXPECT_EQ(room_.session_count(), 0u);
+    auto pc = cli.Get("/aonx/v1/server/players");
+    EXPECT_EQ(nlohmann::json::parse(pc->body)["online"], 0);
+}
