@@ -916,7 +916,7 @@ TEST_F(NXEndpointTest, AreaPlayersEmpty) {
 TEST_F(NXEndpointTest, AreaJoinSuccess) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* cr1 = room_.find_area_by_name("Courtroom 1");
     ASSERT_NE(cr1, nullptr);
@@ -935,7 +935,7 @@ TEST_F(NXEndpointTest, AreaJoinSuccess) {
 TEST_F(NXEndpointTest, AreaJoinLocked) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* cr1 = room_.find_area_by_name("Courtroom 1");
     ASSERT_NE(cr1, nullptr);
@@ -949,7 +949,7 @@ TEST_F(NXEndpointTest, AreaJoinLocked) {
 TEST_F(NXEndpointTest, AreaJoinNotFound) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Post("/aonx/v1/areas/nonexistent/join", h, "", "application/json");
     ASSERT_TRUE(res);
@@ -959,7 +959,7 @@ TEST_F(NXEndpointTest, AreaJoinNotFound) {
 TEST_F(NXEndpointTest, AreaJoinRejectsUnderscore) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Post("/aonx/v1/areas/_/join", h, "", "application/json");
     ASSERT_TRUE(res);
@@ -969,7 +969,7 @@ TEST_F(NXEndpointTest, AreaJoinRejectsUnderscore) {
 TEST_F(NXEndpointTest, AreaJoinRejectsStar) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res = cli.Post("/aonx/v1/areas/*/join", h, "", "application/json");
     ASSERT_TRUE(res);
@@ -993,7 +993,7 @@ TEST_F(NXEndpointTest, OocSendSuccess) {
 
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -1017,7 +1017,7 @@ TEST_F(NXEndpointTest, OocSendCurrentArea) {
 
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     // Session defaults to Lobby; send to "_" (current area).
     auto res = cli.Post("/aonx/v1/areas/_/ooc", h, R"({"name":"Player","message":"test"})", "application/json");
@@ -1033,8 +1033,9 @@ TEST_F(NXEndpointTest, OocSendAllAreas) {
     room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { captured.push_back(evt); });
 
     auto token = create_session();
+    room_.find_session_by_token(token)->moderator = true;
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto res =
         cli.Post("/aonx/v1/areas/*/ooc", h, R"({"name":"Admin","message":"server message"})", "application/json");
@@ -1055,7 +1056,7 @@ TEST_F(NXEndpointTest, OocSendAllAreas) {
 TEST_F(NXEndpointTest, OocSendMissingBody) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -1082,7 +1083,7 @@ TEST_F(NXEndpointTest, IcSendSuccess) {
 
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -1108,7 +1109,7 @@ TEST_F(NXEndpointTest, IcSendCurrentArea) {
 
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     nlohmann::json ic_body = {
         {"text", {{{"id", "t0"}, {"content", "Test"}, {"on", "start"}}}},
@@ -1127,8 +1128,9 @@ TEST_F(NXEndpointTest, IcSendAllAreas) {
     room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { captured.push_back(evt); });
 
     auto token = create_session();
+    room_.find_session_by_token(token)->moderator = true;
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     nlohmann::json ic_body = {
         {"text", {{{"id", "t0"}, {"content", "Objection!"}, {"on", "start"}}}},
@@ -1144,7 +1146,7 @@ TEST_F(NXEndpointTest, IcSendAllAreas) {
 TEST_F(NXEndpointTest, IcSendMissingBody) {
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -1171,7 +1173,7 @@ TEST_F(NXEndpointTest, IcSendFlattensObjectAndAudio) {
 
     auto token = create_session();
     auto cli = client();
-    httplib::Headers h = {{"Authorization", "Bearer " + token}};
+    http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* lobby = room_.find_area_by_name("Lobby");
     ASSERT_NE(lobby, nullptr);
@@ -1210,4 +1212,52 @@ TEST_F(NXEndpointTest, IcSendFlattensObjectAndAudio) {
     EXPECT_EQ(action.sfx_name, "sfx-objection");
     EXPECT_EQ(action.sfx_delay, 100);
     EXPECT_TRUE(action.realization);
+}
+
+TEST_F(NXEndpointTest, IcSendAllAreasDeniedWithoutModerator) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "spam"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/*/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, OocSendAllAreasDeniedWithoutModerator) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/*/ooc", h, R"({"name":"Player","message":"spam"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, IcSendNotFoundArea) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "hello"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/nonexistent/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+}
+
+TEST_F(NXEndpointTest, OocSendNotFoundArea) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/nonexistent/ooc", h, R"({"name":"Player","message":"hi"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
 }

@@ -41,7 +41,8 @@ class AreaOocEndpoint : public NXEndpoint {
         const auto& area_id = it->second;
 
         if (area_id == "*") {
-            // Broadcast to all areas.
+            if (!req.session->moderator)
+                return RestResponse::error(403, "All-areas broadcast requires moderator");
             for (auto& [id, state] : room().area_states())
                 room().handle_ooc(action, state.name);
         }

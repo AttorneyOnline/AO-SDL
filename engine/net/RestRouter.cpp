@@ -69,7 +69,7 @@ void RestRouter::bind(http::Server& server) {
     // OPTIONS to a non-existent path returns 404, which browsers treat
     // as a failed preflight and block the actual request.
     if (!cors_origin_.empty()) {
-        server.Options(".*", [this](const httplib::Request&, httplib::Response& res) {
+        server.Options(".*", [this](const http::Request&, http::Response& res) {
             set_cors(res);
             res.status = 204;
         });

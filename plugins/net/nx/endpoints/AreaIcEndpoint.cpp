@@ -4,6 +4,8 @@
 #include "net/EndpointRegistrar.h"
 #include "utils/GeneratedSchemas.h"
 
+#include <cassert>
+
 namespace {
 
 /// Flatten an NX IcMessage JSON into the protocol-agnostic ICAction struct.
@@ -16,6 +18,7 @@ namespace {
 /// Full NX-to-NX forwarding of the raw composition will be added in Phase 5
 /// when SSE event streams are implemented.
 ICAction flatten_ic_message(const nlohmann::json& body, ServerSession* session) {
+    assert(session);
     ICAction action;
     action.sender_id = session->client_id;
     action.char_id = session->character_id;
@@ -67,9 +70,9 @@ ICAction flatten_ic_message(const nlohmann::json& body, ServerSession* session) 
     if (body.contains("effects") && body["effects"].is_array()) {
         for (auto& eff : body["effects"]) {
             auto shader = eff.value("shader", std::string{});
-            if (shader.find("realization") != std::string::npos)
+            if (shader.starts_with("realization"))
                 action.realization = true;
-            else if (shader.find("screenshake") != std::string::npos)
+            else if (shader.starts_with("screenshake"))
                 action.screenshake = true;
         }
     }
@@ -109,6 +112,8 @@ class AreaIcEndpoint : public NXEndpoint {
         const auto& area_id = it->second;
 
         if (area_id == "*") {
+            if (!req.session->moderator)
+                return RestResponse::error(403, "All-areas broadcast requires moderator");
             for (auto& [id, state] : room().area_states())
                 room().handle_ic(action, state.name);
         }
