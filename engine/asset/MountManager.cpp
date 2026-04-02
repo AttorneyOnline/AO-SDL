@@ -244,9 +244,9 @@ std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& 
 
     for (auto& entry : loaded_mounts) {
         try {
-            auto data = entry.mount->try_fetch(relative_path);
-            if (!data.empty())
-                return data;
+            if (!entry.mount->seek_file(relative_path))
+                continue;
+            return entry.mount->fetch_data(relative_path);
         }
         catch (const std::exception& e) {
             Log::log_print(ERR, std::format("Failed to fetch {}: {}", relative_path, e.what()).c_str());
