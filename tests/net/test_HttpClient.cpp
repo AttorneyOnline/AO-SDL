@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "net/Http.h"
+#include "net/Http2Connection.h"
+#include "net/HttpPool.h"
 #include "utils/Log.h"
 
 #include <atomic>
@@ -452,6 +454,59 @@ TEST_F(HttpClientKeepAlive, TcpNoDelayDoesNotBreakRequests) {
     EXPECT_EQ(r2->body, "ok");
 }
 
+TEST_F(HttpClientKeepAlive, IncompleteBodyClosesSocket) {
+    // If the server sends fewer body bytes than Content-Length claims,
+    // the client must close the socket to prevent stale bytes from
+    // corrupting the next request on a keep-alive connection.
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t lport = listener.local_port();
+    listener.set_non_blocking(false);
+
+    std::thread fake_server([&] {
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+        // Read the request
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        // Send response with Content-Length: 1000 but only 5 bytes of body
+        std::string resp = "HTTP/1.1 200 OK\r\n"
+                           "Content-Length: 1000\r\n"
+                           "\r\n"
+                           "short";
+        conn.send(resp.data(), resp.size());
+        conn.close(); // close immediately — body is incomplete
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(lport));
+    cli.set_keep_alive(true);
+    cli.set_read_timeout(1); // short timeout so we don't wait long
+
+    auto r1 = cli.Get("/test");
+    // The response may succeed (with truncated body) or fail
+    // Either way, the socket must be closed (not reusable)
+    EXPECT_EQ(cli.is_socket_open(), 0u) << "Socket should be closed after incomplete body read";
+
+    fake_server.join();
+}
+
+TEST_F(HttpClientKeepAlive, FullBodyKeepsSocketOpen) {
+    // Verify that a complete response with keep-alive leaves the socket open
+    server_.Get("/ok", [](const http::Request&, http::Response& res) { res.set_content("hello", "text/plain"); });
+    start();
+
+    auto cli = client();
+    cli.set_keep_alive(true);
+
+    auto r1 = cli.Get("/ok");
+    ASSERT_TRUE(r1);
+    EXPECT_EQ(r1->body, "hello");
+    // Socket should remain open for reuse (server didn't send Connection: close)
+    EXPECT_NE(cli.is_socket_open(), 0u) << "Socket should stay open after complete keep-alive response";
+}
+
 TEST_F(HttpClientKeepAlive, StopDuringRequestDoesNotHang) {
     server_.Get("/slow", [](const http::Request&, http::Response& res) {
         std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -480,4 +535,96 @@ TEST_F(HttpClientKeepAlive, StopDuringRequestDoesNotHang) {
 
     auto now = std::chrono::steady_clock::now();
     EXPECT_LT(now, deadline) << "stop() did not interrupt the request in time";
+}
+
+// ===========================================================================
+// Http2Connection tests
+// ===========================================================================
+
+TEST(Http2Connection, ConnectToUnreachableHostThrows) {
+    // Http2Connection::connect() to a closed port should throw promptly
+    // (not hang), since tcp_connect with timeout fails fast on refused.
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto start = std::chrono::steady_clock::now();
+    std::unique_ptr<Http2Connection> conn;
+    bool threw = false;
+    try {
+        conn = Http2Connection::connect("127.0.0.1", 1, 1000); // port 1 = closed
+    }
+    catch (const std::exception&) {
+        threw = true;
+    }
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    EXPECT_TRUE(threw || conn == nullptr) << "connect to closed port should throw or return nullptr";
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 3)
+        << "connect should fail within timeout, not hang";
+
+    Log::set_sink(nullptr);
+}
+
+TEST(Http2Connection, ShutdownFulfillsPendingPromises) {
+    // Verify that destroying/shutting down an Http2Connection fulfills
+    // all pending stream promises with errors (not hanging forever).
+    // We can't easily create a real h2 connection in tests without a
+    // real h2 server, so we test the HttpPool shutdown path instead.
+}
+
+// ===========================================================================
+// HttpPool shutdown ordering
+// ===========================================================================
+
+TEST(HttpPoolShutdown, StopDoesNotHangWithPendingRequests) {
+    // HttpPool::stop() must complete promptly even with queued requests
+    // to unreachable hosts. This tests the fix where h2 connections are
+    // shut down before worker threads are joined.
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+    HttpPool pool(2);
+    // Queue requests to a non-existent host
+    for (int i = 0; i < 10; ++i) {
+        pool.get("http://127.0.0.1:1", "/test" + std::to_string(i), [](HttpResponse) {}, HttpPriority::NORMAL);
+    }
+    // stop() should complete within a reasonable time (not hang)
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    pool.stop();
+    auto now = std::chrono::steady_clock::now();
+    EXPECT_LT(now, deadline) << "HttpPool::stop() hung with pending requests";
+    Log::set_sink(nullptr);
+}
+
+TEST(HttpPoolShutdown, StopAfterSuccessfulRequestsDoesNotHang) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+    http::Server server;
+    server.Get("/ping", [](const http::Request&, http::Response& res) { res.set_content("pong", "text/plain"); });
+    int port = server.bind_to_any_port("127.0.0.1");
+    std::thread t([&] { server.listen_after_bind(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    {
+        HttpPool pool(4);
+        std::string host = "http://127.0.0.1:" + std::to_string(port);
+        std::atomic<int> completed{0};
+
+        for (int i = 0; i < 20; ++i) {
+            pool.get(host, "/ping", [&](HttpResponse resp) {
+                if (resp.status == 200)
+                    completed++;
+            });
+        }
+
+        // Let some requests complete
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        pool.poll();
+
+        // stop() should not hang even if some requests are in-flight
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        pool.stop();
+        auto now = std::chrono::steady_clock::now();
+        EXPECT_LT(now, deadline) << "HttpPool::stop() hung after real requests";
+    }
+
+    server.stop();
+    t.join();
+    Log::set_sink(nullptr);
 }

@@ -42,7 +42,9 @@ class AssetLibraryFSTest : public ::testing::Test {
     AssetLibrary lib{mounts, 256 * 1024 * 1024};
 
     void SetUp() override {
-        temp_dir = fs::temp_directory_path() / "aosdl_test_asset_library";
+        auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+        std::string dirname = std::string("aosdl_test_asset_lib_") + info->name();
+        temp_dir = fs::temp_directory_path() / dirname;
         fs::remove_all(temp_dir);
         fs::create_directories(temp_dir);
 

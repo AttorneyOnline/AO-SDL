@@ -301,7 +301,9 @@ class MountManagerLoadTest : public ::testing::Test {
     fs::path temp_dir;
 
     void SetUp() override {
-        temp_dir = fs::temp_directory_path() / "aosdl_test_mount_manager";
+        auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+        std::string dirname = std::string("aosdl_test_mount_mgr_") + info->name();
+        temp_dir = fs::temp_directory_path() / dirname;
         fs::remove_all(temp_dir);
         fs::create_directories(temp_dir);
 

@@ -18,7 +18,10 @@ class MountDirectoryTest : public ::testing::Test {
     fs::path temp_dir;
 
     void SetUp() override {
-        temp_dir = fs::temp_directory_path() / "aosdl_test_mount_directory";
+        // Use a unique directory per test instance to avoid races under parallel ctest
+        auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+        std::string dirname = std::string("aosdl_test_mount_dir_") + info->name();
+        temp_dir = fs::temp_directory_path() / dirname;
         fs::remove_all(temp_dir);
         fs::create_directories(temp_dir);
         fs::create_directories(temp_dir / "subdir");

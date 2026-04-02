@@ -4,11 +4,15 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
+
+class Http2Connection;
 
 /// Result of an HTTP request.
 struct HttpResponse {
@@ -108,4 +112,16 @@ class HttpPool {
     // Result queue (completed, awaiting poll)
     std::deque<CompletedRequest> result_queue_;
     std::mutex result_mutex_;
+
+    // HTTP/2 connection pool: one multiplexed connection per host.
+    // Workers try h2 first; if server doesn't support it, h2_failed_hosts_
+    // prevents repeated ALPN attempts.
+    std::unordered_map<std::string, std::shared_ptr<Http2Connection>> h2_connections_;
+    std::unordered_set<std::string> h2_failed_hosts_;     // hosts that don't support h2
+    std::unordered_set<std::string> h2_eligible_hosts_;   // hosts with at least one successful h1 request
+    std::unordered_set<std::string> h2_connecting_hosts_; // hosts currently being connected (prevents races)
+    std::mutex h2_mutex_;
+
+    std::shared_ptr<Http2Connection> get_h2(const std::string& host);
+    void mark_h2_eligible(const std::string& host);
 };
