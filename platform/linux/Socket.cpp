@@ -159,10 +159,13 @@ bool Socket::bytes_available() const {
 uint16_t Socket::local_port() const {
     if (!impl_ || impl_->fd < 0)
         return 0;
-    struct sockaddr_in sa{};
-    socklen_t len = sizeof(sa);
-    if (getsockname(impl_->fd, reinterpret_cast<sockaddr*>(&sa), &len) == 0) {
-        return ntohs(sa.sin_port);
+    struct sockaddr_storage ss{};
+    socklen_t len = sizeof(ss);
+    if (getsockname(impl_->fd, reinterpret_cast<sockaddr*>(&ss), &len) == 0) {
+        if (ss.ss_family == AF_INET)
+            return ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port);
+        if (ss.ss_family == AF_INET6)
+            return ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port);
     }
     return 0;
 }

@@ -131,20 +131,41 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
 int Poller::create_notifier() {
     // Windows lacks eventfd/pipe for sockets. Use a self-connected TCP pair.
     SOCKET listener = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET)
+        throw std::runtime_error("Poller::create_notifier: socket() failed");
+
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;
-    ::bind(listener, (sockaddr*)&addr, sizeof(addr));
-    ::listen(listener, 1);
+    if (::bind(listener, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR || ::listen(listener, 1) == SOCKET_ERROR) {
+        closesocket(listener);
+        throw std::runtime_error("Poller::create_notifier: bind/listen failed");
+    }
 
     int len = sizeof(addr);
     getsockname(listener, (sockaddr*)&addr, &len);
 
     impl_->notify_write = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    ::connect(impl_->notify_write, (sockaddr*)&addr, sizeof(addr));
+    if (impl_->notify_write == INVALID_SOCKET) {
+        closesocket(listener);
+        throw std::runtime_error("Poller::create_notifier: write socket() failed");
+    }
+
+    if (::connect(impl_->notify_write, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+        closesocket(impl_->notify_write);
+        impl_->notify_write = INVALID_SOCKET;
+        closesocket(listener);
+        throw std::runtime_error("Poller::create_notifier: connect() failed");
+    }
+
     impl_->notify_read = ::accept(listener, nullptr, nullptr);
     closesocket(listener);
+    if (impl_->notify_read == INVALID_SOCKET) {
+        closesocket(impl_->notify_write);
+        impl_->notify_write = INVALID_SOCKET;
+        throw std::runtime_error("Poller::create_notifier: accept() failed");
+    }
 
     // Make read end non-blocking
     u_long mode = 1;

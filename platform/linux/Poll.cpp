@@ -36,6 +36,12 @@ Poller::~Poller() = default;
 Poller::Poller(Poller&&) noexcept = default;
 Poller& Poller::operator=(Poller&&) noexcept = default;
 
+// Edge-triggered mode (EPOLLET): the kernel delivers an event only once per
+// state transition, NOT every time data is available. Consumers MUST drain
+// the socket completely (recv until EAGAIN) after each readable event,
+// otherwise remaining data won't trigger another notification until *new*
+// data arrives. The HttpServer poll loop and WebSocketServer both follow
+// this pattern. If adding a new poller consumer, ensure it drains fully.
 static uint32_t to_epoll_events(uint32_t interest) {
     uint32_t ev = EPOLLET;
     if (interest & Poller::Readable)

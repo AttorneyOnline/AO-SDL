@@ -10,13 +10,10 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cassert>
 #include <chrono>
-#include <condition_variable>
 #include <cstring>
 #include <functional>
 #include <limits>
-#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -24,7 +21,6 @@
 #include <ostream>
 #include <regex>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -564,72 +560,7 @@ class TaskQueue {
     }
 };
 
-class ThreadPool final : public TaskQueue {
-  public:
-    explicit ThreadPool(size_t n, size_t mqr = 0) : shutdown_(false), max_queued_requests_(mqr) {
-        while (n) {
-            threads_.emplace_back(worker(*this));
-            n--;
-        }
-    }
-
-    ThreadPool(const ThreadPool&) = delete;
-    ~ThreadPool() override = default;
-
-    bool enqueue(std::function<void()> fn) override {
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            if (max_queued_requests_ > 0 && jobs_.size() >= max_queued_requests_) {
-                return false;
-            }
-            jobs_.push_back(std::move(fn));
-        }
-        cond_.notify_one();
-        return true;
-    }
-
-    void shutdown() override {
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            shutdown_ = true;
-        }
-        cond_.notify_all();
-        for (auto& t : threads_) {
-            t.join();
-        }
-    }
-
-  private:
-    struct worker {
-        explicit worker(ThreadPool& pool) : pool_(pool) {
-        }
-        void operator()() {
-            for (;;) {
-                std::function<void()> fn;
-                {
-                    std::unique_lock<std::mutex> lock(pool_.mutex_);
-                    pool_.cond_.wait(lock, [&] { return !pool_.jobs_.empty() || pool_.shutdown_; });
-                    if (pool_.shutdown_ && pool_.jobs_.empty()) {
-                        break;
-                    }
-                    fn = pool_.jobs_.front();
-                    pool_.jobs_.pop_front();
-                }
-                assert(true == static_cast<bool>(fn));
-                fn();
-            }
-        }
-        ThreadPool& pool_;
-    };
-    friend struct worker;
-
-    std::vector<std::thread> threads_;
-    std::list<std::function<void()>> jobs_;
-    bool shutdown_;
-    size_t max_queued_requests_ = 0;
-    std::condition_variable cond_;
-    std::mutex mutex_;
-};
+// ThreadPool was removed — the HTTP server uses std::jthread workers directly.
 
 // ===========================================================================
 // Logger / SocketOptions / free functions
@@ -840,82 +771,16 @@ class Server {
     size_t payload_max_length_ = CPPHTTPLIB_PAYLOAD_MAX_LENGTH;
 
   private:
-    using Handlers = std::vector<std::pair<std::unique_ptr<detail::MatcherBase>, Handler>>;
-    using HandlersForContentReader =
-        std::vector<std::pair<std::unique_ptr<detail::MatcherBase>, HandlerWithContentReader>>;
-
     static std::unique_ptr<detail::MatcherBase> make_matcher(const std::string& pattern);
 
     Server& set_error_handler_core(HandlerWithResponse handler, std::true_type);
     Server& set_error_handler_core(Handler handler, std::false_type);
 
-    socket_t create_server_socket(const std::string& host, int port, int socket_flags,
-                                  SocketOptions socket_options) const;
-    int bind_internal(const std::string& host, int port, int socket_flags);
-    bool listen_internal();
-
-    bool routing(Request& req, Response& res, Stream& strm);
-    bool handle_file_request(const Request& req, Response& res, bool head = false);
-    bool dispatch_request(Request& req, Response& res, const Handlers& handlers) const;
-    bool dispatch_request_for_content_reader(Request& req, Response& res, ContentReader content_reader,
-                                             const HandlersForContentReader& handlers) const;
-
-    bool parse_request_line(const char* s, Request& req) const;
-    void apply_ranges(const Request& req, Response& res, std::string& content_type, std::string& boundary) const;
-    bool write_response(Stream& strm, bool close_connection, Request& req, Response& res);
-    bool write_response_with_content(Stream& strm, bool close_connection, const Request& req, Response& res);
-    bool write_response_core(Stream& strm, bool close_connection, const Request& req, Response& res,
-                             bool need_apply_ranges);
-    bool write_content_with_provider(Stream& strm, const Request& req, Response& res, const std::string& boundary,
-                                     const std::string& content_type);
-    bool read_content(Stream& strm, Request& req, Response& res);
-    bool read_content_with_content_receiver(Stream& strm, Request& req, Response& res, ContentReceiver receiver,
-                                            MultipartContentHeader multipart_header,
-                                            ContentReceiver multipart_receiver);
-    bool read_content_core(Stream& strm, Request& req, Response& res, ContentReceiver receiver,
-                           MultipartContentHeader multipart_header, ContentReceiver multipart_receiver) const;
-
     virtual bool process_and_close_socket(socket_t sock);
 
     std::atomic<bool> is_running_{false};
-    std::atomic<bool> is_decommisioned{false};
-
-    struct MountPointEntry {
-        std::string mount_point;
-        std::string base_dir;
-        Headers headers;
-    };
-    std::vector<MountPointEntry> base_dirs_;
-    std::map<std::string, std::string> file_extension_and_mimetype_map_;
-    std::string default_file_mimetype_ = "application/octet-stream";
-    Handler file_request_handler_;
-
-    Handlers get_handlers_;
-    Handlers post_handlers_;
-    HandlersForContentReader post_handlers_for_content_reader_;
-    Handlers put_handlers_;
-    HandlersForContentReader put_handlers_for_content_reader_;
-    Handlers patch_handlers_;
-    HandlersForContentReader patch_handlers_for_content_reader_;
-    Handlers delete_handlers_;
-    HandlersForContentReader delete_handlers_for_content_reader_;
-    Handlers options_handlers_;
-
-    HandlerWithResponse error_handler_;
-    ExceptionHandler exception_handler_;
-    HandlerWithResponse pre_routing_handler_;
-    Handler post_routing_handler_;
-    Expect100ContinueHandler expect_100_continue_handler_;
-
-    Logger logger_;
-
-    int address_family_ = AF_UNSPEC;
-    bool tcp_nodelay_ = CPPHTTPLIB_TCP_NODELAY;
-    bool ipv6_v6only_ = CPPHTTPLIB_IPV6_V6ONLY;
-    SocketOptions socket_options_ = default_socket_options;
 
     Headers default_headers_;
-    std::function<ssize_t(Stream&, Headers&)> header_writer_ = detail::write_headers;
 
   public:
     struct ServerState; // defined in HttpServer.cpp

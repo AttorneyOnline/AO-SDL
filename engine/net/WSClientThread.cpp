@@ -52,7 +52,13 @@ ParsedWsUrl parse_ws_url(const std::string& host_in, uint16_t port_in) {
         // Could be IPv6 — only parse port if there's no '[' before the colon
         if (rest[0] != '[' || rest.find(']') < colon) {
             result.host = rest.substr(0, colon);
-            result.port = static_cast<uint16_t>(std::stoi(rest.substr(colon + 1)));
+            try {
+                result.port = static_cast<uint16_t>(std::stoi(rest.substr(colon + 1)));
+            }
+            catch (const std::exception&) {
+                Log::log_print(ERR, "parse_ws_url: invalid port in '%s', using default %d", host_in.c_str(),
+                               result.port);
+            }
         }
         else {
             result.host = rest;
