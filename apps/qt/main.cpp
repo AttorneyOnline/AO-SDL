@@ -18,7 +18,7 @@
 #include "game/GameThread.h"
 #include "game/Session.h"
 #include "net/HttpPool.h"
-#include "net/NetworkThread.h"
+#include "net/WSClientThread.h"
 #include "render/IQtRenderBackend.h"
 #include "render/RenderBridge.h"
 #include "render/StateBuffer.h"
@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
         });
 
     auto protocol = ao::create_protocol();
-    NetworkThread netThread(*protocol);
+    WSClientThread netThread(*protocol);
 
     // --- Event bridge ---------------------------------------------------------
     //

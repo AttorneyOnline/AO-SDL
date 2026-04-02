@@ -1,6 +1,7 @@
 qt_standard_project_setup(REQUIRES 6.11)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
 
 qt_add_executable(aoqt main.cpp)
 
