@@ -897,3 +897,307 @@ TEST(PlatformSocketEdge, RecvOnClosedSocketReturnsError) {
     ssize_t n = s.recv(buf, sizeof(buf));
     EXPECT_LE(n, 0);
 }
+
+// ===========================================================================
+// Client wrapper overload coverage — exercises the delegation layer
+// ===========================================================================
+
+// These tests exercise the many Client::* → ClientImpl::* delegation overloads
+// that the coverage tool flags as uncovered. Each overload is a one-liner, but
+// the coverage tool counts them individually. We run them all against a real
+// server to get full line coverage.
+
+class HttpClientOverloads : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+        server_.Get("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+        server_.Post("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+        server_.Put("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+        server_.Patch("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+        server_.Delete("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+        server_.Options("/test", [](const http::Request&, http::Response& res) { res.status = 204; });
+        // 204 No Content handler (coverage for serialize_response 204 path)
+        server_.Get("/nocontent", [](const http::Request&, http::Response& res) { res.status = 204; });
+        port_ = server_.bind_to_any_port("127.0.0.1");
+        ASSERT_GT(port_, 0);
+        server_thread_ = std::thread([this] { server_.listen_after_bind(); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    void TearDown() override {
+        server_.stop();
+        if (server_thread_.joinable())
+            server_thread_.join();
+        Log::set_sink(nullptr);
+    }
+
+    http::Client client() {
+        return http::Client("127.0.0.1", port_);
+    }
+
+    http::Server server_;
+    int port_ = 0;
+    std::thread server_thread_;
+};
+
+TEST_F(HttpClientOverloads, GetOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    http::Params pa = {{"key", "val"}};
+    auto noop_progress = [](uint64_t, uint64_t) -> bool { return true; };
+    auto noop_receiver = [](const char*, size_t) -> bool { return true; };
+    auto noop_handler = [](const http::Response&) -> bool { return true; };
+
+    EXPECT_TRUE(cli.Get("/test"));
+    EXPECT_TRUE(cli.Get("/test", h));
+    EXPECT_TRUE(cli.Get("/test", noop_progress));
+    EXPECT_TRUE(cli.Get("/test", h, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", noop_receiver));
+    EXPECT_TRUE(cli.Get("/test", h, noop_receiver));
+    EXPECT_TRUE(cli.Get("/test", noop_receiver, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", h, noop_receiver, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", noop_handler, noop_receiver));
+    EXPECT_TRUE(cli.Get("/test", h, noop_handler, noop_receiver));
+    EXPECT_TRUE(cli.Get("/test", noop_handler, noop_receiver, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", h, noop_handler, noop_receiver, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", pa, h, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", pa, h, noop_receiver, noop_progress));
+    EXPECT_TRUE(cli.Get("/test", pa, h, noop_handler, noop_receiver, noop_progress));
+}
+
+TEST_F(HttpClientOverloads, HeadOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    EXPECT_TRUE(cli.Head("/test"));
+    EXPECT_TRUE(cli.Head("/test", h));
+}
+
+TEST_F(HttpClientOverloads, PostOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    auto noop_progress = [](uint64_t, uint64_t) -> bool { return true; };
+
+    EXPECT_TRUE(cli.Post("/test"));
+    EXPECT_TRUE(cli.Post("/test", h));
+    EXPECT_TRUE(cli.Post("/test", "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Post("/test", h, "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Post("/test", h, "body", 4, "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Post("/test", "body", "text/plain"));
+    EXPECT_TRUE(cli.Post("/test", "body", "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Post("/test", h, "body", "text/plain"));
+    EXPECT_TRUE(cli.Post("/test", h, "body", "text/plain", noop_progress));
+
+    // Stub overloads (ContentProvider, Params, Multipart) — these delegate to Post()
+    http::Params pa = {{"key", "val"}};
+    EXPECT_TRUE(cli.Post("/test", pa));
+    EXPECT_TRUE(cli.Post("/test", h, pa));
+    EXPECT_TRUE(cli.Post("/test", h, pa, noop_progress));
+    http::MultipartFormDataItems items;
+    EXPECT_TRUE(cli.Post("/test", items));
+    EXPECT_TRUE(cli.Post("/test", h, items));
+    EXPECT_TRUE(cli.Post("/test", h, items, "boundary"));
+    http::MultipartFormDataProviderItems providers;
+    EXPECT_TRUE(cli.Post("/test", h, items, providers));
+    // ContentProvider stubs
+    http::ContentProvider cp = [](size_t, size_t, http::DataSink&) -> bool { return true; };
+    EXPECT_TRUE(cli.Post("/test", 0, std::move(cp), "text/plain"));
+    http::ContentProviderWithoutLength cpwl = [](size_t, http::DataSink&) -> bool { return true; };
+    EXPECT_TRUE(cli.Post("/test", std::move(cpwl), "text/plain"));
+}
+
+TEST_F(HttpClientOverloads, PutOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    auto noop_progress = [](uint64_t, uint64_t) -> bool { return true; };
+
+    EXPECT_TRUE(cli.Put("/test"));
+    EXPECT_TRUE(cli.Put("/test", "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Put("/test", h, "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Put("/test", h, "body", 4, "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Put("/test", "body", "text/plain"));
+    EXPECT_TRUE(cli.Put("/test", "body", "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Put("/test", h, "body", "text/plain"));
+    EXPECT_TRUE(cli.Put("/test", h, "body", "text/plain", noop_progress));
+
+    http::Params pa = {{"key", "val"}};
+    EXPECT_TRUE(cli.Put("/test", pa));
+    EXPECT_TRUE(cli.Put("/test", h, pa));
+    EXPECT_TRUE(cli.Put("/test", h, pa, noop_progress));
+    http::MultipartFormDataItems items;
+    EXPECT_TRUE(cli.Put("/test", items));
+    EXPECT_TRUE(cli.Put("/test", h, items));
+    EXPECT_TRUE(cli.Put("/test", h, items, "boundary"));
+    http::MultipartFormDataProviderItems providers;
+    EXPECT_TRUE(cli.Put("/test", h, items, providers));
+    http::ContentProvider cp = [](size_t, size_t, http::DataSink&) -> bool { return true; };
+    EXPECT_TRUE(cli.Put("/test", 0, std::move(cp), "text/plain"));
+    http::ContentProviderWithoutLength cpwl = [](size_t, http::DataSink&) -> bool { return true; };
+    EXPECT_TRUE(cli.Put("/test", std::move(cpwl), "text/plain"));
+}
+
+TEST_F(HttpClientOverloads, PatchOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    auto noop_progress = [](uint64_t, uint64_t) -> bool { return true; };
+
+    EXPECT_TRUE(cli.Patch("/test"));
+    EXPECT_TRUE(cli.Patch("/test", "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Patch("/test", "body", 4, "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Patch("/test", h, "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Patch("/test", h, "body", 4, "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Patch("/test", "body", "text/plain"));
+    EXPECT_TRUE(cli.Patch("/test", "body", "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Patch("/test", h, "body", "text/plain"));
+    EXPECT_TRUE(cli.Patch("/test", h, "body", "text/plain", noop_progress));
+    http::ContentProvider cp = [](size_t, size_t, http::DataSink&) -> bool { return true; };
+    EXPECT_TRUE(cli.Patch("/test", 0, std::move(cp), "text/plain"));
+    http::ContentProviderWithoutLength cpwl = [](size_t, http::DataSink&) -> bool { return true; };
+    EXPECT_TRUE(cli.Patch("/test", std::move(cpwl), "text/plain"));
+}
+
+TEST_F(HttpClientOverloads, DeleteOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    auto noop_progress = [](uint64_t, uint64_t) -> bool { return true; };
+
+    EXPECT_TRUE(cli.Delete("/test"));
+    EXPECT_TRUE(cli.Delete("/test", h));
+    EXPECT_TRUE(cli.Delete("/test", "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Delete("/test", "body", 4, "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Delete("/test", h, "body", 4, "text/plain"));
+    EXPECT_TRUE(cli.Delete("/test", h, "body", 4, "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Delete("/test", "body", "text/plain"));
+    EXPECT_TRUE(cli.Delete("/test", "body", "text/plain", noop_progress));
+    EXPECT_TRUE(cli.Delete("/test", h, "body", "text/plain"));
+    EXPECT_TRUE(cli.Delete("/test", h, "body", "text/plain", noop_progress));
+}
+
+TEST_F(HttpClientOverloads, OptionsOverloads) {
+    auto cli = client();
+    http::Headers h = {{"X-Test", "1"}};
+    EXPECT_TRUE(cli.Options("/test"));
+    EXPECT_TRUE(cli.Options("/test", h));
+}
+
+TEST_F(HttpClientOverloads, SendStubs) {
+    auto cli = client();
+    http::Request req;
+    http::Response res;
+    http::Error err;
+    EXPECT_FALSE(cli.send(req, res, err));
+    EXPECT_EQ(err, http::Error::Unknown);
+
+    auto r = cli.send(req);
+    EXPECT_FALSE(r);
+}
+
+TEST_F(HttpClientOverloads, NoContent204) {
+    auto cli = client();
+    auto res = cli.Get("/nocontent");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+    EXPECT_TRUE(res->body.empty());
+}
+
+// ===========================================================================
+// Client constructors — cover cert/key overloads
+// ===========================================================================
+
+TEST(HttpClientConstructors, SchemeHostPortWithCert) {
+    http::Client cli("http://127.0.0.1", "cert.pem", "key.pem");
+    EXPECT_TRUE(cli.is_valid());
+}
+
+TEST(HttpClientConstructors, HostPortWithCert) {
+    http::Client cli("127.0.0.1", 8080, "cert.pem", "key.pem");
+    EXPECT_TRUE(cli.is_valid());
+}
+
+// ===========================================================================
+// Client setter overloads — cover Client → ClientImpl delegation for setters
+// ===========================================================================
+
+TEST(HttpClientSetters, AllSettersViaClientWrapper) {
+    http::Client cli("127.0.0.1", 1);
+    cli.set_hostname_addr_map({});
+    cli.set_default_headers({{"X-Default", "val"}});
+    cli.set_header_writer([](http::Stream&, http::Headers&) -> ssize_t { return 0; });
+    cli.set_address_family(AF_INET);
+    cli.set_tcp_nodelay(true);
+    cli.set_socket_options([](http::socket_t) {});
+    cli.set_connection_timeout(5, 0);
+    cli.set_read_timeout(10, 0);
+    cli.set_write_timeout(5, 0);
+    cli.set_basic_auth("user", "pass");
+    cli.set_bearer_token_auth("token");
+    cli.set_keep_alive(true);
+    cli.set_follow_location(true);
+    cli.set_url_encode(false);
+    cli.set_compress(false);
+    cli.set_decompress(true);
+    cli.set_interface("eth0");
+    cli.set_proxy("proxy.example.com", 8080);
+    cli.set_proxy_basic_auth("proxyuser", "proxypass");
+    cli.set_proxy_bearer_token_auth("proxytoken");
+    cli.set_logger([](const http::Request&, const http::Response&) {});
+    EXPECT_TRUE(cli.is_valid());
+    EXPECT_EQ(cli.host(), "127.0.0.1");
+    EXPECT_EQ(cli.port(), 1);
+}
+
+// ===========================================================================
+// 1xx informational response handling
+// ===========================================================================
+
+TEST(HttpClient1xx, ClientSkips100Continue) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+
+    std::thread fake_server([&] {
+        listener.set_non_blocking(false);
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        // Send 100 Continue followed by 200 OK
+        std::string resp = "HTTP/1.1 100 Continue\r\n"
+                           "\r\n"
+                           "HTTP/1.1 200 OK\r\n"
+                           "Content-Length: 4\r\n"
+                           "Connection: close\r\n"
+                           "\r\n"
+                           "done";
+        conn.send(resp.data(), resp.size());
+        conn.shutdown();
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(port));
+    auto res = cli.Get("/test");
+    fake_server.join();
+    listener.close();
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(res->body, "done");
+
+    Log::set_sink(nullptr);
+}
+
+// ===========================================================================
+// ParseWsUrl edge case: invalid port
+// ===========================================================================
+
+TEST(ParseWsUrl, InvalidPortFallsBackToDefault) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+    auto url = parse_ws_url("wss://example.com:notaport", 0);
+    EXPECT_EQ(url.host, "example.com");
+    EXPECT_EQ(url.port, 443); // falls back to scheme default
+    EXPECT_TRUE(url.ssl);
+    Log::set_sink(nullptr);
+}
