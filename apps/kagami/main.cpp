@@ -97,6 +97,9 @@ int main(int /*argc*/, char* argv[]) {
     EndpointFactory::instance().populate(rest_router);
     rest_router.bind(http);
 
+    // Preflight handler for the SSE endpoint (registered outside RestRouter).
+    http.Options("/aonx/v1/events", [](const http::Request&, http::Response& res) { res.status = 204; });
+
     // --- SSE endpoint (AONX Phase 5) ---
     http.SSE("/aonx/v1/events",
              [&rest_router, &room](const http::Request& req, http::Response& res) -> http::Server::SSEAcceptResult {
