@@ -4,19 +4,23 @@ import QtQuick.Layouts
 
 /**
  * Combined area / music-track list with search filter.
- * Model: courtroomController.musicAreaModel
+ * Model: controller.musicAreaModel
  */
 Frame {
     id: root
+    required property var controller
     padding: 4
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 4
 
-        RowLayout {
+        Label {
+            text: root.controller ? root.controller.nowPlaying : ""
+            elide: Text.ElideRight
+            font.italic: true
+            font.pixelSize: 10
             Layout.fillWidth: true
-            Label { text: courtroomController ? courtroomController.nowPlaying : ""; elide: Text.ElideRight; font.italic: true; font.pixelSize: 10; Layout.fillWidth: true }
         }
 
         TextField {
@@ -30,7 +34,7 @@ Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: courtroomController ? courtroomController.musicAreaModel : null
+            model: root.controller ? root.controller.musicAreaModel : null
 
             delegate: ItemDelegate {
                 width: ListView.view.width

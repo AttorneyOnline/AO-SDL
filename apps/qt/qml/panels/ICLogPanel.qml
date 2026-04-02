@@ -3,11 +3,11 @@ import QtQuick.Controls
 
 /**
  * In-character (IC) message log panel.
- * Populated from ICLogEvent in a future pass; placeholder shows a scrollable
- * text area until the ICLog model is wired up.
+ * Placeholder scrollable text area until ICLog model is wired to controller.
  */
 Frame {
     id: root
+    required property var controller
     padding: 4
 
     ScrollView {
@@ -15,7 +15,6 @@ Frame {
         clip: true
 
         TextArea {
-            id: log
             readOnly: true
             wrapMode: Text.Wrap
             font.pixelSize: 11

@@ -3,14 +3,14 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * Disconnect confirmation dialog.  Shown when the server closes the
- * connection (DisconnectEvent) or the user clicks the disconnect button.
- *
- * Calls app.courtroomController.disconnect() on confirm, which emits
- * POP_TO_ROOT → QtGameWindow::onNavAction().
+ * Disconnect confirmation dialog.
+ * Calls controller.disconnect() on confirm, which triggers navigation back
+ * to the server list via UIManager.
  */
 Dialog {
     id: root
+    required property var controller
+
     title: "Disconnected"
     modal: true
     standardButtons: Dialog.NoButton
@@ -33,15 +33,14 @@ Dialog {
             Layout.alignment: Qt.AlignRight
             text: "Return to Server List"
             onClicked: {
-                root.close();
-                app.courtroomController.disconnect();
+                root.close()
+                root.controller.disconnect()
             }
         }
     }
 
-    /// Show the modal with an optional reason string.
     function showWithReason(msg) {
-        root.reason = msg || "Connection closed.";
-        root.open();
+        root.reason = msg || "Connection closed."
+        root.open()
     }
 }

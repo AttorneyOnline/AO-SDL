@@ -1,5 +1,6 @@
 #include "CourtroomController.h"
 
+#include "ao/ui/screens/CourtroomScreen.h"
 #include "event/AreaUpdateEvent.h"
 #include "event/ChatEvent.h"
 #include "event/EvidenceListEvent.h"
@@ -7,6 +8,7 @@
 #include "event/HealthBarEvent.h"
 #include "event/MusicListEvent.h"
 #include "event/NowPlayingEvent.h"
+#include "event/OutgoingICMessageEvent.h"
 #include "event/PlayerListEvent.h"
 #include "ui/UIManager.h"
 
@@ -14,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+
 
 CourtroomController::CourtroomController(UIManager& uiMgr, QObject* parent)
     : IQtScreenController(parent)
@@ -36,6 +39,7 @@ void CourtroomController::drain() {
     drainAreaUpdates();
     drainHealthBars();
     drainNowPlaying();
+    applyCharacterData();
 }
 
 void CourtroomController::reset() {
@@ -44,20 +48,159 @@ void CourtroomController::reset() {
     m_players.clear();
     m_evidence.clear();
     m_musicArea.clear();
+    m_emotes.clear();
     m_areas.clear();
     m_tracks.clear();
     m_playerCache.clear();
 
-    if (m_defHp != 0) { m_defHp = 0; emit defHpChanged(); }
-    if (m_proHp != 0) { m_proHp = 0; emit proHpChanged(); }
+    if (m_defHp != 0)        { m_defHp = 0;       emit defHpChanged();      }
+    if (m_proHp != 0)        { m_proHp = 0;       emit proHpChanged();      }
     if (!m_nowPlaying.isEmpty()) { m_nowPlaying.clear(); emit nowPlayingChanged(); }
     if (!m_charName.isEmpty())   { m_charName.clear();   emit charNameChanged();  }
+    if (!m_showname.isEmpty())   { m_showname.clear();   emit shownameChanged();  }
+    if (!m_side.isEmpty())       { m_side.clear();       emit sideChanged();      }
+    if (m_selectedEmote != 0)    { m_selectedEmote = 0;  emit selectedEmoteChanged(); }
+    if (m_preAnim)               { m_preAnim = false;    emit preAnimChanged();   }
+    m_charId    = -1;
+    m_lastLoadGen = -1;
 }
 
 void CourtroomController::disconnect() {
     Log::info("[CourtroomController] disconnecting, returning to server list");
     reset();
     m_uiMgr.pop_to_root();
+}
+
+void CourtroomController::setShowname(const QString& v) {
+    if (v == m_showname)
+        return;
+    m_showname = v;
+    emit shownameChanged();
+}
+
+void CourtroomController::setPreAnim(bool v) {
+    if (v == m_preAnim)
+        return;
+    m_preAnim = v;
+    emit preAnimChanged();
+}
+
+void CourtroomController::selectEmote(int index) {
+    if (index < 0 || index >= m_emotes.rowCount())
+        return;
+    if (m_selectedEmote != index) {
+        m_selectedEmote = index;
+        emit selectedEmoteChanged();
+    }
+
+    // Auto-update pre-anim flag from the selected emote.
+    auto* screen = dynamic_cast<CourtroomScreen*>(m_uiMgr.active_screen());
+    if (!screen)
+        return;
+    auto sheet = screen->get_character_sheet();
+    if (sheet && index < sheet->emote_count()) {
+        const auto& emo = sheet->emote(index);
+        bool hasPreAnim = !emo.pre_anim.empty() && emo.pre_anim != "-";
+        setPreAnim(hasPreAnim);
+    }
+}
+
+void CourtroomController::sendICMessage(const QString& message, int objectionMod) {
+    ICMessageData data;
+    data.character = m_charName.toStdString();
+    data.char_id   = m_charId;
+    data.message   = message.toStdString();
+    data.showname  = m_showname.toStdString();
+    data.side      = m_side.isEmpty() ? "def" : m_side.toStdString();
+    data.objection_mod = objectionMod;
+
+    auto* screen = dynamic_cast<CourtroomScreen*>(m_uiMgr.active_screen());
+    if (screen) {
+        auto sheet = screen->get_character_sheet();
+        if (sheet && m_selectedEmote >= 0 && m_selectedEmote < sheet->emote_count()) {
+            const auto& emo = sheet->emote(m_selectedEmote);
+            data.emote      = emo.anim_name;
+            data.pre_emote  = emo.pre_anim;
+            data.desk_mod   = emo.desk_mod;
+            if (!emo.sfx_name.empty() && emo.sfx_name != "0") {
+                data.sfx_name  = emo.sfx_name;
+                data.sfx_delay = emo.sfx_delay;
+            }
+        }
+    }
+
+    data.emote_mod = m_preAnim ? 1 : 0;
+
+    EventManager::instance()
+        .get_channel<OutgoingICMessageEvent>()
+        .publish(OutgoingICMessageEvent(std::move(data)));
+}
+
+// --------------------------------------------------------------------------
+// Character sheet polling
+// --------------------------------------------------------------------------
+
+void CourtroomController::applyCharacterData() {
+    auto* screen = dynamic_cast<CourtroomScreen*>(m_uiMgr.active_screen());
+    if (!screen || screen->is_loading())
+        return;
+    if (screen->load_generation() == m_lastLoadGen)
+        return;
+
+    m_lastLoadGen = screen->load_generation();
+    m_charId = screen->get_char_id();
+
+    QString qname = QString::fromStdString(screen->get_character_name());
+    if (qname != m_charName) {
+        m_charName = qname;
+        emit charNameChanged();
+    }
+
+    auto sheet = screen->get_character_sheet();
+    if (sheet) {
+        QString qside = QString::fromStdString(sheet->side());
+        if (qside != m_side) {
+            m_side = qside;
+            emit sideChanged();
+        }
+
+        QString qshow = QString::fromStdString(sheet->showname());
+        if (qshow != m_showname) {
+            m_showname = qshow;
+            emit shownameChanged();
+        }
+    }
+
+    // Build emote entries; icons are served on-demand by EmoteIconProvider.
+    std::vector<EmoteModel::Entry> entries;
+    int emoteCount = sheet ? sheet->emote_count() : 0;
+    entries.reserve(emoteCount);
+    for (int i = 0; i < emoteCount; i++) {
+        EmoteModel::Entry e;
+        e.comment    = QString::fromStdString(sheet->emote(i).comment);
+        e.iconSource = QStringLiteral("image://emoteicon/%1/%2").arg(qname).arg(i);
+        entries.push_back(std::move(e));
+    }
+    m_emotes.reset(std::move(entries));
+
+    // Reset selection to first emote and auto-set pre-anim.
+    int newSel = 0;
+    bool newPre = false;
+    if (sheet && emoteCount > 0) {
+        const auto& emo = sheet->emote(0);
+        newPre = !emo.pre_anim.empty() && emo.pre_anim != "-";
+    }
+    if (m_selectedEmote != newSel) {
+        m_selectedEmote = newSel;
+        emit selectedEmoteChanged();
+    }
+    if (m_preAnim != newPre) {
+        m_preAnim = newPre;
+        emit preAnimChanged();
+    }
+
+    Log::debug("[CourtroomController] character data applied: {} ({} emotes)",
+               screen->get_character_name(), emoteCount);
 }
 
 // --------------------------------------------------------------------------

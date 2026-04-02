@@ -800,7 +800,9 @@ endif() # NOT AO_BUILD_SERVER_ONLY
 # =============================================================================
 
 if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
-    add_subdirectory(apps/sdl)
+    if(AO_BUILD_SDL)
+        add_subdirectory(apps/sdl)
+    endif()
 
     find_package(Qt6 6.8 QUIET COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
     if(Qt6_FOUND)

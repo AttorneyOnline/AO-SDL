@@ -2,8 +2,14 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+/**
+ * Placeholder screen used during navigation tests.
+ */
 Item {
+    id: root
     anchors.fill: parent
+
+    property var controller: app.dummyController
 
     Rectangle {
         anchors.fill: parent
@@ -31,7 +37,7 @@ Item {
             Button {
                 text: "Go Back"
                 Layout.alignment: Qt.AlignHCenter
-                onClicked: app.dummyController.goBack()
+                onClicked: root.controller.goBack()
             }
         }
     }

@@ -3,16 +3,16 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * Defense / Prosecution health bars.
- * Reads defHp (0–10) and proHp (0–10) from courtroomController.
+ * Pure display component: Defence / Prosecution health bars.
+ * All state is driven by properties — no controller dependency.
  */
 Item {
     id: root
     width: 130
     height: 48
 
-    readonly property int defHp: courtroomController ? courtroomController.defHp : 0
-    readonly property int proHp: courtroomController ? courtroomController.proHp : 0
+    property int defHp: 0
+    property int proHp: 0
 
     ColumnLayout {
         anchors.fill: parent

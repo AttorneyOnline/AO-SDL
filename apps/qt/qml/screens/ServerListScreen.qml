@@ -3,11 +3,14 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * Server browser screen.  Displays the master-server list and a direct-connect
- * bar.  Delegates to app.serverListController (ServerListController*).
+ * Server browser screen.
+ * Displays the master-server list and a direct-connect bar.
+ * Delegates to controller (ServerListController*) for all data and actions.
  */
 Page {
     id: root
+
+    property var controller: app.serverListController
 
     header: Label {
         text: "Attorney Online — Server List"
@@ -40,11 +43,10 @@ Page {
 
         // Server list
         ListView {
-            id: serverView
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: app.serverListController ? app.serverListController.model : null
+            model: root.controller ? root.controller.model : null
 
             delegate: ItemDelegate {
                 width: ListView.view.width
@@ -54,7 +56,7 @@ Page {
                     Label { text: model.description; wrapMode: Text.Wrap; opacity: 0.7 }
                     Label { text: model.players + " players"; font.pixelSize: 11 }
                 }
-                onClicked: app.serverListController.connectToServer(index)
+                onClicked: root.controller.connectToServer(index)
             }
 
             Label {
@@ -66,16 +68,16 @@ Page {
     }
 
     function doDirectConnect() {
-        var addr = directField.text.trim();
+        var addr = directField.text.trim()
         if (!addr.length)
-            return;
-        var port = 27016;
-        var colon = addr.lastIndexOf(":");
+            return
+        var port = 27016
+        var colon = addr.lastIndexOf(":")
         if (colon >= 0) {
-            port = parseInt(addr.substring(colon + 1), 10) || port;
-            addr = addr.substring(0, colon);
+            port = parseInt(addr.substring(colon + 1), 10) || port
+            addr = addr.substring(0, colon)
         }
-        app.serverListController.directConnect(addr, port);
-        directField.clear();
+        root.controller.directConnect(addr, port)
+        directField.clear()
     }
 }

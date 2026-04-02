@@ -15,7 +15,12 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        Label { text: "Choose your side"; font.bold: true; font.pixelSize: 12; Layout.alignment: Qt.AlignHCenter }
+        Label {
+            text: "Choose your side"
+            font.bold: true
+            font.pixelSize: 12
+            Layout.alignment: Qt.AlignHCenter
+        }
 
         GridLayout {
             columns: 2
@@ -25,10 +30,10 @@ Frame {
 
             Repeater {
                 model: [
-                    { id: "def", label: "Defence"      },
-                    { id: "pro", label: "Prosecution"  },
-                    { id: "wit", label: "Witness"      },
-                    { id: "jud", label: "Judge"        }
+                    { id: "def", label: "Defence"     },
+                    { id: "pro", label: "Prosecution" },
+                    { id: "wit", label: "Witness"     },
+                    { id: "jud", label: "Judge"       }
                 ]
 
                 Button {

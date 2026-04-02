@@ -1,4 +1,6 @@
-qt_standard_project_setup(REQUIRES 6.8)
+qt_standard_project_setup(REQUIRES 6.11)
+
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
 
 qt_add_executable(aoqt main.cpp)
 
@@ -8,11 +10,35 @@ qt_add_qml_module(aoqt
     URI "AO"
     VERSION 1.0
     QML_FILES
+        # Entry point
         qml/Main.qml
-        qml/ServerListScreen.qml
-        qml/CharSelectScreen.qml
-        qml/CourtroomScreen.qml
-        qml/DummyScreen.qml
+
+        # Tier 1 — stylable, property-driven components (no controller access)
+        qml/components/HealthBarDisplay.qml
+        qml/components/TimerDisplay.qml
+        qml/components/InterjectionOverlay.qml
+        qml/components/UndockablePanel.qml
+
+        # Tier 2 — data-aware panels (receive controller via required property)
+        qml/panels/GameViewport.qml
+        qml/panels/HealthPanel.qml
+        qml/panels/OOCChatPanel.qml
+        qml/panels/ICInputPanel.qml
+        qml/panels/ICLogPanel.qml
+        qml/panels/MusicAreaPanel.qml
+        qml/panels/PlayerListPanel.qml
+        qml/panels/EvidencePanel.qml
+        qml/panels/EmoteSelectorPanel.qml
+        qml/panels/MessageOptionsPanel.qml
+        qml/panels/SideSelectPanel.qml
+        qml/panels/DisconnectModal.qml
+        qml/panels/DebugOverlay.qml
+
+        # Tier 3 — full interactive screens (own controller ref, wire it to panels)
+        qml/screens/CourtroomScreen.qml
+        qml/screens/ServerListScreen.qml
+        qml/screens/CharSelectScreen.qml
+        qml/screens/DummyScreen.qml
     SOURCES
         render/SceneTextureItem.h
         render/SceneTextureItem.cpp
@@ -45,6 +71,8 @@ target_sources(aoqt PRIVATE
 
     ui/CharIconProvider.h
     ui/CharIconProvider.cpp
+    ui/EmoteIconProvider.h
+    ui/EmoteIconProvider.cpp
 
     ui/controllers/IQtScreenController.h
     ui/controllers/ServerListController.h
@@ -68,6 +96,8 @@ target_sources(aoqt PRIVATE
     ui/models/MusicAreaModel.cpp
     ui/models/PlayerListModel.h
     ui/models/PlayerListModel.cpp
+    ui/models/EmoteModel.h
+    ui/models/EmoteModel.cpp
 )
 
 target_link_libraries(aoqt PRIVATE

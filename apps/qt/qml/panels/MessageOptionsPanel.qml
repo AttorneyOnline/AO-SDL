@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * IC message options panel: pre/post emote, shout, effect, flip, no-interrupt.
+ * IC message options panel: flip, no-interrupt, additive, shout, effect.
  */
 Frame {
     id: root
@@ -15,9 +15,9 @@ Frame {
 
         Label { text: "Message Options"; font.bold: true; font.pixelSize: 12 }
 
-        CheckBox { id: flipCheck;         text: "Flip character" }
-        CheckBox { id: noInterruptCheck;  text: "No interrupt"   }
-        CheckBox { id: additiveChatCheck; text: "Additive chat"  }
+        CheckBox { text: "Flip character" }
+        CheckBox { text: "No interrupt"   }
+        CheckBox { text: "Additive chat"  }
 
         RowLayout {
             spacing: 4

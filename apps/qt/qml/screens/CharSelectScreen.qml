@@ -3,16 +3,19 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * Character selection screen.  Shows the character roster in a grid with
- * taken characters greyed out.  Delegates to app.charSelectController.
+ * Character selection screen.
+ * Shows the character roster in a grid with taken characters greyed out.
+ * Delegates to controller (CharSelectController*) for model and actions.
  */
 Page {
     id: root
 
+    property var controller: app.charSelectController
+
     header: RowLayout {
         width: parent.width
-        Label { text: "Select your character"; font.bold: true; padding: 8; Layout.fillWidth: true }
-        ToolButton { text: "✕ Disconnect"; onClicked: app.charSelectController.disconnect() }
+        Label   { text: "Select your character"; font.bold: true; padding: 8; Layout.fillWidth: true }
+        ToolButton { text: "✕ Disconnect"; onClicked: root.controller.disconnect() }
     }
 
     GridView {
@@ -23,11 +26,10 @@ Page {
         cellHeight: 112
         clip: true
         cacheBuffer: 2000
-        model: app.charSelectController ? app.charSelectController.model : null
+        model: root.controller ? root.controller.model : null
         reuseItems: true
 
         delegate: Item {
-            id: cell
             width:  grid.cellWidth  - 4
             height: grid.cellHeight - 4
             opacity: model.taken ? 0.4 : 1.0
@@ -71,7 +73,7 @@ Page {
 
             MouseArea {
                 anchors.fill: parent
-                onClicked: app.charSelectController.selectCharacter(index)
+                onClicked: root.controller.selectCharacter(index)
             }
         }
     }

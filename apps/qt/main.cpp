@@ -28,6 +28,7 @@
 #include "ui/controllers/DummyController.h"
 #include "ui/controllers/ServerListController.h"
 #include "ui/CharIconProvider.h"
+#include "ui/EmoteIconProvider.h"
 
 #include "ao/ao_plugin.h"
 #include "ao/ui/screens/ServerListScreen.h"
@@ -91,6 +92,9 @@ int main(int argc, char* argv[]) {
     engine.addImageProvider(
         QStringLiteral("charicon"),
         new CharIconProvider(MediaManager::instance().assets()));
+    engine.addImageProvider(
+        QStringLiteral("emoteicon"),
+        new EmoteIconProvider(MediaManager::instance().assets()));
     Log::debug("[main] QML engine created");
 
     // --- Network + HTTP -------------------------------------------------------

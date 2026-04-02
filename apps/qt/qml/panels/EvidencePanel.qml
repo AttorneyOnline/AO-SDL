@@ -3,10 +3,12 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * Evidence list panel.  Model: courtroomController.evidenceModel
+ * Evidence list panel.
+ * Model: controller.evidenceModel
  */
 Frame {
     id: root
+    required property var controller
     padding: 4
 
     ColumnLayout {
@@ -19,13 +21,13 @@ Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: courtroomController ? courtroomController.evidenceModel : null
+            model: root.controller ? root.controller.evidenceModel : null
 
             delegate: ItemDelegate {
                 width: ListView.view.width
                 contentItem: ColumnLayout {
                     spacing: 1
-                    Label { text: model.name;        font.bold: true;  font.pixelSize: 11 }
+                    Label { text: model.name;        font.bold: true; font.pixelSize: 11 }
                     Label { text: model.description; wrapMode: Text.Wrap; font.pixelSize: 10; opacity: 0.8 }
                 }
             }

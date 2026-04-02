@@ -4,10 +4,11 @@ import QtQuick.Layouts
 
 /**
  * OOC chat panel: scrolling log + text input.
- * Model: app.courtroomController.chatModel
+ * Model: controller.chatModel
  */
 Frame {
     id: root
+    required property var controller
     padding: 4
 
     ColumnLayout {
@@ -19,7 +20,7 @@ Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: app.courtroomController ? app.courtroomController.chatModel : null
+            model: root.controller ? root.controller.chatModel : null
             verticalLayoutDirection: ListView.BottomToTop
 
             delegate: Label {
@@ -33,20 +34,12 @@ Frame {
             onCountChanged: positionViewAtEnd()
         }
 
-        RowLayout {
+        TextField {
+            id: chatInput
             Layout.fillWidth: true
-            spacing: 4
-
-            TextField {
-                id: chatInput
-                Layout.fillWidth: true
-                placeholderText: "OOC chat…"
-                font.pixelSize: 11
-                onAccepted: {
-                    // OutgoingChatEvent is published via the engine; placeholder.
-                    chatInput.clear();
-                }
-            }
+            placeholderText: "OOC chat…"
+            font.pixelSize: 11
+            onAccepted: chatInput.clear()
         }
     }
 }
