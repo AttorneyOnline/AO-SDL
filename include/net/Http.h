@@ -684,13 +684,19 @@ class Server {
     Server& Delete(const std::string& pattern, HandlerWithContentReader handler);
     Server& Options(const std::string& pattern, Handler handler);
 
+    /// Result returned by an SSE handler to accept or reject a connection.
+    struct SSEAcceptResult {
+        bool accepted = false;     ///< true to open the SSE stream
+        std::string session_token; ///< Optional token stored on the connection for TTL refresh
+    };
+
     /// Register an SSE (Server-Sent Events) endpoint.
     /// The handler is called once when a client connects. It receives the
     /// Request (for auth/params) and a Response (for setting status/headers).
-    /// Return true to accept the SSE stream, false to reject.
+    /// Return an SSEAcceptResult — set accepted=true to open the stream.
     /// Accepted connections are held open and receive SSEEvents published
     /// to EventManager.
-    using SSEHandler = std::function<bool(const Request& req, Response& res)>;
+    using SSEHandler = std::function<SSEAcceptResult(const Request& req, Response& res)>;
     Server& SSE(const std::string& pattern, SSEHandler handler);
 
     /// Push an SSE event to all matching connections. Called by the poll loop;

@@ -108,7 +108,7 @@ struct Server::ServerState {
     std::unordered_map<int, SSEConnection> sse_by_fd; // fd → SSEConnection for O(1) lookup
 
     // Event ID sequencing for SSE reconnection support
-    uint64_t next_event_id = 1;
+    uint64_t next_event_id = 1; // guarded by sse_mutex
 
     // Ring buffer of recent SSE events for Last-Event-ID replay
     struct BufferedSSEEvent {
@@ -443,8 +443,11 @@ static void worker_loop(Server::ServerState& state, std::stop_token st) {
 }
 
 /// Send a raw frame string to an SSE socket. Returns false if the send fails.
+/// Switches to blocking mode with a 5-second send timeout so that a stalled
+/// client cannot block the poll loop indefinitely.
 static bool send_sse_frame(platform::Socket& socket, const std::string& frame) {
     socket.set_non_blocking(false);
+    socket.set_send_timeout(5000);
     size_t total = 0;
     bool ok = true;
     while (total < frame.size()) {
@@ -455,6 +458,7 @@ static bool send_sse_frame(platform::Socket& socket, const std::string& frame) {
         }
         total += static_cast<size_t>(n);
     }
+    socket.set_send_timeout(0);
     socket.set_non_blocking(true);
     return ok;
 }
@@ -688,7 +692,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                             if (pattern == req.path || matcher.match(req)) {
                                 Response res;
                                 res.status = 200;
-                                if (sse_handler(req, res)) {
+                                auto result = sse_handler(req, res);
+                                if (result.accepted) {
                                     // Accepted — send SSE headers and move to SSE connections
                                     std::string headers = "HTTP/1.1 200 OK\r\n"
                                                           "Content-Type: text/event-stream\r\n"
@@ -708,14 +713,11 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                     if (area_it != req.params.end())
                                         area = area_it->second;
 
-                                    // Extract session token from handler (passed via response header)
-                                    std::string session_token = res.get_header_value("X-SSE-Token");
-
                                     ServerState::SSEConnection sse_conn;
                                     sse_conn.id = conn->id;
                                     sse_conn.socket = std::move(conn->socket);
                                     sse_conn.area = area;
-                                    sse_conn.session_token = session_token;
+                                    sse_conn.session_token = std::move(result.session_token);
 
                                     // Replay buffered events if client sent Last-Event-ID
                                     uint64_t last_id = 0;
@@ -725,28 +727,36 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                             last_id = std::stoull(leid);
                                         }
                                         catch (...) {
+                                            Log::log_print(DEBUG, "SSE: ignoring malformed Last-Event-ID: %s",
+                                                           leid.c_str());
                                         }
                                     }
 
-                                    // Keep in poller for disconnect detection
+                                    // Copy replay frames under lock, then send outside it.
+                                    // The socket isn't in sse_by_fd yet, so no concurrent access.
+                                    std::vector<std::string> replay_frames;
                                     int sse_fd = sse_conn.socket.fd();
                                     {
                                         std::lock_guard sse_lock(state.sse_mutex);
-
-                                        // Replay missed events before adding to live set
                                         if (last_id > 0) {
                                             for (auto& buf : state.sse_event_buffer) {
                                                 if (buf.id <= last_id)
                                                     continue;
                                                 if (!buf.area.empty() && !area.empty() && buf.area != area)
                                                     continue;
-                                                std::string frame = "id: " + std::to_string(buf.id) +
-                                                                    "\nevent: " + buf.event + "\ndata: " + buf.data +
-                                                                    "\n\n";
-                                                send_sse_frame(sse_conn.socket, frame);
+                                                replay_frames.push_back("id: " + std::to_string(buf.id) + "\nevent: " +
+                                                                        buf.event + "\ndata: " + buf.data + "\n\n");
                                             }
                                         }
+                                    }
 
+                                    // Send replay frames without holding the lock
+                                    for (auto& frame : replay_frames)
+                                        send_sse_frame(sse_conn.socket, frame);
+
+                                    // Now add to live set
+                                    {
+                                        std::lock_guard sse_lock(state.sse_mutex);
                                         state.sse_by_fd.emplace(sse_fd, std::move(sse_conn));
                                     }
                                     // Remove from normal connections (fd_to_conn already points here)

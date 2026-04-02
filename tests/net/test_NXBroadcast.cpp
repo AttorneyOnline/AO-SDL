@@ -4,13 +4,13 @@
 #include "game/GameAction.h"
 #include "game/GameRoom.h"
 #include "net/SSEEvent.h"
+#include "net/nx/NXServer.h"
 
 #include <json.hpp>
 
 // ===========================================================================
-// Test fixture — creates a GameRoom with NX broadcast callbacks wired
-// via the same path as NXServer (registers broadcast callbacks that
-// serialize events to JSON and publish SSEEvents).
+// Test fixture — creates a GameRoom with an actual NXServer so that
+// broadcast→SSE serialization uses the real code path.
 // ===========================================================================
 
 class NXBroadcastTest : public ::testing::Test {
@@ -27,60 +27,8 @@ class NXBroadcastTest : public ::testing::Test {
         room_.build_area_index();
         room_.build_char_id_index();
 
-        // Register broadcast callbacks that mirror NXServer's implementation
-        room_.add_ic_broadcast([this](const std::string& area, const ICEvent& evt) {
-            auto& a = evt.action;
-            nlohmann::json j;
-            j["character"] = a.character;
-            j["message"] = a.message;
-            j["showname"] = a.showname;
-            j["side"] = a.side;
-            j["char_id"] = a.char_id;
-            SSEEvent sse;
-            sse.event = "ic_message";
-            sse.data = j.dump();
-            sse.area = area;
-            EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
-        });
-
-        room_.add_ooc_broadcast([this](const std::string& area, const OOCEvent& evt) {
-            SSEEvent sse;
-            sse.event = "ooc_message";
-            sse.data = nlohmann::json({{"name", evt.action.name}, {"message", evt.action.message}}).dump();
-            sse.area = area;
-            EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
-        });
-
-        room_.add_char_select_broadcast([this](const CharSelectEvent& evt) {
-            SSEEvent sse;
-            sse.event = "char_taken";
-            sse.data = nlohmann::json({{"client_id", evt.client_id},
-                                       {"character_id", evt.character_id},
-                                       {"character_name", evt.character_name}})
-                           .dump();
-            sse.area = ""; // global
-            EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
-        });
-
-        room_.add_chars_taken_broadcast([this](const std::vector<int>& taken) {
-            SSEEvent sse;
-            sse.event = "char_taken";
-            sse.data = nlohmann::json({{"taken", taken}}).dump();
-            sse.area = ""; // global
-            EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
-        });
-
-        room_.add_music_broadcast([this](const std::string& area, const MusicEvent& evt) {
-            SSEEvent sse;
-            sse.event = "music_change";
-            sse.data = nlohmann::json({{"track", evt.action.track},
-                                       {"showname", evt.action.showname},
-                                       {"channel", evt.action.channel},
-                                       {"looping", evt.action.looping}})
-                           .dump();
-            sse.area = area;
-            EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
-        });
+        // Construct NXServer — this registers all broadcast callbacks on room_
+        nx_ = std::make_unique<NXServer>(room_);
 
         // Create a session for the sender
         auto& session = room_.create_session(1, "aonx");
@@ -95,6 +43,7 @@ class NXBroadcastTest : public ::testing::Test {
     }
 
     GameRoom room_;
+    std::unique_ptr<NXServer> nx_;
 };
 
 // ===========================================================================

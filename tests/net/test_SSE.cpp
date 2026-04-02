@@ -95,7 +95,8 @@ class SSETest : public ::testing::Test {
 // ===========================================================================
 
 TEST_F(SSETest, SSEEndpointReturnsEventStream) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = platform::tcp_connect("127.0.0.1", port());
@@ -120,7 +121,7 @@ TEST_F(SSETest, SSEHandlerCanReject) {
     server_.SSE("/events", [](const http::Request&, http::Response& res) {
         res.status = 401;
         res.set_content("Unauthorized", "text/plain");
-        return false;
+        return http::Server::SSEAcceptResult{false, {}};
     });
     start();
 
@@ -141,7 +142,8 @@ TEST_F(SSETest, SSEHandlerCanReject) {
 }
 
 TEST_F(SSETest, ReceivesPublishedEvent) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse();
@@ -159,7 +161,8 @@ TEST_F(SSETest, ReceivesPublishedEvent) {
 }
 
 TEST_F(SSETest, MultipleEventsDeliveredInOrder) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse();
@@ -182,7 +185,8 @@ TEST_F(SSETest, MultipleEventsDeliveredInOrder) {
 }
 
 TEST_F(SSETest, AreaFilterBroadcastReachesAll) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse("/events"); // no area filter
@@ -199,7 +203,8 @@ TEST_F(SSETest, AreaFilterBroadcastReachesAll) {
 }
 
 TEST_F(SSETest, AreaFilterMatchesSubscribedArea) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse("/events?area=courtroom1");
@@ -215,7 +220,8 @@ TEST_F(SSETest, AreaFilterMatchesSubscribedArea) {
 }
 
 TEST_F(SSETest, AreaFilterBlocksMismatchedArea) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse("/events?area=courtroom2");
@@ -232,7 +238,8 @@ TEST_F(SSETest, AreaFilterBlocksMismatchedArea) {
 }
 
 TEST_F(SSETest, GlobalEventReachesAreaSubscriber) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse("/events?area=courtroom1");
@@ -248,7 +255,8 @@ TEST_F(SSETest, GlobalEventReachesAreaSubscriber) {
 }
 
 TEST_F(SSETest, MultipleClientsReceiveSameEvent) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock1 = connect_sse();
@@ -266,7 +274,8 @@ TEST_F(SSETest, MultipleClientsReceiveSameEvent) {
 }
 
 TEST_F(SSETest, ClientDisconnectIsHandledGracefully) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     {
@@ -291,7 +300,8 @@ TEST_F(SSETest, ClientDisconnectIsHandledGracefully) {
 }
 
 TEST_F(SSETest, SSEAndNormalEndpointsCoexist) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     server_.Get("/api/test",
                 [](const http::Request&, http::Response& res) { res.set_content("normal", "text/plain"); });
     start();
@@ -314,7 +324,8 @@ TEST_F(SSETest, SSEAndNormalEndpointsCoexist) {
 }
 
 TEST_F(SSETest, ZeroLatencyDelivery) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse();
@@ -340,7 +351,8 @@ TEST_F(SSETest, ZeroLatencyDelivery) {
 // ===========================================================================
 
 TEST_F(SSETest, EventIdInFrame) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse();
@@ -358,7 +370,8 @@ TEST_F(SSETest, EventIdInFrame) {
 }
 
 TEST_F(SSETest, EventIdsAreMonotonicallyIncreasing) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     auto sock = connect_sse();
@@ -394,7 +407,8 @@ TEST_F(SSETest, EventIdsAreMonotonicallyIncreasing) {
 }
 
 TEST_F(SSETest, ReconnectWithLastEventId) {
-    server_.SSE("/events", [](const http::Request&, http::Response&) { return true; });
+    server_.SSE("/events",
+                [](const http::Request&, http::Response&) { return http::Server::SSEAcceptResult{true, {}}; });
     start();
 
     // Connect, receive 3 events, note the ID of the first
@@ -459,10 +473,9 @@ TEST_F(SSETest, ReconnectWithLastEventId) {
 }
 
 TEST_F(SSETest, SessionTokenStoredOnConnection) {
-    // Verify that setting X-SSE-Token in the handler response stores the token
-    server_.SSE("/events", [](const http::Request&, http::Response& res) {
-        res.set_header("X-SSE-Token", "test-session-token");
-        return true;
+    // Verify that returning a session token in SSEAcceptResult stores it on the connection
+    server_.SSE("/events", [](const http::Request&, http::Response&) {
+        return http::Server::SSEAcceptResult{true, "test-session-token"};
     });
 
     bool touch_called = false;

@@ -98,35 +98,34 @@ int main(int /*argc*/, char* argv[]) {
     rest_router.bind(http);
 
     // --- SSE endpoint (AONX Phase 5) ---
-    http.SSE("/aonx/v1/events", [&rest_router, &room](const http::Request& req, http::Response& res) -> bool {
-        // Extract bearer token from Authorization header
-        auto auth = req.get_header_value("Authorization");
-        if (auth.size() <= 7 || auth.substr(0, 7) != "Bearer ") {
-            res.status = 401;
-            res.set_content(R"({"error":"Missing or invalid Authorization header"})", "application/json");
-            return false;
-        }
-        auto token = auth.substr(7);
+    http.SSE("/aonx/v1/events",
+             [&rest_router, &room](const http::Request& req, http::Response& res) -> http::Server::SSEAcceptResult {
+                 // Extract bearer token from Authorization header
+                 auto auth = req.get_header_value("Authorization");
+                 if (auth.size() <= 7 || auth.substr(0, 7) != "Bearer ") {
+                     res.status = 401;
+                     res.set_content(R"({"error":"Missing or invalid Authorization header"})", "application/json");
+                     return {false, {}};
+                 }
+                 auto token = auth.substr(7);
 
-        // Validate session under dispatch lock
-        bool accepted = false;
-        rest_router.with_lock([&] {
-            auto* session = room.find_session_by_token(token);
-            if (session) {
-                session->touch();
-                accepted = true;
-            }
-        });
-        if (!accepted) {
-            res.status = 401;
-            res.set_content(R"({"error":"Invalid or expired session"})", "application/json");
-            return false;
-        }
+                 // Validate session under dispatch lock
+                 bool accepted = false;
+                 rest_router.with_lock([&] {
+                     auto* session = room.find_session_by_token(token);
+                     if (session) {
+                         session->touch();
+                         accepted = true;
+                     }
+                 });
+                 if (!accepted) {
+                     res.status = 401;
+                     res.set_content(R"({"error":"Invalid or expired session"})", "application/json");
+                     return {false, {}};
+                 }
 
-        // Pass token to SSEConnection via response header (internal convention)
-        res.set_header("X-SSE-Token", token);
-        return true;
-    });
+                 return {true, token};
+             });
 
     // Wire keepalive session touch — refreshes TTL for SSE-connected sessions
     http.set_sse_session_touch([&rest_router, &room](const std::string& token) {
