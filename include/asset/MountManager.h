@@ -121,6 +121,10 @@ class MountManager {
     void drop_http_below(int priority);
 
     /// Get HTTP mount stats (pending downloads, cached files, failed files).
+    /// Aggregate HTTP cache generation across all HTTP mounts.
+    /// Increments whenever any HTTP mount inserts new data.
+    uint32_t http_cache_generation() const;
+
     struct HttpStats {
         int pending = 0;
         int cached = 0;

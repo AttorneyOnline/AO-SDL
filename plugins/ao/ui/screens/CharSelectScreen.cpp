@@ -9,6 +9,7 @@
 #include "event/EventManager.h"
 #include "event/UIEvent.h"
 
+#include <cstdint>
 #include <format>
 
 void CharSelectScreen::enter(ScreenController& ctrl) {
@@ -26,6 +27,7 @@ void CharSelectScreen::handle_events() {
     auto& char_list_channel = EventManager::instance().get_channel<CharacterListEvent>();
     while (auto optev = char_list_channel.get_event()) {
         chars.clear();
+        icon_probe_failed_.clear();
         for (const auto& folder : optev->get_characters()) {
             chars.push_back({folder, std::nullopt, nullptr, false});
         }
@@ -97,17 +99,25 @@ void CharSelectScreen::retry_icons() {
         }
     }
 
-    // Decode + GPU upload, batched to avoid GL driver stalls.
-    // Scan from the start each time since icons arrive out of order.
+    // Decode + GPU upload — only scan when new HTTP data has arrived.
+    uint32_t gen = MediaManager::instance().mounts_ref().http_cache_generation();
+    if (gen != last_http_gen_) {
+        icon_probe_failed_.clear();
+        last_http_gen_ = gen;
+    }
+
     int uploaded = 0;
-    for (auto& entry : chars) {
-        if (entry.icon.has_value())
+    for (int i = 0; i < (int)chars.size(); ++i) {
+        auto& entry = chars[i];
+        if (entry.icon.has_value() || icon_probe_failed_.count(i))
             continue;
 
         std::string icon_path = std::format("characters/{}/char_icon", entry.folder);
         auto asset = lib.image(icon_path);
-        if (!asset || asset->frame_count() == 0)
+        if (!asset || asset->frame_count() == 0) {
+            icon_probe_failed_.insert(i);
             continue;
+        }
 
         const ImageFrame& frame = asset->frame(0);
         entry.icon.emplace(frame.width, frame.height, asset->frame_pixels(0), 4);
