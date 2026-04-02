@@ -97,6 +97,45 @@ int main(int /*argc*/, char* argv[]) {
     EndpointFactory::instance().populate(rest_router);
     rest_router.bind(http);
 
+    // --- SSE endpoint (AONX Phase 5) ---
+    http.SSE("/aonx/v1/events",
+             [&rest_router, &room](const http::Request& req, http::Response& res) -> http::Server::SSEAcceptResult {
+                 // Extract bearer token from Authorization header
+                 auto auth = req.get_header_value("Authorization");
+                 if (auth.size() <= 7 || auth.substr(0, 7) != "Bearer ") {
+                     res.status = 401;
+                     res.set_content(R"({"error":"Missing or invalid Authorization header"})", "application/json");
+                     return {false, {}};
+                 }
+                 auto token = auth.substr(7);
+
+                 // Validate session under dispatch lock
+                 bool accepted = false;
+                 rest_router.with_lock([&] {
+                     auto* session = room.find_session_by_token(token);
+                     if (session) {
+                         session->touch();
+                         accepted = true;
+                     }
+                 });
+                 if (!accepted) {
+                     res.status = 401;
+                     res.set_content(R"({"error":"Invalid or expired session"})", "application/json");
+                     return {false, {}};
+                 }
+
+                 return {true, token};
+             });
+
+    // Wire keepalive session touch — refreshes TTL for SSE-connected sessions
+    http.set_sse_session_touch([&rest_router, &room](const std::string& token) {
+        rest_router.with_lock([&] {
+            auto* session = room.find_session_by_token(token);
+            if (session)
+                session->touch();
+        });
+    });
+
     if (!http.bind_to_port(cfg.bind_address(), cfg.http_port())) {
         Log::log_print(ERR, "Failed to bind HTTP on %s:%d", cfg.bind_address().c_str(), cfg.http_port());
         return 1;

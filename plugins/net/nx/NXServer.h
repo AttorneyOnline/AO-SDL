@@ -40,11 +40,12 @@ class NXServer {
 
   private:
     // Broadcast callbacks registered with GameRoom.
-    // These will push events to SSE streams once implemented (Phase 5).
+    // Serialize events to JSON and publish as SSEEvents for NX clients.
     void broadcast_ic(const std::string& area, const ICEvent& evt);
     void broadcast_ooc(const std::string& area, const OOCEvent& evt);
     void broadcast_char_select(const CharSelectEvent& evt);
     void broadcast_chars_taken(const std::vector<int>& taken);
+    void broadcast_music(const std::string& area, const MusicEvent& evt);
 
     GameRoom& room_;
     std::atomic<uint64_t> next_rest_id_ =

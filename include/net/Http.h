@@ -684,18 +684,30 @@ class Server {
     Server& Delete(const std::string& pattern, HandlerWithContentReader handler);
     Server& Options(const std::string& pattern, Handler handler);
 
+    /// Result returned by an SSE handler to accept or reject a connection.
+    struct SSEAcceptResult {
+        bool accepted = false;     ///< true to open the SSE stream
+        std::string session_token; ///< Optional token stored on the connection for TTL refresh
+    };
+
     /// Register an SSE (Server-Sent Events) endpoint.
     /// The handler is called once when a client connects. It receives the
     /// Request (for auth/params) and a Response (for setting status/headers).
-    /// Return true to accept the SSE stream, false to reject.
+    /// Return an SSEAcceptResult — set accepted=true to open the stream.
     /// Accepted connections are held open and receive SSEEvents published
     /// to EventManager.
-    using SSEHandler = std::function<bool(const Request& req, Response& res)>;
+    using SSEHandler = std::function<SSEAcceptResult(const Request& req, Response& res)>;
     Server& SSE(const std::string& pattern, SSEHandler handler);
 
     /// Push an SSE event to all matching connections. Called by the poll loop;
     /// not intended for direct use — publish SSEEvent to EventManager instead.
     void push_sse(const std::string& event, const std::string& data, const std::string& area);
+
+    /// Set a callback invoked during SSE keepalive to refresh session TTL.
+    /// The callback receives the session token associated with each SSE connection.
+    /// Called from the poll thread — the callback must handle its own locking.
+    using SSESessionTouchFunc = std::function<void(const std::string& token)>;
+    void set_sse_session_touch(SSESessionTouchFunc func);
 
     bool set_base_dir(const std::string& dir, const std::string& mount_point = std::string());
     bool set_mount_point(const std::string& mount_point, const std::string& dir, Headers headers = Headers());
