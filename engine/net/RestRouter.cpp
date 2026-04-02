@@ -55,20 +55,20 @@ void RestRouter::bind(http::Server& server) {
         server.set_default_headers({
             {"Access-Control-Allow-Origin", "*"},
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+            {"Access-Control-Allow-Headers", "*"},
         });
     }
     else if (cors_origins_.size() == 1) {
         server.set_default_headers({
             {"Access-Control-Allow-Origin", cors_origins_[0]},
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+            {"Access-Control-Allow-Headers", "*"},
         });
     }
     else if (!cors_origins_.empty()) {
         server.set_default_headers({
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+            {"Access-Control-Allow-Headers", "*"},
             {"Vary", "Origin"},
         });
     }
