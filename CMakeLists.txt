@@ -566,6 +566,9 @@ add_library(nx_net STATIC
     plugins/net/nx/endpoints/AreaListEndpoint.cpp
     plugins/net/nx/endpoints/AreaGetEndpoint.cpp
     plugins/net/nx/endpoints/AreaPlayersEndpoint.cpp
+    plugins/net/nx/endpoints/AreaJoinEndpoint.cpp
+    plugins/net/nx/endpoints/AreaIcEndpoint.cpp
+    plugins/net/nx/endpoints/AreaOocEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net

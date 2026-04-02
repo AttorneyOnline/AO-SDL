@@ -25,6 +25,9 @@ struct ServerSession {
     /// True if the session has completed the handshake and is fully joined.
     bool joined = false;
 
+    /// True if the session has moderator privileges (e.g. all-areas broadcast).
+    bool moderator = false;
+
     /// Protocol backend that owns this session ("ao2" or "aonx").
     std::string protocol;
 

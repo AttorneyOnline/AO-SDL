@@ -64,6 +64,16 @@ void RestRouter::bind(http::Server& server) {
             res.status = 204;
         });
     }
+
+    // Catch-all preflight handler for unmatched routes. Without this,
+    // OPTIONS to a non-existent path returns 404, which browsers treat
+    // as a failed preflight and block the actual request.
+    if (!cors_origin_.empty()) {
+        server.Options(".*", [this](const http::Request&, http::Response& res) {
+            set_cors(res);
+            res.status = 204;
+        });
+    }
 }
 
 void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res) {

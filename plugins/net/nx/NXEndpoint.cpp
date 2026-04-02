@@ -16,6 +16,11 @@ void nx_ep_area_list();
 void nx_ep_area_get();
 void nx_ep_area_players();
 
+// Phase 4: Chat & Area Join endpoints (#91)
+void nx_ep_area_join();
+void nx_ep_area_ic();
+void nx_ep_area_ooc();
+
 // Force all endpoint TUs to link. Same pattern as ao_register_packet_types().
 void nx_register_endpoints() {
     nx_ep_server_info();
@@ -31,4 +36,8 @@ void nx_register_endpoints() {
     nx_ep_area_list();
     nx_ep_area_get();
     nx_ep_area_players();
+
+    nx_ep_area_join();
+    nx_ep_area_ic();
+    nx_ep_area_ooc();
 }

@@ -107,6 +107,18 @@ void GameRoom::handle_ic(const ICAction& action) {
         cb(evt.area, evt);
 }
 
+void GameRoom::handle_ic(const ICAction& action, const std::string& target_area) {
+    auto* session = get_session(action.sender_id);
+    if (!session || !session->joined)
+        return;
+
+    Log::log_print(INFO, "GameRoom: IC from %s -> %s", session->display_name.c_str(), target_area.c_str());
+
+    ICEvent evt{target_area, action};
+    for (auto& cb : ic_broadcasts_)
+        cb(evt.area, evt);
+}
+
 void GameRoom::handle_ooc(const OOCAction& action) {
     auto* session = get_session(action.sender_id);
     if (!session || !session->joined)
@@ -115,6 +127,18 @@ void GameRoom::handle_ooc(const OOCAction& action) {
     Log::log_print(INFO, "GameRoom: OOC from %s in %s", action.name.c_str(), session->area.c_str());
 
     OOCEvent evt{session->area, action};
+    for (auto& cb : ooc_broadcasts_)
+        cb(evt.area, evt);
+}
+
+void GameRoom::handle_ooc(const OOCAction& action, const std::string& target_area) {
+    auto* session = get_session(action.sender_id);
+    if (!session || !session->joined)
+        return;
+
+    Log::log_print(INFO, "GameRoom: OOC from %s -> %s", action.name.c_str(), target_area.c_str());
+
+    OOCEvent evt{target_area, action};
     for (auto& cb : ooc_broadcasts_)
         cb(evt.area, evt);
 }

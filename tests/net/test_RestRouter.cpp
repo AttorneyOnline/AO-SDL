@@ -11,6 +11,7 @@
 
 #include "net/Http.h"
 
+#include <set>
 #include <thread>
 
 // -- Test helpers ------------------------------------------------------------
@@ -908,4 +909,355 @@ TEST_F(NXEndpointTest, AreaPlayersEmpty) {
 
     auto body = nlohmann::json::parse(res->body);
     EXPECT_EQ(body["players"].size(), 0);
+}
+
+// -- Phase 4: Chat & Area Join endpoint tests (#91) --------------------------
+
+TEST_F(NXEndpointTest, AreaJoinSuccess) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    ASSERT_NE(cr1, nullptr);
+
+    auto res = cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_TRUE(nlohmann::json::parse(res->body)["accepted"].get<bool>());
+
+    // Verify session moved to the new area
+    auto* session = room_.find_session_by_token(token);
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(session->area, "Courtroom 1");
+}
+
+TEST_F(NXEndpointTest, AreaJoinLocked) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    ASSERT_NE(cr1, nullptr);
+    cr1->locked = true;
+
+    auto res = cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, AreaJoinNotFound) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/nonexistent/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+}
+
+TEST_F(NXEndpointTest, AreaJoinRejectsUnderscore) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/_/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, AreaJoinRejectsStar) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/*/join", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, AreaJoinRequiresAuth) {
+    auto cli = client();
+    auto* cr1 = room_.find_area_by_name("Courtroom 1");
+    ASSERT_NE(cr1, nullptr);
+
+    auto res = cli.Post("/aonx/v1/areas/" + cr1->id + "/join", "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, OocSendSuccess) {
+    // Capture broadcasts to verify dispatch.
+    std::vector<OOCEvent> captured;
+    room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/ooc", h, R"({"name":"TestUser","message":"Hello world"})",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_TRUE(nlohmann::json::parse(res->body)["accepted"].get<bool>());
+
+    // The NXServer broadcast stub fires first, then our capture callback.
+    ASSERT_FALSE(captured.empty());
+    EXPECT_EQ(captured.back().area, "Lobby");
+    EXPECT_EQ(captured.back().action.name, "TestUser");
+    EXPECT_EQ(captured.back().action.message, "Hello world");
+}
+
+TEST_F(NXEndpointTest, OocSendCurrentArea) {
+    std::vector<OOCEvent> captured;
+    room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    // Session defaults to Lobby; send to "_" (current area).
+    auto res = cli.Post("/aonx/v1/areas/_/ooc", h, R"({"name":"Player","message":"test"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    ASSERT_FALSE(captured.empty());
+    EXPECT_EQ(captured.back().area, "Lobby");
+}
+
+TEST_F(NXEndpointTest, OocSendAllAreas) {
+    std::vector<OOCEvent> captured;
+    room_.add_ooc_broadcast([&](const std::string&, const OOCEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    room_.find_session_by_token(token)->moderator = true;
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res =
+        cli.Post("/aonx/v1/areas/*/ooc", h, R"({"name":"Admin","message":"server message"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    // Should broadcast once per area (Lobby + Courtroom 1 = 2).
+    // NXServer also has a callback, so total = 2 areas * 2 callbacks = 4.
+    // We only count our captures.
+    EXPECT_EQ(captured.size(), 2u);
+    std::set<std::string> areas;
+    for (auto& evt : captured)
+        areas.insert(evt.area);
+    EXPECT_TRUE(areas.count("Lobby"));
+    EXPECT_TRUE(areas.count("Courtroom 1"));
+}
+
+TEST_F(NXEndpointTest, OocSendMissingBody) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/ooc", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, OocSendRequiresAuth) {
+    auto cli = client();
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res =
+        cli.Post("/aonx/v1/areas/" + lobby->id + "/ooc", R"({"name":"Anon","message":"hi"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, IcSendSuccess) {
+    std::vector<ICEvent> captured;
+    room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "Hold it!"}, {"showname", "Phoenix"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_TRUE(nlohmann::json::parse(res->body)["accepted"].get<bool>());
+
+    ASSERT_FALSE(captured.empty());
+    EXPECT_EQ(captured.back().area, "Lobby");
+    EXPECT_EQ(captured.back().action.message, "Hold it!");
+    EXPECT_EQ(captured.back().action.showname, "Phoenix");
+}
+
+TEST_F(NXEndpointTest, IcSendCurrentArea) {
+    std::vector<ICEvent> captured;
+    room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "Test"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/_/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    ASSERT_FALSE(captured.empty());
+    EXPECT_EQ(captured.back().area, "Lobby");
+}
+
+TEST_F(NXEndpointTest, IcSendAllAreas) {
+    std::vector<ICEvent> captured;
+    room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    room_.find_session_by_token(token)->moderator = true;
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "Objection!"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/*/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    EXPECT_EQ(captured.size(), 2u);
+}
+
+TEST_F(NXEndpointTest, IcSendMissingBody) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/ic", h, "", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+}
+
+TEST_F(NXEndpointTest, IcSendRequiresAuth) {
+    auto cli = client();
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/ic", R"({"text":[{"id":"t0","content":"hi","on":"start"}]})",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(NXEndpointTest, IcSendFlattensObjectAndAudio) {
+    std::vector<ICEvent> captured;
+    room_.add_ic_broadcast([&](const std::string&, const ICEvent& evt) { captured.push_back(evt); });
+
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto* lobby = room_.find_area_by_name("Lobby");
+    ASSERT_NE(lobby, nullptr);
+
+    nlohmann::json ic_body = {
+        {"text",
+         {{{"id", "t0"},
+           {"content", "Take that!"},
+           {"showname", "Edgeworth"},
+           {"additive", true},
+           {"immediate", true},
+           {"on", "start"}}}},
+        {"objects",
+         {{{"id", "def"},
+           {"z", 0},
+           {"visible", true},
+           {"initial_state", "pointing"},
+           {"transform", {{"scale_x", -1.0}}}}}},
+        {"audio", {{{"asset", "sfx-objection"}, {"delay_ms", 100}, {"on", "start"}}}},
+        {"effects", {{{"shader", "realization-flash"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/" + lobby->id + "/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    ASSERT_FALSE(captured.empty());
+    auto& action = captured.back().action;
+    EXPECT_EQ(action.message, "Take that!");
+    EXPECT_EQ(action.showname, "Edgeworth");
+    EXPECT_TRUE(action.additive);
+    EXPECT_TRUE(action.immediate);
+    EXPECT_EQ(action.side, "def");
+    EXPECT_EQ(action.emote, "pointing");
+    EXPECT_TRUE(action.flip);
+    EXPECT_EQ(action.sfx_name, "sfx-objection");
+    EXPECT_EQ(action.sfx_delay, 100);
+    EXPECT_TRUE(action.realization);
+}
+
+TEST_F(NXEndpointTest, IcSendAllAreasDeniedWithoutModerator) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "spam"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/*/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, OocSendAllAreasDeniedWithoutModerator) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/*/ooc", h, R"({"name":"Player","message":"spam"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+}
+
+TEST_F(NXEndpointTest, IcSendNotFoundArea) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    nlohmann::json ic_body = {
+        {"text", {{{"id", "t0"}, {"content", "hello"}, {"on", "start"}}}},
+    };
+
+    auto res = cli.Post("/aonx/v1/areas/nonexistent/ic", h, ic_body.dump(), "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+}
+
+TEST_F(NXEndpointTest, OocSendNotFoundArea) {
+    auto token = create_session();
+    auto cli = client();
+    http::Headers h = {{"Authorization", "Bearer " + token}};
+
+    auto res = cli.Post("/aonx/v1/areas/nonexistent/ooc", h, R"({"name":"Player","message":"hi"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
 }

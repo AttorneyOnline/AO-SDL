@@ -127,8 +127,14 @@ class GameRoom {
     /// Process an IC message. Validates, then broadcasts to area via all delegates.
     void handle_ic(const ICAction& action);
 
+    /// Process an IC message to a specific area (used by NX endpoints for explicit area targeting).
+    void handle_ic(const ICAction& action, const std::string& target_area);
+
     /// Process an OOC message. Broadcasts to area via all delegates.
     void handle_ooc(const OOCAction& action);
+
+    /// Process an OOC message to a specific area (used by NX endpoints for explicit area targeting).
+    void handle_ooc(const OOCAction& action, const std::string& target_area);
 
     /// Process a character selection. Updates char_taken, session, broadcasts.
     /// Returns true if the selection was accepted.
