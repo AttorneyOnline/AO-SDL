@@ -1,8 +1,12 @@
 #include "NXServer.h"
 
+#include "event/EventManager.h"
 #include "game/ClientId.h"
+#include "net/SSEEvent.h"
 #include "utils/Crypto.h"
 #include "utils/Log.h"
+
+#include <json.hpp>
 
 #include <cstdio>
 #include <random>
@@ -42,6 +46,7 @@ NXServer::NXServer(GameRoom& room) : room_(room) {
     room_.add_ooc_broadcast([this](const std::string& area, const OOCEvent& evt) { broadcast_ooc(area, evt); });
     room_.add_char_select_broadcast([this](const CharSelectEvent& evt) { broadcast_char_select(evt); });
     room_.add_chars_taken_broadcast([this](const std::vector<int>& taken) { broadcast_chars_taken(taken); });
+    room_.add_music_broadcast([this](const std::string& area, const MusicEvent& evt) { broadcast_music(area, evt); });
 }
 
 std::string NXServer::create_session(const std::string& hdid, const std::string& client_name,
@@ -65,23 +70,68 @@ void NXServer::destroy_session(uint64_t client_id) {
     Log::log_print(INFO, "NX: session destroyed for %s", format_client_id(client_id).c_str());
 }
 
-// -- Broadcast stubs (will push to SSE streams in Phase 5) -------------------
+// -- Broadcast → SSE event publishing -----------------------------------------
+
+static void publish_sse(const std::string& event_type, nlohmann::json payload, const std::string& area) {
+    SSEEvent sse;
+    sse.event = event_type;
+    sse.data = payload.dump();
+    sse.area = area;
+    EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
+}
 
 void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
-    // TODO: push to SSE streams for NX clients in this area
-    (void)area;
-    (void)evt;
+    auto& a = evt.action;
+    nlohmann::json j;
+    j["character"] = a.character;
+    j["message"] = a.message;
+    j["showname"] = a.showname;
+    j["emote"] = a.emote;
+    j["side"] = a.side;
+    j["pre_emote"] = a.pre_emote;
+    j["emote_mod"] = a.emote_mod;
+    j["char_id"] = a.char_id;
+    j["desk_mod"] = a.desk_mod;
+    j["flip"] = a.flip;
+    j["text_color"] = a.text_color;
+    j["objection_mod"] = a.objection_mod;
+    j["evidence_id"] = a.evidence_id;
+    j["realization"] = a.realization;
+    j["screenshake"] = a.screenshake;
+    j["additive"] = a.additive;
+    j["immediate"] = a.immediate;
+    if (!a.sfx_name.empty()) {
+        j["sfx_name"] = a.sfx_name;
+        j["sfx_delay"] = a.sfx_delay;
+        j["sfx_looping"] = a.sfx_looping;
+    }
+    if (!a.effects.empty())
+        j["effects"] = a.effects;
+    if (!a.blipname.empty())
+        j["blipname"] = a.blipname;
+    publish_sse("ic_message", std::move(j), area);
 }
 
 void NXServer::broadcast_ooc(const std::string& area, const OOCEvent& evt) {
-    (void)area;
-    (void)evt;
+    publish_sse("ooc_message", {{"name", evt.action.name}, {"message", evt.action.message}}, area);
 }
 
 void NXServer::broadcast_char_select(const CharSelectEvent& evt) {
-    (void)evt;
+    publish_sse(
+        "char_taken",
+        {{"client_id", evt.client_id}, {"character_id", evt.character_id}, {"character_name", evt.character_name}},
+        ""); // global broadcast
 }
 
 void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
-    (void)taken;
+    publish_sse("char_taken", {{"taken", taken}}, ""); // global broadcast
+}
+
+void NXServer::broadcast_music(const std::string& area, const MusicEvent& evt) {
+    publish_sse("music_change",
+                {{"track", evt.action.track},
+                 {"showname", evt.action.showname},
+                 {"channel", evt.action.channel},
+                 {"looping", evt.action.looping}},
+                area);
 }

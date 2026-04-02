@@ -697,6 +697,12 @@ class Server {
     /// not intended for direct use — publish SSEEvent to EventManager instead.
     void push_sse(const std::string& event, const std::string& data, const std::string& area);
 
+    /// Set a callback invoked during SSE keepalive to refresh session TTL.
+    /// The callback receives the session token associated with each SSE connection.
+    /// Called from the poll thread — the callback must handle its own locking.
+    using SSESessionTouchFunc = std::function<void(const std::string& token)>;
+    void set_sse_session_touch(SSESessionTouchFunc func);
+
     bool set_base_dir(const std::string& dir, const std::string& mount_point = std::string());
     bool set_mount_point(const std::string& mount_point, const std::string& dir, Headers headers = Headers());
     bool remove_mount_point(const std::string& mount_point);
