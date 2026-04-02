@@ -69,7 +69,9 @@ class Socket {
 
     /// Perform a client-side TLS handshake on this connected socket.
     /// @param hostname Used for SNI and certificate verification.
-    void ssl_connect(const std::string& hostname);
+    /// @param alpn_protos  Comma-separated ALPN protocols (e.g. "h2,http/1.1").
+    ///                     Empty string = no ALPN negotiation (default).
+    void ssl_connect(const std::string& hostname, const std::string& alpn_protos = "");
 
     /// Perform a server-side TLS handshake using the global server context
     /// initialised by ssl_init_server().
@@ -77,6 +79,10 @@ class Socket {
 
     /// True if TLS has been established on this socket.
     bool is_ssl() const;
+
+    /// Returns the ALPN protocol selected during TLS handshake (e.g. "h2").
+    /// Empty string if no ALPN was negotiated or TLS is not active.
+    std::string negotiated_protocol() const;
 
   private:
     struct Impl;

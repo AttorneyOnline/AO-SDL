@@ -266,3 +266,35 @@ TEST(PlatformSocket, SetSendTimeoutDoesNotCrash) {
     s.set_send_timeout(1000); // just verify it doesn't crash
     s.set_recv_timeout(1000);
 }
+
+// -- Non-blocking recv semantics ----------------------------------------------
+
+TEST(PlatformSocket, NonBlockingRecvReturnsNegativeNotZero) {
+    // Verify that recv on a non-blocking socket with no data returns -1
+    // (EAGAIN), not 0 (which means graceful close). This distinction is
+    // critical for TLS I/O loops that need to tell "no data yet" from
+    // "connection closed".
+    auto listener = tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+    listener.set_non_blocking(false);
+
+    std::thread server([&] {
+        std::string addr;
+        uint16_t rp;
+        auto conn = tcp_accept(listener, addr, rp);
+        // Hold connection open but send nothing
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    });
+
+    auto sock = tcp_connect("127.0.0.1", port);
+    ASSERT_TRUE(sock.valid());
+    sock.set_non_blocking(true);
+
+    char buf[64];
+    ssize_t n = sock.recv(buf, sizeof(buf));
+
+    // Non-blocking with no data: must return -1 (not 0)
+    EXPECT_EQ(n, -1) << "non-blocking recv with no data should return -1, not " << n;
+
+    server.join();
+}

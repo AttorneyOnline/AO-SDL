@@ -12,6 +12,7 @@
 
 #include <mutex>
 #include <stdexcept>
+#include <vector>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -57,6 +58,7 @@ static void ensure_openssl() {
 struct Socket::Impl {
     SOCKET winsock = INVALID_SOCKET;
     SSL* ssl = nullptr;
+    std::string negotiated_proto;
 
     int to_fd() const {
         return (winsock == INVALID_SOCKET) ? -1 : static_cast<int>(winsock);
@@ -183,7 +185,7 @@ void Socket::close() {
         impl_->close();
 }
 
-void Socket::ssl_connect(const std::string& hostname) {
+void Socket::ssl_connect(const std::string& hostname, const std::string& alpn_protos) {
     ensure_openssl();
     SSL* ssl = SSL_new(g_client_ctx);
     if (!ssl)
@@ -193,6 +195,23 @@ void Socket::ssl_connect(const std::string& hostname) {
     SSL_set_tlsext_host_name(ssl, hostname.c_str());
     SSL_set1_host(ssl, hostname.c_str());
 
+    // ALPN negotiation: build wire-format (length-prefixed strings)
+    if (!alpn_protos.empty()) {
+        std::vector<unsigned char> wire;
+        std::string remaining = alpn_protos;
+        while (!remaining.empty()) {
+            auto comma = remaining.find(',');
+            std::string proto = (comma != std::string::npos) ? remaining.substr(0, comma) : remaining;
+            remaining = (comma != std::string::npos) ? remaining.substr(comma + 1) : "";
+            if (!proto.empty() && proto.size() < 256) {
+                wire.push_back(static_cast<unsigned char>(proto.size()));
+                wire.insert(wire.end(), proto.begin(), proto.end());
+            }
+        }
+        if (!wire.empty())
+            SSL_set_alpn_protos(ssl, wire.data(), static_cast<unsigned int>(wire.size()));
+    }
+
     int ret = SSL_connect(ssl);
     if (ret != 1) {
         unsigned long err = ERR_get_error();
@@ -201,7 +220,22 @@ void Socket::ssl_connect(const std::string& hostname) {
         SSL_free(ssl);
         throw std::runtime_error("SSL_connect failed: " + std::string(err_buf));
     }
+
+    // Read negotiated ALPN protocol
+    impl_->negotiated_proto.clear();
+    if (!alpn_protos.empty()) {
+        const unsigned char* data = nullptr;
+        unsigned int len = 0;
+        SSL_get0_alpn_selected(ssl, &data, &len);
+        if (data && len > 0)
+            impl_->negotiated_proto.assign(reinterpret_cast<const char*>(data), len);
+    }
+
     impl_->ssl = ssl;
+}
+
+std::string Socket::negotiated_protocol() const {
+    return impl_ ? impl_->negotiated_proto : "";
 }
 
 void Socket::ssl_accept() {

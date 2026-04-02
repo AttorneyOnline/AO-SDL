@@ -3,6 +3,7 @@
 #include "utils/Log.h"
 
 #include "net/Http.h"
+#include "net/Http2Connection.h"
 
 #include <algorithm>
 
@@ -27,8 +28,98 @@ void HttpPool::stop() {
             q.clear();
     }
     work_cv_.notify_all();
-    // jthread destructors auto-join
+
+    Log::log_print(DEBUG, "HttpPool::stop: shutting down h2 connections");
+    {
+        std::lock_guard lock(h2_mutex_);
+        for (auto& [host, conn] : h2_connections_) {
+            Log::log_print(DEBUG, "HttpPool::stop: shutting down h2 for %s", host.c_str());
+            conn->shutdown();
+        }
+        h2_connections_.clear();
+        h2_failed_hosts_.clear();
+        h2_eligible_hosts_.clear();
+        h2_connecting_hosts_.clear();
+    }
+
+    Log::log_print(DEBUG, "HttpPool::stop: joining workers");
     workers_.clear();
+    Log::log_print(DEBUG, "HttpPool::stop: done");
+}
+
+void HttpPool::mark_h2_eligible(const std::string& host) {
+    std::lock_guard lock(h2_mutex_);
+    if (!h2_failed_hosts_.count(host))
+        h2_eligible_hosts_.insert(host);
+}
+
+std::shared_ptr<Http2Connection> HttpPool::get_h2(const std::string& host) {
+    {
+        std::lock_guard lock(h2_mutex_);
+        if (h2_failed_hosts_.count(host))
+            return nullptr;
+
+        auto it = h2_connections_.find(host);
+        if (it != h2_connections_.end()) {
+            if (it->second->is_alive())
+                return it->second;
+            h2_connections_.erase(it);
+        }
+
+        if (!h2_eligible_hosts_.count(host)) {
+            Log::log_print(DEBUG, "HttpPool: h2 skip (not eligible yet): %s", host.c_str());
+            return nullptr;
+        }
+
+        // Prevent multiple workers from racing to connect to the same host.
+        // Only the first worker connects; others fall back to h1.
+        if (h2_connecting_hosts_.count(host))
+            return nullptr;
+        h2_connecting_hosts_.insert(host);
+    }
+
+    // Parse host:port from the URL-style host string
+    auto parsed_host = host;
+    uint16_t port = 443;
+    auto scheme_end = parsed_host.find("://");
+    if (scheme_end != std::string::npos)
+        parsed_host = parsed_host.substr(scheme_end + 3);
+    if (host.find("http://") == 0) {
+        std::lock_guard lock(h2_mutex_);
+        h2_failed_hosts_.insert(host);
+        h2_connecting_hosts_.erase(host);
+        return nullptr;
+    }
+    auto slash = parsed_host.find('/');
+    if (slash != std::string::npos)
+        parsed_host = parsed_host.substr(0, slash);
+    auto colon = parsed_host.find(':');
+    if (colon != std::string::npos) {
+        port = static_cast<uint16_t>(std::stoi(parsed_host.substr(colon + 1)));
+        parsed_host = parsed_host.substr(0, colon);
+    }
+
+    try {
+        auto conn = Http2Connection::connect(parsed_host, port, 3000);
+        std::lock_guard lock(h2_mutex_);
+        h2_connecting_hosts_.erase(host);
+        if (!conn) {
+            h2_failed_hosts_.insert(host);
+            Log::log_print(DEBUG, "HttpPool: %s does not support HTTP/2, using HTTP/1.1", host.c_str());
+            return nullptr;
+        }
+        Log::log_print(DEBUG, "HttpPool: HTTP/2 connection established to %s", host.c_str());
+        auto ptr = std::shared_ptr<Http2Connection>(std::move(conn));
+        h2_connections_[host] = ptr;
+        return ptr;
+    }
+    catch (const std::exception& e) {
+        std::lock_guard lock(h2_mutex_);
+        h2_connecting_hosts_.erase(host);
+        h2_failed_hosts_.insert(host);
+        Log::log_print(DEBUG, "HttpPool: HTTP/2 connect to %s failed: %s", host.c_str(), e.what());
+        return nullptr;
+    }
 }
 
 void HttpPool::get(const std::string& host, const std::string& path, HttpCallback cb, HttpPriority priority) {
@@ -146,45 +237,82 @@ void HttpPool::worker_loop(std::stop_token st) {
         }
 
         HttpResponse resp;
+        bool done = false;
         if (!st.stop_requested()) {
-            try {
-                auto& cli = get_client(req.host);
-                if (req.chunk_callback) {
-                    // Streaming: longer read timeout for large files (music)
-                    cli.set_read_timeout(30);
-                    auto res = cli.Get(req.path, [&](const char* data, size_t len) -> bool {
-                        return req.chunk_callback(reinterpret_cast<const uint8_t*>(data), len);
-                    });
-                    cli.set_read_timeout(10); // restore normal timeout
-                    if (res) {
-                        resp.status = res->status;
-                    }
-                    else {
-                        resp.error = http::to_string(res.error());
-                        clients.erase(req.host);
-                    }
-                }
-                else {
-                    auto res = cli.Get(req.path);
-                    if (res) {
-                        resp.status = res->status;
-                        resp.body = std::move(res->body);
-                    }
-                    else {
-                        resp.error = http::to_string(res.error());
-                        clients.erase(req.host);
-                    }
+
+            // Try HTTP/2 first for non-streaming requests.
+            // Use async submit so the worker doesn't block — the h2 I/O
+            // thread delivers results directly to result_queue_.
+            if (!req.chunk_callback) {
+                auto h2 = get_h2(req.host);
+                if (h2) {
+                    static constexpr int priority_to_urgency[] = {6, 3, 1, 0};
+                    int urgency = priority_to_urgency[static_cast<int>(req.priority)];
+                    auto cb = std::move(req.callback);
+                    h2->submit_get_async(req.path, urgency,
+                                         [this, cb = std::move(cb)](Http2Connection::Response h2_resp) {
+                                             HttpResponse resp;
+                                             resp.status = h2_resp.status;
+                                             resp.body = std::move(h2_resp.body);
+                                             resp.error = std::move(h2_resp.error);
+                                             if (cb) {
+                                                 std::lock_guard lock(result_mutex_);
+                                                 result_queue_.push_back({std::move(resp), cb});
+                                             }
+                                             pending_.fetch_sub(1, std::memory_order_relaxed);
+                                         });
+                    done = true;
+                    // Don't decrement pending here — the async callback does it
                 }
             }
-            catch (const std::exception& e) {
-                resp.error = e.what();
-                clients.erase(req.host);
+
+            // Fallback to HTTP/1.1
+            if (!done) {
+                try {
+                    auto& cli = get_client(req.host);
+                    if (req.chunk_callback) {
+                        cli.set_read_timeout(30);
+                        auto res = cli.Get(req.path, [&](const char* data, size_t len) -> bool {
+                            return req.chunk_callback(reinterpret_cast<const uint8_t*>(data), len);
+                        });
+                        cli.set_read_timeout(10);
+                        if (res) {
+                            resp.status = res->status;
+                        }
+                        else {
+                            resp.error = http::to_string(res.error());
+                            clients.erase(req.host);
+                        }
+                    }
+                    else {
+                        auto res = cli.Get(req.path);
+                        if (res) {
+                            resp.status = res->status;
+                            resp.body = std::move(res->body);
+                        }
+                        else {
+                            resp.error = http::to_string(res.error());
+                            clients.erase(req.host);
+                        }
+                    }
+                }
+                catch (const std::exception& e) {
+                    resp.error = e.what();
+                    clients.erase(req.host);
+                }
+                // After a successful h1 request, mark host as eligible for h2 upgrade
+                if (resp.status > 0)
+                    mark_h2_eligible(req.host);
             }
+        }
+
+        if (done) {
+            // h2 async path — callback handles result queue and pending count
+            continue;
         }
 
         if (!st.stop_requested()) {
             if (req.chunk_callback) {
-                // Streaming: callback runs directly on worker thread (caller blocks on future)
                 if (req.callback)
                     req.callback(std::move(resp));
             }

@@ -309,6 +309,16 @@ endif()
 #   #include "ui/IUIRenderer.h"      — UI backend interface
 # =============================================================================
 
+# --- nghttp2 — HTTP/2 C library (static, lib sources only) -------------------
+file(GLOB NGHTTP2_SOURCES third-party/nghttp2/lib/*.c)
+add_library(nghttp2 STATIC ${NGHTTP2_SOURCES})
+set_property(TARGET nghttp2 PROPERTY C_STANDARD 11)
+target_include_directories(nghttp2
+    PUBLIC  third-party/nghttp2/lib/includes
+    PRIVATE third-party/nghttp2/lib
+)
+target_compile_definitions(nghttp2 PRIVATE NGHTTP2_STATICLIB)
+
 add_library(aoengine STATIC
     engine/event/Event.cpp
     engine/event/ChatEvent.cpp
@@ -369,6 +379,7 @@ add_library(aoengine STATIC
     engine/render/GlyphCache.cpp
     engine/render/TextMeshBuilder.cpp
     engine/net/HttpPool.cpp
+    engine/net/Http2Connection.cpp
     engine/net/EndpointFactory.cpp
     engine/net/RestRouter.cpp
     engine/asset/MountHttp.cpp
@@ -424,12 +435,12 @@ target_include_directories(aoengine
 
 # TLS support: Secure Transport on Apple, OpenSSL on Linux/Windows
 if(APPLE)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile nghttp2)
     set_source_files_properties(platform/macos/Socket.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 else()
     set(OPENSSL_USE_STATIC_LIBS ON)
     find_package(OpenSSL REQUIRED)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile OpenSSL::SSL OpenSSL::Crypto)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile nghttp2 OpenSSL::SSL OpenSSL::Crypto)
 endif()
 target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 
@@ -438,6 +449,7 @@ if(APPLE)
         "-framework CoreText"
         "-framework Foundation"
         "-framework IOKit"
+        "-framework Network"
         "-framework Security"
     )
 endif()

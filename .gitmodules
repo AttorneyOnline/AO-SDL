@@ -28,3 +28,6 @@
 [submodule "third-party/ogg"]
 	path = third-party/ogg
 	url = https://github.com/xiph/ogg.git
+[submodule "third-party/nghttp2"]
+	path = third-party/nghttp2
+	url = https://github.com/nghttp2/nghttp2.git
