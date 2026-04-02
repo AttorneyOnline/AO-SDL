@@ -298,6 +298,204 @@ TEST_F(RestRouterTest, PutMethod) {
     EXPECT_EQ(res->status, 200);
 }
 
+// -- CORS tests --------------------------------------------------------------
+
+/// Helper: count occurrences of a header in a response.
+static size_t header_count(const http::Result& res, const std::string& key) {
+    return res->get_header_value_count(key);
+}
+
+TEST_F(RestRouterTest, CorsWildcardOnGet) {
+    router_.set_cors_origins({"*"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {{"ok", true}}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Get("/test");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "*");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Methods"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Headers"), 1u);
+}
+
+TEST_F(RestRouterTest, CorsWildcardOnPreflight) {
+    router_.set_cors_origins({"*"});
+    auto ep = std::make_unique<StubEndpoint>("POST", "/data", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Options("/data");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "*");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Methods"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Headers"), 1u);
+}
+
+TEST_F(RestRouterTest, CorsWildcardInArrayTreatedAsWildcard) {
+    // If "*" appears anywhere in the list, treat the whole config as wildcard.
+    router_.set_cors_origins({"https://a.com", "*", "https://b.com"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Get("/test");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "*");
+}
+
+TEST_F(RestRouterTest, CorsSingleOrigin) {
+    router_.set_cors_origins({"https://example.com"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Get("/test");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "https://example.com");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    // Single origin should NOT have Vary: Origin
+    EXPECT_EQ(header_count(res, "Vary"), 0u);
+}
+
+TEST_F(RestRouterTest, CorsMultipleOriginsMatchesRequest) {
+    router_.set_cors_origins({"https://a.com", "https://b.com", "https://c.com"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    http::Headers headers = {{"Origin", "https://b.com"}};
+    auto res = cli.Get("/test", headers);
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "https://b.com");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(res->get_header_value("Vary"), "Origin");
+}
+
+TEST_F(RestRouterTest, CorsMultipleOriginsRejectsUnlisted) {
+    router_.set_cors_origins({"https://a.com", "https://b.com"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    http::Headers headers = {{"Origin", "https://evil.com"}};
+    auto res = cli.Get("/test", headers);
+
+    ASSERT_TRUE(res);
+    // No Allow-Origin header for unmatched origins
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 0u);
+    // Vary: Origin is still present (caching correctness)
+    EXPECT_EQ(res->get_header_value("Vary"), "Origin");
+}
+
+TEST_F(RestRouterTest, CorsMultipleOriginsOnPreflight) {
+    router_.set_cors_origins({"https://a.com", "https://b.com"});
+    auto ep = std::make_unique<StubEndpoint>("POST", "/data", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    http::Headers headers = {{"Origin", "https://a.com"}};
+    auto res = cli.Options("/data", headers);
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "https://a.com");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(res->get_header_value("Vary"), "Origin");
+}
+
+TEST_F(RestRouterTest, CorsDisabledSendsNoHeaders) {
+    // Empty origins = CORS disabled
+    router_.set_cors_origins({});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Get("/test");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 0u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Methods"), 0u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Headers"), 0u);
+}
+
+TEST_F(RestRouterTest, CorsNoDuplicateHeadersOnPreflight) {
+    // Regression test: previously set_default_headers + set_cors() caused duplicates.
+    router_.set_cors_origins({"https://example.com"});
+    auto ep = std::make_unique<StubEndpoint>("POST", "/data", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Options("/data");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Methods"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Headers"), 1u);
+}
+
+TEST_F(RestRouterTest, CorsNoDuplicateHeadersOnRegularRequest) {
+    router_.set_cors_origins({"https://example.com"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/test", false, RestResponse::json(200, {}));
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto cli = client();
+    auto res = cli.Get("/test");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Methods"), 1u);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Headers"), 1u);
+}
+
+TEST_F(RestRouterTest, CorsHeadersOnUnmatchedRoute) {
+    // CORS headers should appear even on 404 responses.
+    router_.set_cors_origins({"*"});
+    // No endpoints registered — any path is unmatched.
+
+    start();
+    auto cli = client();
+    auto res = cli.Get("/nonexistent");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "*");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+}
+
+TEST_F(RestRouterTest, CorsPreflightOnUnmatchedRouteStillHasHeaders) {
+    // OPTIONS to a path with no registered endpoint returns 404 (no catch-all
+    // regex support in this httplib), but default_headers still inject CORS.
+    router_.set_cors_origins({"https://example.com"});
+
+    start();
+    auto cli = client();
+    auto res = cli.Options("/nonexistent");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "https://example.com");
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+}
+
 // -- GameRoom session tests --------------------------------------------------
 
 TEST(GameRoomTest, FindSessionByToken) {

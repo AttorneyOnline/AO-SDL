@@ -15,18 +15,61 @@ void RestRouter::register_endpoint(std::unique_ptr<RestEndpoint> endpoint) {
     endpoints_.push_back(std::move(endpoint));
 }
 
-void RestRouter::set_cors_origin(const std::string& origin) {
-    cors_origin_ = origin;
+void RestRouter::set_cors_origins(std::vector<std::string> origins) {
+    cors_wildcard_ = false;
+    cors_origins_.clear();
+    for (auto& o : origins) {
+        if (o == "*") {
+            cors_wildcard_ = true;
+            cors_origins_.clear();
+            return;
+        }
+        cors_origins_.push_back(std::move(o));
+    }
+}
+
+bool RestRouter::cors_enabled() const {
+    return cors_wildcard_ || !cors_origins_.empty();
+}
+
+void RestRouter::apply_cors_origin(const http::Request& req, http::Response& res) const {
+    // Multi-origin mode: echo back the Origin if it matches the allow-list.
+    // Methods, Headers, and Vary are already set via set_default_headers.
+    auto origin = req.get_header_value("Origin");
+    for (const auto& allowed : cors_origins_) {
+        if (origin == allowed) {
+            res.set_header("Access-Control-Allow-Origin", origin);
+            return;
+        }
+    }
 }
 
 void RestRouter::bind(http::Server& server) {
-    // Apply CORS headers to all responses, including httplib's built-in
-    // 404 for unmatched routes (which bypasses our dispatch method).
-    if (!cors_origin_.empty()) {
+    // Static CORS headers are set via set_default_headers so they appear on
+    // every response, including httplib's built-in 404 for unmatched routes.
+    //
+    // For wildcard or single-origin configs, all CORS headers are static.
+    // For multi-origin, Allow-Origin varies per request and is set in each
+    // handler via apply_cors_origin(); the remaining headers are static.
+    if (cors_wildcard_) {
         server.set_default_headers({
-            {"Access-Control-Allow-Origin", cors_origin_},
+            {"Access-Control-Allow-Origin", "*"},
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
             {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+        });
+    }
+    else if (cors_origins_.size() == 1) {
+        server.set_default_headers({
+            {"Access-Control-Allow-Origin", cors_origins_[0]},
+            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
+            {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+        });
+    }
+    else if (!cors_origins_.empty()) {
+        server.set_default_headers({
+            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
+            {"Access-Control-Allow-Headers", "Content-Type, Authorization"},
+            {"Vary", "Origin"},
         });
     }
 
@@ -51,20 +94,24 @@ void RestRouter::bind(http::Server& server) {
             Log::log_print(ERR, "REST: unknown method '%s' for %s", method.c_str(), pattern.c_str());
 
         // Preflight handler for this route
-        // CORS headers are already applied by set_default_headers.
-        server.Options(pattern, [](const http::Request&, http::Response& res) { res.status = 204; });
-    }
-
-    // Catch-all preflight handler for unmatched routes. Without this,
-    // OPTIONS to a non-existent path returns 404, which browsers treat
-    // as a failed preflight and block the actual request.
-    if (!cors_origin_.empty()) {
-        server.Options(".*", [](const http::Request&, http::Response& res) { res.status = 204; });
+        if (cors_origins_.size() > 1) {
+            server.Options(pattern, [this](const http::Request& req, http::Response& res) {
+                apply_cors_origin(req, res);
+                res.status = 204;
+            });
+        }
+        else {
+            server.Options(pattern, [](const http::Request&, http::Response& res) { res.status = 204; });
+        }
     }
 }
 
 void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res) {
-    // CORS headers are set globally via set_default_headers in bind().
+    // Static CORS headers are set via set_default_headers in bind().
+    // Multi-origin mode needs per-request Allow-Origin.
+    if (cors_origins_.size() > 1)
+        apply_cors_origin(req, res);
+
     try {
         // Build RestRequest from http::Request (no lock needed — pure parsing)
         RestRequest rest_req;

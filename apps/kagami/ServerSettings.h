@@ -43,8 +43,28 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return std::max(0, value<int>("session_ttl_seconds"));
     }
 
-    std::string cors_origin() const {
-        return value<std::string>("cors_origin");
+    /// Returns the configured CORS origins.
+    /// Supports both a single string and an array of strings in config:
+    ///   "cors_origin": "*"
+    ///   "cors_origin": "https://example.com"
+    ///   "cors_origin": ["https://a.com", "https://b.com"]
+    std::vector<std::string> cors_origins() const {
+        auto raw = value<nlohmann::json>("cors_origin");
+        if (raw.is_string()) {
+            auto s = raw.get<std::string>();
+            if (s.empty())
+                return {};
+            return {s};
+        }
+        if (raw.is_array()) {
+            std::vector<std::string> result;
+            for (const auto& item : raw) {
+                if (item.is_string())
+                    result.push_back(item.get<std::string>());
+            }
+            return result;
+        }
+        return {};
     }
 
     static bool load_from_disk(const std::string& path);

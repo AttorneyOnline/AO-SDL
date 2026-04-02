@@ -248,7 +248,7 @@ All settings are stored in `kagami.json` and can be edited while the server is s
 | `max_players` | `100` | Maximum concurrent players |
 | `motd` | `""` | Message of the day |
 | `session_ttl_seconds` | `300` | REST session TTL in seconds (0 = no expiry) |
-| `cors_origin` | `"https://web.aceattorneyonline.com"` | CORS allowed origin |
+| `cors_origin` | `"https://web.aceattorneyonline.com"` | CORS allowed origin(s) — string, `"*"`, or array of strings |
 
 ### Architecture
 
