@@ -44,7 +44,6 @@ class RestRouter {
 
   private:
     void dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res);
-    void set_cors(http::Response& res);
 
     AuthFunc auth_func_;
     std::string cors_origin_;

@@ -19,14 +19,6 @@ void RestRouter::set_cors_origin(const std::string& origin) {
     cors_origin_ = origin;
 }
 
-void RestRouter::set_cors(http::Response& res) {
-    if (cors_origin_.empty())
-        return;
-    res.set_header("Access-Control-Allow-Origin", cors_origin_);
-    res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-}
-
 void RestRouter::bind(http::Server& server) {
     // Apply CORS headers to all responses, including httplib's built-in
     // 404 for unmatched routes (which bypasses our dispatch method).
@@ -59,20 +51,15 @@ void RestRouter::bind(http::Server& server) {
             Log::log_print(ERR, "REST: unknown method '%s' for %s", method.c_str(), pattern.c_str());
 
         // Preflight handler for this route
-        server.Options(pattern, [this](const http::Request&, http::Response& res) {
-            set_cors(res);
-            res.status = 204;
-        });
+        // CORS headers are already applied by set_default_headers.
+        server.Options(pattern, [](const http::Request&, http::Response& res) { res.status = 204; });
     }
 
     // Catch-all preflight handler for unmatched routes. Without this,
     // OPTIONS to a non-existent path returns 404, which browsers treat
     // as a failed preflight and block the actual request.
     if (!cors_origin_.empty()) {
-        server.Options(".*", [this](const http::Request&, http::Response& res) {
-            set_cors(res);
-            res.status = 204;
-        });
+        server.Options(".*", [](const http::Request&, http::Response& res) { res.status = 204; });
     }
 }
 
