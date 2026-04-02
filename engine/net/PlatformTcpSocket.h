@@ -18,6 +18,10 @@ class PlatformTcpSocket : public ITcpSocket {
     /// The hostname is used for SNI and certificate verification.
     void enable_ssl(const std::string& hostname);
 
+    /// Set the TCP connect timeout in milliseconds.
+    /// Must be called before connect(). Default: 10000ms (10 seconds).
+    void set_connect_timeout(int timeout_ms);
+
     int fd() const override;
 
     void connect() override;
@@ -30,6 +34,7 @@ class PlatformTcpSocket : public ITcpSocket {
     static constexpr size_t RECV_BUF_SIZE = 8192;
     std::string host_;
     uint16_t port_;
-    std::string ssl_hostname_; // non-empty = upgrade to TLS after connect
+    std::string ssl_hostname_;       // non-empty = upgrade to TLS after connect
+    int connect_timeout_ms_ = 10000; // 10 second default
     platform::Socket sock_;
 };

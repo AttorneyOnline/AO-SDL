@@ -443,8 +443,13 @@ void Socket::ssl_connect(const std::string &hostname, const std::string &alpn_pr
       } else if (state == nw_connection_state_failed || state == nw_connection_state_cancelled) {
           if (error) {
               CFErrorRef cf_err = nw_error_copy_cf_error(error);
-              NSError *ns_err = (__bridge_transfer NSError *)cf_err;
-              error_msg = ns_err.localizedDescription.UTF8String;
+              if (cf_err) {
+                  NSError *ns_err = (__bridge_transfer NSError *)cf_err;
+                  NSString *desc = ns_err.localizedDescription;
+                  error_msg = desc ? std::string(desc.UTF8String) : "connection failed";
+              } else {
+                  error_msg = "connection failed (unknown error)";
+              }
           } else {
               error_msg = "connection failed";
           }

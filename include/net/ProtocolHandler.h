@@ -16,6 +16,13 @@
  * Concrete implementations (e.g. AOClient) translate between raw wire messages
  * and higher-level game events. WSClientThread owns a reference to this interface
  * and calls its methods from the network thread.
+ *
+ * @par Thread safety
+ * All methods (on_connect, on_message, on_disconnect, flush_outgoing) are called
+ * exclusively from the WSClientThread's background thread — never from the main
+ * thread or UI thread. They are never called concurrently with each other.
+ * Implementations that interact with shared game state must synchronize access
+ * (e.g. via EventChannel, mutex, or main-thread dispatch).
  */
 class ProtocolHandler {
   public:

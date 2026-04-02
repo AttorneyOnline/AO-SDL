@@ -11,7 +11,6 @@
 #include "platform/Poll.h"
 #include "utils/Log.h"
 
-#include <algorithm>
 #include <chrono>
 #include <optional>
 #include <thread>
@@ -91,11 +90,19 @@ void WSClientThread::ws_loop(std::stop_token st) {
         while (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
         }
 
-        // Wait for the user to select a server.
+        // Wait for the user to select a server, using a Poller notifier
+        // to wake instantly when a ServerConnectEvent is published.
         std::optional<WebSocket> sock;
         ParsedWsUrl url;
+
+        platform::Poller connect_poller;
+        connect_poller.create_notifier();
+        auto& connect_channel = EventManager::instance().get_channel<ServerConnectEvent>();
+        connect_channel.set_on_publish([&connect_poller] { connect_poller.notify(); });
+
         while (!st.stop_requested() && !sock.has_value()) {
-            if (auto ev = EventManager::instance().get_channel<ServerConnectEvent>().get_event()) {
+            // Check for events before blocking — one may already be queued
+            if (auto ev = connect_channel.get_event()) {
                 url = parse_ws_url(ev->get_host(), ev->get_port());
 
                 auto tcp = std::make_unique<PlatformTcpSocket>(url.host, url.port);
@@ -105,9 +112,14 @@ void WSClientThread::ws_loop(std::stop_token st) {
                 sock.emplace(url.host, url.port, std::move(tcp));
             }
             else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                // Block until notified (with timeout so stop_requested is checked)
+                platform::Poller::Event events[1];
+                connect_poller.poll(events, 1, 200);
+                connect_poller.drain_notifier();
             }
         }
+
+        connect_channel.set_on_publish(nullptr);
 
         if (st.stop_requested())
             return;
@@ -124,6 +136,9 @@ void WSClientThread::ws_loop(std::stop_token st) {
             continue;
         }
 
+        // All ProtocolHandler methods are called exclusively from this thread.
+        // Implementations must be aware that these run on the network thread,
+        // not the main/UI thread.
         handler.on_connect();
         EventManager::instance().get_channel<SessionStartEvent>().publish(SessionStartEvent());
 
@@ -131,12 +146,38 @@ void WSClientThread::ws_loop(std::stop_token st) {
         while (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
         }
 
+        // Set up Poller for the message loop: watch the socket fd for data,
+        // use a notifier to wake when disconnect is requested or outgoing
+        // messages need flushing.
+        platform::Poller poller;
+        int notifier_fd = poller.create_notifier();
+        int sock_fd = sock->socket_fd();
+        if (sock_fd >= 0)
+            poller.add(sock_fd, platform::Poller::Readable);
+
+        // Wire disconnect-request and flush notifications to the poller
+        auto& disconnect_channel = EventManager::instance().get_channel<DisconnectRequestEvent>();
+        disconnect_channel.set_on_publish([&poller] { poller.notify(); });
+
         std::vector<WebSocket::WebSocketFrame> msgs;
 
         while (!st.stop_requested()) {
-            if (EventManager::instance().get_channel<DisconnectRequestEvent>().get_event()) {
+            // Block until socket is readable, notifier fires, or timeout
+            // The 200ms timeout is a safety net for stop_requested checks;
+            // normal wakeups are instant via the Poller.
+            platform::Poller::Event events[4];
+            int n = poller.poll(events, 4, 200);
+
+            // Check for disconnect request
+            if (disconnect_channel.get_event()) {
                 Log::log_print(INFO, "Disconnect requested by user");
                 break;
+            }
+
+            // Drain notifier if it fired
+            for (int i = 0; i < n; ++i) {
+                if (events[i].fd == notifier_fd)
+                    poller.drain_notifier();
             }
 
             try {
@@ -159,12 +200,9 @@ void WSClientThread::ws_loop(std::stop_token st) {
                 EventManager::instance().get_channel<DisconnectEvent>().publish(DisconnectEvent(e.what()));
                 break;
             }
-
-            // TODO: Replace with Poller integration once ITcpSocket exposes fd().
-            // For now, keep the sleep — the socket is in non-blocking mode after
-            // handshake, so read() returns immediately when no data is available.
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
+
+        disconnect_channel.set_on_publish(nullptr);
 
         handler.on_disconnect();
         EventManager::instance().get_channel<SessionEndEvent>().publish(SessionEndEvent());
