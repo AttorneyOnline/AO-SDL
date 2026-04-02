@@ -59,6 +59,22 @@ class Mount {
      */
     virtual std::vector<uint8_t> fetch_data(const std::string& path) = 0;
 
+    /**
+     * @brief Seek and fetch in a single operation.
+     *
+     * Default implementation calls seek_file() then fetch_data().
+     * Subclasses may override to avoid redundant work (e.g. double
+     * hash-map lookups or repeated path normalization).
+     *
+     * @param path Virtual (relative) path to the file.
+     * @return The raw file bytes, or empty vector if not found.
+     */
+    virtual std::vector<uint8_t> try_fetch(const std::string& path) {
+        if (!seek_file(path))
+            return {};
+        return fetch_data(path);
+    }
+
   protected:
     const std::filesystem::path path; /**< Filesystem path to the backing directory or archive. */
 

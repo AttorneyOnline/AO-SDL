@@ -119,6 +119,17 @@ void MountManager::drop_http_below(int priority) {
     }
 }
 
+uint32_t MountManager::http_cache_generation() const {
+    std::shared_lock<std::shared_mutex> locker(lock);
+    uint32_t gen = 0;
+    for (auto& entry : loaded_mounts) {
+        auto* http = dynamic_cast<MountHttp*>(entry.mount.get());
+        if (http)
+            gen += http->cache_generation();
+    }
+    return gen;
+}
+
 MountManager::HttpStats MountManager::http_stats() const {
     std::shared_lock<std::shared_mutex> locker(lock);
     HttpStats stats;
@@ -232,13 +243,13 @@ std::optional<std::vector<uint8_t>> MountManager::fetch_data(const std::string& 
     std::shared_lock<std::shared_mutex> locker(lock);
 
     for (auto& entry : loaded_mounts) {
-        if (entry.mount->seek_file(relative_path)) {
-            try {
-                return entry.mount->fetch_data(relative_path);
-            }
-            catch (const std::exception& e) {
-                Log::log_print(ERR, std::format("Failed to fetch {}: {}", relative_path, e.what()).c_str());
-            }
+        try {
+            auto data = entry.mount->try_fetch(relative_path);
+            if (!data.empty())
+                return data;
+        }
+        catch (const std::exception& e) {
+            Log::log_print(ERR, std::format("Failed to fetch {}: {}", relative_path, e.what()).c_str());
         }
     }
 

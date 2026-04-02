@@ -162,6 +162,15 @@ std::vector<uint8_t> MountHttp::fetch_data(const std::string& path) {
     return {};
 }
 
+std::vector<uint8_t> MountHttp::try_fetch(const std::string& path) {
+    std::string lower = lowercase_path(path);
+    std::lock_guard lock(mutex_);
+    auto it = cache_.find(lower);
+    if (it != cache_.end())
+        return it->second;
+    return {};
+}
+
 bool MountHttp::fetch_streaming(const std::string& raw_path, std::function<bool(const uint8_t*, size_t)> on_chunk) {
     std::string path = lowercase_path(raw_path);
     {
@@ -250,6 +259,7 @@ void MountHttp::request(const std::string& raw_path, HttpPriority priority) {
             if (resp.status == 200 && !resp.body.empty()) {
                 transient_failures_.erase(captured_path);
                 cache_[captured_path] = std::vector<uint8_t>(resp.body.begin(), resp.body.end());
+                cache_generation_.fetch_add(1, std::memory_order_relaxed);
                 Log::log_print(VERBOSE, "MountHttp: downloaded %s (%zu bytes)", captured_path.c_str(),
                                resp.body.size());
             }

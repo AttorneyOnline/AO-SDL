@@ -418,7 +418,6 @@ struct MetalRendererImpl {
             [enc endEncoding];
 
             [cmd commit];
-            [cmd waitUntilCompleted];
         }
 
         return (uintptr_t)(__bridge void *)display_texture;
@@ -849,7 +848,6 @@ struct MetalRendererImpl {
 
             [enc endEncoding];
             [cmd commit];
-            [cmd waitUntilCompleted];
         }
     }
 };

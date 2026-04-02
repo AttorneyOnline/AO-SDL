@@ -3,6 +3,7 @@
 #include "asset/Mount.h"
 #include "net/HttpPool.h"
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -27,6 +28,7 @@ class MountHttp : public Mount {
     void load() override;
     bool seek_file(const std::string& path) const override;
     std::vector<uint8_t> fetch_data(const std::string& path) override;
+    std::vector<uint8_t> try_fetch(const std::string& path) override;
 
     /// Trigger an async download for the given path if not already
     /// cached, pending, or previously failed (404).
@@ -74,6 +76,12 @@ class MountHttp : public Mount {
     /// Whether extensions.json has been loaded.
     bool has_extensions() const;
 
+    /// Monotonically increasing counter bumped on each successful HTTP cache insertion.
+    /// Consumers can compare against a stored value to detect new data arrivals.
+    uint32_t cache_generation() const {
+        return cache_generation_.load(std::memory_order_relaxed);
+    }
+
     /// Access the underlying HttpPool (for drop_below, pending count, etc.).
     HttpPool& pool() {
         return pool_;
@@ -97,6 +105,8 @@ class MountHttp : public Mount {
     // Callbacks capture this by value; the destructor sets it to false.
     // Safe without a mutex because poll() and ~MountHttp run on the same thread.
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+
+    std::atomic<uint32_t> cache_generation_{0};
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::vector<uint8_t>> cache_;

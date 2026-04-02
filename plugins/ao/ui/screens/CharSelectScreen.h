@@ -8,9 +8,11 @@
 #include "render/Texture.h"
 #include "ui/Screen.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 /**
@@ -95,9 +97,11 @@ class CharSelectScreen : public Screen {
   private:
     void retry_icons();
 
-    ScreenController* controller = nullptr; ///< Stored controller for stack navigation.
-    std::vector<CharEntry> chars;           ///< Character roster entries.
-    int selected = -1;                      ///< Currently selected character index (-1 = none).
-    int prefetch_cursor_ = 0;               ///< Next character index to prefetch.
-    int retry_cursor_ = 0;                  ///< Next character index to retry after transient failure.
+    ScreenController* controller = nullptr;     ///< Stored controller for stack navigation.
+    std::vector<CharEntry> chars;               ///< Character roster entries.
+    int selected = -1;                          ///< Currently selected character index (-1 = none).
+    int prefetch_cursor_ = 0;                   ///< Next character index to prefetch.
+    int retry_cursor_ = 0;                      ///< Next character index to retry after transient failure.
+    uint32_t last_http_gen_ = 0;                ///< Last seen HTTP cache generation (for change detection).
+    std::unordered_set<int> icon_probe_failed_; ///< Char indices where lib.image() returned null.
 };
