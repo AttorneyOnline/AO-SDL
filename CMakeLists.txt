@@ -326,7 +326,17 @@ target_include_directories(nghttp2
     PUBLIC  ${CMAKE_CURRENT_BINARY_DIR}/nghttp2  # for generated nghttp2ver.h
     PRIVATE third-party/nghttp2/lib
 )
-target_compile_definitions(nghttp2 PRIVATE NGHTTP2_STATICLIB)
+target_compile_definitions(nghttp2
+    PRIVATE NGHTTP2_STATICLIB BUILDING_NGHTTP2
+    PUBLIC  NGHTTP2_NO_SSIZE_T  # consumers use *2 APIs (nghttp2_ssize, not ssize_t)
+)
+# MSVC lacks POSIX ssize_t — nghttp2's deprecated wrappers need it internally.
+# BUILDING_NGHTTP2 undefines NGHTTP2_NO_SSIZE_T inside the library, exposing
+# the ssize_t typedefs. Defining ssize_t as ptrdiff_t is the nghttp2-recommended
+# approach (see nghttp2's CMakeLists.txt check_type_size block).
+if(MSVC)
+    target_compile_definitions(nghttp2 PRIVATE "ssize_t=ptrdiff_t")
+endif()
 
 add_library(aoengine STATIC
     engine/event/Event.cpp
