@@ -14,6 +14,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "utils/Log.h"
+
 #pragma comment(lib, "ws2_32.lib")
 
 namespace platform {
@@ -135,27 +137,36 @@ ssize_t Socket::recv(void* buf, size_t len) {
 
 void Socket::set_non_blocking(bool enabled) {
     u_long mode = enabled ? 1 : 0;
-    ioctlsocket(impl_->winsock, FIONBIO, &mode);
+    if (ioctlsocket(impl_->winsock, FIONBIO, &mode) == SOCKET_ERROR)
+        Log::warn("ioctlsocket FIONBIO failed: WSA error {}", WSAGetLastError());
 }
 
 void Socket::set_reuse_addr(bool enabled) {
     int val = enabled ? 1 : 0;
-    setsockopt(impl_->winsock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&val), sizeof(val));
+    if (setsockopt(impl_->winsock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&val), sizeof(val)) ==
+        SOCKET_ERROR)
+        Log::warn("setsockopt SO_REUSEADDR failed: WSA error {}", WSAGetLastError());
 }
 
 void Socket::set_tcp_nodelay(bool enabled) {
     int val = enabled ? 1 : 0;
-    setsockopt(impl_->winsock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&val), sizeof(val));
+    if (setsockopt(impl_->winsock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&val), sizeof(val)) ==
+        SOCKET_ERROR)
+        Log::warn("setsockopt TCP_NODELAY failed: WSA error {}", WSAGetLastError());
 }
 
 void Socket::set_recv_timeout(int timeout_ms) {
     DWORD tv = static_cast<DWORD>(timeout_ms);
-    setsockopt(impl_->winsock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    if (setsockopt(impl_->winsock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv)) ==
+        SOCKET_ERROR)
+        Log::warn("setsockopt SO_RCVTIMEO failed: WSA error {}", WSAGetLastError());
 }
 
 void Socket::set_send_timeout(int timeout_ms) {
     DWORD tv = static_cast<DWORD>(timeout_ms);
-    setsockopt(impl_->winsock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    if (setsockopt(impl_->winsock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv)) ==
+        SOCKET_ERROR)
+        Log::warn("setsockopt SO_SNDTIMEO failed: WSA error {}", WSAGetLastError());
 }
 
 bool Socket::bytes_available() const {
@@ -281,7 +292,8 @@ Socket tcp_connect(const std::string& host, uint16_t port, int timeout_ms) {
     std::string port_str = std::to_string(port);
     int err = getaddrinfo(host.c_str(), port_str.c_str(), &hints, &res);
     if (err != 0 || !res) {
-        throw std::runtime_error("getaddrinfo failed for " + host + ":" + port_str);
+        throw std::runtime_error("getaddrinfo failed for " + host + ":" + port_str + ": WSA error " +
+                                 std::to_string(err));
     }
 
     auto impl = std::make_unique<Socket::Impl>();

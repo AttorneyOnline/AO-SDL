@@ -143,6 +143,10 @@ static bool send_all(platform::Socket& sock, const std::string& data) {
     return true;
 }
 
+/// Maximum header section size (64 KB). Prevents OOM from malicious servers
+/// sending unbounded data before the \r\n\r\n terminator.
+static constexpr size_t MAX_CLIENT_HEADER_SIZE = 65536;
+
 /// Read until we find `\r\n\r\n`. Returns all data read (headers + any body start).
 static std::string read_headers(platform::Socket& sock) {
     std::string buf;
@@ -154,6 +158,10 @@ static std::string read_headers(platform::Socket& sock) {
         buf.append(chunk, static_cast<size_t>(n));
         if (buf.find("\r\n\r\n") != std::string::npos)
             break;
+        if (buf.size() > MAX_CLIENT_HEADER_SIZE) {
+            Log::warn("HTTP response headers exceed {} bytes, aborting", MAX_CLIENT_HEADER_SIZE);
+            return {};
+        }
     }
     return buf;
 }
@@ -183,7 +191,9 @@ static ParsedResponse parse_response_headers(const std::string& raw) {
         auto sp2 = status_line.find(' ', sp1 + 1);
         std::string code_str =
             (sp2 != std::string::npos) ? status_line.substr(sp1 + 1, sp2 - sp1 - 1) : status_line.substr(sp1 + 1);
-        std::from_chars(code_str.data(), code_str.data() + code_str.size(), pr.status);
+        auto [ptr, ec] = std::from_chars(code_str.data(), code_str.data() + code_str.size(), pr.status);
+        if (ec != std::errc{})
+            Log::warn("HTTP response: failed to parse status code '{}'", code_str);
     }
 
     // Parse headers with obs-fold handling (RFC 9112 §5.2).
@@ -264,7 +274,9 @@ static std::string read_final_headers(platform::Socket& sock) {
             auto sp2 = raw.find(' ', sp1 + 1);
             std::string code_str =
                 (sp2 != std::string::npos) ? raw.substr(sp1 + 1, sp2 - sp1 - 1) : raw.substr(sp1 + 1, 3);
-            std::from_chars(code_str.data(), code_str.data() + code_str.size(), status);
+            auto [ptr, ec] = std::from_chars(code_str.data(), code_str.data() + code_str.size(), status);
+            if (ec != std::errc{})
+                return raw; // can't parse status — return as-is for caller to handle
             if (status >= 100 && status < 200) {
                 // Skip the 1xx headers; keep any bytes past \r\n\r\n
                 auto end = raw.find("\r\n\r\n");
@@ -303,7 +315,6 @@ static std::string read_body(platform::Socket& sock, const ParsedResponse& pr, s
 }
 
 static std::string read_chunked_body(platform::Socket& sock, const std::string& initial) {
-    // Simple chunked transfer-encoding reader.
     std::string body;
     std::string pending = initial;
 
@@ -326,23 +337,60 @@ static std::string read_chunked_body(platform::Socket& sock, const std::string& 
         }
 
         auto line_end = pending.find("\r\n");
-        std::string size_str = pending.substr(0, line_end);
-        pending = pending.substr(line_end + 2);
+        if (line_end == std::string::npos)
+            break;
+        std::string size_line = pending.substr(0, line_end);
+        if (line_end + 2 <= pending.size())
+            pending = pending.substr(line_end + 2);
+        else
+            pending.clear();
+
+        // Strip chunk extensions (RFC 9112 §7.1.1): "size;ext=val"
+        auto semi = size_line.find(';');
+        std::string size_str = (semi != std::string::npos) ? size_line.substr(0, semi) : size_line;
 
         // Parse hex chunk size
         size_t chunk_size = 0;
-        std::from_chars(size_str.data(), size_str.data() + size_str.size(), chunk_size, 16);
+        auto [ptr, ec] = std::from_chars(size_str.data(), size_str.data() + size_str.size(), chunk_size, 16);
+        if (ec != std::errc{}) {
+            Log::warn("HTTP chunked: failed to parse chunk size '{}'", size_str);
+            break;
+        }
         if (chunk_size == 0)
-            break; // final chunk
+            break; // final chunk — fall through to consume trailers
 
         // Read chunk_size bytes + trailing \r\n
         if (!read_more(chunk_size + 2)) {
             body.append(pending, 0, std::min(pending.size(), chunk_size));
-            break;
+            return body; // truncated — caller should close connection
         }
         body.append(pending, 0, chunk_size);
-        pending = pending.substr(chunk_size + 2); // skip \r\n after chunk
+        if (chunk_size + 2 <= pending.size())
+            pending = pending.substr(chunk_size + 2);
+        else
+            pending.clear();
     }
+
+    // Consume trailer headers (RFC 9112 §7.1.2): read until empty line \r\n
+    // Even if we discard them, we must drain them so keep-alive connections
+    // don't see leftover data as the next response.
+    while (true) {
+        while (pending.find("\r\n") == std::string::npos) {
+            if (!read_more(pending.size() + 1))
+                return body;
+        }
+        auto line_end = pending.find("\r\n");
+        if (line_end == 0) {
+            // Empty line — end of trailers
+            break;
+        }
+        // Skip this trailer line
+        if (line_end + 2 <= pending.size())
+            pending = pending.substr(line_end + 2);
+        else
+            pending.clear();
+    }
+
     return body;
 }
 
@@ -437,7 +485,9 @@ uint64_t Request::get_header_value_u64(const std::string& key, uint64_t def, siz
     if (val.empty())
         return def;
     uint64_t result = def;
-    std::from_chars(val.data(), val.data() + val.size(), result);
+    auto [ptr, ec] = std::from_chars(val.data(), val.data() + val.size(), result);
+    if (ec != std::errc{})
+        Log::warn("HTTP: failed to parse header '{}' value '{}' as u64", key, val);
     return result;
 }
 
@@ -511,7 +561,9 @@ uint64_t Response::get_header_value_u64(const std::string& key, uint64_t def, si
     if (val.empty())
         return def;
     uint64_t result = def;
-    std::from_chars(val.data(), val.data() + val.size(), result);
+    auto [ptr, ec] = std::from_chars(val.data(), val.data() + val.size(), result);
+    if (ec != std::errc{})
+        Log::warn("HTTP: failed to parse header '{}' value '{}' as u64", key, val);
     return result;
 }
 
@@ -596,7 +648,9 @@ uint64_t Result::get_request_header_value_u64(const std::string& key, uint64_t d
     if (val.empty())
         return def;
     uint64_t result = def;
-    std::from_chars(val.data(), val.data() + val.size(), result);
+    auto [ptr, ec] = std::from_chars(val.data(), val.data() + val.size(), result);
+    if (ec != std::errc{})
+        Log::warn("HTTP: failed to parse request header '{}' value '{}' as u64", key, val);
     return result;
 }
 

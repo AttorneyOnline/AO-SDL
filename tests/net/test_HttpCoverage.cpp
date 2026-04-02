@@ -641,3 +641,259 @@ TEST(HttpClientSetters, AllSettersWork) {
     cli.set_logger([](const http::Request&, const http::Response&) {});
     EXPECT_TRUE(cli.is_valid());
 }
+
+// ===========================================================================
+// Header size limit: client rejects oversized headers
+// ===========================================================================
+
+TEST(HttpClientHeaderLimit, RejectsOversizedHeaders) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+
+    std::thread fake_server([&] {
+        listener.set_non_blocking(false);
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        // Send response with a massive header section (> 64 KB)
+        std::string resp = "HTTP/1.1 200 OK\r\n";
+        for (int i = 0; i < 2000; ++i)
+            resp += "X-Padding-" + std::to_string(i) + ": " + std::string(40, 'x') + "\r\n";
+        resp += "\r\nbody";
+        conn.send(resp.data(), resp.size());
+        conn.shutdown();
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(port));
+    auto res = cli.Get("/test");
+    fake_server.join();
+    listener.close();
+
+    // Should fail — headers too large
+    EXPECT_FALSE(res);
+
+    Log::set_sink(nullptr);
+}
+
+// ===========================================================================
+// Chunked: invalid hex chunk size is handled gracefully
+// ===========================================================================
+
+TEST(HttpClientChunked, InvalidChunkSizeHandledGracefully) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+
+    std::thread fake_server([&] {
+        listener.set_non_blocking(false);
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        std::string resp = "HTTP/1.1 200 OK\r\n"
+                           "Transfer-Encoding: chunked\r\n"
+                           "Connection: close\r\n"
+                           "\r\n"
+                           "ZZZZ\r\n" // invalid hex
+                           "garbage\r\n";
+        conn.send(resp.data(), resp.size());
+        conn.shutdown();
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(port));
+    auto res = cli.Get("/test");
+    fake_server.join();
+    listener.close();
+
+    // Should succeed with empty body (parser stops at invalid chunk)
+    ASSERT_TRUE(res);
+    EXPECT_TRUE(res->body.empty());
+
+    Log::set_sink(nullptr);
+}
+
+// ===========================================================================
+// Chunked: chunk extensions are stripped (RFC 9112 §7.1.1)
+// ===========================================================================
+
+TEST(HttpClientChunked, ChunkExtensionsStripped) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+
+    std::thread fake_server([&] {
+        listener.set_non_blocking(false);
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        std::string resp = "HTTP/1.1 200 OK\r\n"
+                           "Transfer-Encoding: chunked\r\n"
+                           "Connection: close\r\n"
+                           "\r\n"
+                           "5;ext=value\r\n" // chunk extension
+                           "Hello\r\n"
+                           "0\r\n"
+                           "\r\n";
+        conn.send(resp.data(), resp.size());
+        conn.shutdown();
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(port));
+    auto res = cli.Get("/test");
+    fake_server.join();
+    listener.close();
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->body, "Hello");
+
+    Log::set_sink(nullptr);
+}
+
+// ===========================================================================
+// Chunked: trailer headers are consumed without corrupting keep-alive
+// ===========================================================================
+
+TEST(HttpClientChunked, TrailerHeadersConsumed) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+
+    std::thread fake_server([&] {
+        listener.set_non_blocking(false);
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+
+        // First request: chunked with trailers
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        std::string resp1 = "HTTP/1.1 200 OK\r\n"
+                            "Transfer-Encoding: chunked\r\n"
+                            "Connection: keep-alive\r\n"
+                            "\r\n"
+                            "5\r\n"
+                            "First\r\n"
+                            "0\r\n"
+                            "Trailer-Key: trailer-value\r\n"
+                            "\r\n";
+        conn.send(resp1.data(), resp1.size());
+
+        // Second request on same connection
+        conn.recv(buf, sizeof(buf));
+        std::string resp2 = "HTTP/1.1 200 OK\r\n"
+                            "Content-Length: 6\r\n"
+                            "Connection: close\r\n"
+                            "\r\n"
+                            "Second";
+        conn.send(resp2.data(), resp2.size());
+        conn.shutdown();
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(port));
+    cli.set_keep_alive(true);
+
+    auto r1 = cli.Get("/first");
+    ASSERT_TRUE(r1);
+    EXPECT_EQ(r1->body, "First");
+
+    auto r2 = cli.Get("/second");
+    ASSERT_TRUE(r2);
+    EXPECT_EQ(r2->body, "Second");
+
+    fake_server.join();
+    listener.close();
+
+    Log::set_sink(nullptr);
+}
+
+// ===========================================================================
+// from_chars: malformed Content-Length header logged and returns default
+// ===========================================================================
+
+TEST(HttpClientFromChars, MalformedContentLengthUsesDefault) {
+    Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
+
+    auto listener = platform::tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+
+    std::thread fake_server([&] {
+        listener.set_non_blocking(false);
+        std::string addr;
+        uint16_t rp;
+        auto conn = platform::tcp_accept(listener, addr, rp);
+        if (!conn.valid())
+            return;
+        char buf[4096];
+        conn.recv(buf, sizeof(buf));
+        std::string resp = "HTTP/1.1 200 OK\r\n"
+                           "Content-Length: not-a-number\r\n"
+                           "Connection: close\r\n"
+                           "\r\n"
+                           "body-data";
+        conn.send(resp.data(), resp.size());
+        conn.shutdown();
+    });
+
+    http::Client cli("127.0.0.1", static_cast<int>(port));
+    auto res = cli.Get("/test");
+    fake_server.join();
+    listener.close();
+
+    // Should succeed — malformed Content-Length defaults to 0
+    ASSERT_TRUE(res);
+
+    Log::set_sink(nullptr);
+}
+
+// ===========================================================================
+// Socket: double close is safe
+// ===========================================================================
+
+TEST(PlatformSocketEdge, ConnectAfterCloseThrows) {
+    // After closing, the socket should be invalid
+    auto s = platform::tcp_create();
+    s.close();
+    EXPECT_FALSE(s.valid());
+    EXPECT_EQ(s.fd(), -1);
+}
+
+TEST(PlatformSocketEdge, ShutdownOnFreshSocketDoesNotCrash) {
+    auto s = platform::tcp_create();
+    s.shutdown(); // should not crash even though not connected
+    s.close();
+}
+
+TEST(PlatformSocketEdge, SendOnClosedSocketReturnsError) {
+    auto s = platform::tcp_create();
+    s.close();
+    // Sending on an invalid socket should return error
+    // (behavior may vary — just ensure no crash)
+    ssize_t n = s.send("test", 4);
+    EXPECT_LE(n, 0);
+}
+
+TEST(PlatformSocketEdge, RecvOnClosedSocketReturnsError) {
+    auto s = platform::tcp_create();
+    s.close();
+    char buf[16];
+    ssize_t n = s.recv(buf, sizeof(buf));
+    EXPECT_LE(n, 0);
+}

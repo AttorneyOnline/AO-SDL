@@ -103,6 +103,7 @@ struct Server::ServerState {
         platform::Socket socket;
         std::string area;
     };
+    std::mutex sse_mutex; // Guards sse_by_fd — accessed from both poll thread and push_sse()
     std::unordered_map<int, SSEConnection> sse_by_fd; // fd → SSEConnection for O(1) lookup
 };
 
@@ -510,15 +511,18 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
             }
             else {
                 // O(1) SSE connection disconnect detection
-                auto sse_it = state.sse_by_fd.find(ev.fd);
-                if (sse_it != state.sse_by_fd.end()) {
-                    char discard[64];
-                    ssize_t n = sse_it->second.socket.recv(discard, sizeof(discard));
-                    if (n <= 0) {
-                        state.poller.remove(ev.fd);
-                        state.sse_by_fd.erase(sse_it);
+                {
+                    std::lock_guard sse_lock(state.sse_mutex);
+                    auto sse_it = state.sse_by_fd.find(ev.fd);
+                    if (sse_it != state.sse_by_fd.end()) {
+                        char discard[64];
+                        ssize_t n = sse_it->second.socket.recv(discard, sizeof(discard));
+                        if (n <= 0) {
+                            state.poller.remove(ev.fd);
+                            state.sse_by_fd.erase(sse_it);
+                        }
+                        continue;
                     }
-                    continue;
                 }
 
                 // O(1) fd → connection lookup
@@ -673,7 +677,10 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                     sse_conn.area = area;
                                     // Keep in poller for disconnect detection
                                     int sse_fd = sse_conn.socket.fd();
-                                    state.sse_by_fd.emplace(sse_fd, std::move(sse_conn));
+                                    {
+                                        std::lock_guard sse_lock(state.sse_mutex);
+                                        state.sse_by_fd.emplace(sse_fd, std::move(sse_conn));
+                                    }
                                     // Remove from normal connections (fd_to_conn already points here)
                                     state.fd_to_conn.erase(ev.fd);
                                     state.connections.erase(conn->id);
@@ -798,6 +805,7 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
         return;
     std::string frame = "event: " + event + "\ndata: " + data + "\n\n";
 
+    std::lock_guard lock(state_->sse_mutex);
     std::vector<int> dead_fds;
     for (auto& [fd, sse] : state_->sse_by_fd) {
         if (!area.empty() && !sse.area.empty() && sse.area != area)
@@ -878,7 +886,10 @@ bool Server::listen_after_bind() {
         w.request_stop();
     state.work_cv.notify_all();
     state.workers.clear();
-    state.sse_by_fd.clear();
+    {
+        std::lock_guard sse_lock(state.sse_mutex);
+        state.sse_by_fd.clear();
+    }
 
     is_running_.store(false);
     return true;

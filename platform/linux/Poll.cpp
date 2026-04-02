@@ -6,9 +6,12 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+
+#include "utils/Log.h"
 
 namespace platform {
 
@@ -57,7 +60,8 @@ void Poller::add(int fd, uint32_t interest, void* user_data) {
     struct epoll_event ev{};
     ev.events = to_epoll_events(interest);
     ev.data.fd = fd;
-    epoll_ctl(impl_->epfd, EPOLL_CTL_ADD, fd, &ev);
+    if (epoll_ctl(impl_->epfd, EPOLL_CTL_ADD, fd, &ev) < 0)
+        Log::warn("epoll_ctl ADD failed for fd {}: {}", fd, strerror(errno));
     impl_->user_data_map[fd] = user_data;
 }
 
@@ -65,12 +69,14 @@ void Poller::modify(int fd, uint32_t interest, void* user_data) {
     struct epoll_event ev{};
     ev.events = to_epoll_events(interest);
     ev.data.fd = fd;
-    epoll_ctl(impl_->epfd, EPOLL_CTL_MOD, fd, &ev);
+    if (epoll_ctl(impl_->epfd, EPOLL_CTL_MOD, fd, &ev) < 0)
+        Log::warn("epoll_ctl MOD failed for fd {}: {}", fd, strerror(errno));
     impl_->user_data_map[fd] = user_data;
 }
 
 void Poller::remove(int fd) {
-    epoll_ctl(impl_->epfd, EPOLL_CTL_DEL, fd, nullptr);
+    if (epoll_ctl(impl_->epfd, EPOLL_CTL_DEL, fd, nullptr) < 0)
+        Log::warn("epoll_ctl DEL failed for fd {}: {}", fd, strerror(errno));
     impl_->user_data_map.erase(fd);
 }
 

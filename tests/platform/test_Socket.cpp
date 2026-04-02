@@ -269,6 +269,41 @@ TEST(PlatformSocket, SetSendTimeoutDoesNotCrash) {
 
 // -- Non-blocking recv semantics ----------------------------------------------
 
+// -- Local port -----------------------------------------------------------------
+
+TEST(PlatformSocket, LocalPortReturnsAssignedPort) {
+    auto listener = tcp_listen("127.0.0.1", 0);
+    uint16_t port = listener.local_port();
+    EXPECT_GT(port, 0u);
+}
+
+TEST(PlatformSocket, LocalPortOnUnboundSocketReturnsZero) {
+    auto s = tcp_create();
+    EXPECT_EQ(s.local_port(), 0u);
+}
+
+// -- Shutdown without prior connect ---------------------------------------------
+
+TEST(PlatformSocket, ShutdownOnUnconnectedSocketDoesNotCrash) {
+    auto s = tcp_create();
+    s.shutdown(); // should not crash
+    s.close();
+}
+
+// -- SSL methods on non-SSL socket -----------------------------------------------
+
+TEST(PlatformSocket, NegotiatedProtocolEmptyOnPlainSocket) {
+    auto s = tcp_create();
+    EXPECT_TRUE(s.negotiated_protocol().empty());
+}
+
+TEST(PlatformSocket, IsSSLReturnsFalseOnPlainSocket) {
+    auto s = tcp_create();
+    EXPECT_FALSE(s.is_ssl());
+}
+
+// -- Non-blocking recv semantics ----------------------------------------------
+
 TEST(PlatformSocket, NonBlockingRecvReturnsNegativeNotZero) {
     // Verify that recv on a non-blocking socket with no data returns -1
     // (EAGAIN), not 0 (which means graceful close). This distinction is

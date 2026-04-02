@@ -3,7 +3,9 @@
 #include "platform/Poll.h"
 #include "platform/Socket.h"
 
+#include <atomic>
 #include <chrono>
+#include <set>
 #include <thread>
 
 using namespace platform;
@@ -228,6 +230,55 @@ TEST(PlatformPoller, NotifierCanBeCalledMultipleTimes) {
 }
 
 // -- Listener socket readability (accept pattern) -----------------------------
+
+TEST(PlatformPoller, MultipleSocketsAllEventsDelivered) {
+    // Verify that with two readable sockets, both events are eventually delivered
+    // (tests that we don't permanently lose events under load)
+    auto [c1, s1] = make_pair();
+    auto [c2, s2] = make_pair();
+
+    Poller poller;
+    poller.add(s1, Poller::Readable, reinterpret_cast<void*>(1));
+    poller.add(s2, Poller::Readable, reinterpret_cast<void*>(2));
+
+    c1.send("a", 1);
+    c2.send("b", 1);
+
+    // Drain both sockets' data via polling
+    std::set<void*> seen;
+    Poller::Event events[4];
+    for (int attempt = 0; attempt < 20 && seen.size() < 2; ++attempt) {
+        int n = poller.poll(events, 4, 100);
+        for (int i = 0; i < n; ++i)
+            seen.insert(events[i].user_data);
+    }
+    EXPECT_EQ(seen.size(), 2u) << "Both socket events should be delivered";
+}
+
+TEST(PlatformPoller, NotifierWakeFromAnotherThread) {
+    // Verify notifier can wake the poller from a different thread
+    Poller poller;
+    poller.create_notifier();
+
+    std::atomic<int> wake_count{0};
+    std::thread waker([&] {
+        for (int i = 0; i < 5; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            poller.notify();
+        }
+    });
+
+    Poller::Event events[4];
+    for (int attempt = 0; attempt < 50 && wake_count < 1; ++attempt) {
+        int n = poller.poll(events, 4, 200);
+        if (n > 0) {
+            wake_count++;
+            poller.drain_notifier();
+        }
+    }
+    waker.join();
+    EXPECT_GE(wake_count.load(), 1) << "Notifier should wake poller from another thread";
+}
 
 TEST(PlatformPoller, ListenerReadableOnIncomingConnection) {
     auto listener = tcp_listen("127.0.0.1", 0);
