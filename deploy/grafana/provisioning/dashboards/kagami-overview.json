@@ -515,12 +515,61 @@
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 110 },
       "targets": [{ "expr": "kagami_sessions_expired_total", "refId": "A" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+
+    {
+      "type": "row",
+      "title": "Logs",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 114 },
+      "collapsed": false
+    },
+    {
+      "type": "logs",
+      "title": "Server Logs",
+      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 115 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [{
+        "expr": "{job=\"kagami\", level=~\"$log_level\"}",
+        "refId": "A"
+      }],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
     }
   ],
   "refresh": "15s",
   "schemaVersion": 39,
   "tags": ["kagami"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "name": "log_level",
+        "label": "Log Level",
+        "type": "custom",
+        "current": { "text": "All", "value": ".+" },
+        "options": [
+          { "text": "All", "value": ".+", "selected": true },
+          { "text": "VERBOSE", "value": "VERBOSE", "selected": false },
+          { "text": "DEBUG", "value": "DEBUG", "selected": false },
+          { "text": "INFO", "value": "INFO", "selected": false },
+          { "text": "WARNING", "value": "WARNING", "selected": false },
+          { "text": "ERROR", "value": "ERROR", "selected": false },
+          { "text": "FATAL", "value": "FATAL", "selected": false }
+        ],
+        "query": "VERBOSE,DEBUG,INFO,WARNING,ERROR,FATAL",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+"
+      }
+    ]
+  },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
