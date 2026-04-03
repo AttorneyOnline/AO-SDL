@@ -139,6 +139,9 @@ void NXServer::broadcast_char_select(const CharSelectEvent& evt) {
     // sends the full availability array.
     if (evt.character_id < 0)
         return;
+    // TODO: char_id should be the SHA-256 manifest hash per the spec, not the
+    // integer index. CharSelectEvent only carries the legacy index; resolving
+    // the hash requires the character manifest store (Phase 3).
     nlohmann::json j = {
         {"char_id", std::to_string(evt.character_id)},
         {"available", false},
