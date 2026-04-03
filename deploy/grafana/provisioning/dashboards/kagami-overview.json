@@ -545,7 +545,8 @@
       }
     }
   ],
-  "refresh": "15s",
+  "refresh": "5s",
+  "liveNow": true,
   "schemaVersion": 39,
   "tags": ["kagami"],
   "templating": {
@@ -570,7 +571,7 @@
       }
     ]
   },
-  "time": { "from": "now-1h", "to": "now" },
+  "time": { "from": "now-5m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
   "title": "Kagami Overview",
