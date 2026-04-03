@@ -34,7 +34,7 @@ services:
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=24h'
       - '--storage.tsdb.retention.size=1GB'
       - '--web.external-url=/prometheus/'
       - '--web.route-prefix=/prometheus/'
