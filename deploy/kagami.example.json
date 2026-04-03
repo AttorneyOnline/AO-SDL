@@ -11,6 +11,7 @@
     "log_level": "info",
     "log_file": "/logs/kagami.log",
     "log_file_level": "info",
+    "loki_url": "http://loki:3100",
     "metrics_enabled": true,
     "metrics_path": "/metrics",
     "cloudwatch": {

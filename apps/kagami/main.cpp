@@ -1,4 +1,5 @@
 #include "CloudWatchSink.h"
+#include "LokiSink.h"
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
@@ -115,6 +116,22 @@ int main(int /*argc*/, char* argv[]) {
             },
             cfg.cloudwatch_log_level());
         cw_sink->start();
+    }
+
+    // --- Loki log sink ---
+    std::unique_ptr<LokiSink> loki_sink;
+    if (!cfg.loki_url().empty()) {
+        LokiSink::Config loki_cfg;
+        loki_cfg.url = cfg.loki_url();
+        loki_sink = std::make_unique<LokiSink>(std::move(loki_cfg));
+        Log::add_sink(
+            "loki",
+            [&lk = *loki_sink](LogLevel level, const std::string& timestamp, const std::string& message) {
+                lk.push(level, timestamp, message);
+            },
+            cfg.console_log_level());
+        loki_sink->start();
+        Log::log_print(INFO, "Loki: pushing to %s", cfg.loki_url().c_str());
     }
 
     Log::log_print(INFO, "Server: %s", cfg.server_name().c_str());
@@ -429,9 +446,12 @@ int main(int /*argc*/, char* argv[]) {
     // a stopped/destroyed object. CloudWatch's stop() does a final flush()
     // which sends buffered events via HTTP and reports errors to stderr
     // directly (not through Log), so this ordering is safe.
+    Log::remove_sink("loki");
     Log::remove_sink("cloudwatch");
     Log::remove_sink("file");
     Log::set_sink(nullptr);
+    if (loki_sink)
+        loki_sink->stop();
     if (cw_sink)
         cw_sink->stop();
 

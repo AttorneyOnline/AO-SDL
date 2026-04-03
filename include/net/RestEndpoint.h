@@ -16,5 +16,10 @@ class RestEndpoint {
     virtual const std::string& path_pattern() const = 0;
     virtual bool requires_auth() const = 0;
 
+    /// If true, response bodies are redacted in logs to avoid leaking secrets.
+    virtual bool sensitive() const {
+        return false;
+    }
+
     virtual RestResponse handle(const RestRequest& req) = 0;
 };

@@ -21,6 +21,9 @@ class SessionCreateEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return false;
     }
+    bool sensitive() const override {
+        return true;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (room().session_count() >= static_cast<size_t>(room().max_players)) {
