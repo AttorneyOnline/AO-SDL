@@ -539,7 +539,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[1m])",
+          "expr": "irate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "acquisitions",
           "refId": "A",
           "interval": "100ms"
@@ -566,7 +566,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_dispatch_lock_wait_nanoseconds_total{instance=~\"$instance\"}[1m])",
+          "expr": "irate(kagami_dispatch_lock_wait_nanoseconds_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "wait \u00b5s/sec",
           "refId": "A",
           "interval": "100ms"
