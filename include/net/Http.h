@@ -766,6 +766,26 @@ class Server {
 
     std::function<TaskQueue*(void)> new_task_queue;
 
+    // -- Observable internals (for metrics) ----------------------------------
+
+    /// Number of pending work items (requests waiting for a worker thread).
+    size_t work_queue_depth() const;
+
+    /// Number of pending results (responses waiting for the poll thread).
+    size_t result_queue_depth() const;
+
+    /// Number of worker threads currently executing a handler.
+    int active_workers() const;
+
+    /// Total number of worker threads.
+    size_t worker_count() const;
+
+    /// Cumulative nanoseconds workers spent idle (waiting for work).
+    uint64_t worker_idle_ns() const;
+
+    /// Cumulative nanoseconds workers spent executing handlers.
+    uint64_t worker_busy_ns() const;
+
   protected:
     bool process_request(Stream& strm, const std::string& remote_addr, int remote_port, const std::string& local_addr,
                          int local_port, bool close_connection, bool& connection_closed,

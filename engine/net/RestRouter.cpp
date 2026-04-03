@@ -21,6 +21,10 @@ static auto& http_errors_ =
     metrics::MetricsRegistry::instance().counter("kagami_http_errors_total", "Protocol-level HTTP errors", {"type"});
 static auto& dispatch_lock_wait_ = metrics::MetricsRegistry::instance().counter(
     "kagami_dispatch_lock_wait_nanoseconds_total", "Cumulative dispatch mutex wait time in nanoseconds");
+static auto& dispatch_lock_hold_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_dispatch_lock_hold_nanoseconds_total", "Cumulative dispatch mutex hold time in nanoseconds", {"endpoint"});
+static auto& http_request_bytes_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_http_request_bytes_total", "Total HTTP request body bytes received", {"method", "endpoint"});
 
 // -- RestRouter --------------------------------------------------------------
 
@@ -214,7 +218,16 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             }
 
             rest_res = endpoint.handle(rest_req);
+
+            auto hold_ns =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - lock_acquired)
+                    .count();
+            dispatch_lock_hold_.labels({endpoint.path_pattern()}).inc(static_cast<uint64_t>(hold_ns));
         }
+
+        // Track request body size (outside lock)
+        if (rest_req.body)
+            http_request_bytes_.labels({req.method, endpoint.path_pattern()}).inc(req.body.size());
 
         // Write response (outside lock — no game state access)
         res.status = rest_res.status;
