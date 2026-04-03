@@ -62,7 +62,7 @@ NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const st
     session.joined = true;
     Log::log_print(INFO, "NX: session created (%s, client=%s)", format_client_id(id).c_str(),
                    session.client_software.c_str());
-    return {session.session_token, session.session_id};
+    return {session.session_token, session.session_id, session.moderator};
 }
 
 void NXServer::destroy_session(uint64_t client_id) {

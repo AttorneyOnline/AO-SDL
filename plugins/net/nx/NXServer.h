@@ -19,6 +19,7 @@ class NXServer {
     struct SessionInfo {
         std::string token;
         uint64_t session_id;
+        bool moderator;
     };
 
     /// Create a session for a REST client.

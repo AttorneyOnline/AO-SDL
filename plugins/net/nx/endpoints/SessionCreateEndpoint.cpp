@@ -53,13 +53,17 @@ class SessionCreateEndpoint : public NXEndpoint {
 
         auto info = server().create_session(hdid, client_name, client_version);
 
+        auto roles = nlohmann::json::array({"player"});
+        if (info.moderator)
+            roles.push_back("moderator");
+
         nlohmann::json resp = {
             {"token", info.token},
             {"user",
              {
                  {"id", std::to_string(info.session_id)},
                  {"display_name", client_name},
-                 {"roles", nlohmann::json::array({"player"})},
+                 {"roles", std::move(roles)},
              }},
         };
 
