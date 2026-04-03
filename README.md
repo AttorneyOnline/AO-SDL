@@ -250,6 +250,35 @@ All settings are stored in `kagami.json` and can be edited while the server is s
 | `session_ttl_seconds` | `300` | REST session TTL in seconds (0 = no expiry) |
 | `cors_origin` | `"https://web.aceattorneyonline.com"` | CORS allowed origin(s) — string, `"*"`, or array of strings |
 
+### Deploying
+
+The `deploy/` directory contains a complete Docker Compose stack that runs Kagami with TLS, metrics, and dashboards:
+
+```sh
+cd deploy
+cp kagami.example.json kagami.json   # edit with your server settings
+docker compose up -d
+```
+
+This brings up four services:
+
+| Service | Purpose | URL |
+|---|---|---|
+| **Caddy** | Reverse proxy + automatic HTTPS | `https://your.domain/` |
+| **Kagami** | Game server (AO2 + AONX) | Port 27015 (WebSocket, direct) |
+| **Prometheus** | Metrics scraping + storage | `https://your.domain/prometheus/` |
+| **Grafana** | Dashboards + alerting | `https://your.domain/grafana/` |
+
+Set `KAGAMI_DOMAIN` to your domain for TLS:
+
+```sh
+KAGAMI_DOMAIN=my.server.com docker compose up -d
+```
+
+Optionally create a `.env` file with `GRAFANA_ADMIN_PASSWORD=your_password` (defaults to `kagami`). Anonymous visitors get read-only dashboard access.
+
+Kagami exposes a Prometheus-compatible `/metrics` endpoint with session counts, network I/O, area populations, lock contention, memory usage, and more. See `include/metrics/` for the full metric inventory.
+
 ### Architecture
 
 Kagami uses a protocol-agnostic core with pluggable protocol backends:
