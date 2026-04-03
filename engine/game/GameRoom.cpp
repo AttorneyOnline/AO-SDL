@@ -1,6 +1,7 @@
 #include "game/GameRoom.h"
 
 #include "game/ClientId.h"
+#include "metrics/MetricsRegistry.h"
 #include "utils/Crypto.h"
 #include "utils/Log.h"
 
@@ -80,6 +81,9 @@ int GameRoom::expire_sessions(int ttl_seconds) {
         ++it;
     }
     if (expired > 0) {
+        static auto& ctr =
+            metrics::MetricsRegistry::instance().counter("kagami_sessions_expired_total", "Sessions expired by TTL");
+        ctr.get().inc(expired);
         for (auto& cb : chars_taken_broadcasts_)
             cb(char_taken);
     }

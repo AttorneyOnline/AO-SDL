@@ -753,9 +753,13 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                     }
 
                                     // Send replay frames without holding the lock
-                                    if (!replay_frames.empty())
+                                    if (!replay_frames.empty()) {
+                                        static auto& ctr = metrics::MetricsRegistry::instance().counter(
+                                            "kagami_sse_replays_total", "SSE event replays on reconnect");
+                                        ctr.get().inc(replay_frames.size());
                                         Log::log_print(VERBOSE, "SSE: replaying %zu events from id %lu",
                                                        replay_frames.size(), (unsigned long)last_id);
+                                    }
                                     for (auto& frame : replay_frames)
                                         send_sse_frame(sse_conn.socket, frame);
 
@@ -941,6 +945,11 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
             ++sent_count;
     }
     Log::log_print(VERBOSE, "SSE: push id=%lu %s -> %d client(s)", (unsigned long)eid, event.c_str(), sent_count);
+    if (!dead_fds.empty()) {
+        static auto& ctr = metrics::MetricsRegistry::instance().counter("kagami_sse_dead_clients_total",
+                                                                        "SSE clients dropped due to send failure");
+        ctr.get().inc(dead_fds.size());
+    }
     for (int fd : dead_fds) {
         Log::log_print(VERBOSE, "SSE: dropped dead fd=%d", fd);
         state_->poller.remove(fd);
