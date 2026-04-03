@@ -533,10 +533,10 @@
         "refId": "A"
       }],
       "options": {
-        "showTime": true,
-        "showLabels": true,
+        "showTime": false,
+        "showLabels": false,
         "showCommonLabels": false,
-        "wrapLogMessage": true,
+        "wrapLogMessage": false,
         "prettifyLogMessage": false,
         "enableLogDetails": true,
         "sortOrder": "Descending",
