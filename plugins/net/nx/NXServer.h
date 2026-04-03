@@ -16,8 +16,13 @@ class NXServer {
         return room_;
     }
 
-    /// Create a session for a REST client. Returns the bearer token.
-    std::string create_session(const std::string& hdid, const std::string& client_name,
+    struct SessionInfo {
+        std::string token;
+        uint64_t session_id;
+    };
+
+    /// Create a session for a REST client.
+    SessionInfo create_session(const std::string& hdid, const std::string& client_name,
                                const std::string& client_version);
     void destroy_session(uint64_t client_id);
 

@@ -63,11 +63,10 @@ def ref_name(ref: str) -> str:
 
 
 # Keywords we handle or can safely ignore (documentation-only).
-# TODO: add oneOf support for polymorphic schemas (e.g. CharTakenEvent).
 SUPPORTED_KEYWORDS = {
     "type", "$ref", "properties", "required", "items", "enum",
     "additionalProperties", "description", "format", "nullable",
-    "minLength", "maxLength", "minimum", "maximum",
+    "minLength", "maxLength", "minimum", "maximum", "oneOf",
 }
 
 
@@ -92,6 +91,21 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0, context: str = "") 
     if "$ref" in schema:
         resolved = resolve_ref(spec, schema["$ref"])
         return schema_to_cpp(spec, resolved, indent, context)
+
+    # Handle oneOf — exactly one variant must validate.
+    if "oneOf" in schema:
+        variants = schema["oneOf"]
+        variant_exprs = []
+        for i, variant in enumerate(variants):
+            variant_ctx = f"{context}[oneOf/{i}]" if context else f"oneOf/{i}"
+            variant_exprs.append(schema_to_cpp(spec, variant, indent + 1, context=variant_ctx))
+        lines = ["JsonSchema::one_of({"]
+        for expr in variant_exprs:
+            for line in expr.split("\n"):
+                lines.append(f"{pad}    {line}")
+            lines[-1] += ","
+        lines.append(f"{pad}}})")
+        return "\n".join(lines)
 
     typ = schema.get("type", "object")
 
