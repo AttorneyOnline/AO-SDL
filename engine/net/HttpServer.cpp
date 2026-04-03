@@ -16,6 +16,7 @@
 
 #include "event/EventChannel.h"
 #include "event/EventManager.h"
+#include "metrics/MetricsRegistry.h"
 #include "platform/Poll.h"
 #include "platform/Socket.h"
 #include "utils/Log.h"
@@ -905,9 +906,17 @@ void Server::set_sse_session_touch(SSESessionTouchFunc func) {
         state_->sse_session_touch = std::move(func);
 }
 
+static metrics::CounterFamily& sse_events_metric() {
+    static auto& f =
+        metrics::MetricsRegistry::instance().counter("kagami_sse_events_total", "SSE events sent", {"event"});
+    return f;
+}
+
 void Server::push_sse(const std::string& event, const std::string& data, const std::string& area) {
     if (!state_)
         return;
+
+    sse_events_metric().labels({event}).inc();
 
     std::lock_guard lock(state_->sse_mutex);
 

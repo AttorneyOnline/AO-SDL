@@ -19,6 +19,9 @@ void nx_ep_area_join();
 void nx_ep_area_ic();
 void nx_ep_area_ooc();
 
+// Admin endpoints
+void nx_ep_admin_sessions();
+
 // Force all endpoint TUs to link. Same pattern as ao_register_packet_types().
 void nx_register_endpoints() {
     nx_ep_server();
@@ -36,4 +39,6 @@ void nx_register_endpoints() {
     nx_ep_area_join();
     nx_ep_area_ic();
     nx_ep_area_ooc();
+
+    nx_ep_admin_sessions();
 }

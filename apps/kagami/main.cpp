@@ -2,8 +2,11 @@
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
+
 #include "game/ClientId.h"
 #include "game/GameRoom.h"
+#include "metrics/MetricsRegistry.h"
+#include "metrics/ProcessMetrics.h"
 #include "net/EndpointFactory.h"
 #include "net/PlatformServerSocket.h"
 #include "net/RestRouter.h"
@@ -11,6 +14,7 @@
 #include "net/ao/AOServer.h"
 #include "net/nx/NXEndpoint.h"
 #include "utils/Log.h"
+#include "utils/Version.h"
 
 #include "net/Http.h"
 
@@ -138,6 +142,14 @@ int main(int /*argc*/, char* argv[]) {
         res.set_content("Hello from " + cfg.server_name() + "\n", "text/plain");
     });
 
+    // --- Metrics endpoint (infrastructure, no auth) ---
+    auto server_start_time = std::chrono::steady_clock::now();
+    if (cfg.metrics_enabled()) {
+        http.Get(cfg.metrics_path(), [](const http::Request&, http::Response& res) {
+            res.set_content(metrics::MetricsRegistry::instance().collect(), "text/plain; version=0.0.4; charset=utf-8");
+        });
+    }
+
     // --- REST API (AONX endpoints registered via EndpointFactory) ---
     nx_register_endpoints();
     NXEndpoint::set_server(&nx_backend);
@@ -148,6 +160,63 @@ int main(int /*argc*/, char* argv[]) {
         [&room](const std::string& token) -> ServerSession* { return room.find_session_by_token(token); });
     EndpointFactory::instance().populate(rest_router);
     rest_router.bind(http);
+
+    // --- Metrics snapshot collectors (registered after room + rest_router exist) ---
+    if (cfg.metrics_enabled()) {
+        auto& reg = metrics::MetricsRegistry::instance();
+        auto& uptime = reg.gauge("kagami_uptime_seconds", "Server uptime in seconds");
+        auto& rss = reg.gauge("kagami_process_resident_bytes", "Resident memory in bytes");
+        auto& sessions_g = reg.gauge("kagami_sessions", "Active sessions", {"protocol"});
+        auto& sessions_joined = reg.gauge("kagami_sessions_joined", "Joined sessions");
+        auto& sessions_mods = reg.gauge("kagami_sessions_moderators", "Online moderators");
+        auto& area_players = reg.gauge("kagami_area_players", "Players per area", {"area", "status"});
+        auto& chars_taken = reg.gauge("kagami_characters_taken", "Characters currently taken");
+        auto& build_info = reg.gauge("kagami_build_info", "Build metadata", {"version"});
+        auto& config_info =
+            reg.gauge("kagami_config_info", "Active configuration", {"server_name", "max_players", "session_ttl"});
+
+        build_info.labels({ao_sdl_version()}).set(1);
+        config_info
+            .labels({cfg.server_name(), std::to_string(cfg.max_players()), std::to_string(cfg.session_ttl_seconds())})
+            .set(1);
+
+        reg.add_collector([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &chars_taken,
+                           &rest_router, &room, &server_start_time] {
+            auto elapsed = std::chrono::steady_clock::now() - server_start_time;
+            uptime.get().set(std::chrono::duration<double>(elapsed).count());
+            rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
+
+            rest_router.with_lock([&] {
+                int ao_count = 0, nx_count = 0, joined_count = 0, mod_count = 0;
+                room.for_each_session([&](const ServerSession& s) {
+                    if (s.protocol == "ao2")
+                        ++ao_count;
+                    else
+                        ++nx_count;
+                    if (s.joined)
+                        ++joined_count;
+                    if (s.moderator)
+                        ++mod_count;
+                });
+                sessions_g.labels({"ao2"}).set(ao_count);
+                sessions_g.labels({"aonx"}).set(nx_count);
+                sessions_joined.get().set(joined_count);
+                sessions_mods.get().set(mod_count);
+
+                for (auto& [id, state] : room.area_states()) {
+                    auto players = room.sessions_in_area(state.name);
+                    area_players.labels({state.name, state.status}).set(static_cast<double>(players.size()));
+                }
+
+                int taken = 0;
+                for (int t : room.char_taken) {
+                    if (t)
+                        ++taken;
+                }
+                chars_taken.get().set(taken);
+            });
+        });
+    }
 
     // Preflight handler for the SSE endpoint (registered outside RestRouter).
     http.Options("/aonx/v1/events", [](const http::Request&, http::Response& res) { res.status = 204; });
@@ -208,6 +277,13 @@ int main(int /*argc*/, char* argv[]) {
         ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
     };
     ao_backend.set_send_func(ws_send);
+
+    // WS connection gauge (registered here because ws is created after the main metrics block)
+    if (cfg.metrics_enabled()) {
+        auto& reg = metrics::MetricsRegistry::instance();
+        auto& ws_conns = reg.gauge("kagami_ws_connections", "Active WebSocket connections");
+        reg.add_collector([&ws_conns, &ws] { ws_conns.get().set(static_cast<double>(ws.client_count())); });
+    }
 
     // All GameRoom mutations (WS and REST) share the dispatch mutex to
     // prevent concurrent access. This couples WS latency to REST handler

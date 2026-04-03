@@ -107,6 +107,15 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return parse_log_level(value<std::string>("cloudwatch/log_level"));
     }
 
+    // -- Metrics --
+
+    bool metrics_enabled() const {
+        return value<bool>("metrics_enabled");
+    }
+    std::string metrics_path() const {
+        return value<std::string>("metrics_path");
+    }
+
     /// Returns the configured CORS origins.
     /// Supports both a single string and an array of strings in config:
     ///   "cors_origin": "*"
@@ -150,6 +159,8 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"log_level", "verbose"},
             {"log_file", ""},
             {"log_file_level", "verbose"},
+            {"metrics_enabled", true},
+            {"metrics_path", "/metrics"},
             {"cloudwatch",
              nlohmann::json{
                  {"region", ""},

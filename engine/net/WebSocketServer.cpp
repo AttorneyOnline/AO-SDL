@@ -1,5 +1,6 @@
 #include "net/WebSocketServer.h"
 
+#include "metrics/MetricsRegistry.h"
 #include "net/WebSocketCommon.h"
 
 #ifdef _WIN32
@@ -12,6 +13,28 @@
 #include <cstring>
 #include <format>
 #include <sstream>
+
+// -- WS metrics (lazy-initialized) --------------------------------------------
+
+static metrics::CounterFamily& ws_frames_in() {
+    static auto& f =
+        metrics::MetricsRegistry::instance().counter("kagami_ws_frames_in_total", "WebSocket frames received");
+    return f;
+}
+static metrics::CounterFamily& ws_frames_out() {
+    static auto& f =
+        metrics::MetricsRegistry::instance().counter("kagami_ws_frames_out_total", "WebSocket frames sent");
+    return f;
+}
+static metrics::CounterFamily& ws_bytes_in() {
+    static auto& f =
+        metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_in_total", "WebSocket bytes received");
+    return f;
+}
+static metrics::CounterFamily& ws_bytes_out() {
+    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_out_total", "WebSocket bytes sent");
+    return f;
+}
 
 WebSocketServer::WebSocketServer(std::unique_ptr<IServerSocket> listener) : listener_(std::move(listener)) {
 }
@@ -107,8 +130,11 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
 
             try {
                 auto frames = read_client_frames(client);
-                for (auto& frame : frames)
+                for (auto& frame : frames) {
+                    ws_frames_in().get().inc();
+                    ws_bytes_in().get().inc(frame.data.size());
                     result.push_back({id, std::move(frame)});
+                }
             }
             catch (...) {
                 dead_clients.push_back(id);
@@ -136,6 +162,9 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
 }
 
 void WebSocketServer::send(ClientId client_id, std::span<const uint8_t> data) {
+    ws_frames_out().get().inc();
+    ws_bytes_out().get().inc(data.size());
+
     bool dead = false;
     {
         std::lock_guard lock(mutex_);
@@ -201,16 +230,20 @@ void WebSocketServer::broadcast(std::span<const uint8_t> data) {
         frame.data.assign(data.begin(), data.end());
         auto wire_bytes = frame.serialize();
 
+        int send_count = 0;
         for (auto& [id, client] : clients_) {
             if (!client.handshake_complete)
                 continue;
             try {
                 client.socket->send(wire_bytes.data(), wire_bytes.size());
+                ++send_count;
             }
             catch (...) {
                 dead_clients.push_back(id);
             }
         }
+        ws_frames_out().get().inc(send_count);
+        ws_bytes_out().get().inc(data.size() * send_count);
 
         for (auto id : dead_clients)
             remove_client(id);
