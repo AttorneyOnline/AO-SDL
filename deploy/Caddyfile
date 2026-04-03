@@ -1,0 +1,12 @@
+{$KAGAMI_DOMAIN:canary.attorneyoffline.de} {
+	# Game server API
+	reverse_proxy /aonx/* kagami:80
+	reverse_proxy /metrics kagami:80
+	reverse_proxy / kagami:80
+
+	# Grafana dashboards
+	reverse_proxy /grafana/* grafana:3000
+
+	# Prometheus (optional — remove to hide from public)
+	reverse_proxy /prometheus/* prometheus:9090
+}

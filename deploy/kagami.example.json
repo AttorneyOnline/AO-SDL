@@ -1,0 +1,25 @@
+{
+    "bind_address": "0.0.0.0",
+    "http_port": 80,
+    "ws_port": 27015,
+    "cors_origin": "*",
+    "server_name": "Kagami Server",
+    "server_description": "",
+    "max_players": 100,
+    "motd": "",
+    "session_ttl_seconds": 300,
+    "log_level": "info",
+    "log_file": "/logs/kagami.log",
+    "log_file_level": "info",
+    "metrics_enabled": true,
+    "metrics_path": "/metrics",
+    "cloudwatch": {
+        "region": "",
+        "log_group": "",
+        "log_stream": "",
+        "access_key_id": "",
+        "secret_access_key": "",
+        "flush_interval": 5,
+        "log_level": "info"
+    }
+}

@@ -1,0 +1,63 @@
+services:
+  # --- Reverse proxy + TLS ---
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - kagami
+      - grafana
+
+  # --- Game server ---
+  kagami:
+    image: ghcr.io/attorneyonline/kagami:latest
+    restart: unless-stopped
+    ports:
+      - "27015:27015"  # WebSocket (AO2) — direct, no proxy
+    volumes:
+      - ./kagami.json:/app/kagami.json
+      - kagami_logs:/logs
+    # HTTP on port 80 is internal only (Caddy proxies to it)
+
+  # --- Metrics ---
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=1GB'
+      # Listen on default 9090, only accessible via Caddy
+    depends_on:
+      - kagami
+
+  # --- Dashboards ---
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=kagami
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN:-canary.attorneyoffline.de}/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  caddy_data:
+  caddy_config:
+  kagami_logs:
+  prometheus_data:
+  grafana_data:
