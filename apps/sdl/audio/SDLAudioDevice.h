@@ -63,4 +63,5 @@ class SDLAudioDevice : public IAudioDevice {
     SDL_AudioDeviceID device_id_ = 0;
     mutable std::mutex mutex_;
     std::array<Channel, NUM_CHANNELS> channels_{};
+    float mix_buf_[8192]{}; // scratch buffer for stream reads (32 KB — too large for stack)
 };

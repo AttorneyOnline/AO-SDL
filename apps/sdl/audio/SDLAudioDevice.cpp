@@ -139,16 +139,15 @@ void SDLAudioDevice::mix(float* output, int frames) {
 
         if (ch.stream) {
             // --- Streaming channel (music) ---
-            float buf[8192]; // temp buffer for stream read
             int remaining = frames;
             int out_pos = 0;
 
             while (remaining > 0) {
-                int to_read = std::min(remaining, (int)(sizeof(buf) / sizeof(buf[0]) / 2));
-                int got = ch.stream->read_frames(buf, to_read);
+                int to_read = std::min(remaining, (int)(sizeof(mix_buf_) / sizeof(mix_buf_[0]) / 2));
+                int got = ch.stream->read_frames(mix_buf_, to_read);
 
                 for (int i = 0; i < got * 2; ++i)
-                    output[out_pos * 2 + i] += buf[i] * vol;
+                    output[out_pos * 2 + i] += mix_buf_[i] * vol;
                 out_pos += got;
                 remaining -= got;
 
