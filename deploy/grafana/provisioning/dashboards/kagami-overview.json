@@ -371,32 +371,29 @@
       "type": "table",
       "title": "Session List",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 71 },
-      "targets": [{
-        "expr": "{__name__=~\"kagami_session_.*\"}",
-        "format": "table",
-        "instant": true,
-        "refId": "A"
-      }],
+      "targets": [
+        { "expr": "kagami_session_idle_seconds", "format": "table", "instant": true, "refId": "idle" },
+        { "expr": "kagami_session_bytes_sent", "format": "table", "instant": true, "refId": "bytes_out" },
+        { "expr": "kagami_session_bytes_received", "format": "table", "instant": true, "refId": "bytes_in" },
+        { "expr": "kagami_session_packets_sent", "format": "table", "instant": true, "refId": "pkts_out" },
+        { "expr": "kagami_session_packets_received", "format": "table", "instant": true, "refId": "pkts_in" }
+      ],
       "transformations": [
-        { "id": "filterFieldsByName", "options": { "include": { "pattern": "session_id|display_name|protocol|area|character|__name__|Value" } } },
-        { "id": "rowsToFields", "options": { "mappings": [{ "fieldName": "__name__", "handlerKey": "field.name" }] } },
+        { "id": "joinByField", "options": { "byField": "session_id", "mode": "outer" } },
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "session_id|display_name 1|protocol 1|area 1|character 1|Value #idle|Value #bytes_out|Value #bytes_in|Value #pkts_out|Value #pkts_in" } } },
         { "id": "organize", "options": { "renameByName": {
-          "kagami_session_idle_seconds": "idle",
-          "kagami_session_bytes_sent": "bytes_out",
-          "kagami_session_bytes_received": "bytes_in",
-          "kagami_session_packets_sent": "pkts_out",
-          "kagami_session_packets_received": "pkts_in"
+          "display_name 1": "name",
+          "protocol 1": "protocol",
+          "area 1": "area",
+          "character 1": "character",
+          "Value #idle": "idle",
+          "Value #bytes_out": "bytes_out",
+          "Value #bytes_in": "bytes_in",
+          "Value #pkts_out": "pkts_out",
+          "Value #pkts_in": "pkts_in"
         }, "indexByName": {
-          "session_id": 0,
-          "display_name": 1,
-          "character": 2,
-          "protocol": 3,
-          "area": 4,
-          "bytes_out": 5,
-          "bytes_in": 6,
-          "pkts_out": 7,
-          "pkts_in": 8,
-          "idle": 9
+          "session_id": 0, "name": 1, "character": 2, "protocol": 3, "area": 4,
+          "bytes_out": 5, "bytes_in": 6, "pkts_out": 7, "pkts_in": 8, "idle": 9
         }}}
       ],
       "fieldConfig": {
