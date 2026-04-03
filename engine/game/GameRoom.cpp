@@ -91,6 +91,21 @@ int GameRoom::expire_sessions(int ttl_seconds) {
     return expired;
 }
 
+std::vector<uint64_t> GameRoom::find_expired_sessions(int ttl_seconds) const {
+    std::vector<uint64_t> result;
+    if (ttl_seconds <= 0)
+        return result;
+    auto now = std::chrono::steady_clock::now();
+    for (auto& [client_id, session] : sessions_) {
+        if (!session.session_token.empty()) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session.last_activity()).count();
+            if (elapsed > ttl_seconds)
+                result.push_back(client_id);
+        }
+    }
+    return result;
+}
+
 std::vector<ServerSession*> GameRoom::sessions_in_area(const std::string& area) {
     std::vector<ServerSession*> result;
     for (auto& [id, s] : sessions_) {
