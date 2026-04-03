@@ -252,32 +252,67 @@ All settings are stored in `kagami.json` and can be edited while the server is s
 
 ### Deploying
 
-The `deploy/` directory contains a complete Docker Compose stack that runs Kagami with TLS, metrics, and dashboards:
+The `deploy/` directory contains everything needed to run Kagami in production.
+
+#### Quick start
 
 ```sh
 cd deploy
 cp kagami.example.json kagami.json   # edit with your server settings
-docker compose up -d
-```
-
-This brings up four services:
-
-| Service | Purpose | URL |
-|---|---|---|
-| **Caddy** | Reverse proxy + automatic HTTPS | `https://your.domain/` |
-| **Kagami** | Game server (AO2 + AONX) | Port 27015 (WebSocket, direct) |
-| **Prometheus** | Metrics scraping + storage | `https://your.domain/prometheus/` |
-| **Grafana** | Dashboards + alerting | `https://your.domain/grafana/` |
-
-Set `KAGAMI_DOMAIN` to your domain for TLS:
-
-```sh
 KAGAMI_DOMAIN=my.server.com docker compose up -d
 ```
 
-Optionally create a `.env` file with `GRAFANA_ADMIN_PASSWORD=your_password` (defaults to `kagami`). Anonymous visitors get read-only dashboard access.
+**Prerequisites:** A Linux server (arm64 or amd64) with Docker and Docker Compose. Run `deploy/bootstrap.sh` on a fresh Ubuntu instance to install them. Point your domain's DNS to the server's IP — Caddy handles TLS certificates automatically via Let's Encrypt.
 
-Kagami exposes a Prometheus-compatible `/metrics` endpoint with session counts, network I/O, area populations, lock contention, memory usage, and more. See `include/metrics/` for the full metric inventory.
+#### Full stack (observability)
+
+The default `docker-compose.yml` runs 5 services:
+
+| Service | Purpose | URL | RAM |
+|---|---|---|---|
+| **Caddy** | TLS + reverse proxy | `https://your.domain/` | ~18 MB |
+| **Kagami** | Game server (AO2 + AONX) | Port 27015 (WebSocket, direct) | ~20 MB |
+| **Prometheus** | Metrics collection | `https://your.domain/prometheus/` | ~100 MB |
+| **Loki** | Log aggregation | (internal, queried via Grafana) | ~80 MB |
+| **Grafana** | Dashboards + log viewer | `https://your.domain/grafana/` | ~130 MB |
+
+This requires ~350 MB of RAM for the full stack. A t4g.micro (1 GB) or equivalent is recommended.
+
+Optionally create a `.env` file with `GRAFANA_ADMIN_PASSWORD=your_password` (defaults to `kagami`). Anonymous visitors get read-only dashboard access. A 34-panel Grafana dashboard is auto-provisioned on first boot — no manual setup needed.
+
+#### Minimal stack (game server only)
+
+If you don't need observability, remove the `prometheus`, `loki`, and `grafana` services from `docker-compose.yml` and trim the `Caddyfile` to just proxy to `kagami:80`. This runs on ~40 MB total — a t4g.nano (512 MB) is more than enough.
+
+Kagami's `/metrics` endpoint still works in the minimal setup, so you can add monitoring later or scrape remotely from another server.
+
+#### Updating
+
+On pushes to `master`, CI automatically builds the Docker image and pushes it to GHCR. If you set the `DEPLOY_SSH_KEY` and `DEPLOY_HOST` secrets in your fork, CI will also deploy to your server:
+
+```sh
+cd /opt/kagami && docker compose pull kagami && docker compose up -d kagami
+```
+
+Only the `kagami` container restarts — Caddy, Prometheus, Grafana, and Loki continue running.
+
+For manual deploys (e.g., testing a branch), build and push the image locally:
+
+```sh
+docker buildx build --platform linux/arm64 \
+  -t ghcr.io/attorneyonline/kagami:latest \
+  --output type=docker,dest=/tmp/kagami.tar .
+
+scp -i your-key.pem /tmp/kagami.tar user@your.server:/tmp/
+ssh -i your-key.pem user@your.server "
+  docker load < /tmp/kagami.tar
+  cd /opt/kagami && docker compose up -d kagami
+"
+```
+
+#### Observability
+
+Kagami exposes a Prometheus-compatible `/metrics` endpoint with 33 metric families covering network I/O, sessions, areas, lock contention, memory, and per-client traffic. Logs are pushed to Loki (if configured) with Grafana-native log levels for filtered queries. See `include/metrics/` for the full metric inventory.
 
 ### Architecture
 
