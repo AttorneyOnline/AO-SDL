@@ -36,7 +36,8 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=30d'
       - '--storage.tsdb.retention.size=1GB'
-      # Listen on default 9090, only accessible via Caddy
+      - '--web.external-url=/prometheus/'
+      - '--web.route-prefix=/prometheus/'
     depends_on:
       - kagami
 

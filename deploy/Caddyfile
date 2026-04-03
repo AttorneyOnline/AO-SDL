@@ -1,12 +1,16 @@
 {$KAGAMI_DOMAIN:canary.attorneyoffline.de} {
-	# Game server API
-	reverse_proxy /aonx/* kagami:80
-	reverse_proxy /metrics kagami:80
-	reverse_proxy / kagami:80
+	# Grafana (served from /grafana/, handles its own sub-path via GF_SERVER_SERVE_FROM_SUB_PATH)
+	handle /grafana* {
+		reverse_proxy grafana:3000
+	}
 
-	# Grafana dashboards
-	reverse_proxy /grafana/* grafana:3000
+	# Prometheus (served from /prometheus/, configured via --web.external-url)
+	handle /prometheus* {
+		reverse_proxy prometheus:9090
+	}
 
-	# Prometheus (optional — remove to hide from public)
-	reverse_proxy /prometheus/* prometheus:9090
+	# Everything else goes to kagami (game server API, /metrics, root)
+	handle {
+		reverse_proxy kagami:80
+	}
 }
