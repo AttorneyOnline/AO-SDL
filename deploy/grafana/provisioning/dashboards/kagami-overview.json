@@ -540,7 +540,8 @@
         "prettifyLogMessage": false,
         "enableLogDetails": true,
         "sortOrder": "Descending",
-        "dedupStrategy": "none"
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": true
       }
     }
   ],
@@ -556,14 +557,13 @@
         "current": { "text": "All", "value": ".+" },
         "options": [
           { "text": "All", "value": ".+", "selected": true },
-          { "text": "VERBOSE", "value": "VERBOSE", "selected": false },
-          { "text": "DEBUG", "value": "DEBUG", "selected": false },
-          { "text": "INFO", "value": "INFO", "selected": false },
-          { "text": "WARNING", "value": "WARNING", "selected": false },
-          { "text": "ERROR", "value": "ERROR", "selected": false },
-          { "text": "FATAL", "value": "FATAL", "selected": false }
+          { "text": "Debug", "value": "debug", "selected": false },
+          { "text": "Info", "value": "info", "selected": false },
+          { "text": "Warn", "value": "warn", "selected": false },
+          { "text": "Error", "value": "error", "selected": false },
+          { "text": "Critical", "value": "critical", "selected": false }
         ],
-        "query": "VERBOSE,DEBUG,INFO,WARNING,ERROR,FATAL",
+        "query": "debug,info,warn,error,critical",
         "multi": true,
         "includeAll": true,
         "allValue": ".+"

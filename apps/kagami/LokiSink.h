@@ -52,10 +52,34 @@ class LokiSink {
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
                 .count());
 
-        std::string formatted = "[" + timestamp + "][" + log_level_name(level) + "] " + message;
+        // Omit [LEVEL] prefix — Grafana renders it as a colored badge from the label
+        std::string formatted = "[" + timestamp + "] " + message;
+
+        // Map to Grafana-recognized level names for colored badges
+        const char* loki_level = "unknown";
+        switch (level) {
+        case VERBOSE:
+        case DEBUG:
+            loki_level = "debug";
+            break;
+        case INFO:
+            loki_level = "info";
+            break;
+        case WARNING:
+            loki_level = "warn";
+            break;
+        case ERR:
+            loki_level = "error";
+            break;
+        case FATAL:
+            loki_level = "critical";
+            break;
+        default:
+            break;
+        }
 
         std::lock_guard lock(buffer_mutex_);
-        buffer_.push_back({log_level_name(level), std::move(now_ns), std::move(formatted)});
+        buffer_.push_back({loki_level, std::move(now_ns), std::move(formatted)});
     }
 
   private:
