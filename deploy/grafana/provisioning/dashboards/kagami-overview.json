@@ -566,7 +566,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_dispatch_lock_wait_microseconds_total[1m])",
+          "expr": "rate(kagami_dispatch_lock_wait_nanoseconds_total[1m])",
           "legendFormat": "wait \u00b5s/sec",
           "refId": "A",
           "interval": "100ms"
@@ -978,7 +978,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_event_publishes_total",
+          "expr": "kagami_event_publishes",
           "legendFormat": "{{channel}}",
           "refId": "A",
           "interval": "100ms"

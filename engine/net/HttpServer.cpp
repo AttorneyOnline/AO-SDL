@@ -921,9 +921,9 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
     if (!state_)
         return;
 
-    sse_events_.labels({event}).inc();
-
     std::lock_guard lock(state_->sse_mutex);
+
+    sse_events_.labels({event}).inc();
 
     // Assign monotonic event ID
     uint64_t eid = state_->next_event_id++;

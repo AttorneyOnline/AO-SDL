@@ -7,6 +7,7 @@
 #include "net/Http.h"
 
 #include <chrono>
+#include <cstring>
 
 // -- Metrics (file-scope statics — self-register at program startup) ----------
 
@@ -19,7 +20,7 @@ static auto& dispatch_lock_acquisitions_ = metrics::MetricsRegistry::instance().
 static auto& http_errors_ =
     metrics::MetricsRegistry::instance().counter("kagami_http_errors_total", "Protocol-level HTTP errors", {"type"});
 static auto& dispatch_lock_wait_ = metrics::MetricsRegistry::instance().counter(
-    "kagami_dispatch_lock_wait_microseconds_total", "Cumulative dispatch mutex wait time in microseconds");
+    "kagami_dispatch_lock_wait_nanoseconds_total", "Cumulative dispatch mutex wait time in nanoseconds");
 
 // -- RestRouter --------------------------------------------------------------
 
@@ -171,9 +172,9 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             std::lock_guard lock(dispatch_mutex_);
             auto lock_acquired = std::chrono::steady_clock::now();
             dispatch_lock_acquisitions_.get().inc();
-            double wait_secs = std::chrono::duration<double>(lock_acquired - lock_start).count();
-            if (wait_secs > 0.0)
-                dispatch_lock_wait_.get().inc(static_cast<uint64_t>(wait_secs * 1e6)); // microseconds
+            auto wait_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(lock_acquired - lock_start).count();
+            if (wait_ns > 0)
+                dispatch_lock_wait_.get().inc(static_cast<uint64_t>(wait_ns));
 
             if (endpoint.requires_auth()) {
                 if (rest_req.bearer_token.empty()) {
@@ -226,7 +227,9 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         Log::log_print(ERR, "REST: exception in %s %s: %s", endpoint.method().c_str(), endpoint.path_pattern().c_str(),
                        e.what());
         res.status = 500;
-        res.set_content(R"({"reason":"An internal server error occurred"})", "application/json");
+        auto err_body = R"({"reason":"An internal server error occurred"})";
+        res.set_content(err_body, "application/json");
         http_requests_.labels({req.method, endpoint.path_pattern(), "500"}).inc();
+        http_response_bytes_.labels({req.method, endpoint.path_pattern()}).inc(std::strlen(err_body));
     }
 }
