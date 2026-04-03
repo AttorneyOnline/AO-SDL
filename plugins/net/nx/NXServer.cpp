@@ -81,17 +81,23 @@ static void publish_sse(const std::string& event_type, nlohmann::json payload, c
 }
 
 /// Resolve a client_id (transport-level) to the user_id string exposed to
-/// clients. Returns empty string if the session is not found.
-std::string NXServer::resolve_user_id(uint64_t client_id) {
+/// clients. Returns nullopt if the session is not found.
+std::optional<std::string> NXServer::resolve_user_id(uint64_t client_id) {
     if (auto* s = room_.get_session(client_id))
         return std::to_string(s->session_id);
-    return {};
+    return std::nullopt;
+}
+
+/// Set "user_id" on a JSON object if the resolved value is present.
+static void set_user_id(nlohmann::json& j, const std::optional<std::string>& uid) {
+    if (uid)
+        j["user_id"] = *uid;
 }
 
 void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
     auto& a = evt.action;
     nlohmann::json j;
-    j["user_id"] = resolve_user_id(a.sender_id);
+    set_user_id(j, resolve_user_id(a.sender_id));
     j["character"] = a.character;
     j["message"] = a.message;
     j["showname"] = a.showname;
@@ -122,19 +128,23 @@ void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
 }
 
 void NXServer::broadcast_ooc(const std::string& area, const OOCEvent& evt) {
-    publish_sse("ooc_message",
-                {{"user_id", resolve_user_id(evt.action.sender_id)},
-                 {"name", evt.action.name},
-                 {"message", evt.action.message}},
-                area);
+    nlohmann::json j = {{"name", evt.action.name}, {"message", evt.action.message}};
+    set_user_id(j, resolve_user_id(evt.action.sender_id));
+    publish_sse("ooc_message", std::move(j), area);
 }
 
 void NXServer::broadcast_char_select(const CharSelectEvent& evt) {
-    publish_sse("char_taken",
-                {{"user_id", resolve_user_id(evt.client_id)},
-                 {"char_id", std::to_string(evt.character_id)},
-                 {"available", false}},
-                ""); // global broadcast
+    // Only emit per-character char_taken when a character was actually selected.
+    // Deselection (character_id = -1) is covered by broadcast_chars_taken which
+    // sends the full availability array.
+    if (evt.character_id < 0)
+        return;
+    nlohmann::json j = {
+        {"char_id", std::to_string(evt.character_id)},
+        {"available", false},
+    };
+    set_user_id(j, resolve_user_id(evt.client_id));
+    publish_sse("char_taken", std::move(j), ""); // global broadcast
 }
 
 void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
@@ -142,11 +152,12 @@ void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
 }
 
 void NXServer::broadcast_music(const std::string& area, const MusicEvent& evt) {
-    publish_sse("music_change",
-                {{"user_id", resolve_user_id(evt.action.sender_id)},
-                 {"track", evt.action.track},
-                 {"showname", evt.action.showname},
-                 {"channel", evt.action.channel},
-                 {"looping", evt.action.looping}},
-                area);
+    nlohmann::json j = {
+        {"track", evt.action.track},
+        {"showname", evt.action.showname},
+        {"channel", evt.action.channel},
+        {"looping", evt.action.looping},
+    };
+    set_user_id(j, resolve_user_id(evt.action.sender_id));
+    publish_sse("music_change", std::move(j), area);
 }

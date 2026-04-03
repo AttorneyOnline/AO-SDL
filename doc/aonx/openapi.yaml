@@ -2224,9 +2224,6 @@ components:
         Wraps an IcMessage with sender metadata. The composition payload
         is identical to what was submitted via POST /ic.
       properties:
-        user_id:
-          type: string
-          description: User identifier of the sender.
         sender:
           type: object
           required: [user_id, char_id]

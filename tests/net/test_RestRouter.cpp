@@ -837,6 +837,43 @@ TEST_F(NXEndpointTest, SessionRenewOmitsExpiresAtWhenTTLZero) {
     EXPECT_FALSE(body.contains("expires_at"));
 }
 
+TEST_F(NXEndpointTest, SessionCreateReturnsUserAndExpiresAt) {
+    nx_->set_session_ttl_seconds(600);
+    auto cli = client();
+    auto res = cli.Post("/aonx/v1/session", R"({"client_name":"AO-SDL","client_version":"3.0","hdid":"hwid_test"})",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 201);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_TRUE(body.contains("token"));
+    EXPECT_TRUE(body.contains("expires_at"));
+    EXPECT_TRUE(body.contains("user"));
+
+    auto& user = body["user"];
+    EXPECT_TRUE(user.contains("id"));
+    EXPECT_FALSE(user["id"].get<std::string>().empty());
+    EXPECT_TRUE(user.contains("display_name"));
+    EXPECT_EQ(user["display_name"], "AO-SDL");
+    EXPECT_TRUE(user.contains("roles"));
+    EXPECT_TRUE(user["roles"].is_array());
+    EXPECT_FALSE(user["roles"].empty());
+}
+
+TEST_F(NXEndpointTest, SessionCreateOmitsExpiresAtWhenTTLZero) {
+    nx_->set_session_ttl_seconds(0);
+    auto cli = client();
+    auto res = cli.Post("/aonx/v1/session", R"({"client_name":"test","client_version":"1.0","hdid":"abc"})",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 201);
+
+    auto body = nlohmann::json::parse(res->body);
+    EXPECT_TRUE(body.contains("token"));
+    EXPECT_FALSE(body.contains("expires_at"));
+    EXPECT_TRUE(body.contains("user"));
+}
+
 TEST_F(NXEndpointTest, SessionRenewRequiresAuth) {
     auto cli = client();
     auto res = cli.Patch("/aonx/v1/session", "", "application/json");
