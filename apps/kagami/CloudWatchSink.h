@@ -120,12 +120,15 @@ class CloudWatchSink {
 
         std::string body_str = body.dump();
 
-        // Sign the request
+        // Sign the request.
+        // Note: do NOT include content-type in the signable headers — httplib's
+        // Post() adds its own Content-Type from the content_type parameter, and
+        // since Headers is a multimap, including it here too would produce a
+        // duplicate header that breaks SigV4 verification.
         aws::SignableRequest req;
         req.method = "POST";
         req.uri = "/";
         req.headers["host"] = host_;
-        req.headers["content-type"] = "application/x-amz-json-1.1";
         req.headers["x-amz-target"] = "Logs_20140328.PutLogEvents";
         req.body = body_str;
 
@@ -133,7 +136,6 @@ class CloudWatchSink {
 
         // Send via http::Client
         http::Headers headers = {
-            {"Content-Type", "application/x-amz-json-1.1"},
             {"X-Amz-Target", "Logs_20140328.PutLogEvents"},
             {"X-Amz-Date", signed_headers.x_amz_date},
             {"X-Amz-Content-Sha256", signed_headers.x_amz_content_sha256},
