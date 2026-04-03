@@ -157,6 +157,8 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0, context: str = "") 
             # Unconstrained object (e.g. moderation params) — no validation
             return "JsonSchema::object().build()"
 
+        no_additional = schema.get("additionalProperties") is False
+
         lines = [f"JsonSchema::object()"]
         for prop_name, prop_schema in props.items():
             is_req = prop_name in required_set
@@ -164,6 +166,8 @@ def schema_to_cpp(spec: dict, schema: dict, indent: int = 0, context: str = "") 
             prop_ctx = f"{context}.{prop_name}" if context else prop_name
             prop_expr = schema_to_cpp(spec, prop_schema, indent + 1, context=prop_ctx)
             lines.append(f'{pad}    .{method}("{prop_name}", {prop_expr})')
+        if no_additional:
+            lines.append(f"{pad}    .no_additional_properties()")
         lines.append(f"{pad}    .build()")
         return "\n".join(lines)
 

@@ -280,6 +280,28 @@ TEST(JsonSchemaTest, ComplexNestedSchemaValidates) {
     EXPECT_NE(err.find("visible"), std::string::npos);
 }
 
+// -- additionalProperties: false tests ----------------------------------------
+
+TEST(JsonSchemaTest, StrictObjectRejectsUnknownFields) {
+    auto s = JsonSchema::object().required("name", JsonSchema::string_type()).no_additional_properties().build();
+    EXPECT_EQ(s.validate(json({{"name", "foo"}})), "");
+    auto err = s.validate(json({{"name", "foo"}, {"extra", 42}}));
+    EXPECT_NE(err, "");
+    EXPECT_NE(err.find("unexpected field"), std::string::npos);
+    EXPECT_NE(err.find("extra"), std::string::npos);
+}
+
+TEST(JsonSchemaTest, StrictObjectAllowsDeclaredOptionals) {
+    auto s = JsonSchema::object()
+                 .required("name", JsonSchema::string_type())
+                 .optional("label", JsonSchema::string_type())
+                 .no_additional_properties()
+                 .build();
+    EXPECT_EQ(s.validate(json({{"name", "foo"}})), "");
+    EXPECT_EQ(s.validate(json({{"name", "foo"}, {"label", "bar"}})), "");
+    EXPECT_NE(s.validate(json({{"name", "foo"}, {"unknown", true}})), "");
+}
+
 // -- oneOf tests --------------------------------------------------------------
 
 TEST(JsonSchemaTest, OneOfAcceptsExactlyOneMatch) {
