@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -48,7 +49,10 @@ class MetricsRegistry {
     }
 
     /// Collect all metrics, run snapshot collectors, and serialize.
+    /// Serialized so concurrent scrapes don't produce garbled snapshots.
     std::string collect() {
+        std::lock_guard lock(collect_mutex_);
+
         // Run snapshot collectors to populate point-in-time gauges
         for (auto& fn : collectors_)
             fn();
@@ -67,6 +71,7 @@ class MetricsRegistry {
 
     std::vector<std::unique_ptr<MetricFamilyBase>> families_;
     std::vector<std::function<void()>> collectors_;
+    std::mutex collect_mutex_;
 };
 
 } // namespace metrics

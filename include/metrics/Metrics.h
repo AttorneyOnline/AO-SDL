@@ -163,6 +163,14 @@ class MetricFamily : public MetricFamilyBase {
         return labels({});
     }
 
+    /// Remove all labelled instances. Use before re-populating snapshot gauges
+    /// to avoid leaking stale label combinations (e.g. disconnected sessions).
+    void clear() {
+        std::unique_lock lock(mutex_);
+        instances_.clear();
+        label_values_.clear();
+    }
+
     const char* type_string() const override;
 
     void visit(Visitor fn) const override {

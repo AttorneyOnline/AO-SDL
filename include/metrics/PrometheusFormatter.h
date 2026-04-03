@@ -70,8 +70,10 @@ class PrometheusFormatter {
         if (std::isnan(v))
             return "NaN";
         // If it's a whole number, print without decimals
-        if (v == static_cast<double>(static_cast<uint64_t>(v)) && v < 1e15)
+        if (v >= 0 && v == static_cast<double>(static_cast<uint64_t>(v)) && v < 1e15)
             return std::to_string(static_cast<uint64_t>(v));
+        if (v < 0 && v == static_cast<double>(static_cast<int64_t>(v)) && v > -1e15)
+            return std::to_string(static_cast<int64_t>(v));
         // Otherwise use enough precision
         std::ostringstream ss;
         ss << v;

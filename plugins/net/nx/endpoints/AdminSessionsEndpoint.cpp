@@ -21,6 +21,9 @@ class AdminSessionsEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    bool sensitive() const override {
+        return true;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (!req.session || !req.session->moderator)
