@@ -48,6 +48,9 @@ struct HttpConnection {
     platform::Socket socket;
     std::string recv_buf;
     bool headers_complete = false;
+    bool dispatched = false;   ///< Request has been dispatched to a worker thread.
+    size_t header_end_pos = 0; ///< Byte offset of "\r\n\r\n" in recv_buf.
+    size_t content_length = 0; ///< Expected body length from Content-Length header.
     bool keep_alive = false;
 };
 
@@ -145,6 +148,7 @@ struct Server::ServerState {
 
 static constexpr size_t MAX_URI_LENGTH = 8192;
 static constexpr size_t MAX_HEADER_SECTION_LENGTH = 65536;
+static constexpr size_t MAX_BODY_LENGTH = 1048576; // 1 MiB
 
 static bool find_header_end(const std::string& buf) {
     return buf.find("\r\n\r\n") != std::string::npos;
@@ -473,6 +477,51 @@ static bool send_sse_frame(platform::Socket& socket, const std::string& frame) {
     return ok;
 }
 
+// -- Raw header field helpers (pre-parse, used during body accumulation) ------
+
+/// Case-insensitive search for a header field in raw HTTP bytes.
+/// \p name must be lowercase and include the trailing colon (e.g. "content-length:").
+/// Returns the byte offset immediately after the colon, or std::string::npos.
+static size_t find_raw_header_value(const std::string& raw, size_t header_end, std::string_view name) {
+    for (size_t i = 0; i < header_end; ++i) {
+        if (raw[i] != '\n' || i + 1 + name.size() > header_end)
+            continue;
+        size_t start = i + 1;
+        bool match = true;
+        for (size_t j = 0; j < name.size(); ++j) {
+            if (std::tolower(static_cast<unsigned char>(raw[start + j])) != name[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match)
+            return start + name.size();
+    }
+    return std::string::npos;
+}
+
+/// Extract Content-Length from raw header bytes. Returns {true, value} if present
+/// and valid, {false, 0} if absent. Callers should reject requests where
+/// Content-Length is absent but a body is expected (411 Length Required).
+static std::pair<bool, size_t> extract_content_length_raw(const std::string& raw, size_t header_end) {
+    auto pos = find_raw_header_value(raw, header_end, "content-length:");
+    if (pos == std::string::npos)
+        return {false, 0};
+    while (pos < header_end && (raw[pos] == ' ' || raw[pos] == '\t'))
+        ++pos;
+    size_t val = 0;
+    while (pos < header_end && raw[pos] >= '0' && raw[pos] <= '9') {
+        val = val * 10 + static_cast<size_t>(raw[pos] - '0');
+        ++pos;
+    }
+    return {true, val};
+}
+
+/// Check if Transfer-Encoding header is present in raw header bytes.
+static bool has_transfer_encoding_raw(const std::string& raw, size_t header_end) {
+    return find_raw_header_value(raw, header_end, "transfer-encoding:") != std::string::npos;
+}
+
 // ===========================================================================
 // Poll loop (runs on the thread that called listen_after_bind)
 // ===========================================================================
@@ -551,6 +600,9 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     if (should_keep_alive) {
                         // Reset connection state for the next request on this socket
                         conn->headers_complete = false;
+                        conn->dispatched = false;
+                        conn->header_end_pos = 0;
+                        conn->content_length = 0;
                         conn->recv_buf.clear();
                         conn->keep_alive = true;
                     }
@@ -656,7 +708,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     continue;
                 }
 
-                // Check if headers are complete
+                // -- Phase 1: Detect header completion and determine body length --
+                // Runs once when the full header section (\r\n\r\n) first appears.
                 if (!conn->headers_complete && find_header_end(conn->recv_buf)) {
                     conn->headers_complete = true;
 
@@ -674,9 +727,65 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         continue;
                     }
 
-                    auto header_end_pos = conn->recv_buf.find("\r\n\r\n");
-                    std::string headers_str = conn->recv_buf.substr(0, header_end_pos + 4);
-                    std::string body = conn->recv_buf.substr(header_end_pos + 4);
+                    conn->header_end_pos = conn->recv_buf.find("\r\n\r\n");
+
+                    // RFC 9112 §6.1: Transfer-Encoding takes precedence over
+                    // Content-Length. Chunked framing is not implemented, so
+                    // respond 411 (Length Required) to tell the client we need
+                    // a Content-Length header instead.
+                    if (has_transfer_encoding_raw(conn->recv_buf, conn->header_end_pos)) {
+                        Response err_res;
+                        err_res.status = 411;
+                        err_res.set_content("Length Required", "text/plain");
+                        std::string resp_data = serialize_response(err_res, state.default_headers);
+                        conn->socket.set_non_blocking(false);
+                        conn->socket.send(resp_data.data(), resp_data.size());
+                        state.poller.remove(ev.fd);
+                        remove_connection(state, conn->id);
+                        continue;
+                    }
+
+                    // RFC 9112 §6.3: Determine body length from Content-Length.
+                    // If neither Content-Length nor Transfer-Encoding is present,
+                    // the body length is zero (RFC 9112 §6.3 step 7).
+                    auto [has_cl, cl_value] = extract_content_length_raw(conn->recv_buf, conn->header_end_pos);
+                    if (has_cl)
+                        conn->content_length = cl_value;
+
+                    // RFC 9110 §15.5.14: Reject oversized bodies early.
+                    if (conn->content_length > MAX_BODY_LENGTH) {
+                        Response err_res;
+                        err_res.status = 413;
+                        err_res.set_content("Content Too Large", "text/plain");
+                        std::string resp_data = serialize_response(err_res, state.default_headers);
+                        conn->socket.set_non_blocking(false);
+                        conn->socket.send(resp_data.data(), resp_data.size());
+                        state.poller.remove(ev.fd);
+                        remove_connection(state, conn->id);
+                        continue;
+                    }
+                }
+
+                // -- Phase 2: Dispatch once the full body has been received -------
+                // Re-checked on every poll event until enough bytes arrive.
+                if (conn->headers_complete && !conn->dispatched) {
+                    size_t body_start = conn->header_end_pos + 4;
+                    size_t body_received = conn->recv_buf.size() > body_start ? conn->recv_buf.size() - body_start : 0;
+
+                    if (body_received < conn->content_length) {
+                        // Not enough body data yet.
+                        if (closed) {
+                            // Peer disconnected before sending the full body.
+                            state.poller.remove(ev.fd);
+                            remove_connection(state, conn->id);
+                        }
+                        continue;
+                    }
+
+                    conn->dispatched = true;
+
+                    std::string headers_str = conn->recv_buf.substr(0, body_start);
+                    std::string body = conn->recv_buf.substr(body_start, conn->content_length);
 
                     Request req = parse_http_request(headers_str, body);
 

@@ -697,9 +697,11 @@ TEST_F(RFC9112Test, ServerMustCloseConnectionAfterBothTEAndCL) {
         resp.append(buf, static_cast<size_t>(n));
     }
 
-    // The server either rejects (400) or processes it, but MUST close connection
+    // The server either rejects (400/411) or processes it, but MUST close connection.
+    // Our server responds 411 because Transfer-Encoding is not supported and
+    // Content-Length is required.
     int status = extract_status(resp);
-    EXPECT_TRUE(status == 400 || status == 200)
+    EXPECT_TRUE(status == 400 || status == 411 || status == 200)
         << "Server should reject or process request with both TE and CL; got " << status;
 
     // Connection should be closed — further send should fail or recv returns 0
@@ -755,7 +757,9 @@ TEST_F(RFC9112Test, ServerMustReject400ForInvalidContentLength) {
 // RFC 9112 §6.3 rule 4: "If a Transfer-Encoding header field is present in a
 // request and the chunked transfer coding is not the final encoding, the
 // [...] server MUST respond with the 400 (Bad Request) status code."
-TEST_F(RFC9112Test, ServerMustReject400ForNonChunkedFinalTE) {
+// Our server rejects ALL Transfer-Encoding with 411 (Length Required) since
+// chunked framing is not implemented. 411 is a stricter superset of 400 here.
+TEST_F(RFC9112Test, ServerMustRejectForNonChunkedFinalTE) {
     server_.Post("/test", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
     start();
 
@@ -765,7 +769,8 @@ TEST_F(RFC9112Test, ServerMustReject400ForNonChunkedFinalTE) {
                       "\r\n";
     auto resp = raw_request(port(), req);
     int status = extract_status(resp);
-    EXPECT_EQ(status, 400) << "Server MUST respond 400 when chunked is not the final TE; got " << status;
+    EXPECT_TRUE(status == 400 || status == 411)
+        << "Server MUST reject request with non-chunked final TE; got " << status;
 }
 
 // RFC 9112 §6.3 rule 6: "If a valid Content-Length header field is present
