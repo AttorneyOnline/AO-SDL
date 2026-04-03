@@ -103,9 +103,12 @@ class LokiSink {
 
         auto body = payload.dump();
         auto result = client_.Post("/loki/api/v1/push", body, "application/json");
-        if (!result || (result->status != 204 && result->status != 200)) {
-            int status = result ? result->status : 0;
-            std::fprintf(stderr, "[Loki] push failed: status=%d\n", status);
+        if (!result) {
+            std::fprintf(stderr, "[Loki] push failed: connection error (host=%s)\n", config_.url.c_str());
+        }
+        else if (result->status != 204 && result->status != 200) {
+            std::fprintf(stderr, "[Loki] push failed: status=%d body=%s\n", result->status,
+                         result->body.substr(0, 200).c_str());
         }
     }
 
