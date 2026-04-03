@@ -24,7 +24,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_uptime_seconds",
+          "expr": "kagami_uptime_seconds{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -54,7 +54,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_process_resident_bytes",
+          "expr": "kagami_process_resident_bytes{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -103,7 +103,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_sessions_joined",
+          "expr": "kagami_sessions_joined{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -127,7 +127,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_sessions_moderators",
+          "expr": "kagami_sessions_moderators{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -151,7 +151,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_ws_connections",
+          "expr": "kagami_ws_connections{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -175,7 +175,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_characters_taken",
+          "expr": "kagami_characters_taken{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -221,13 +221,13 @@
       },
       "targets": [
         {
-          "expr": "kagami_sessions{protocol=\"ao2\"}",
+          "expr": "kagami_sessions{instance=~\"$instance\",protocol=\"ao2\"}",
           "legendFormat": "AO2",
           "refId": "A",
           "interval": "100ms"
         },
         {
-          "expr": "kagami_sessions{protocol=\"aonx\"}",
+          "expr": "kagami_sessions{instance=~\"$instance\",protocol=\"aonx\"}",
           "legendFormat": "AONX",
           "refId": "B",
           "interval": "100ms"
@@ -256,7 +256,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_area_players",
+          "expr": "kagami_area_players{instance=~\"$instance\"}",
           "legendFormat": "{{area}}",
           "refId": "A",
           "interval": "100ms"
@@ -294,7 +294,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kagami_http_requests_total[1m])) by (method)",
+          "expr": "sum(rate(kagami_http_requests_total{instance=~\"$instance\"}[1m])) by (method)",
           "legendFormat": "{{method}}",
           "refId": "A",
           "interval": "100ms"
@@ -321,7 +321,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kagami_http_response_bytes_total[1m])) by (method)",
+          "expr": "sum(rate(kagami_http_response_bytes_total{instance=~\"$instance\"}[1m])) by (method)",
           "legendFormat": "{{method}}",
           "refId": "A",
           "interval": "100ms"
@@ -394,7 +394,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kagami_http_requests_total[1m])) by (status)",
+          "expr": "sum(rate(kagami_http_requests_total{instance=~\"$instance\"}[1m])) by (status)",
           "legendFormat": "{{status}}",
           "refId": "A",
           "interval": "100ms"
@@ -421,13 +421,13 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_bytes_in_total[1m])",
+          "expr": "rate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "Bytes In",
           "refId": "A",
           "interval": "100ms"
         },
         {
-          "expr": "rate(kagami_ws_bytes_out_total[1m])",
+          "expr": "rate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "Bytes Out",
           "refId": "B",
           "interval": "100ms"
@@ -454,13 +454,13 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_frames_in_total[1m])",
+          "expr": "rate(kagami_ws_frames_in_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "Frames In",
           "refId": "A",
           "interval": "100ms"
         },
         {
-          "expr": "rate(kagami_ws_frames_out_total[1m])",
+          "expr": "rate(kagami_ws_frames_out_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "Frames Out",
           "refId": "B",
           "interval": "100ms"
@@ -501,7 +501,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_sse_events_total[1m])",
+          "expr": "rate(kagami_sse_events_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "{{event}}",
           "refId": "A",
           "interval": "100ms"
@@ -539,7 +539,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_dispatch_lock_acquisitions_total[1m])",
+          "expr": "rate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "acquisitions",
           "refId": "A",
           "interval": "100ms"
@@ -566,7 +566,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_dispatch_lock_wait_nanoseconds_total[1m])",
+          "expr": "rate(kagami_dispatch_lock_wait_nanoseconds_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "wait \u00b5s/sec",
           "refId": "A",
           "interval": "100ms"
@@ -593,7 +593,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_process_resident_bytes",
+          "expr": "kagami_process_resident_bytes{instance=~\"$instance\"}",
           "legendFormat": "RSS",
           "refId": "A",
           "interval": "100ms"
@@ -622,7 +622,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_area_players",
+          "expr": "kagami_area_players{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "A",
@@ -714,7 +714,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_area_players",
+          "expr": "kagami_area_players{instance=~\"$instance\"}",
           "legendFormat": "{{area}}",
           "refId": "A",
           "interval": "100ms"
@@ -751,13 +751,13 @@
       },
       "targets": [
         {
-          "expr": "kagami_ws_connections",
+          "expr": "kagami_ws_connections{instance=~\"$instance\"}",
           "legendFormat": "WebSocket (AO2)",
           "refId": "A",
           "interval": "100ms"
         },
         {
-          "expr": "kagami_sessions{protocol=\"aonx\"}",
+          "expr": "kagami_sessions{instance=~\"$instance\",protocol=\"aonx\"}",
           "legendFormat": "REST/SSE (AONX)",
           "refId": "B",
           "interval": "100ms"
@@ -786,7 +786,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_server_info",
+          "expr": "kagami_server_info{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "A",
@@ -826,35 +826,35 @@
       },
       "targets": [
         {
-          "expr": "kagami_session_idle_seconds",
+          "expr": "kagami_session_idle_seconds{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "idle",
           "interval": "100ms"
         },
         {
-          "expr": "kagami_session_bytes_sent",
+          "expr": "kagami_session_bytes_sent{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "bytes_out",
           "interval": "100ms"
         },
         {
-          "expr": "kagami_session_bytes_received",
+          "expr": "kagami_session_bytes_received{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "bytes_in",
           "interval": "100ms"
         },
         {
-          "expr": "kagami_session_packets_sent",
+          "expr": "kagami_session_packets_sent{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "pkts_out",
           "interval": "100ms"
         },
         {
-          "expr": "kagami_session_packets_received",
+          "expr": "kagami_session_packets_received{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "pkts_in",
@@ -978,7 +978,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_event_publishes",
+          "expr": "kagami_event_publishes{instance=~\"$instance\"}",
           "legendFormat": "{{channel}}",
           "refId": "A",
           "interval": "100ms"
@@ -1005,7 +1005,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_http_errors_total[1m])",
+          "expr": "rate(kagami_http_errors_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "{{type}}",
           "refId": "A",
           "interval": "100ms"
@@ -1034,7 +1034,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_http_requests_total",
+          "expr": "kagami_http_requests_total{instance=~\"$instance\"}",
           "format": "table",
           "instant": true,
           "refId": "A",
@@ -1099,7 +1099,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_sessions_expired_total[1m])",
+          "expr": "rate(kagami_sessions_expired_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "expired",
           "refId": "A",
           "interval": "100ms"
@@ -1126,7 +1126,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ao_errors_total[1m])",
+          "expr": "rate(kagami_ao_errors_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "{{type}}",
           "refId": "A",
           "interval": "100ms"
@@ -1153,7 +1153,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_handshake_failures_total[1m])",
+          "expr": "rate(kagami_ws_handshake_failures_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "failures",
           "refId": "A",
           "interval": "100ms"
@@ -1180,13 +1180,13 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_sse_replays_total[1m])",
+          "expr": "rate(kagami_sse_replays_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "replays",
           "refId": "A",
           "interval": "100ms"
         },
         {
-          "expr": "rate(kagami_sse_dead_clients_total[1m])",
+          "expr": "rate(kagami_sse_dead_clients_total{instance=~\"$instance\"}[1m])",
           "legendFormat": "dead clients",
           "refId": "B",
           "interval": "100ms"
@@ -1204,7 +1204,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_config_ops_total{op=\"load\"}",
+          "expr": "kagami_config_ops_total{instance=~\"$instance\",op=\"load\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -1228,7 +1228,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_config_ops_total{op=\"save\"}",
+          "expr": "kagami_config_ops_total{instance=~\"$instance\",op=\"save\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -1252,7 +1252,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_max_players",
+          "expr": "kagami_max_players{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -1276,7 +1276,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_sessions_expired_total",
+          "expr": "kagami_sessions_expired_total{instance=~\"$instance\"}",
           "refId": "A",
           "interval": "100ms"
         }
@@ -1341,6 +1341,36 @@
   ],
   "templating": {
     "list": [
+      {
+        "name": "instance",
+        "label": "Server",
+        "type": "custom",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [
+          {
+            "text": "All",
+            "value": "$__all",
+            "selected": true
+          },
+          {
+            "text": "staging",
+            "value": "staging",
+            "selected": false
+          },
+          {
+            "text": "canary",
+            "value": "canary",
+            "selected": false
+          }
+        ],
+        "query": "staging,canary",
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*"
+      },
       {
         "name": "log_level",
         "label": "Log Level",
