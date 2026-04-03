@@ -575,12 +575,39 @@
     },
     {
       "type": "timeseries",
-      "title": "Memory Usage",
+      "title": "Avg Lock Wait per Request",
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
         "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_dispatch_lock_wait_nanoseconds_total{instance=~\"$instance\"}[5s]) / irate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "avg wait/req",
+          "refId": "A",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 48
       },
       "fieldConfig": {
         "defaults": {
