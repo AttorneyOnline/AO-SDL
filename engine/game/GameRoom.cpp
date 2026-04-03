@@ -68,7 +68,7 @@ int GameRoom::expire_sessions(int ttl_seconds) {
         // Only expire REST sessions (those with tokens). AO2/WS sessions
         // are managed by their transport layer.
         if (!session.session_token.empty()) {
-            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session.last_activity).count();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session.last_activity()).count();
             if (elapsed > ttl_seconds) {
                 // Free character slot
                 if (session.character_id >= 0 && session.character_id < static_cast<int>(char_taken.size()))

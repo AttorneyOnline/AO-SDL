@@ -164,12 +164,24 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             rest_req.bearer_token = auth_header.substr(7);
         }
 
-        // Single lock for auth + handler — prevents session from being
-        // destroyed between the auth check and the handler call.
+        // Lock for auth + handler — prevents session from being destroyed
+        // between the auth check and the handler call. Read-only endpoints
+        // use a shared lock so they can run concurrently with each other;
+        // mutating endpoints take an exclusive lock.
         RestResponse rest_res;
         {
             auto lock_start = std::chrono::steady_clock::now();
-            std::lock_guard lock(dispatch_mutex_);
+
+            // Acquire shared or exclusive lock based on endpoint type.
+            // Both lock types are held in a unique_lock/shared_lock that
+            // releases on scope exit.
+            std::unique_lock<std::shared_mutex> exclusive_lock(dispatch_mutex_, std::defer_lock);
+            std::shared_lock<std::shared_mutex> shared_lock(dispatch_mutex_, std::defer_lock);
+            if (endpoint.readonly())
+                shared_lock.lock();
+            else
+                exclusive_lock.lock();
+
             auto lock_acquired = std::chrono::steady_clock::now();
             dispatch_lock_acquisitions_.get().inc();
             auto wait_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(lock_acquired - lock_start).count();

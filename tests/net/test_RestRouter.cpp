@@ -244,8 +244,10 @@ TEST_F(RestRouterTest, AuthTouchesSession) {
     session.joined = true;
 
     // Backdate the last_activity
-    session.last_activity = std::chrono::steady_clock::now() - std::chrono::seconds(100);
-    auto old_activity = session.last_activity;
+    session.last_activity_ns.store(
+        (std::chrono::steady_clock::now() - std::chrono::seconds(100)).time_since_epoch().count(),
+        std::memory_order_relaxed);
+    auto old_activity = session.last_activity();
 
     router_.set_auth_func(
         [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
@@ -257,7 +259,7 @@ TEST_F(RestRouterTest, AuthTouchesSession) {
 
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-    EXPECT_GT(session.last_activity, old_activity);
+    EXPECT_GT(session.last_activity(), old_activity);
 }
 
 TEST_F(RestRouterTest, DeleteMethod) {
@@ -529,7 +531,8 @@ TEST(GameRoomTest, ExpireSessionsRemovesStale) {
     room.register_session_token("stale", 2);
     s2.character_id = 0;
     room.char_taken[0] = 1;
-    s2.last_activity = std::chrono::steady_clock::now() - std::chrono::seconds(600);
+    s2.last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(600)).time_since_epoch().count(),
+                              std::memory_order_relaxed);
 
     EXPECT_EQ(room.session_count(), 2u);
     Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
@@ -549,7 +552,8 @@ TEST(GameRoomTest, ExpireSessionsSkipsAO2) {
 
     // AO2 session has empty token — should never be expired
     auto& s = room.create_session(1, "ao2");
-    s.last_activity = std::chrono::steady_clock::now() - std::chrono::seconds(9999);
+    s.last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(9999)).time_since_epoch().count(),
+                             std::memory_order_relaxed);
 
     Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
     int expired = room.expire_sessions(300);

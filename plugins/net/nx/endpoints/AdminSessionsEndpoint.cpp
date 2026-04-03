@@ -21,6 +21,9 @@ class AdminSessionsEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    bool readonly() const override {
+        return true;
+    }
     bool sensitive() const override {
         return true;
     }
@@ -33,7 +36,7 @@ class AdminSessionsEndpoint : public NXEndpoint {
         nlohmann::json arr = nlohmann::json::array();
 
         room().for_each_session([&](const ServerSession& s) {
-            auto idle = std::chrono::duration_cast<std::chrono::seconds>(now - s.last_activity).count();
+            auto idle = std::chrono::duration_cast<std::chrono::seconds>(now - s.last_activity()).count();
             arr.push_back({
                 {"session_id", s.session_id},
                 {"display_name", s.display_name},
