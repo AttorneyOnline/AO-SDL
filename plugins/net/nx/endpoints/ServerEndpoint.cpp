@@ -18,6 +18,9 @@ class ServerEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return false;
     }
+    bool readonly() const override {
+        return true;
+    }
 
     RestResponse handle(const RestRequest& /*req*/) override {
         return RestResponse::json(200, {

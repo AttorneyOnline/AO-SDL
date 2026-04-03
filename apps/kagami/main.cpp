@@ -260,7 +260,7 @@ int main(int /*argc*/, char* argv[]) {
                         s.bytes_received.load(std::memory_order_relaxed),
                         s.packets_sent.load(std::memory_order_relaxed),
                         s.packets_received.load(std::memory_order_relaxed),
-                        std::chrono::duration_cast<std::chrono::seconds>(now_steady - s.last_activity).count(),
+                        std::chrono::duration_cast<std::chrono::seconds>(now_steady - s.last_activity()).count(),
                     });
                 });
                 for (auto& [id, state] : room.area_states()) {

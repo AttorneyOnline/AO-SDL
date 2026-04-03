@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 namespace http {
@@ -33,12 +34,21 @@ class RestRouter {
     /// Call once after all endpoints have been registered.
     void bind(http::Server& server);
 
-    /// Execute a callable under the dispatch mutex.
-    /// Use for operations that must be serialized with endpoint handlers
-    /// (e.g., session expiry sweeps).
+    /// Execute a callable under an exclusive dispatch lock.
+    /// Use for operations that mutate game state and must be serialized
+    /// with endpoint handlers (e.g., session expiry sweeps, AO protocol).
     template <typename F>
     void with_lock(F&& func) {
-        std::lock_guard lock(dispatch_mutex_);
+        std::unique_lock lock(dispatch_mutex_);
+        func();
+    }
+
+    /// Execute a callable under a shared (reader) dispatch lock.
+    /// Use for operations that only read game state and can run concurrently
+    /// with other readers.
+    template <typename F>
+    void with_shared_lock(F&& func) {
+        std::shared_lock lock(dispatch_mutex_);
         func();
     }
 
@@ -51,5 +61,5 @@ class RestRouter {
     std::vector<std::string> cors_origins_;
     bool cors_wildcard_ = false;
     std::vector<std::unique_ptr<RestEndpoint>> endpoints_;
-    std::mutex dispatch_mutex_; ///< Serializes handler access to game state.
+    std::shared_mutex dispatch_mutex_; ///< Serializes handler access to game state.
 };

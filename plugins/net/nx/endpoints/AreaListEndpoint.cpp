@@ -17,6 +17,9 @@ class AreaListEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    bool readonly() const override {
+        return true;
+    }
 
     RestResponse handle(const RestRequest& /*req*/) override {
         nlohmann::json list = nlohmann::json::array();

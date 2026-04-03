@@ -21,5 +21,11 @@ class RestEndpoint {
         return false;
     }
 
+    /// If true, the handler only reads game state and can run concurrently
+    /// with other read-only handlers under a shared lock.
+    virtual bool readonly() const {
+        return false;
+    }
+
     virtual RestResponse handle(const RestRequest& req) = 0;
 };

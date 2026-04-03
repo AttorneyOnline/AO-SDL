@@ -17,6 +17,9 @@ class CharacterListEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    bool readonly() const override {
+        return true;
+    }
 
     RestResponse handle(const RestRequest& /*req*/) override {
         auto& chars = room().characters;
