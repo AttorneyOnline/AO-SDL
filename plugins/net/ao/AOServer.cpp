@@ -5,6 +5,9 @@
 #include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
+static auto& ao_errors_ =
+    metrics::MetricsRegistry::instance().counter("kagami_ao_errors_total", "AO protocol errors", {"type"});
+
 AOServer::AOServer(GameRoom& room) : room_(room) {
     ao_register_packet_types();
 
@@ -60,17 +63,13 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
                 dispatch(client_id, *packet);
             }
             catch (const std::exception& e) {
-                static auto& ctr = metrics::MetricsRegistry::instance().counter("kagami_ao_errors_total",
-                                                                                "AO protocol errors", {"type"});
-                ctr.labels({"dispatch"}).inc();
+                ao_errors_.labels({"dispatch"}).inc();
                 Log::log_print(WARNING, "AO: error handling packet from %s: %s", format_client_id(client_id).c_str(),
                                e.what());
             }
         }
         else {
-            static auto& ctr =
-                metrics::MetricsRegistry::instance().counter("kagami_ao_errors_total", "AO protocol errors", {"type"});
-            ctr.labels({"parse"}).inc();
+            ao_errors_.labels({"parse"}).inc();
         }
     }
 }

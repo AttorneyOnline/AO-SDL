@@ -8,37 +8,18 @@
 
 #include <chrono>
 
-// -- Metrics (registered lazily on first use) ---------------------------------
+// -- Metrics (file-scope statics — self-register at program startup) ----------
 
-static metrics::CounterFamily& http_requests() {
-    static auto& f = metrics::MetricsRegistry::instance().counter(
-        "kagami_http_requests_total", "Total HTTP requests handled", {"method", "endpoint", "status"});
-    return f;
-}
-
-static metrics::CounterFamily& http_response_bytes() {
-    static auto& f = metrics::MetricsRegistry::instance().counter(
-        "kagami_http_response_bytes_total", "Total HTTP response bytes sent", {"method", "endpoint"});
-    return f;
-}
-
-static metrics::CounterFamily& dispatch_lock_acquisitions() {
-    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_dispatch_lock_acquisitions_total",
-                                                                  "Dispatch mutex lock acquisitions");
-    return f;
-}
-
-static metrics::CounterFamily& http_errors() {
-    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_http_errors_total",
-                                                                  "Protocol-level HTTP errors", {"type"});
-    return f;
-}
-
-static metrics::CounterFamily& dispatch_lock_wait() {
-    static auto& f = metrics::MetricsRegistry::instance().counter(
-        "kagami_dispatch_lock_wait_microseconds_total", "Cumulative dispatch mutex wait time in microseconds");
-    return f;
-}
+static auto& http_requests_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_http_requests_total", "Total HTTP requests handled", {"method", "endpoint", "status"});
+static auto& http_response_bytes_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_http_response_bytes_total", "Total HTTP response bytes sent", {"method", "endpoint"});
+static auto& dispatch_lock_acquisitions_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_dispatch_lock_acquisitions_total", "Dispatch mutex lock acquisitions");
+static auto& http_errors_ =
+    metrics::MetricsRegistry::instance().counter("kagami_http_errors_total", "Protocol-level HTTP errors", {"type"});
+static auto& dispatch_lock_wait_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_dispatch_lock_wait_microseconds_total", "Cumulative dispatch mutex wait time in microseconds");
 
 // -- RestRouter --------------------------------------------------------------
 
@@ -169,7 +150,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             }
             catch (const nlohmann::json::parse_error&) {
                 Log::log_print(VERBOSE, "REST: << 400 %s %s (malformed JSON)", req.method.c_str(), req.path.c_str());
-                http_errors().labels({"malformed_json"}).inc();
+                http_errors_.labels({"malformed_json"}).inc();
                 res.status = 400;
                 res.set_content(R"({"reason":"Malformed JSON in request body"})", "application/json");
                 return;
@@ -189,15 +170,15 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             auto lock_start = std::chrono::steady_clock::now();
             std::lock_guard lock(dispatch_mutex_);
             auto lock_acquired = std::chrono::steady_clock::now();
-            dispatch_lock_acquisitions().get().inc();
+            dispatch_lock_acquisitions_.get().inc();
             double wait_secs = std::chrono::duration<double>(lock_acquired - lock_start).count();
             if (wait_secs > 0.0)
-                dispatch_lock_wait().get().inc(static_cast<uint64_t>(wait_secs * 1e6)); // microseconds
+                dispatch_lock_wait_.get().inc(static_cast<uint64_t>(wait_secs * 1e6)); // microseconds
 
             if (endpoint.requires_auth()) {
                 if (rest_req.bearer_token.empty()) {
                     Log::log_print(VERBOSE, "REST: << 401 %s %s (no token)", req.method.c_str(), req.path.c_str());
-                    http_errors().labels({"missing_token"}).inc();
+                    http_errors_.labels({"missing_token"}).inc();
                     res.status = 401;
                     res.set_content(R"({"reason":"Missing session token"})", "application/json");
                     return;
@@ -211,7 +192,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
                 rest_req.session = auth_func_(rest_req.bearer_token);
                 if (!rest_req.session) {
                     Log::log_print(VERBOSE, "REST: << 401 %s %s (bad token)", req.method.c_str(), req.path.c_str());
-                    http_errors().labels({"invalid_token"}).inc();
+                    http_errors_.labels({"invalid_token"}).inc();
                     res.status = 401;
                     res.set_content(R"({"reason":"Invalid or expired session token"})", "application/json");
                     return;
@@ -235,17 +216,17 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             else
                 Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
                                body.c_str());
-            http_response_bytes().labels({req.method, endpoint.path_pattern()}).inc(body.size());
+            http_response_bytes_.labels({req.method, endpoint.path_pattern()}).inc(body.size());
             res.set_content(std::move(body), rest_res.content_type);
         }
 
-        http_requests().labels({req.method, endpoint.path_pattern(), std::to_string(rest_res.status)}).inc();
+        http_requests_.labels({req.method, endpoint.path_pattern(), std::to_string(rest_res.status)}).inc();
     }
     catch (const std::exception& e) {
         Log::log_print(ERR, "REST: exception in %s %s: %s", endpoint.method().c_str(), endpoint.path_pattern().c_str(),
                        e.what());
         res.status = 500;
         res.set_content(R"({"reason":"An internal server error occurred"})", "application/json");
-        http_requests().labels({req.method, endpoint.path_pattern(), "500"}).inc();
+        http_requests_.labels({req.method, endpoint.path_pattern(), "500"}).inc();
     }
 }
