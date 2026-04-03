@@ -123,6 +123,9 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                     newly_connected.push_back(id);
                 }
                 catch (...) {
+                    static auto& ctr = metrics::MetricsRegistry::instance().counter(
+                        "kagami_ws_handshake_failures_total", "WebSocket handshake failures");
+                    ctr.get().inc();
                     dead_clients.push_back(id);
                     continue;
                 }
