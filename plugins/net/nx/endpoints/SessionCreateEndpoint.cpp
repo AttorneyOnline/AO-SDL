@@ -3,7 +3,20 @@
 #include "net/EndpointRegistrar.h"
 #include "utils/GeneratedSchemas.h"
 
+#include <chrono>
+#include <format>
+
 namespace {
+
+/// Format a system_clock time_point as ISO 8601 (UTC).
+std::string to_iso8601(std::chrono::system_clock::time_point tp) {
+    auto dp = std::chrono::floor<std::chrono::days>(tp);
+    std::chrono::year_month_day ymd{dp};
+    std::chrono::hh_mm_ss hms{std::chrono::floor<std::chrono::seconds>(tp - dp)};
+    return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}Z", static_cast<int>(ymd.year()),
+                       static_cast<unsigned>(ymd.month()), static_cast<unsigned>(ymd.day()), hms.hours().count(),
+                       hms.minutes().count(), hms.seconds().count());
+}
 
 class SessionCreateEndpoint : public NXEndpoint {
   public:
@@ -50,9 +63,30 @@ class SessionCreateEndpoint : public NXEndpoint {
 
         auto token = server().create_session(hdid, client_name, client_version);
 
-        return RestResponse::json(201, {
-                                           {"token", token},
-                                       });
+        nlohmann::json resp = {
+            {"token", token},
+            {"user",
+             {
+                 {"id", ""},
+                 {"display_name", client_name},
+                 {"roles", nlohmann::json::array({"player"})},
+             }},
+        };
+
+        // Fill in the server-assigned user id.
+        if (auto* session = room().find_session_by_token(token)) {
+            resp["user"]["id"] = std::to_string(session->session_id);
+            if (session->moderator)
+                resp["user"]["roles"].push_back("moderator");
+        }
+
+        int ttl = server().session_ttl_seconds();
+        if (ttl > 0) {
+            auto expires_at = std::chrono::system_clock::now() + std::chrono::seconds(ttl);
+            resp["expires_at"] = to_iso8601(expires_at);
+        }
+
+        return RestResponse::json(201, std::move(resp));
     }
 };
 

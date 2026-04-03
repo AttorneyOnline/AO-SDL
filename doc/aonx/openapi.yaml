@@ -44,8 +44,13 @@ paths:
       operationId: createSession
       summary: Create Session
       description: |
-        Create a new session. Returns a session token used for all subsequent requests.
-        Authentication is optional and server-dependent.
+        Create a new session. Returns a session token used for all subsequent
+        requests.
+
+        The `hdid` field is always required — it is a device fingerprint used
+        for rate-limiting and ban enforcement, not for authentication. The
+        optional `auth` field carries an authentication token whose format is
+        server-dependent.
       requestBody:
         required: true
         content:
@@ -56,28 +61,34 @@ paths:
               properties:
                 auth:
                   type: string
+                  maxLength: 512
                   description: Authentication token. Format is TBD and server-dependent. Omitted for anonymous sessions.
                 hdid:
                   type: string
                   minLength: 1
+                  maxLength: 128
                   description: |
-                    Hardware identifier. SHA-256 hash of a string in the format:
+                    Hardware identifier (device fingerprint). SHA-256 hash of a
+                    string in the format:
                     `client_name:platform:platform_specific_fingerprint`
                 client_name:
                   type: string
                   minLength: 1
+                  maxLength: 64
                   description: Client software name.
                 client_version:
                   type: string
                   minLength: 1
+                  maxLength: 32
                   description: Client software version.
       responses:
-        "200":
+        "201":
           description: Session created.
           content:
             application/json:
               schema:
                 type: object
+                required: [token, user]
                 properties:
                   token:
                     type: string
@@ -85,9 +96,10 @@ paths:
                   expires_at:
                     type: string
                     format: date-time
-                    description: When the token expires (ISO 8601).
+                    description: When the token expires (ISO 8601). Omitted if sessions do not expire.
                   user:
                     type: object
+                    required: [id, display_name]
                     properties:
                       id:
                         type: string
@@ -99,9 +111,10 @@ paths:
                         type: array
                         items:
                           type: string
+                          maxLength: 64
                         description: Server-assigned roles (e.g. "player", "moderator").
         "400":
-          description: Missing required fields (`client_name`, `client_version`).
+          description: Missing or invalid required fields.
           content:
             application/json:
               schema:
@@ -139,6 +152,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [token]
                 properties:
                   token:
                     type: string
@@ -174,73 +188,51 @@ paths:
   # ---------------------------------------------------------------------------
   # Server
   # ---------------------------------------------------------------------------
-  /server/players:
+  /server:
     get:
       tags: [Server]
-      operationId: getPlayerCount
-      summary: Player Count
-      description: Returns the current and maximum player count.
-      responses:
-        "200":
-          description: Player count.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  online:
-                    type: integer
-                    description: Number of players currently connected.
-                  max:
-                    type: integer
-                    description: Maximum player capacity.
-
-  /server/info:
-    get:
-      tags: [Server]
-      operationId: getServerInfo
-      summary: Server Info
+      operationId: getServer
+      summary: Server Status
       description: |
-        Returns server software identity and the user-facing server name
-        and description. No authentication required.
+        Returns server identity, configuration, and live status in a single
+        request. No authentication required.
       responses:
         "200":
-          description: Server info.
+          description: Server status.
           content:
             application/json:
               schema:
                 type: object
+                required: [software, version, name, online, max]
                 properties:
                   software:
                     type: string
+                    maxLength: 64
                     description: Server software name (e.g. "kagami").
                   version:
                     type: string
+                    maxLength: 40
                     description: Server software version (git short hash, e.g. "b5b570e").
                   name:
                     type: string
+                    maxLength: 256
                     description: User-facing server name.
                   description:
                     type: string
+                    maxLength: 4096
                     description: User-facing server description. May be empty.
-
-  /server/motd:
-    get:
-      tags: [Server]
-      operationId: getMotd
-      summary: Message of the Day
-      description: Returns the server's message of the day.
-      responses:
-        "200":
-          description: Message of the day.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
+                  motd:
                     type: string
+                    maxLength: 4096
                     description: Message of the day. May be empty.
+                  online:
+                    type: integer
+                    minimum: 0
+                    description: Number of players currently connected.
+                  max:
+                    type: integer
+                    minimum: 0
+                    description: Maximum player capacity.
 
   /areas:
     get:
@@ -260,6 +252,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [areas]
                 properties:
                   areas:
                     type: array
@@ -288,9 +281,13 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 128
                   description: Area display name.
                 path:
                   type: string
+                  minLength: 1
+                  maxLength: 256
                   description: Hierarchical path (e.g. "courtroom/3", "offices/defense").
       responses:
         "201":
@@ -344,6 +341,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [area]
                 properties:
                   area:
                     $ref: "#/components/schemas/Area"
@@ -353,29 +351,39 @@ paths:
                     properties:
                       name:
                         type: string
+                        maxLength: 256
                       manifest_hash:
                         type: string
+                        maxLength: 64
                       position:
                         type: string
+                        maxLength: 64
                   music:
                     type: object
                     nullable: true
                     properties:
                       name:
                         type: string
+                        maxLength: 256
                       asset_hash:
                         type: string
+                        maxLength: 64
                       looping:
                         type: boolean
                       channel:
                         type: integer
+                        minimum: 0
                   hp:
                     type: object
                     properties:
                       defense:
                         type: integer
+                        minimum: 0
+                        maximum: 10
                       prosecution:
                         type: integer
+                        minimum: 0
+                        maximum: 10
                   timers:
                     type: array
                     items:
@@ -383,8 +391,11 @@ paths:
                       properties:
                         timer_id:
                           type: integer
+                          minimum: 0
+                          maximum: 4
                         value_ms:
                           type: integer
+                          minimum: 0
                         running:
                           type: boolean
         "401":
@@ -422,18 +433,24 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 128
                   description: New display name.
                 path:
                   type: string
+                  minLength: 1
+                  maxLength: 256
                   description: New hierarchical path.
                 status:
                   type: string
+                  maxLength: 64
                   description: New area status.
                 locked:
                   type: boolean
                   description: Lock or unlock the area.
                 cm:
                   type: string
+                  maxLength: 128
                   description: Set the case maker. Empty string to clear.
       responses:
         "200":
@@ -518,24 +535,29 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [players]
                 properties:
                   players:
                     type: array
                     items:
                       type: object
+                      required: [user_id, display_name]
                       properties:
                         user_id:
                           type: string
                           description: User identifier.
                         display_name:
                           type: string
+                          maxLength: 64
                           description: Display name.
                         character:
                           type: string
                           nullable: true
+                          maxLength: 64
                           description: Character manifest hash, or null if no character selected.
                         charname:
                           type: string
+                          maxLength: 128
                           description: In-character showname.
         "401":
           description: Token is invalid or already expired.
@@ -575,6 +597,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -631,6 +654,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -678,9 +702,13 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 64
                   description: Sender display name.
                 message:
                   type: string
+                  minLength: 1
+                  maxLength: 4096
                   description: Message text.
       responses:
         "200":
@@ -689,6 +717,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -744,9 +773,12 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 256
                   description: Background name.
                 position:
                   type: string
+                  maxLength: 64
                   description: Initial position (e.g. "def", "pro", "wit"). Default server-defined.
       responses:
         "200":
@@ -755,6 +787,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -796,12 +829,16 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 256
                   description: Track name.
                 looping:
                   type: boolean
                   description: Whether to loop. Default true.
                 channel:
                   type: integer
+                  minimum: 0
+                  maximum: 15
                   description: Audio channel. 0 = music, 1+ = ambience. Default 0.
                 effects:
                   type: object
@@ -820,6 +857,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -865,6 +903,8 @@ paths:
                   description: Which health bar to set.
                 value:
                   type: integer
+                  minimum: 0
+                  maximum: 10
                   description: Health bar value (0-10).
       responses:
         "200":
@@ -873,6 +913,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -897,7 +938,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Area identifier, `_` for current area, or `*` for all areas.
+          description: Area identifier, `_` for current area, `*` for all areas.
       requestBody:
         required: true
         content:
@@ -908,6 +949,8 @@ paths:
               properties:
                 timer_id:
                   type: integer
+                  minimum: 0
+                  maximum: 4
                   description: Timer identifier (0-4).
                 action:
                   type: string
@@ -915,7 +958,8 @@ paths:
                   description: Timer action.
                 value_ms:
                   type: integer
-                  description: Timer value in milliseconds. Required when action is 2 (set).
+                  minimum: 0
+                  description: Timer value in milliseconds. Required when action is "set".
       responses:
         "200":
           description: Timer updated.
@@ -923,6 +967,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -958,6 +1003,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [evidence]
                 properties:
                   evidence:
                     type: array
@@ -981,7 +1027,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EvidenceItem"
+              $ref: "#/components/schemas/EvidenceItemCreate"
       responses:
         "201":
           description: Evidence added.
@@ -1022,7 +1068,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EvidenceItem"
+              $ref: "#/components/schemas/EvidenceItemCreate"
       responses:
         "200":
           description: Evidence updated.
@@ -1030,6 +1076,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -1102,6 +1149,8 @@ paths:
               properties:
                 char_id:
                   type: string
+                  minLength: 1
+                  maxLength: 64
                   description: SHA-256 hash of the character manifest.
       responses:
         "200":
@@ -1110,6 +1159,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [accepted]
                 properties:
                   accepted:
                     type: boolean
@@ -1147,14 +1197,17 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [characters]
                 properties:
                   characters:
                     type: array
                     items:
                       type: object
+                      required: [char_id, available]
                       properties:
                         char_id:
                           type: string
+                          maxLength: 64
                           description: SHA-256 hash of the character manifest.
                         available:
                           type: boolean
@@ -1219,17 +1272,21 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [backgrounds]
                 properties:
                   backgrounds:
                     type: array
                     items:
                       type: object
+                      required: [name, manifest_hash]
                       properties:
                         name:
                           type: string
+                          maxLength: 256
                           description: Background display name.
                         manifest_hash:
                           type: string
+                          maxLength: 64
                           description: SHA-256 hash of the background manifest.
         "401":
           description: Token is invalid or already expired.
@@ -1253,17 +1310,21 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [tracks]
                 properties:
                   tracks:
                     type: array
                     items:
                       type: object
+                      required: [name, asset_hash]
                       properties:
                         name:
                           type: string
+                          maxLength: 256
                           description: Track display name.
                         asset_hash:
                           type: string
+                          maxLength: 64
                           description: SHA-256 content hash of the audio file.
         "401":
           description: Token is invalid or already expired.
@@ -1336,19 +1397,25 @@ paths:
               properties:
                 action:
                   type: string
+                  minLength: 1
+                  maxLength: 64
                   description: Action identifier (e.g. "kick", "ban", "mute", "x-custom").
                 target:
                   type: string
+                  maxLength: 128
                   description: Session token or user ID of the affected user. Required for targeted actions.
                 area:
                   type: string
+                  maxLength: 128
                   description: Area scope. Defaults to the moderator's current area.
                 reason:
                   type: string
+                  maxLength: 4096
                   description: Human-readable reason. Delivered to the target where applicable.
                 duration:
                   type: integer
                   nullable: true
+                  minimum: 0
                   description: Duration in seconds. null = permanent. Interpretation is action-dependent.
                 params:
                   type: object
@@ -1360,6 +1427,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [action_id, action, status, timestamp]
                 properties:
                   action_id:
                     type: string
@@ -1421,22 +1489,28 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [actions]
                 properties:
                   actions:
                     type: array
                     items:
                       type: object
+                      required: [action_id, action, applied_at]
                       properties:
                         action_id:
                           type: string
                         action:
                           type: string
+                          maxLength: 64
                         target_user:
                           type: string
+                          maxLength: 128
                         area:
                           type: string
+                          maxLength: 128
                         reason:
                           type: string
+                          maxLength: 4096
                         duration:
                           type: integer
                           nullable: true
@@ -1449,6 +1523,7 @@ paths:
                           nullable: true
                         moderator:
                           type: string
+                          maxLength: 128
         "401":
           description: Token is invalid or already expired.
           content:
@@ -1516,17 +1591,21 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [actions]
                 properties:
                   actions:
                     type: array
                     items:
                       type: object
+                      required: [action, requires_target, supports_duration]
                       properties:
                         action:
                           type: string
+                          maxLength: 64
                           description: Action identifier.
                         description:
                           type: string
+                          maxLength: 512
                           description: Human-readable description.
                         requires_target:
                           type: boolean
@@ -1673,11 +1752,13 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
           description: |
             Opaque identifier for this object. Referenced by transitions,
             effect targets, and auto-fired events (animation_end:<id>).
         ref:
           type: string
+          maxLength: 128
           description: |
             Reference to a layer from the current background manifest
             (e.g. "def", "def:desk", "wit"), or the special value `_prev`
@@ -1692,6 +1773,7 @@ components:
             or image. Mutually exclusive with `ref`.
         initial_state:
           type: string
+          maxLength: 64
           description: Which state to start in. Required when using `states`.
         transform:
           $ref: "#/components/schemas/Transform"
@@ -1746,6 +1828,7 @@ components:
       properties:
         time_ms:
           type: integer
+          minimum: 0
           description: Time offset in milliseconds from animation start.
         x:
           type: number
@@ -1764,17 +1847,21 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
           description: |
             Identifier for this text part. Auto-fires "text_end:<id>" when
             the crawl finishes. Triggered by "text_start:<id>".
         content:
           type: string
+          maxLength: 4096
           description: The message text to display.
         showname:
           type: string
+          maxLength: 128
           description: Name displayed above the text box.
         color:
           type: string
+          maxLength: 7
           description: Text color as hex (e.g. "#FFFFFF", "#00FF00"). Default "#FFFFFF".
         additive:
           type: boolean
@@ -1784,6 +1871,7 @@ components:
           description: Skip text crawl and display immediately. Default false.
         on:
           type: string
+          maxLength: 128
           description: Event that triggers this text part (typically "text_start:<id>").
 
     AudioCue:
@@ -1792,12 +1880,15 @@ components:
       properties:
         asset:
           type: string
+          maxLength: 64
           description: Asset hash of the sound file.
         on:
           type: string
+          maxLength: 128
           description: Event that triggers playback.
         delay_ms:
           type: integer
+          minimum: 0
           description: Delay after the trigger event before playing. Default 0.
 
     EffectCue:
@@ -1806,15 +1897,19 @@ components:
       properties:
         shader:
           type: string
+          maxLength: 64
           description: Asset hash of the shader program.
         on:
           type: string
+          maxLength: 128
           description: Event that triggers the effect.
         target:
           type: string
+          maxLength: 64
           description: Object id, "text", or omit for global scope.
         duration_ms:
           type: integer
+          minimum: 0
           description: Effect duration in milliseconds. Omit for one-shot effects.
 
     Transition:
@@ -1823,12 +1918,15 @@ components:
       properties:
         object:
           type: string
+          maxLength: 64
           description: Object id to transition.
         to:
           type: string
+          maxLength: 64
           description: Target state name (must exist in the object's states map).
         on:
           type: string
+          maxLength: 128
           description: Event that triggers the transition.
 
     EventCue:
@@ -1837,11 +1935,13 @@ components:
       properties:
         name:
           type: string
+          maxLength: 128
           description: |
             Event name to fire. Use "text_start:<id>" to trigger a text part.
             Any other name is user-defined and can be referenced by other cues.
         on:
           type: string
+          maxLength: 128
           description: |
             Trigger event. Can be "start", "animation_end:<id>",
             "text_end:<id>", or any user-defined event name.
@@ -1851,6 +1951,7 @@ components:
     # -------------------------------------------------------------------------
     Area:
       type: object
+      required: [id, name, path]
       description: |
         All identifiers (area id, evidence id, action id, etc.) are
         opaque server-assigned tokens. Clients MUST NOT assume any
@@ -1859,24 +1960,30 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
           description: Server-assigned unique identifier. Opaque string.
         name:
           type: string
+          maxLength: 128
           description: Area display name.
         path:
           type: string
+          maxLength: 256
           description: |
             Hierarchical path (e.g. "courtroom/1", "basement/cells/a").
             Defines the area's position in the tree. Clients can use
             this to render a nested area list.
         players:
           type: integer
+          minimum: 0
           description: Number of players currently in this area.
         status:
           type: string
+          maxLength: 64
           description: Area status (e.g. "IDLE", "CASING", "RECESS").
         cm:
           type: string
+          maxLength: 128
           description: Current case maker / courtroom magistrate. Empty if none.
         locked:
           type: boolean
@@ -1887,6 +1994,7 @@ components:
     # -------------------------------------------------------------------------
     CharacterManifest:
       type: object
+      required: [schema, schema_version, id, name, emotes]
       description: |
         Defines a character's emotes, default properties, and assets.
         Each emote provides a `states` map that feeds directly into
@@ -1901,21 +2009,26 @@ components:
           type: integer
         id:
           type: string
+          maxLength: 128
           description: Human-readable identifier (e.g. "saturday/phoenix-wright").
         name:
           type: string
+          maxLength: 128
           description: Display name (e.g. "Phoenix Wright").
         icon:
           type: string
+          maxLength: 64
           description: Asset hash of the character icon.
         defaults:
           type: object
           properties:
             side:
               type: string
+              maxLength: 64
               description: Default court position (e.g. "def", "pro", "wit").
             blip:
               type: string
+              maxLength: 64
               description: Asset hash of the default blip sound.
         emotes:
           type: array
@@ -1924,15 +2037,18 @@ components:
 
     EmoteDefinition:
       type: object
+      required: [name, states]
       description: |
         An emote template. The client uses this to build an ObjectComposition
         and event wiring for an IC message.
       properties:
         name:
           type: string
+          maxLength: 128
           description: Emote display name.
         button:
           type: string
+          maxLength: 64
           description: Asset hash of the emote picker button image.
         states:
           type: object
@@ -1950,9 +2066,11 @@ components:
           properties:
             asset:
               type: string
+              maxLength: 64
               description: Asset hash of the sound file.
             delay_ms:
               type: integer
+              minimum: 0
               description: Delay before playing. Default 0.
           description: Sound effect for this emote. Played on "start" by default when the client builds the IC message.
         effects:
@@ -1975,6 +2093,7 @@ components:
     # -------------------------------------------------------------------------
     BackgroundManifest:
       type: object
+      required: [schema, schema_version, id, name, positions]
       description: |
         Defines a background's positions, layers, and transition timings.
         Each position defines named layers that can be referenced via
@@ -1987,9 +2106,11 @@ components:
           type: integer
         id:
           type: string
+          maxLength: 128
           description: Human-readable identifier (e.g. "saturday/courtroom").
         name:
           type: string
+          maxLength: 128
           description: Display name (e.g. "Courtroom").
         positions:
           type: object
@@ -2005,12 +2126,15 @@ components:
             properties:
               from:
                 type: string
+                maxLength: 64
                 description: Source position id.
               to:
                 type: string
+                maxLength: 64
                 description: Target position id.
               duration_ms:
                 type: integer
+                minimum: 0
                 description: Suggested slide duration in milliseconds.
           description: |
             Suggested transition timings between positions. Clients use
@@ -2026,6 +2150,7 @@ components:
             properties:
               asset:
                 type: string
+                maxLength: 64
                 description: Asset hash of the layer image.
               z:
                 type: integer
@@ -2041,20 +2166,44 @@ components:
     # -------------------------------------------------------------------------
     # Evidence
     # -------------------------------------------------------------------------
-    EvidenceItem:
+    EvidenceItemCreate:
       type: object
+      required: [name]
+      description: Evidence submission (no server-assigned id).
       properties:
-        id:
-          type: string
-          description: Server-assigned unique identifier. Opaque string.
         name:
           type: string
+          minLength: 1
+          maxLength: 128
           description: Evidence display name.
         description:
           type: string
+          maxLength: 4096
           description: Evidence description text.
         image:
           type: string
+          maxLength: 64
+          description: Asset hash of the evidence image.
+
+    EvidenceItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: Server-assigned unique identifier. Opaque string.
+        name:
+          type: string
+          maxLength: 128
+          description: Evidence display name.
+        description:
+          type: string
+          maxLength: 4096
+          description: Evidence description text.
+        image:
+          type: string
+          maxLength: 64
           description: Asset hash of the evidence image.
 
     # -------------------------------------------------------------------------
@@ -2063,32 +2212,48 @@ components:
     # All SSE events carry a `schema_version` integer field (currently 1).
     # Omitted from individual schemas below for brevity — it is present
     # on every event payload.
+    #
+    # User-initiated events carry a `user_id` field identifying the acting
+    # user. Moderation events use display names instead to prevent leaking
+    # session identity to non-moderators.
     # -------------------------------------------------------------------------
     IcMessageEvent:
       type: object
+      required: [sender, message]
       description: |
         Wraps an IcMessage with sender metadata. The composition payload
         is identical to what was submitted via POST /ic.
       properties:
+        user_id:
+          type: string
+          description: User identifier of the sender.
         sender:
           type: object
+          required: [user_id, char_id]
           properties:
             user_id:
               type: string
             char_id:
               type: string
+              maxLength: 64
               description: SHA-256 hash of the sender's character manifest.
         message:
           $ref: "#/components/schemas/IcMessage"
 
     OocMessageEvent:
       type: object
+      required: [name, message]
       properties:
+        user_id:
+          type: string
+          description: User identifier of the sender. Absent for system messages.
         name:
           type: string
+          maxLength: 64
           description: Sender display name.
         message:
           type: string
+          maxLength: 4096
           description: Message text.
         system:
           type: boolean
@@ -2096,6 +2261,7 @@ components:
 
     AreaUpdateEvent:
       type: object
+      required: [areas]
       properties:
         areas:
           type: array
@@ -2104,25 +2270,37 @@ components:
 
     BackgroundChangeEvent:
       type: object
+      required: [name]
       properties:
+        user_id:
+          type: string
+          description: User identifier of who changed the background.
         name:
           type: string
+          maxLength: 256
           description: Background name.
         position:
           type: string
+          maxLength: 64
           description: Active position.
 
     MusicChangeEvent:
       type: object
+      required: [name]
       properties:
+        user_id:
+          type: string
+          description: User identifier of who changed the music.
         name:
           type: string
+          maxLength: 256
           description: Track name. Empty to stop.
         looping:
           type: boolean
           description: Whether the track loops.
         channel:
           type: integer
+          minimum: 0
           description: Audio channel (0 = music, 1+ = ambience).
         effects:
           type: object
@@ -2136,30 +2314,47 @@ components:
 
     HealthUpdateEvent:
       type: object
+      required: [side, value]
       properties:
+        user_id:
+          type: string
+          description: User identifier of who changed the health bar.
         side:
           type: string
           enum: [defense, prosecution]
         value:
           type: integer
+          minimum: 0
+          maximum: 10
           description: Health bar value (0-10).
 
     TimerUpdateEvent:
       type: object
+      required: [timer_id, action]
       properties:
+        user_id:
+          type: string
+          description: User identifier of who changed the timer.
         timer_id:
           type: integer
+          minimum: 0
+          maximum: 4
           description: Timer identifier (0-4).
         action:
           type: string
           enum: [start, pause, set, hide]
         value_ms:
           type: integer
+          minimum: 0
           description: Timer value in milliseconds.
 
     EvidenceUpdateEvent:
       type: object
+      required: [evidence]
       properties:
+        user_id:
+          type: string
+          description: User identifier of who modified the evidence.
         evidence:
           type: array
           items:
@@ -2168,6 +2363,7 @@ components:
 
     PresenceUpdateEvent:
       type: object
+      required: [action, area, user]
       description: |
         Fired when a player joins, leaves, or changes state within an area.
         Sent to all players in the affected area(s).
@@ -2178,44 +2374,56 @@ components:
           description: What happened.
         area:
           type: string
+          maxLength: 128
           description: Area identifier where this occurred.
         user:
           type: object
+          required: [user_id]
           properties:
             user_id:
               type: string
             display_name:
               type: string
+              maxLength: 64
             character:
               type: string
               nullable: true
+              maxLength: 64
               description: Character manifest hash.
             charname:
               type: string
+              maxLength: 128
               description: In-character showname.
 
     ModerationActionEvent:
       type: object
+      required: [action]
       description: |
         Broadcast to affected clients when a moderation action is applied or revoked.
         Uses display names, not session IDs, to prevent information leakage.
       properties:
         action:
           type: string
+          maxLength: 64
           description: Action identifier.
         moderator:
           type: string
+          maxLength: 128
           description: Display name of the moderator. Omitted if the server hides moderator identity.
         target:
           type: string
+          maxLength: 128
           description: Display name of the affected user.
         area:
           type: string
+          maxLength: 128
         reason:
           type: string
+          maxLength: 4096
         duration:
           type: integer
           nullable: true
+          minimum: 0
         revoked:
           type: boolean
           description: True if this is a revocation of a previous action.
@@ -2225,9 +2433,14 @@ components:
 
     CharTakenEvent:
       type: object
+      required: [char_id, available]
       properties:
+        user_id:
+          type: string
+          description: User identifier of who took or released the character.
         char_id:
           type: string
+          maxLength: 64
           description: SHA-256 hash of the character manifest.
         available:
           type: boolean
@@ -2238,7 +2451,9 @@ components:
     # -------------------------------------------------------------------------
     Error:
       type: object
+      required: [reason]
       properties:
         reason:
           type: string
+          maxLength: 4096
           description: Human-readable explanation. May be empty.
