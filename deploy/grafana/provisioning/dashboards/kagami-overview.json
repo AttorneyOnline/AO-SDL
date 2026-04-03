@@ -268,14 +268,76 @@
 
     {
       "type": "row",
-      "title": "Server Info",
+      "title": "Areas",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
       "collapsed": false
     },
     {
       "type": "table",
+      "title": "Area Status",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 49 },
+      "targets": [{
+        "expr": "kagami_area_players",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }],
+      "transformations": [
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "area|status|Value" } } },
+        { "id": "organize", "options": { "renameByName": { "Value": "players" } } }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "players" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } }, { "id": "thresholds", "value": { "steps": [{ "color": "transparent", "value": null }, { "color": "blue", "value": 1 }, { "color": "green", "value": 5 }, { "color": "yellow", "value": 20 }] } }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Area Population Over Time",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 49 },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 30, "stacking": { "mode": "normal" }, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_area_players",
+        "legendFormat": "{{area}}",
+        "refId": "A"
+      }]
+    },
+
+    {
+      "type": "row",
+      "title": "Connections",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Connection Types Over Time",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 15 } },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "kagami_ws_connections", "legendFormat": "WebSocket (AO2)", "refId": "A" },
+        { "expr": "kagami_sessions{protocol=\"aonx\"}", "legendFormat": "REST/SSE (AONX)", "refId": "B" }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Server Info",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 64 },
+      "collapsed": false
+    },
+    {
+      "type": "table",
       "title": "Build & Config",
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 49 },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 65 },
       "targets": [
         { "expr": "kagami_build_info", "format": "table", "instant": true, "refId": "A" },
         { "expr": "kagami_config_info", "format": "table", "instant": true, "refId": "B" }
@@ -284,6 +346,132 @@
         { "id": "merge", "options": {} },
         { "id": "filterFieldsByName", "options": { "include": { "pattern": "version|server_name|max_players|session_ttl" } } }
       ]
+    },
+    {
+      "type": "table",
+      "title": "Network Config",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 65 },
+      "targets": [{
+        "expr": "kagami_network_info",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }],
+      "transformations": [
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "http_port|ws_port|bind_address|cors_origin" } } }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Active Sessions (per-client)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 70 },
+      "collapsed": false
+    },
+    {
+      "type": "table",
+      "title": "Session List",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 71 },
+      "targets": [{
+        "expr": "kagami_session_idle_seconds",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      },
+      {
+        "expr": "kagami_session_bytes_sent",
+        "format": "table",
+        "instant": true,
+        "refId": "B"
+      },
+      {
+        "expr": "kagami_session_bytes_received",
+        "format": "table",
+        "instant": true,
+        "refId": "C"
+      },
+      {
+        "expr": "kagami_session_packets_sent",
+        "format": "table",
+        "instant": true,
+        "refId": "D"
+      },
+      {
+        "expr": "kagami_session_packets_received",
+        "format": "table",
+        "instant": true,
+        "refId": "E"
+      }],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "session_id|display_name|protocol|area|character|Value #A|Value #B|Value #C|Value #D|Value #E" } } },
+        { "id": "organize", "options": { "renameByName": { "Value #A": "idle_s", "Value #B": "bytes_out", "Value #C": "bytes_in", "Value #D": "pkts_out", "Value #E": "pkts_in" } } }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "bytes_out" }, "properties": [{ "id": "unit", "value": "bytes" }] },
+          { "matcher": { "id": "byName", "options": "bytes_in" }, "properties": [{ "id": "unit", "value": "bytes" }] },
+          { "matcher": { "id": "byName", "options": "idle_s" }, "properties": [{ "id": "unit", "value": "s" }] }
+        ]
+      }
+    },
+
+    {
+      "type": "row",
+      "title": "Event Channels",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 81 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Event Channel Publishes (total)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 82 },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_event_publishes_total",
+        "legendFormat": "{{channel}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Protocol Errors / sec",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 82 },
+      "fieldConfig": {
+        "defaults": { "unit": "eps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "rate(kagami_http_errors_total[1m])",
+        "legendFormat": "{{type}}",
+        "refId": "A"
+      }]
+    },
+
+    {
+      "type": "row",
+      "title": "Per-Endpoint Breakdown",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 90 },
+      "collapsed": false
+    },
+    {
+      "type": "table",
+      "title": "Endpoint Request Counts",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 91 },
+      "targets": [{
+        "expr": "kagami_http_requests_total",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }],
+      "transformations": [
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "method|endpoint|status|Value" } } },
+        { "id": "organize", "options": { "renameByName": { "Value": "count" } } }
+      ],
+      "options": { "sortBy": [{ "displayName": "count", "desc": true }] }
     }
   ],
   "refresh": "15s",

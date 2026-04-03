@@ -11,20 +11,26 @@
 // -- Metrics (registered lazily on first use) ---------------------------------
 
 static metrics::CounterFamily& http_requests() {
-    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_http_requests_total",
-                                                                  "Total HTTP requests handled", {"method", "status"});
+    static auto& f = metrics::MetricsRegistry::instance().counter(
+        "kagami_http_requests_total", "Total HTTP requests handled", {"method", "endpoint", "status"});
     return f;
 }
 
 static metrics::CounterFamily& http_response_bytes() {
-    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_http_response_bytes_total",
-                                                                  "Total HTTP response bytes sent", {"method"});
+    static auto& f = metrics::MetricsRegistry::instance().counter(
+        "kagami_http_response_bytes_total", "Total HTTP response bytes sent", {"method", "endpoint"});
     return f;
 }
 
 static metrics::CounterFamily& dispatch_lock_acquisitions() {
     static auto& f = metrics::MetricsRegistry::instance().counter("kagami_dispatch_lock_acquisitions_total",
                                                                   "Dispatch mutex lock acquisitions");
+    return f;
+}
+
+static metrics::CounterFamily& http_errors() {
+    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_http_errors_total",
+                                                                  "Protocol-level HTTP errors", {"type"});
     return f;
 }
 
@@ -163,6 +169,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             }
             catch (const nlohmann::json::parse_error&) {
                 Log::log_print(VERBOSE, "REST: << 400 %s %s (malformed JSON)", req.method.c_str(), req.path.c_str());
+                http_errors().labels({"malformed_json"}).inc();
                 res.status = 400;
                 res.set_content(R"({"reason":"Malformed JSON in request body"})", "application/json");
                 return;
@@ -190,6 +197,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             if (endpoint.requires_auth()) {
                 if (rest_req.bearer_token.empty()) {
                     Log::log_print(VERBOSE, "REST: << 401 %s %s (no token)", req.method.c_str(), req.path.c_str());
+                    http_errors().labels({"missing_token"}).inc();
                     res.status = 401;
                     res.set_content(R"({"reason":"Missing session token"})", "application/json");
                     return;
@@ -203,6 +211,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
                 rest_req.session = auth_func_(rest_req.bearer_token);
                 if (!rest_req.session) {
                     Log::log_print(VERBOSE, "REST: << 401 %s %s (bad token)", req.method.c_str(), req.path.c_str());
+                    http_errors().labels({"invalid_token"}).inc();
                     res.status = 401;
                     res.set_content(R"({"reason":"Invalid or expired session token"})", "application/json");
                     return;
@@ -222,17 +231,17 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             auto body = rest_res.body.dump();
             Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
                            body.c_str());
-            http_response_bytes().labels({req.method}).inc(body.size());
+            http_response_bytes().labels({req.method, endpoint.path_pattern()}).inc(body.size());
             res.set_content(std::move(body), rest_res.content_type);
         }
 
-        http_requests().labels({req.method, std::to_string(rest_res.status)}).inc();
+        http_requests().labels({req.method, endpoint.path_pattern(), std::to_string(rest_res.status)}).inc();
     }
     catch (const std::exception& e) {
         Log::log_print(ERR, "REST: exception in %s %s: %s", endpoint.method().c_str(), endpoint.path_pattern().c_str(),
                        e.what());
         res.status = 500;
         res.set_content(R"({"reason":"An internal server error occurred"})", "application/json");
-        http_requests().labels({req.method, "500"}).inc();
+        http_requests().labels({req.method, endpoint.path_pattern(), "500"}).inc();
     }
 }
