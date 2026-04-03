@@ -1,3 +1,4 @@
+#include "CloudWatchSink.h"
 #include "ReplCommand.h"
 #include "ServerSettings.h"
 #include "TerminalUI.h"
@@ -15,7 +16,9 @@
 
 #include <csignal>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -53,11 +56,56 @@ int main(int /*argc*/, char* argv[]) {
     bool interactive = IS_INTERACTIVE();
     TerminalUI ui;
 
+    // --- Log level for stdout (and terminal UI in interactive mode) ---
+    Log::set_stdout_level(cfg.console_log_level());
+
     if (interactive) {
         ui.init();
-        Log::set_sink([&ui](LogLevel level, const std::string& timestamp, const std::string& message) {
-            ui.log(level, timestamp, message);
-        });
+        Log::set_sink([&ui](LogLevel level, const std::string& timestamp,
+                            const std::string& message) { ui.log(level, timestamp, message); },
+                      cfg.console_log_level());
+    }
+
+    // --- File log sink ---
+    std::shared_ptr<std::ofstream> log_file;
+    if (!cfg.log_file().empty()) {
+        log_file = std::make_shared<std::ofstream>(cfg.log_file(), std::ios::app);
+        if (log_file->is_open()) {
+            Log::add_sink(
+                "file",
+                [lf = log_file](LogLevel level, const std::string& timestamp, const std::string& message) {
+                    *lf << "[" << timestamp << "][" << log_level_name(level) << "] " << message << "\n";
+                    lf->flush();
+                },
+                cfg.file_log_level());
+        }
+        else {
+            log_file.reset();
+        }
+    }
+
+    // --- CloudWatch log sink ---
+    std::unique_ptr<CloudWatchSink> cw_sink;
+    if (!cfg.cloudwatch_region().empty() && !cfg.cloudwatch_log_group().empty()) {
+        CloudWatchSink::Config cw_cfg;
+        cw_cfg.region = cfg.cloudwatch_region();
+        cw_cfg.log_group = cfg.cloudwatch_log_group();
+        cw_cfg.log_stream = cfg.cloudwatch_log_stream();
+        cw_cfg.credentials.access_key_id = cfg.cloudwatch_access_key_id();
+        cw_cfg.credentials.secret_access_key = cfg.cloudwatch_secret_access_key();
+        cw_cfg.flush_interval_seconds = cfg.cloudwatch_flush_interval();
+
+        if (cw_cfg.log_stream.empty())
+            cw_cfg.log_stream = cfg.server_name();
+
+        cw_sink = std::make_unique<CloudWatchSink>(std::move(cw_cfg));
+        Log::add_sink(
+            "cloudwatch",
+            [&cw = *cw_sink](LogLevel level, const std::string& timestamp, const std::string& message) {
+                cw.push(level, timestamp, message);
+            },
+            cfg.cloudwatch_log_level());
+        cw_sink->start();
     }
 
     Log::log_print(INFO, "Server: %s", cfg.server_name().c_str());
@@ -249,7 +297,11 @@ int main(int /*argc*/, char* argv[]) {
 
     // --- Shutdown ---
     stop_src.request_stop();
+    Log::remove_sink("cloudwatch");
+    Log::remove_sink("file");
     Log::set_sink(nullptr);
+    if (cw_sink)
+        cw_sink->stop();
     Log::log_print(INFO, "Shutting down...");
     ws.stop();
     http.stop();
