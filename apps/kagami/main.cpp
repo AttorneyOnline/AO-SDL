@@ -297,12 +297,18 @@ int main(int /*argc*/, char* argv[]) {
 
     // --- Shutdown ---
     stop_src.request_stop();
+    Log::log_print(INFO, "Shutting down...");
+
+    // Remove sinks before stopping backends so the callbacks can't fire on
+    // a stopped/destroyed object. CloudWatch's stop() does a final flush()
+    // which sends buffered events via HTTP and reports errors to stderr
+    // directly (not through Log), so this ordering is safe.
     Log::remove_sink("cloudwatch");
     Log::remove_sink("file");
     Log::set_sink(nullptr);
     if (cw_sink)
         cw_sink->stop();
-    Log::log_print(INFO, "Shutting down...");
+
     ws.stop();
     http.stop();
 
