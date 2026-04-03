@@ -359,4 +359,59 @@ inline std::vector<uint8_t> sha256_raw(const std::string& input) {
     return detail::to_bytes(s, 8);
 }
 
+// -- HMAC-SHA256 --------------------------------------------------------------
+
+/// Compute HMAC-SHA256 as raw 32-byte digest.
+/// key and message are arbitrary binary data.
+inline std::vector<uint8_t> hmac_sha256(const std::vector<uint8_t>& key, const std::vector<uint8_t>& message) {
+    constexpr size_t BLOCK_SIZE = 64; // SHA-256 block size
+
+    // Step 1: If key > block size, hash it. If shorter, zero-pad.
+    std::vector<uint8_t> padded_key(BLOCK_SIZE, 0);
+    if (key.size() > BLOCK_SIZE) {
+        std::string key_str(key.begin(), key.end());
+        auto hashed = sha256_raw(key_str);
+        std::copy(hashed.begin(), hashed.end(), padded_key.begin());
+    }
+    else {
+        std::copy(key.begin(), key.end(), padded_key.begin());
+    }
+
+    // Step 2: Create inner and outer padded keys
+    std::vector<uint8_t> i_key_pad(BLOCK_SIZE);
+    std::vector<uint8_t> o_key_pad(BLOCK_SIZE);
+    for (size_t i = 0; i < BLOCK_SIZE; i++) {
+        i_key_pad[i] = padded_key[i] ^ 0x36;
+        o_key_pad[i] = padded_key[i] ^ 0x5c;
+    }
+
+    // Step 3: inner hash = SHA256(i_key_pad || message)
+    std::string inner_data(i_key_pad.begin(), i_key_pad.end());
+    inner_data.append(message.begin(), message.end());
+    auto inner_hash = sha256_raw(inner_data);
+
+    // Step 4: outer hash = SHA256(o_key_pad || inner_hash)
+    std::string outer_data(o_key_pad.begin(), o_key_pad.end());
+    outer_data.append(inner_hash.begin(), inner_hash.end());
+    return sha256_raw(outer_data);
+}
+
+/// Convenience: HMAC-SHA256 with string key and message, returns hex string.
+inline std::string hmac_sha256_hex(const std::string& key, const std::string& message) {
+    std::vector<uint8_t> k(key.begin(), key.end());
+    std::vector<uint8_t> m(message.begin(), message.end());
+    auto digest = hmac_sha256(k, m);
+    // Convert to hex
+    uint32_t words[8];
+    for (int i = 0; i < 8; i++)
+        words[i] = detail::read_be32(digest.data() + 4 * i);
+    return detail::to_hex(words, 8);
+}
+
+/// Convenience: HMAC-SHA256 with raw key bytes and string message.
+inline std::vector<uint8_t> hmac_sha256(const std::vector<uint8_t>& key, const std::string& message) {
+    std::vector<uint8_t> m(message.begin(), message.end());
+    return hmac_sha256(key, m);
+}
+
 } // namespace crypto

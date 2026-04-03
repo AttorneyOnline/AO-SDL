@@ -75,7 +75,18 @@ class Log {
 
     /// Register an additional log sink. Called from any thread — must be thread-safe.
     /// Only one sink is supported (last one wins). Pass nullptr to clear.
-    static void set_sink(Sink sink);
+    /// min_level filters: only events at or above this level reach the sink.
+    static void set_sink(Sink sink, LogLevel min_level = VERBOSE);
+
+    /// Add a named sink. Multiple sinks can coexist. Thread-safe.
+    /// min_level filters: only events at or above this level reach the sink.
+    static void add_sink(const std::string& name, Sink sink, LogLevel min_level = VERBOSE);
+
+    /// Remove a named sink by name. Thread-safe.
+    static void remove_sink(const std::string& name);
+
+    /// Set the minimum level for stdout output. Default is VERBOSE (everything).
+    static void set_stdout_level(LogLevel min_level);
 
   private:
     static void log_impl(LogLevel level, std::string message);
