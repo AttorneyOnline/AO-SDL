@@ -449,6 +449,72 @@
         { "id": "organize", "options": { "renameByName": { "Value": "count" } } }
       ],
       "options": { "sortBy": [{ "displayName": "count", "desc": true }] }
+    },
+
+    {
+      "type": "row",
+      "title": "Health & Errors",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 101 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Session Expiries / sec",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 102 },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [{ "expr": "rate(kagami_sessions_expired_total[1m])", "legendFormat": "expired", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "AO Protocol Errors / sec",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 102 },
+      "fieldConfig": { "defaults": { "unit": "eps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [{ "expr": "rate(kagami_ao_errors_total[1m])", "legendFormat": "{{type}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "WS Handshake Failures / sec",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 102 },
+      "fieldConfig": { "defaults": { "unit": "eps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [{ "expr": "rate(kagami_ws_handshake_failures_total[1m])", "legendFormat": "failures", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "SSE Replays & Dead Clients / sec",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 102 },
+      "fieldConfig": { "defaults": { "unit": "eps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(kagami_sse_replays_total[1m])", "legendFormat": "replays", "refId": "A" },
+        { "expr": "rate(kagami_sse_dead_clients_total[1m])", "legendFormat": "dead clients", "refId": "B" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Config Loads",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 110 },
+      "targets": [{ "expr": "kagami_config_ops_total{op=\"load\"}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Config Saves",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 110 },
+      "targets": [{ "expr": "kagami_config_ops_total{op=\"save\"}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Max Players",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 110 },
+      "targets": [{ "expr": "kagami_max_players", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Sessions Expired (total)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 110 },
+      "targets": [{ "expr": "kagami_sessions_expired_total", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
     }
   ],
   "refresh": "15s",
