@@ -257,7 +257,7 @@ int main(int /*argc*/, char* argv[]) {
             std::vector<SessionSnap> session_snaps;
             std::vector<AreaSnap> area_snaps;
 
-            rest_router.with_lock([&] {
+            rest_router.with_shared_lock([&] {
                 auto now_steady = std::chrono::steady_clock::now();
                 room.for_each_session([&](const ServerSession& s) {
                     (s.protocol == "ao2") ? ++ao : ++nx;
@@ -421,10 +421,25 @@ int main(int /*argc*/, char* argv[]) {
                 rest_router.with_lock([&] { ao_backend.on_client_message(client_id, data); });
             }
 
-            // Periodic session expiry sweep (~every 30s)
+            // Periodic session expiry sweep (~every 30s).
+            // Two-phase: scan under shared lock (cheap, doesn't block requests),
+            // then destroy under exclusive lock (fast, only touches expired IDs).
             auto now = std::chrono::steady_clock::now();
             if (now - last_sweep > std::chrono::seconds(30)) {
-                rest_router.with_lock([&] { room.expire_sessions(cfg.session_ttl_seconds()); });
+                std::vector<uint64_t> to_expire;
+                rest_router.with_shared_lock(
+                    [&] { to_expire = room.find_expired_sessions(cfg.session_ttl_seconds()); });
+                if (!to_expire.empty()) {
+                    rest_router.with_lock([&] {
+                        for (auto client_id : to_expire)
+                            room.destroy_session(client_id);
+                        room.broadcast_chars_taken();
+                    });
+                    metrics::MetricsRegistry::instance()
+                        .counter("kagami_sessions_expired_total", "Sessions expired by TTL")
+                        .get()
+                        .inc(to_expire.size());
+                }
                 last_sweep = now;
             }
         }

@@ -50,6 +50,12 @@ class GameRoom {
         chars_taken_broadcasts_.push_back(std::move(cb));
     }
 
+    /// Fire the chars_taken broadcast to notify all backends of availability changes.
+    void broadcast_chars_taken() {
+        for (auto& cb : chars_taken_broadcasts_)
+            cb(char_taken);
+    }
+
     // --- Session management (unified across protocols) ---
 
     ServerSession& create_session(uint64_t client_id, const std::string& protocol);
@@ -69,6 +75,11 @@ class GameRoom {
     /// Remove REST sessions that have been inactive for longer than ttl_seconds.
     /// Returns the number of expired sessions removed.
     int expire_sessions(int ttl_seconds);
+
+    /// Scan for expired REST sessions without modifying state.
+    /// Returns client_ids of sessions that have exceeded the TTL.
+    /// Safe to call under a shared (reader) lock.
+    std::vector<uint64_t> find_expired_sessions(int ttl_seconds) const;
 
     /// Invoke a callback for each active session.
     template <typename F>
