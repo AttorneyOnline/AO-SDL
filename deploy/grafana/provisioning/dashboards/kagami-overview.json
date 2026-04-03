@@ -336,29 +336,16 @@
     },
     {
       "type": "table",
-      "title": "Build & Config",
-      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 65 },
-      "targets": [
-        { "expr": "kagami_build_info", "format": "table", "instant": true, "refId": "A" },
-        { "expr": "kagami_config_info", "format": "table", "instant": true, "refId": "B" }
-      ],
-      "transformations": [
-        { "id": "merge", "options": {} },
-        { "id": "filterFieldsByName", "options": { "include": { "pattern": "version|server_name|max_players|session_ttl" } } }
-      ]
-    },
-    {
-      "type": "table",
-      "title": "Network Config",
-      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 65 },
+      "title": "Server Info",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 65 },
       "targets": [{
-        "expr": "kagami_network_info",
+        "expr": "kagami_server_info",
         "format": "table",
         "instant": true,
         "refId": "A"
       }],
       "transformations": [
-        { "id": "filterFieldsByName", "options": { "include": { "pattern": "http_port|ws_port|bind_address|cors_origin" } } }
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "version|server_name|max_players|session_ttl|http_port|ws_port|bind_address|cors_origin" } } }
       ]
     },
     {

@@ -173,11 +173,9 @@ int main(int /*argc*/, char* argv[]) {
         auto& area_players = reg.gauge("kagami_area_players", "Players per area", {"area", "status"});
         auto& chars_taken = reg.gauge("kagami_characters_taken", "Characters currently taken");
         auto& area_info = reg.gauge("kagami_area_info", "Area state", {"area", "status", "locked"});
-        auto& build_info = reg.gauge("kagami_build_info", "Build metadata", {"version"});
-        auto& config_info =
-            reg.gauge("kagami_config_info", "Active configuration", {"server_name", "max_players", "session_ttl"});
-        auto& network_info = reg.gauge("kagami_network_info", "Network configuration",
-                                       {"http_port", "ws_port", "bind_address", "cors_origin"});
+        auto& server_info = reg.gauge("kagami_server_info", "Server build and configuration",
+                                      {"version", "server_name", "max_players", "session_ttl", "http_port", "ws_port",
+                                       "bind_address", "cors_origin"});
         auto& max_players = reg.gauge("kagami_max_players", "Configured max player slots");
         auto& event_publishes =
             reg.gauge("kagami_event_publishes_total", "Total events published per channel", {"channel"});
@@ -192,14 +190,11 @@ int main(int /*argc*/, char* argv[]) {
         auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
                                        {"session_id", "display_name", "protocol", "area", "character"});
 
-        build_info.labels({ao_sdl_version()}).set(1);
-        config_info
-            .labels({cfg.server_name(), std::to_string(cfg.max_players()), std::to_string(cfg.session_ttl_seconds())})
-            .set(1);
         auto cors = cfg.cors_origins();
-        network_info
-            .labels({std::to_string(cfg.http_port()), std::to_string(cfg.ws_port()), cfg.bind_address(),
-                     cors.empty() ? "" : cors[0]})
+        server_info
+            .labels({ao_sdl_version(), cfg.server_name(), std::to_string(cfg.max_players()),
+                     std::to_string(cfg.session_ttl_seconds()), std::to_string(cfg.http_port()),
+                     std::to_string(cfg.ws_port()), cfg.bind_address(), cors.empty() ? "" : cors[0]})
             .set(1);
         max_players.get().set(cfg.max_players());
 
