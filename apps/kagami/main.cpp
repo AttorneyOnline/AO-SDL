@@ -3,6 +3,7 @@
 #include "ServerSettings.h"
 #include "TerminalUI.h"
 
+#include "event/EventManager.h"
 #include "game/ClientId.h"
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
@@ -171,17 +172,41 @@ int main(int /*argc*/, char* argv[]) {
         auto& sessions_mods = reg.gauge("kagami_sessions_moderators", "Online moderators");
         auto& area_players = reg.gauge("kagami_area_players", "Players per area", {"area", "status"});
         auto& chars_taken = reg.gauge("kagami_characters_taken", "Characters currently taken");
+        auto& area_info = reg.gauge("kagami_area_info", "Area state", {"area", "status", "locked"});
         auto& build_info = reg.gauge("kagami_build_info", "Build metadata", {"version"});
         auto& config_info =
             reg.gauge("kagami_config_info", "Active configuration", {"server_name", "max_players", "session_ttl"});
+        auto& network_info = reg.gauge("kagami_network_info", "Network configuration",
+                                       {"http_port", "ws_port", "bind_address", "cors_origin"});
+        auto& max_players = reg.gauge("kagami_max_players", "Configured max player slots");
+        auto& event_publishes =
+            reg.gauge("kagami_event_publishes_total", "Total events published per channel", {"channel"});
+        auto& session_bytes_sent = reg.gauge("kagami_session_bytes_sent", "Bytes sent per session",
+                                             {"session_id", "display_name", "protocol", "area", "character"});
+        auto& session_bytes_recv = reg.gauge("kagami_session_bytes_received", "Bytes received per session",
+                                             {"session_id", "display_name", "protocol", "area", "character"});
+        auto& session_packets_sent = reg.gauge("kagami_session_packets_sent", "Packets sent per session",
+                                               {"session_id", "display_name", "protocol", "area", "character"});
+        auto& session_packets_recv = reg.gauge("kagami_session_packets_received", "Packets received per session",
+                                               {"session_id", "display_name", "protocol", "area", "character"});
+        auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
+                                       {"session_id", "display_name", "protocol", "area", "character"});
 
         build_info.labels({ao_sdl_version()}).set(1);
         config_info
             .labels({cfg.server_name(), std::to_string(cfg.max_players()), std::to_string(cfg.session_ttl_seconds())})
             .set(1);
+        auto cors = cfg.cors_origins();
+        network_info
+            .labels({std::to_string(cfg.http_port()), std::to_string(cfg.ws_port()), cfg.bind_address(),
+                     cors.empty() ? "" : cors[0]})
+            .set(1);
+        max_players.get().set(cfg.max_players());
 
-        reg.add_collector([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &chars_taken,
-                           &rest_router, &room, &server_start_time] {
+        reg.add_collector([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &area_info,
+                           &chars_taken, &event_publishes, &session_bytes_sent, &session_bytes_recv,
+                           &session_packets_sent, &session_packets_recv, &session_idle, &rest_router, &room,
+                           &server_start_time] {
             auto elapsed = std::chrono::steady_clock::now() - server_start_time;
             uptime.get().set(std::chrono::duration<double>(elapsed).count());
             rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
@@ -206,6 +231,7 @@ int main(int /*argc*/, char* argv[]) {
                 for (auto& [id, state] : room.area_states()) {
                     auto players = room.sessions_in_area(state.name);
                     area_players.labels({state.name, state.status}).set(static_cast<double>(players.size()));
+                    area_info.labels({state.name, state.status, state.locked ? "true" : "false"}).set(1);
                 }
 
                 int taken = 0;
@@ -214,7 +240,32 @@ int main(int /*argc*/, char* argv[]) {
                         ++taken;
                 }
                 chars_taken.get().set(taken);
+
+                // Per-session metrics with full identity
+                auto now_steady = std::chrono::steady_clock::now();
+                room.for_each_session([&](const ServerSession& s) {
+                    auto sid = std::to_string(s.session_id);
+                    std::string char_name = (s.character_id >= 0 && s.character_id < (int)room.characters.size())
+                                                ? room.characters[s.character_id]
+                                                : "none";
+                    std::string name = s.display_name.empty() ? "(unnamed)" : s.display_name;
+                    auto idle = std::chrono::duration_cast<std::chrono::seconds>(now_steady - s.last_activity).count();
+                    std::vector<std::string> labels = {sid, name, s.protocol, s.area, char_name};
+                    session_bytes_sent.labels(labels).set(
+                        static_cast<double>(s.bytes_sent.load(std::memory_order_relaxed)));
+                    session_bytes_recv.labels(labels).set(
+                        static_cast<double>(s.bytes_received.load(std::memory_order_relaxed)));
+                    session_packets_sent.labels(labels).set(
+                        static_cast<double>(s.packets_sent.load(std::memory_order_relaxed)));
+                    session_packets_recv.labels(labels).set(
+                        static_cast<double>(s.packets_received.load(std::memory_order_relaxed)));
+                    session_idle.labels(labels).set(static_cast<double>(idle));
+                });
             });
+
+            // Event channel stats (no lock needed — snapshot_channel_stats is thread-safe)
+            for (auto& cs : EventManager::instance().snapshot_channel_stats())
+                event_publishes.labels({cs.raw_name}).set(static_cast<double>(cs.count));
         });
     }
 
