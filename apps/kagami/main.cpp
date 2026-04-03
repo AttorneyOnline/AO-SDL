@@ -279,12 +279,14 @@ int main(int /*argc*/, char* argv[]) {
             sessions_mods.get().set(mods);
             chars_taken.get().set(taken);
 
+            // Clear stale labels before re-populating (prevents cardinality leak
+            // when area status/locked changes or sessions disconnect).
+            area_players.clear();
+            area_info.clear();
             for (auto& a : area_snaps) {
                 area_players.labels({a.name, a.status}).set(a.player_count);
                 area_info.labels({a.name, a.status, a.locked ? "true" : "false"}).set(1);
             }
-
-            // Clear stale session labels before re-populating (prevents cardinality leak).
             session_bytes_sent.clear();
             session_bytes_recv.clear();
             session_packets_sent.clear();
