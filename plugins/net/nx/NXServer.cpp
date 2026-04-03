@@ -77,6 +77,8 @@ static void publish_sse(const std::string& event_type, nlohmann::json payload, c
     sse.event = event_type;
     sse.data = payload.dump();
     sse.area = area;
+    Log::log_print(VERBOSE, "SSE: publish %s area=%s %s", event_type.c_str(), area.empty() ? "*" : area.c_str(),
+                   sse.data.c_str());
     EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
 }
 

@@ -694,6 +694,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                 res.status = 200;
                                 auto result = sse_handler(req, res);
                                 if (result.accepted) {
+                                    Log::log_print(VERBOSE, "SSE: client connected on %s", req.path.c_str());
                                     // Accepted — send SSE headers and move to SSE connections
                                     std::string headers = "HTTP/1.1 200 OK\r\n"
                                                           "Content-Type: text/event-stream\r\n"
@@ -751,6 +752,9 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                     }
 
                                     // Send replay frames without holding the lock
+                                    if (!replay_frames.empty())
+                                        Log::log_print(VERBOSE, "SSE: replaying %zu events from id %lu",
+                                                       replay_frames.size(), (unsigned long)last_id);
                                     for (auto& frame : replay_frames)
                                         send_sse_frame(sse_conn.socket, frame);
 
@@ -918,13 +922,18 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
 
     // Send to all matching connections
     std::vector<int> dead_fds;
+    int sent_count = 0;
     for (auto& [fd, sse] : state_->sse_by_fd) {
         if (!area.empty() && !sse.area.empty() && sse.area != area)
             continue;
         if (!send_sse_frame(sse.socket, frame))
             dead_fds.push_back(fd);
+        else
+            ++sent_count;
     }
+    Log::log_print(VERBOSE, "SSE: push id=%lu %s -> %d client(s)", (unsigned long)eid, event.c_str(), sent_count);
     for (int fd : dead_fds) {
+        Log::log_print(VERBOSE, "SSE: dropped dead fd=%d", fd);
         state_->poller.remove(fd);
         state_->sse_by_fd.erase(fd);
     }

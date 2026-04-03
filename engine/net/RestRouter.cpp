@@ -107,6 +107,8 @@ void RestRouter::bind(http::Server& server) {
 }
 
 void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res) {
+    Log::log_print(VERBOSE, "REST: >> %s %s", req.method.c_str(), req.path.c_str());
+
     // Static CORS headers are set via set_default_headers in bind().
     // Multi-origin mode needs per-request Allow-Origin.
     if (cors_origins_.size() > 1)
@@ -131,6 +133,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
                 rest_req.body = nlohmann::json::parse(req.body);
             }
             catch (const nlohmann::json::parse_error&) {
+                Log::log_print(VERBOSE, "REST: << 400 %s %s (malformed JSON)", req.method.c_str(), req.path.c_str());
                 res.status = 400;
                 res.set_content(R"({"reason":"Malformed JSON in request body"})", "application/json");
                 return;
@@ -151,6 +154,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
 
             if (endpoint.requires_auth()) {
                 if (rest_req.bearer_token.empty()) {
+                    Log::log_print(VERBOSE, "REST: << 401 %s %s (no token)", req.method.c_str(), req.path.c_str());
                     res.status = 401;
                     res.set_content(R"({"reason":"Missing session token"})", "application/json");
                     return;
@@ -163,6 +167,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
 
                 rest_req.session = auth_func_(rest_req.bearer_token);
                 if (!rest_req.session) {
+                    Log::log_print(VERBOSE, "REST: << 401 %s %s (bad token)", req.method.c_str(), req.path.c_str());
                     res.status = 401;
                     res.set_content(R"({"reason":"Invalid or expired session token"})", "application/json");
                     return;
@@ -176,10 +181,13 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         // Write response (outside lock — no game state access)
         res.status = rest_res.status;
         if (rest_res.status == 204 || rest_res.body.is_null()) {
-            // No content
+            Log::log_print(VERBOSE, "REST: << %d %s %s", rest_res.status, req.method.c_str(), req.path.c_str());
         }
         else {
-            res.set_content(rest_res.body.dump(), rest_res.content_type);
+            auto body = rest_res.body.dump();
+            Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
+                           body.c_str());
+            res.set_content(std::move(body), rest_res.content_type);
         }
     }
     catch (const std::exception& e) {
