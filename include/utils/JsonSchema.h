@@ -80,6 +80,9 @@ class JsonSchema {
         ObjectBuilder& required(std::string name, JsonSchema schema);
         ObjectBuilder& optional(std::string name, JsonSchema schema);
 
+        /// Reject any fields not declared via required() or optional().
+        ObjectBuilder& no_additional_properties();
+
         /// Finalize and return the schema.
         JsonSchema build();
 
@@ -90,6 +93,7 @@ class JsonSchema {
             bool is_required;
         };
         std::vector<Field> fields_;
+        bool strict_ = false;
     };
 
     static ObjectBuilder object();
@@ -126,4 +130,5 @@ class JsonSchema {
     double minimum_ = -std::numeric_limits<double>::infinity(); // integer/number minimum
     double maximum_ = std::numeric_limits<double>::infinity();  // integer/number maximum
     bool has_range_ = false;                                    // whether min/max are set
+    bool strict_ = false;                                       // object: reject unknown fields
 };

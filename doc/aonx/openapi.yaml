@@ -2443,6 +2443,7 @@ components:
       oneOf:
         - type: object
           required: [char_id, available]
+          additionalProperties: false
           properties:
             user_id:
               type: string
@@ -2456,6 +2457,7 @@ components:
               description: Whether the character is now available.
         - type: object
           required: [taken]
+          additionalProperties: false
           properties:
             taken:
               type: array

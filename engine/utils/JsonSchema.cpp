@@ -75,9 +75,15 @@ JsonSchema::ObjectBuilder& JsonSchema::ObjectBuilder::optional(std::string name,
     return *this;
 }
 
+JsonSchema::ObjectBuilder& JsonSchema::ObjectBuilder::no_additional_properties() {
+    strict_ = true;
+    return *this;
+}
+
 JsonSchema JsonSchema::ObjectBuilder::build() {
     JsonSchema s;
     s.type_ = Type::object_t;
+    s.strict_ = strict_;
     for (auto& f : fields_) {
         s.fields_.push_back({std::move(f.name), std::move(f.schema), f.is_required});
     }
@@ -220,6 +226,19 @@ std::string JsonSchema::validate_impl(const nlohmann::json& value, const std::st
             auto result = field.schema->validate_impl(value[field.name], fp);
             if (!result.empty())
                 return result;
+        }
+        if (strict_) {
+            for (const auto& [key, _] : value.items()) {
+                bool known = false;
+                for (const auto& field : fields_) {
+                    if (field.name == key) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known)
+                    return err(std::format("unexpected field \"{}\"", key));
+            }
         }
         return {};
     }
