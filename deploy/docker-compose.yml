@@ -41,6 +41,16 @@ services:
     depends_on:
       - kagami
 
+  # --- Log aggregation ---
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    volumes:
+      - loki_data:/loki
+    command:
+      - '-config.expand-env=true'
+      - '-config.file=/etc/loki/local-config.yaml'
+
   # --- Dashboards ---
   grafana:
     image: grafana/grafana:latest
@@ -60,10 +70,12 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+      - loki
 
 volumes:
   caddy_data:
   caddy_config:
   kagami_logs:
   prometheus_data:
+  loki_data:
   grafana_data:

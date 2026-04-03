@@ -229,8 +229,12 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         }
         else {
             auto body = rest_res.body.dump();
-            Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
-                           body.c_str());
+            if (endpoint.sensitive())
+                Log::log_print(VERBOSE, "REST: << %d %s %s [REDACTED]", rest_res.status, req.method.c_str(),
+                               req.path.c_str());
+            else
+                Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
+                               body.c_str());
             http_response_bytes().labels({req.method, endpoint.path_pattern()}).inc(body.size());
             res.set_content(std::move(body), rest_res.content_type);
         }

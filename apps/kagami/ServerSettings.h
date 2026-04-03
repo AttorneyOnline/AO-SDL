@@ -107,6 +107,13 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return parse_log_level(value<std::string>("cloudwatch/log_level"));
     }
 
+    // -- Loki logging --
+
+    /// Loki push URL. Empty = disabled.
+    std::string loki_url() const {
+        return value<std::string>("loki_url");
+    }
+
     // -- Metrics --
 
     bool metrics_enabled() const {
@@ -159,6 +166,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"log_level", "verbose"},
             {"log_file", ""},
             {"log_file_level", "verbose"},
+            {"loki_url", ""},
             {"metrics_enabled", true},
             {"metrics_path", "/metrics"},
             {"cloudwatch",
