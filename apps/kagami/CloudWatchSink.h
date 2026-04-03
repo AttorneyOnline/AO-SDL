@@ -144,7 +144,7 @@ class CloudWatchSink {
         if (!result || result->status != 200) {
             // Log to stderr directly — avoid re-entrant logging
             int status = result ? result->status : 0;
-            std::string err_body = result ? result->body.substr(0, 200) : "connection failed";
+            std::string err_body = result ? result->body.substr(0, 500) : "connection failed";
             std::fprintf(stderr, "[CloudWatch] PutLogEvents failed: status=%d %s\n", status, err_body.c_str());
         }
     }
