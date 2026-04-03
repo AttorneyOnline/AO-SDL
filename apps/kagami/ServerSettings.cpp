@@ -6,6 +6,9 @@
 #include <fstream>
 #include <vector>
 
+static auto& config_ops_ =
+    metrics::MetricsRegistry::instance().counter("kagami_config_ops_total", "Config file operations", {"op"});
+
 bool ServerSettings::load_from_disk(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
@@ -20,9 +23,7 @@ bool ServerSettings::load_from_disk(const std::string& path) {
     }
 
     Log::log_print(INFO, "Loaded config from %s", path.c_str());
-    static auto& ctr =
-        metrics::MetricsRegistry::instance().counter("kagami_config_ops_total", "Config file operations", {"op"});
-    ctr.labels({"load"}).inc();
+    config_ops_.labels({"load"}).inc();
     return true;
 }
 
@@ -36,8 +37,6 @@ bool ServerSettings::save_to_disk(const std::string& path) {
 
     file.write(reinterpret_cast<const char*>(data.data()), data.size());
     Log::log_print(INFO, "Saved config to %s", path.c_str());
-    static auto& ctr =
-        metrics::MetricsRegistry::instance().counter("kagami_config_ops_total", "Config file operations", {"op"});
-    ctr.labels({"save"}).inc();
+    config_ops_.labels({"save"}).inc();
     return true;
 }

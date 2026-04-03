@@ -14,27 +14,18 @@
 #include <format>
 #include <sstream>
 
-// -- WS metrics (lazy-initialized) --------------------------------------------
+// -- WS metrics (file-scope — self-register at program startup) ---------------
 
-static metrics::CounterFamily& ws_frames_in() {
-    static auto& f =
-        metrics::MetricsRegistry::instance().counter("kagami_ws_frames_in_total", "WebSocket frames received");
-    return f;
-}
-static metrics::CounterFamily& ws_frames_out() {
-    static auto& f =
-        metrics::MetricsRegistry::instance().counter("kagami_ws_frames_out_total", "WebSocket frames sent");
-    return f;
-}
-static metrics::CounterFamily& ws_bytes_in() {
-    static auto& f =
-        metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_in_total", "WebSocket bytes received");
-    return f;
-}
-static metrics::CounterFamily& ws_bytes_out() {
-    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_out_total", "WebSocket bytes sent");
-    return f;
-}
+static auto& ws_frames_in_ =
+    metrics::MetricsRegistry::instance().counter("kagami_ws_frames_in_total", "WebSocket frames received");
+static auto& ws_frames_out_ =
+    metrics::MetricsRegistry::instance().counter("kagami_ws_frames_out_total", "WebSocket frames sent");
+static auto& ws_bytes_in_ =
+    metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_in_total", "WebSocket bytes received");
+static auto& ws_bytes_out_ =
+    metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_out_total", "WebSocket bytes sent");
+static auto& ws_handshake_failures_ =
+    metrics::MetricsRegistry::instance().counter("kagami_ws_handshake_failures_total", "WebSocket handshake failures");
 
 WebSocketServer::WebSocketServer(std::unique_ptr<IServerSocket> listener) : listener_(std::move(listener)) {
 }
@@ -123,9 +114,7 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                     newly_connected.push_back(id);
                 }
                 catch (...) {
-                    static auto& ctr = metrics::MetricsRegistry::instance().counter(
-                        "kagami_ws_handshake_failures_total", "WebSocket handshake failures");
-                    ctr.get().inc();
+                    ws_handshake_failures_.get().inc();
                     dead_clients.push_back(id);
                     continue;
                 }
@@ -134,8 +123,8 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
             try {
                 auto frames = read_client_frames(client);
                 for (auto& frame : frames) {
-                    ws_frames_in().get().inc();
-                    ws_bytes_in().get().inc(frame.data.size());
+                    ws_frames_in_.get().inc();
+                    ws_bytes_in_.get().inc(frame.data.size());
                     result.push_back({id, std::move(frame)});
                 }
             }
@@ -165,8 +154,8 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
 }
 
 void WebSocketServer::send(ClientId client_id, std::span<const uint8_t> data) {
-    ws_frames_out().get().inc();
-    ws_bytes_out().get().inc(data.size());
+    ws_frames_out_.get().inc();
+    ws_bytes_out_.get().inc(data.size());
 
     bool dead = false;
     {
@@ -245,8 +234,8 @@ void WebSocketServer::broadcast(std::span<const uint8_t> data) {
                 dead_clients.push_back(id);
             }
         }
-        ws_frames_out().get().inc(send_count);
-        ws_bytes_out().get().inc(data.size() * send_count);
+        ws_frames_out_.get().inc(send_count);
+        ws_bytes_out_.get().inc(data.size() * send_count);
 
         for (auto id : dead_clients)
             remove_client(id);
