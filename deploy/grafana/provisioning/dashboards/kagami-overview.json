@@ -620,7 +620,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_dispatch_lock_hold_nanoseconds_total{instance=~\"$instance\"}[5s]) / on() irate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[5s])",
+          "expr": "irate(kagami_dispatch_lock_hold_nanoseconds_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "{{endpoint}}",
           "refId": "A",
           "interval": "100ms"
@@ -793,7 +793,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 64
       },
       "collapsed": false
     },
@@ -804,7 +804,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 49
+        "y": 65
       },
       "targets": [
         {
@@ -884,7 +884,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 49
+        "y": 65
       },
       "fieldConfig": {
         "defaults": {
@@ -914,7 +914,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 71
       },
       "collapsed": false
     },
@@ -925,7 +925,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -957,7 +957,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 80
       },
       "collapsed": false
     },
@@ -968,7 +968,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 65
+        "y": 81
       },
       "targets": [
         {
@@ -997,7 +997,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 86
       },
       "collapsed": false
     },
@@ -1008,7 +1008,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 87
       },
       "targets": [
         {
@@ -1141,7 +1141,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 97
       },
       "collapsed": false
     },
@@ -1152,7 +1152,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 82
+        "y": 98
       },
       "fieldConfig": {
         "defaults": {
@@ -1178,7 +1178,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 82
+        "y": 98
       },
       "fieldConfig": {
         "defaults": {
@@ -1205,7 +1205,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 90
+        "y": 106
       },
       "collapsed": false
     },
@@ -1216,7 +1216,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 91
+        "y": 107
       },
       "targets": [
         {
@@ -1261,7 +1261,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 101
+        "y": 117
       },
       "collapsed": false
     },
@@ -1272,7 +1272,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 102
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -1299,7 +1299,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 102
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -1326,7 +1326,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 102
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -1353,7 +1353,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 102
+        "y": 118
       },
       "fieldConfig": {
         "defaults": {
@@ -1386,7 +1386,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 110
+        "y": 126
       },
       "targets": [
         {
@@ -1410,7 +1410,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 110
+        "y": 126
       },
       "targets": [
         {
@@ -1434,7 +1434,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 110
+        "y": 126
       },
       "targets": [
         {
@@ -1458,7 +1458,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 110
+        "y": 126
       },
       "targets": [
         {
@@ -1482,7 +1482,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 114
+        "y": 130
       },
       "collapsed": false
     },
@@ -1493,7 +1493,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 115
+        "y": 131
       },
       "datasource": {
         "type": "loki",
