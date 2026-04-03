@@ -35,6 +35,11 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
     if (it == proto_state_.end())
         return;
 
+    if (auto* s = room_.get_session(client_id)) {
+        s->bytes_received.fetch_add(raw.size(), std::memory_order_relaxed);
+        s->packets_received.fetch_add(1, std::memory_order_relaxed);
+    }
+
     auto& proto = it->second;
     proto.incomplete_buf += raw;
 
@@ -71,6 +76,10 @@ void AOServer::send(uint64_t client_id, const AOPacket& packet) {
         return;
     auto serialized = packet.serialize();
     Log::log_print(VERBOSE, "AO [%s] >>> %s", format_client_id(client_id).c_str(), serialized.c_str());
+    if (auto* s = room_.get_session(client_id)) {
+        s->bytes_sent.fetch_add(serialized.size(), std::memory_order_relaxed);
+        s->packets_sent.fetch_add(1, std::memory_order_relaxed);
+    }
     send_func_(client_id, serialized);
 }
 

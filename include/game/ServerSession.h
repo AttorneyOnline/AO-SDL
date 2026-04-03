@@ -8,11 +8,28 @@
  */
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <string>
 
 struct ServerSession {
+    ServerSession() = default;
+    ServerSession(ServerSession&& o) noexcept
+        : client_id(o.client_id), session_id(o.session_id), session_token(std::move(o.session_token)),
+          display_name(std::move(o.display_name)), client_software(std::move(o.client_software)),
+          character_id(o.character_id), area(std::move(o.area)), joined(o.joined), moderator(o.moderator),
+          protocol(std::move(o.protocol)), last_activity(o.last_activity),
+          bytes_sent(o.bytes_sent.load(std::memory_order_relaxed)),
+          bytes_received(o.bytes_received.load(std::memory_order_relaxed)),
+          packets_sent(o.packets_sent.load(std::memory_order_relaxed)),
+          packets_received(o.packets_received.load(std::memory_order_relaxed)),
+          mod_actions(o.mod_actions.load(std::memory_order_relaxed)) {
+    }
+    ServerSession& operator=(ServerSession&&) = delete;
+    ServerSession(const ServerSession&) = delete;
+    ServerSession& operator=(const ServerSession&) = delete;
+
     uint64_t client_id = 0;    ///< WebSocket client ID (transport-level).
     uint64_t session_id = 0;   ///< Unique server-assigned session ID.
     std::string session_token; ///< Auth token (empty for AO legacy clients).
@@ -38,4 +55,11 @@ struct ServerSession {
     void touch() {
         last_activity = std::chrono::steady_clock::now();
     }
+
+    // -- Per-session traffic counters (atomic, updated inline at I/O sites) ---
+    std::atomic<uint64_t> bytes_sent{0};
+    std::atomic<uint64_t> bytes_received{0};
+    std::atomic<uint64_t> packets_sent{0};
+    std::atomic<uint64_t> packets_received{0};
+    std::atomic<uint64_t> mod_actions{0};
 };

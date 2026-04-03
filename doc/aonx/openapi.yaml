@@ -1625,6 +1625,38 @@ paths:
   # ---------------------------------------------------------------------------
   # Events (SSE)
   # ---------------------------------------------------------------------------
+  /admin/sessions:
+    get:
+      tags: [Moderation]
+      operationId: adminListSessions
+      summary: List Active Sessions (Admin)
+      description: |
+        Returns per-session traffic and state information for all active
+        sessions. Requires moderator privileges.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: List of active sessions with traffic metrics.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminSessionEntry"
+        "401":
+          description: Missing or invalid session token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a moderator.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /events:
     get:
       tags: [Events]
@@ -2468,6 +2500,59 @@ components:
               description: |
                 Full availability array. Index corresponds to the character
                 list order. 0 = available, 1 = taken.
+
+    # -------------------------------------------------------------------------
+    # Admin
+    # -------------------------------------------------------------------------
+    AdminSessionEntry:
+      type: object
+      required:
+        - session_id
+        - display_name
+        - protocol
+        - area
+        - character_id
+        - bytes_sent
+        - bytes_received
+        - packets_sent
+        - packets_received
+        - mod_actions
+        - idle_seconds
+      additionalProperties: false
+      properties:
+        session_id:
+          type: integer
+          description: Server-assigned session ID.
+        display_name:
+          type: string
+          description: Player display name.
+        protocol:
+          type: string
+          description: Protocol backend (ao2 or aonx).
+        area:
+          type: string
+          description: Current area name.
+        character_id:
+          type: integer
+          description: Selected character index (-1 if none).
+        bytes_sent:
+          type: integer
+          description: Total bytes sent to this client.
+        bytes_received:
+          type: integer
+          description: Total bytes received from this client.
+        packets_sent:
+          type: integer
+          description: Total packets/frames sent to this client.
+        packets_received:
+          type: integer
+          description: Total packets/frames received from this client.
+        mod_actions:
+          type: integer
+          description: Number of moderation actions taken by this session.
+        idle_seconds:
+          type: integer
+          description: Seconds since last activity.
 
     # -------------------------------------------------------------------------
     # Common

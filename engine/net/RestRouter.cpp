@@ -1,9 +1,38 @@
 #include "net/RestRouter.h"
 
 #include "game/ServerSession.h"
+#include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
 #include "net/Http.h"
+
+#include <chrono>
+
+// -- Metrics (registered lazily on first use) ---------------------------------
+
+static metrics::CounterFamily& http_requests() {
+    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_http_requests_total",
+                                                                  "Total HTTP requests handled", {"method", "status"});
+    return f;
+}
+
+static metrics::CounterFamily& http_response_bytes() {
+    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_http_response_bytes_total",
+                                                                  "Total HTTP response bytes sent", {"method"});
+    return f;
+}
+
+static metrics::CounterFamily& dispatch_lock_acquisitions() {
+    static auto& f = metrics::MetricsRegistry::instance().counter("kagami_dispatch_lock_acquisitions_total",
+                                                                  "Dispatch mutex lock acquisitions");
+    return f;
+}
+
+static metrics::CounterFamily& dispatch_lock_wait() {
+    static auto& f = metrics::MetricsRegistry::instance().counter(
+        "kagami_dispatch_lock_wait_microseconds_total", "Cumulative dispatch mutex wait time in microseconds");
+    return f;
+}
 
 // -- RestRouter --------------------------------------------------------------
 
@@ -150,7 +179,13 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         // destroyed between the auth check and the handler call.
         RestResponse rest_res;
         {
+            auto lock_start = std::chrono::steady_clock::now();
             std::lock_guard lock(dispatch_mutex_);
+            auto lock_acquired = std::chrono::steady_clock::now();
+            dispatch_lock_acquisitions().get().inc();
+            double wait_secs = std::chrono::duration<double>(lock_acquired - lock_start).count();
+            if (wait_secs > 0.0)
+                dispatch_lock_wait().get().inc(static_cast<uint64_t>(wait_secs * 1e6)); // microseconds
 
             if (endpoint.requires_auth()) {
                 if (rest_req.bearer_token.empty()) {
@@ -187,13 +222,17 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             auto body = rest_res.body.dump();
             Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
                            body.c_str());
+            http_response_bytes().labels({req.method}).inc(body.size());
             res.set_content(std::move(body), rest_res.content_type);
         }
+
+        http_requests().labels({req.method, std::to_string(rest_res.status)}).inc();
     }
     catch (const std::exception& e) {
         Log::log_print(ERR, "REST: exception in %s %s: %s", endpoint.method().c_str(), endpoint.path_pattern().c_str(),
                        e.what());
         res.status = 500;
         res.set_content(R"({"reason":"An internal server error occurred"})", "application/json");
+        http_requests().labels({req.method, "500"}).inc();
     }
 }
