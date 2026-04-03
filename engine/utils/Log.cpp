@@ -75,6 +75,12 @@ void Log::set_stdout_level(LogLevel min_level) {
     stdout_level = min_level;
 }
 
+void Log::clear_sinks() {
+    std::lock_guard lock(sink_mutex);
+    log_sink = nullptr;
+    named_sinks.clear();
+}
+
 // ---- Core log implementation -----------------------------------------------
 
 void Log::log_impl(LogLevel level, std::string message) {

@@ -88,6 +88,9 @@ class Log {
     /// Set the minimum level for stdout output. Default is VERBOSE (everything).
     static void set_stdout_level(LogLevel min_level);
 
+    /// Remove all sinks (both named and the primary set_sink). Thread-safe.
+    static void clear_sinks();
+
   private:
     static void log_impl(LogLevel level, std::string message);
 };

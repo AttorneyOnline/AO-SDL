@@ -80,6 +80,7 @@ int main(int /*argc*/, char* argv[]) {
                 cfg.file_log_level());
         }
         else {
+            Log::log_print(WARNING, "Could not open log file: %s", cfg.log_file().c_str());
             log_file.reset();
         }
     }
@@ -97,6 +98,9 @@ int main(int /*argc*/, char* argv[]) {
 
         if (cw_cfg.log_stream.empty())
             cw_cfg.log_stream = cfg.server_name();
+
+        Log::log_print(INFO, "CloudWatch: group=%s stream=%s region=%s", cw_cfg.log_group.c_str(),
+                       cw_cfg.log_stream.c_str(), cw_cfg.region.c_str());
 
         cw_sink = std::make_unique<CloudWatchSink>(std::move(cw_cfg));
         Log::add_sink(

@@ -352,11 +352,16 @@ inline std::string sha256(const std::string& input) {
     return detail::to_hex(s, 8);
 }
 
+/// Compute SHA-256 hash of raw bytes, returned as 32 raw bytes.
+inline std::vector<uint8_t> sha256_raw(const uint8_t* data, size_t len) {
+    uint32_t s[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    detail::sha256::compute(s, data, len);
+    return detail::to_bytes(s, 8);
+}
+
 /// Compute SHA-256 hash, returned as 32 raw bytes.
 inline std::vector<uint8_t> sha256_raw(const std::string& input) {
-    uint32_t s[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
-    detail::sha256::compute(s, reinterpret_cast<const uint8_t*>(input.data()), input.size());
-    return detail::to_bytes(s, 8);
+    return sha256_raw(reinterpret_cast<const uint8_t*>(input.data()), input.size());
 }
 
 // -- HMAC-SHA256 --------------------------------------------------------------
@@ -369,8 +374,7 @@ inline std::vector<uint8_t> hmac_sha256(const std::vector<uint8_t>& key, const s
     // Step 1: If key > block size, hash it. If shorter, zero-pad.
     std::vector<uint8_t> padded_key(BLOCK_SIZE, 0);
     if (key.size() > BLOCK_SIZE) {
-        std::string key_str(key.begin(), key.end());
-        auto hashed = sha256_raw(key_str);
+        auto hashed = sha256_raw(key.data(), key.size());
         std::copy(hashed.begin(), hashed.end(), padded_key.begin());
     }
     else {
@@ -386,14 +390,14 @@ inline std::vector<uint8_t> hmac_sha256(const std::vector<uint8_t>& key, const s
     }
 
     // Step 3: inner hash = SHA256(i_key_pad || message)
-    std::string inner_data(i_key_pad.begin(), i_key_pad.end());
-    inner_data.append(message.begin(), message.end());
-    auto inner_hash = sha256_raw(inner_data);
+    std::vector<uint8_t> inner_data(i_key_pad);
+    inner_data.insert(inner_data.end(), message.begin(), message.end());
+    auto inner_hash = sha256_raw(inner_data.data(), inner_data.size());
 
     // Step 4: outer hash = SHA256(o_key_pad || inner_hash)
-    std::string outer_data(o_key_pad.begin(), o_key_pad.end());
-    outer_data.append(inner_hash.begin(), inner_hash.end());
-    return sha256_raw(outer_data);
+    std::vector<uint8_t> outer_data(o_key_pad);
+    outer_data.insert(outer_data.end(), inner_hash.begin(), inner_hash.end());
+    return sha256_raw(outer_data.data(), outer_data.size());
 }
 
 /// Convenience: HMAC-SHA256 with string key and message, returns hex string.
