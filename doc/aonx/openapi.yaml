@@ -2429,12 +2429,6 @@ components:
           description: Action-specific data for client presentation.
 
     CharTakenEvent:
-      # TODO: use oneOf with two sub-schemas once the schema validator
-      # generator supports it:
-      #   oneOf:
-      #     - required: [char_id, available]
-      #     - required: [taken]
-      type: object
       description: |
         Character availability changed. Has two shapes:
 
@@ -2446,26 +2440,32 @@ components:
         parallel to the character list (0 = available, 1 = taken).
 
         Clients should check for the presence of `taken` to distinguish.
-      properties:
-        user_id:
-          type: string
-          description: User identifier of who took the character. Present only on individual events.
-        char_id:
-          type: string
-          maxLength: 64
-          description: SHA-256 hash of the character manifest. Present only on individual events.
-        available:
-          type: boolean
-          description: Whether the character is now available. Present only on individual events.
-        taken:
-          type: array
-          items:
-            type: integer
-            minimum: 0
-            maximum: 1
-          description: |
-            Full availability array. Index corresponds to the character
-            list order. 0 = available, 1 = taken. Present only on bulk events.
+      oneOf:
+        - type: object
+          required: [char_id, available]
+          properties:
+            user_id:
+              type: string
+              description: User identifier of who took the character.
+            char_id:
+              type: string
+              maxLength: 64
+              description: SHA-256 hash of the character manifest.
+            available:
+              type: boolean
+              description: Whether the character is now available.
+        - type: object
+          required: [taken]
+          properties:
+            taken:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+                maximum: 1
+              description: |
+                Full availability array. Index corresponds to the character
+                list order. 0 = available, 1 = taken.
 
     # -------------------------------------------------------------------------
     # Common

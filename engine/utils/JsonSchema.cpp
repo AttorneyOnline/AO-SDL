@@ -51,6 +51,14 @@ JsonSchema JsonSchema::string_map(JsonSchema value_schema) {
     return s;
 }
 
+JsonSchema JsonSchema::one_of(std::vector<JsonSchema> variants) {
+    JsonSchema s;
+    s.type_ = Type::one_of_t;
+    for (auto& v : variants)
+        s.variants_.push_back(std::make_shared<JsonSchema>(std::move(v)));
+    return s;
+}
+
 // -- Object builder -----------------------------------------------------------
 
 JsonSchema::ObjectBuilder JsonSchema::object() {
@@ -214,6 +222,23 @@ std::string JsonSchema::validate_impl(const nlohmann::json& value, const std::st
                 return result;
         }
         return {};
+    }
+
+    case Type::one_of_t: {
+        int matches = 0;
+        std::string last_error;
+        for (const auto& variant : variants_) {
+            auto result = variant->validate_impl(value, path);
+            if (result.empty())
+                ++matches;
+            else
+                last_error = result;
+        }
+        if (matches == 1)
+            return {};
+        if (matches == 0)
+            return err(std::format("value does not match any oneOf variant (last error: {})", last_error));
+        return err(std::format("value matches {} oneOf variants, expected exactly 1", matches));
     }
     }
 

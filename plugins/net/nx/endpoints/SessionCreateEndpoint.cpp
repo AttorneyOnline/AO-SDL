@@ -51,24 +51,17 @@ class SessionCreateEndpoint : public NXEndpoint {
         sanitize(client_version, 32);
         sanitize(hdid, 128);
 
-        auto token = server().create_session(hdid, client_name, client_version);
+        auto info = server().create_session(hdid, client_name, client_version);
 
         nlohmann::json resp = {
-            {"token", token},
+            {"token", info.token},
             {"user",
              {
-                 {"id", ""},
+                 {"id", std::to_string(info.session_id)},
                  {"display_name", client_name},
                  {"roles", nlohmann::json::array({"player"})},
              }},
         };
-
-        // Fill in the server-assigned user id.
-        if (auto* session = room().find_session_by_token(token)) {
-            resp["user"]["id"] = std::to_string(session->session_id);
-            if (session->moderator)
-                resp["user"]["roles"].push_back("moderator");
-        }
 
         int ttl = server().session_ttl_seconds();
         if (ttl > 0) {

@@ -69,6 +69,9 @@ class JsonSchema {
     /// Used for OpenAPI additionalProperties (e.g. states: map<string,string>).
     static JsonSchema string_map(JsonSchema value_schema);
 
+    /// Create a oneOf schema — exactly one sub-schema must validate.
+    static JsonSchema one_of(std::vector<JsonSchema> variants);
+
     // -- Object builder -------------------------------------------------------
 
     /// Start building an object schema.
@@ -102,6 +105,7 @@ class JsonSchema {
         array_t,
         object_t,
         string_map_t,
+        one_of_t,
     };
 
     struct Field {
@@ -116,6 +120,7 @@ class JsonSchema {
     std::vector<std::string> allowed_values_;                   // string_enum
     std::shared_ptr<JsonSchema> item_schema_;                   // array, string_map
     std::vector<Field> fields_;                                 // object
+    std::vector<std::shared_ptr<JsonSchema>> variants_;         // one_of
     int min_length_ = 0;                                        // string minLength
     int max_length_ = 0;                                        // string maxLength (0 = no limit)
     double minimum_ = -std::numeric_limits<double>::infinity(); // integer/number minimum

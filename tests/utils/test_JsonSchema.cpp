@@ -280,6 +280,47 @@ TEST(JsonSchemaTest, ComplexNestedSchemaValidates) {
     EXPECT_NE(err.find("visible"), std::string::npos);
 }
 
+// -- oneOf tests --------------------------------------------------------------
+
+TEST(JsonSchemaTest, OneOfAcceptsExactlyOneMatch) {
+    auto s = JsonSchema::one_of({
+        JsonSchema::object()
+            .required("char_id", JsonSchema::string_type())
+            .required("available", JsonSchema::boolean_type())
+            .build(),
+        JsonSchema::object().required("taken", JsonSchema::array(JsonSchema::integer_type())).build(),
+    });
+
+    // Individual shape
+    EXPECT_EQ(s.validate(json({{"char_id", "abc"}, {"available", false}})), "");
+
+    // Bulk shape
+    EXPECT_EQ(s.validate(json({{"taken", {0, 1, 0}}})), "");
+}
+
+TEST(JsonSchemaTest, OneOfRejectsNoMatch) {
+    auto s = JsonSchema::one_of({
+        JsonSchema::object().required("a", JsonSchema::string_type()).build(),
+        JsonSchema::object().required("b", JsonSchema::integer_type()).build(),
+    });
+
+    auto err = s.validate(json({{"c", true}}));
+    EXPECT_NE(err, "");
+    EXPECT_NE(err.find("oneOf"), std::string::npos);
+}
+
+TEST(JsonSchemaTest, OneOfRejectsMultipleMatches) {
+    // Both variants accept any object (no required fields)
+    auto s = JsonSchema::one_of({
+        JsonSchema::object().optional("a", JsonSchema::string_type()).build(),
+        JsonSchema::object().optional("b", JsonSchema::string_type()).build(),
+    });
+
+    auto err = s.validate(json::object());
+    EXPECT_NE(err, "");
+    EXPECT_NE(err.find("2 oneOf variants"), std::string::npos);
+}
+
 // -- Default (empty) schema accepts anything ----------------------------------
 
 TEST(JsonSchemaTest, DefaultSchemaAcceptsAnything) {
