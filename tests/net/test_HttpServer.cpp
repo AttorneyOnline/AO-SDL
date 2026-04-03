@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "net/Http.h"
+#include "platform/Socket.h"
 #include "utils/Log.h"
 
 #include <atomic>
@@ -13,6 +14,12 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#endif
 
 // ===========================================================================
 // Test fixture: starts server, provides client factory, auto-stops on teardown
@@ -478,4 +485,326 @@ TEST_F(HttpServerTest, HandlerRunsOnWorkerThread) {
     EXPECT_EQ(handler_thread_ids.count(std::this_thread::get_id()), 0u);
     // They should run on at least 1 worker thread (could be more with concurrency)
     EXPECT_GE(handler_thread_ids.size(), 1u);
+}
+
+// ===========================================================================
+// Body accumulation — the server must wait for Content-Length bytes before
+// dispatching, even if the body arrives across multiple TCP segments.
+// ===========================================================================
+
+/// Set a receive timeout on a raw socket so tests don't hang on failure.
+static void set_recv_timeout(platform::Socket& sock, int sec) {
+#ifdef _WIN32
+    DWORD tv = sec * 1000;
+    setsockopt(sock.fd(), SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+#else
+    struct timeval tv;
+    tv.tv_sec = sec;
+    tv.tv_usec = 0;
+    setsockopt(sock.fd(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
+}
+
+/// Read a full HTTP response from a raw socket (until connection close or
+/// double-CRLF + Content-Length body).
+static std::string read_raw_response(platform::Socket& sock) {
+    std::string resp;
+    char buf[8192];
+    while (true) {
+        ssize_t n = sock.recv(buf, sizeof(buf));
+        if (n <= 0)
+            break;
+        resp.append(buf, static_cast<size_t>(n));
+    }
+    return resp;
+}
+
+/// Extract the HTTP status code from a raw response string.
+static int extract_status(const std::string& resp) {
+    auto sp1 = resp.find(' ');
+    if (sp1 == std::string::npos)
+        return 0;
+    auto sp2 = resp.find(' ', sp1 + 1);
+    if (sp2 == std::string::npos)
+        sp2 = resp.find('\r', sp1 + 1);
+    if (sp2 == std::string::npos)
+        return 0;
+    return std::stoi(resp.substr(sp1 + 1, sp2 - sp1 - 1));
+}
+
+/// Extract the response body (everything after \r\n\r\n).
+static std::string extract_body(const std::string& resp) {
+    auto pos = resp.find("\r\n\r\n");
+    if (pos == std::string::npos)
+        return "";
+    return resp.substr(pos + 4);
+}
+
+// -- Core bug: body arriving in a separate TCP segment -----------------------
+
+TEST_F(HttpServerTest, BodyAccumulation_SplitBodyArrivesComplete) {
+    // Regression test: before the fix, the server dispatched the request as
+    // soon as headers were complete, causing truncated/empty bodies under
+    // concurrency. This test simulates the split by sending headers first,
+    // sleeping, then sending the body.
+    std::string received_body;
+    server_.Post("/echo", [&](const http::Request& req, http::Response& res) {
+        received_body = req.body;
+        res.set_content(req.body, "text/plain");
+    });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    std::string body = R"({"key":"value","number":42})";
+    std::string headers = "POST /echo HTTP/1.1\r\n"
+                          "Host: 127.0.0.1\r\n"
+                          "Content-Type: application/json\r\n"
+                          "Content-Length: " +
+                          std::to_string(body.size()) +
+                          "\r\n"
+                          "Connection: close\r\n"
+                          "\r\n";
+
+    // Send headers only — body follows after a delay
+    sock.send(headers.data(), headers.size());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Now send the body
+    sock.send(body.data(), body.size());
+
+    auto resp = read_raw_response(sock);
+    EXPECT_EQ(extract_status(resp), 200);
+    EXPECT_EQ(extract_body(resp), body);
+    EXPECT_EQ(received_body, body);
+}
+
+TEST_F(HttpServerTest, BodyAccumulation_BodyInMultipleChunks) {
+    // Body arrives in three separate TCP writes, each a fragment.
+    std::string received_body;
+    server_.Post("/echo", [&](const http::Request& req, http::Response& res) {
+        received_body = req.body;
+        res.set_content(req.body, "text/plain");
+    });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    std::string body = "aaaaaaaaaa"
+                       "bbbbbbbbbb"
+                       "cccccccccc"; // 30 bytes
+    std::string headers = "POST /echo HTTP/1.1\r\n"
+                          "Host: 127.0.0.1\r\n"
+                          "Content-Length: 30\r\n"
+                          "Connection: close\r\n"
+                          "\r\n";
+
+    sock.send(headers.data(), headers.size());
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    sock.send(body.data(), 10); // first fragment
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    sock.send(body.data() + 10, 10); // second fragment
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    sock.send(body.data() + 20, 10); // third fragment
+
+    auto resp = read_raw_response(sock);
+    EXPECT_EQ(extract_status(resp), 200);
+    EXPECT_EQ(received_body, body);
+}
+
+TEST_F(HttpServerTest, BodyAccumulation_EmptyBodyWithContentLengthZero) {
+    // Content-Length: 0 should dispatch immediately with empty body.
+    bool handler_called = false;
+    server_.Post("/empty", [&](const http::Request& req, http::Response& res) {
+        handler_called = true;
+        EXPECT_TRUE(req.body.empty());
+        res.set_content("ok", "text/plain");
+    });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    std::string req = "POST /empty HTTP/1.1\r\n"
+                      "Host: 127.0.0.1\r\n"
+                      "Content-Length: 0\r\n"
+                      "Connection: close\r\n"
+                      "\r\n";
+    sock.send(req.data(), req.size());
+
+    auto resp = read_raw_response(sock);
+    EXPECT_EQ(extract_status(resp), 200);
+    EXPECT_TRUE(handler_called);
+}
+
+TEST_F(HttpServerTest, BodyAccumulation_NoContentLengthMeansEmptyBody) {
+    // POST without Content-Length — body is zero per RFC 9112 §6.3 step 7.
+    std::string received_body = "sentinel";
+    server_.Post("/no-cl", [&](const http::Request& req, http::Response& res) {
+        received_body = req.body;
+        res.set_content("ok", "text/plain");
+    });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    std::string req = "POST /no-cl HTTP/1.1\r\n"
+                      "Host: 127.0.0.1\r\n"
+                      "Connection: close\r\n"
+                      "\r\n";
+    sock.send(req.data(), req.size());
+
+    auto resp = read_raw_response(sock);
+    EXPECT_EQ(extract_status(resp), 200);
+    EXPECT_EQ(received_body, "");
+}
+
+// -- Transfer-Encoding → 411 Length Required ----------------------------------
+
+TEST_F(HttpServerTest, TransferEncoding_Returns411) {
+    // Server does not support Transfer-Encoding; should respond 411.
+    server_.Post("/te", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    std::string req = "POST /te HTTP/1.1\r\n"
+                      "Host: 127.0.0.1\r\n"
+                      "Transfer-Encoding: chunked\r\n"
+                      "\r\n"
+                      "0\r\n\r\n";
+    sock.send(req.data(), req.size());
+
+    auto resp = read_raw_response(sock);
+    EXPECT_EQ(extract_status(resp), 411);
+}
+
+// -- Content Too Large → 413 --------------------------------------------------
+
+TEST_F(HttpServerTest, OversizedContentLength_Returns413) {
+    server_.Post("/big", [](const http::Request&, http::Response& res) { res.set_content("ok", "text/plain"); });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    // Claim a 2 GiB body — exceeds MAX_BODY_LENGTH (1 MiB)
+    std::string req = "POST /big HTTP/1.1\r\n"
+                      "Host: 127.0.0.1\r\n"
+                      "Content-Length: 2147483648\r\n"
+                      "Connection: close\r\n"
+                      "\r\n";
+    sock.send(req.data(), req.size());
+
+    auto resp = read_raw_response(sock);
+    EXPECT_EQ(extract_status(resp), 413);
+}
+
+// -- Peer close before body complete → discard --------------------------------
+
+TEST_F(HttpServerTest, BodyAccumulation_PeerCloseBeforeBodyComplete) {
+    // Client sends headers promising 100 bytes but closes after 10.
+    // Server should discard the incomplete request, not crash or hang.
+    bool handler_called = false;
+    server_.Post("/partial", [&](const http::Request&, http::Response& res) {
+        handler_called = true;
+        res.set_content("ok", "text/plain");
+    });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+
+    std::string headers = "POST /partial HTTP/1.1\r\n"
+                          "Host: 127.0.0.1\r\n"
+                          "Content-Length: 100\r\n"
+                          "Connection: close\r\n"
+                          "\r\n";
+    sock.send(headers.data(), headers.size());
+    sock.send("short", 5); // Only 5 of 100 bytes
+    sock.close();          // Close before body is complete
+
+    // Give server time to process the close event
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // Handler should NOT have been called with the incomplete body
+    EXPECT_FALSE(handler_called);
+}
+
+// -- Keep-alive: second request after body accumulation -----------------------
+
+TEST_F(HttpServerTest, BodyAccumulation_KeepAliveSecondRequest) {
+    // After a successful POST with body accumulation, a second request on the
+    // same keep-alive connection should also work correctly.
+    int call_count = 0;
+    server_.Post("/first", [&](const http::Request& req, http::Response& res) {
+        ++call_count;
+        res.set_content(req.body, "text/plain");
+    });
+    server_.Get("/second", [&](const http::Request&, http::Response& res) {
+        ++call_count;
+        res.set_content("ok", "text/plain");
+    });
+    start();
+
+    auto sock = platform::tcp_connect("127.0.0.1", port_);
+    set_recv_timeout(sock, 5);
+
+    // First request: POST with split body
+    std::string body1 = "hello world";
+    std::string headers1 = "POST /first HTTP/1.1\r\n"
+                           "Host: 127.0.0.1\r\n"
+                           "Content-Length: " +
+                           std::to_string(body1.size()) +
+                           "\r\n"
+                           "Connection: keep-alive\r\n"
+                           "\r\n";
+    sock.send(headers1.data(), headers1.size());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    sock.send(body1.data(), body1.size());
+
+    // Read first response
+    std::string resp1;
+    char buf[8192];
+    // Read until we have a complete HTTP response (headers + body)
+    while (true) {
+        ssize_t n = sock.recv(buf, sizeof(buf));
+        if (n <= 0)
+            break;
+        resp1.append(buf, static_cast<size_t>(n));
+        // Check if we have a complete response
+        auto hdr_end = resp1.find("\r\n\r\n");
+        if (hdr_end != std::string::npos) {
+            // Find Content-Length in response
+            auto cl_pos = resp1.find("Content-Length: ");
+            if (cl_pos != std::string::npos) {
+                size_t cl_val = std::stoul(resp1.substr(cl_pos + 16));
+                if (resp1.size() >= hdr_end + 4 + cl_val)
+                    break;
+            }
+        }
+    }
+    EXPECT_EQ(extract_status(resp1), 200);
+    EXPECT_EQ(extract_body(resp1), body1);
+
+    // Second request: GET on same connection
+    std::string req2 = "GET /second HTTP/1.1\r\n"
+                       "Host: 127.0.0.1\r\n"
+                       "Connection: close\r\n"
+                       "\r\n";
+    sock.send(req2.data(), req2.size());
+
+    std::string resp2;
+    while (true) {
+        ssize_t n = sock.recv(buf, sizeof(buf));
+        if (n <= 0)
+            break;
+        resp2.append(buf, static_cast<size_t>(n));
+    }
+    EXPECT_EQ(extract_status(resp2), 200);
+    EXPECT_EQ(extract_body(resp2), "ok");
+    EXPECT_EQ(call_count, 2);
 }
