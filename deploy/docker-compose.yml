@@ -36,6 +36,8 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=24h'
       - '--storage.tsdb.retention.size=1GB'
+      - '--storage.tsdb.min-block-duration=30m'
+      - '--storage.tsdb.max-block-duration=1h'
       - '--web.external-url=/prometheus/'
       - '--web.route-prefix=/prometheus/'
     depends_on:
