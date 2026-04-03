@@ -9,6 +9,7 @@
 
 #include "metrics/Metrics.h"
 
+#include <cmath>
 #include <sstream>
 #include <string>
 
