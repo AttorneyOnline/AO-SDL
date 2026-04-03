@@ -141,7 +141,7 @@ TEST_F(NXBroadcastTest, MusicChangePublishesSSEEvent) {
         if (e.event == "music_change") {
             found_music = true;
             auto j = nlohmann::json::parse(e.data);
-            EXPECT_EQ(j["track"], "trial.mp3");
+            EXPECT_EQ(j["name"], "trial.mp3");
             EXPECT_EQ(j["showname"], "TestPlayer");
             EXPECT_EQ(j["channel"], 0);
             EXPECT_EQ(j["looping"], true);
