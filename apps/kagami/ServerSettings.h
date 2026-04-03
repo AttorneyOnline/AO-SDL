@@ -8,17 +8,19 @@
 
 /// Parse a log level string (case-insensitive). Returns VERBOSE on unrecognized input.
 inline LogLevel parse_log_level(const std::string& s) {
-    if (s == "verbose" || s == "VERBOSE")
+    std::string lower = s;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    if (lower == "verbose")
         return VERBOSE;
-    if (s == "debug" || s == "DEBUG")
+    if (lower == "debug")
         return DEBUG;
-    if (s == "info" || s == "INFO")
+    if (lower == "info")
         return INFO;
-    if (s == "warning" || s == "WARNING" || s == "warn" || s == "WARN")
+    if (lower == "warning" || lower == "warn")
         return WARNING;
-    if (s == "error" || s == "ERROR" || s == "err" || s == "ERR")
+    if (lower == "error" || lower == "err")
         return ERR;
-    if (s == "fatal" || s == "FATAL")
+    if (lower == "fatal")
         return FATAL;
     return VERBOSE;
 }
