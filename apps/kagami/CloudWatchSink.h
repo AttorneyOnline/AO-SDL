@@ -30,7 +30,7 @@ class CloudWatchSink {
     };
 
     explicit CloudWatchSink(Config config)
-        : config_(std::move(config)), host_("logs." + config_.region + ".amazonaws.com"), client_(host_) {
+        : config_(std::move(config)), host_("logs." + config_.region + ".amazonaws.com"), client_("https://" + host_) {
         client_.set_connection_timeout(5, 0);
         client_.set_read_timeout(10, 0);
     }
