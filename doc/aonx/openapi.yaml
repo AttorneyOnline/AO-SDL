@@ -2430,18 +2430,37 @@ components:
 
     CharTakenEvent:
       type: object
-      required: [char_id, available]
+      description: |
+        Character availability changed. Has two shapes:
+
+        **Individual** (when a player selects a character):
+        `{char_id, available, user_id?}` — one character changed.
+
+        **Bulk** (on session destroy, TTL expiry, or deselect):
+        `{taken: [0, 1, 0, ...]}` — full availability array indexed
+        parallel to the character list (0 = available, 1 = taken).
+
+        Clients should check for the presence of `taken` to distinguish.
       properties:
         user_id:
           type: string
-          description: User identifier of who took or released the character.
+          description: User identifier of who took the character. Present only on individual events.
         char_id:
           type: string
           maxLength: 64
-          description: SHA-256 hash of the character manifest.
+          description: SHA-256 hash of the character manifest. Present only on individual events.
         available:
           type: boolean
-          description: Whether the character is now available.
+          description: Whether the character is now available. Present only on individual events.
+        taken:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 1
+          description: |
+            Full availability array. Index corresponds to the character
+            list order. 0 = available, 1 = taken. Present only on bulk events.
 
     # -------------------------------------------------------------------------
     # Common

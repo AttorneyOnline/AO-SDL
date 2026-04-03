@@ -153,7 +153,7 @@ void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
 
 void NXServer::broadcast_music(const std::string& area, const MusicEvent& evt) {
     nlohmann::json j = {
-        {"track", evt.action.track},
+        {"name", evt.action.track},
         {"showname", evt.action.showname},
         {"channel", evt.action.channel},
         {"looping", evt.action.looping},
