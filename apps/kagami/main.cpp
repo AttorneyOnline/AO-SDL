@@ -206,6 +206,15 @@ int main(int /*argc*/, char* argv[]) {
                                                {"session_id", "display_name", "protocol", "area", "character"});
         auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
                                        {"session_id", "display_name", "protocol", "area", "character"});
+        auto& http_work_queue = reg.gauge("kagami_http_work_queue_depth", "Pending requests in worker queue");
+        auto& http_result_queue = reg.gauge("kagami_http_result_queue_depth", "Pending results awaiting poll thread");
+        auto& http_active_workers =
+            reg.gauge("kagami_http_active_workers", "Worker threads currently executing handlers");
+        auto& http_worker_count = reg.gauge("kagami_http_worker_count", "Total worker threads");
+        auto& http_worker_idle_ns =
+            reg.gauge("kagami_http_worker_idle_nanoseconds_total", "Cumulative worker idle time in nanoseconds");
+        auto& http_worker_busy_ns =
+            reg.gauge("kagami_http_worker_busy_nanoseconds_total", "Cumulative worker busy time in nanoseconds");
 
         auto cors = cfg.cors_origins();
         server_info
@@ -217,11 +226,20 @@ int main(int /*argc*/, char* argv[]) {
 
         reg.add_collector([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &area_info,
                            &chars_taken, &event_publishes, &session_bytes_sent, &session_bytes_recv,
-                           &session_packets_sent, &session_packets_recv, &session_idle, &rest_router, &room,
-                           &server_start_time] {
+                           &session_packets_sent, &session_packets_recv, &session_idle, &http_work_queue,
+                           &http_result_queue, &http_active_workers, &http_worker_count, &http_worker_idle_ns,
+                           &http_worker_busy_ns, &http_server = http, &rest_router, &room, &server_start_time] {
             auto elapsed = std::chrono::steady_clock::now() - server_start_time;
             uptime.get().set(std::chrono::duration<double>(elapsed).count());
             rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
+
+            // HTTP worker pool metrics (lock-free — read atomics directly)
+            http_work_queue.get().set(static_cast<double>(http_server.work_queue_depth()));
+            http_result_queue.get().set(static_cast<double>(http_server.result_queue_depth()));
+            http_active_workers.get().set(static_cast<double>(http_server.active_workers()));
+            http_worker_count.get().set(static_cast<double>(http_server.worker_count()));
+            http_worker_idle_ns.get().set(static_cast<double>(http_server.worker_idle_ns()));
+            http_worker_busy_ns.get().set(static_cast<double>(http_server.worker_busy_ns()));
 
             // Snapshot game state under the dispatch lock (fast — just copy numbers).
             struct SessionSnap {

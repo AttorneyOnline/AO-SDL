@@ -91,6 +91,18 @@ class EventChannel {
     }
 
     /**
+     * @brief Returns the number of pending events in the queue.
+     *
+     * Acquires the internal mutex for the duration of the call.
+     *
+     * @return The number of queued events.
+     */
+    size_t size() {
+        const std::lock_guard<std::mutex> lock(event_queue_mutex);
+        return event_queue.size();
+    }
+
+    /**
      * @brief Checks whether the queue contains any pending events.
      *
      * Acquires the internal mutex for the duration of the call.

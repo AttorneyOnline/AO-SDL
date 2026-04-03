@@ -602,12 +602,171 @@
     },
     {
       "type": "timeseries",
-      "title": "Memory Usage",
+      "title": "Lock Hold Time by Endpoint",
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
         "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_dispatch_lock_hold_nanoseconds_total{instance=~\"$instance\"}[5s]) / on() irate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Utilization",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_http_active_workers{instance=~\"$instance\"}",
+          "legendFormat": "active",
+          "refId": "A",
+          "interval": "100ms"
+        },
+        {
+          "expr": "kagami_http_worker_count{instance=~\"$instance\"}",
+          "legendFormat": "total",
+          "refId": "B",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Queue Depth",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_http_work_queue_depth{instance=~\"$instance\"}",
+          "legendFormat": "work queue",
+          "refId": "A",
+          "interval": "100ms"
+        },
+        {
+          "expr": "kagami_http_result_queue_depth{instance=~\"$instance\"}",
+          "legendFormat": "result queue",
+          "refId": "B",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "TCP Traffic",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_tcp_bytes_received_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "rx",
+          "refId": "A",
+          "interval": "100ms"
+        },
+        {
+          "expr": "irate(kagami_tcp_bytes_sent_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "tx",
+          "refId": "B",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "TCP Connections & Retransmits",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_tcp_connections_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "connections/s",
+          "refId": "A",
+          "interval": "100ms"
+        },
+        {
+          "expr": "irate(kagami_tcp_retransmits_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "retransmits/s",
+          "refId": "B",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 56
       },
       "fieldConfig": {
         "defaults": {

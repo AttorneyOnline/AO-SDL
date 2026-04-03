@@ -28,6 +28,12 @@
 #include <thread>
 #include <unordered_map>
 
+#ifndef _WIN32
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#endif
+
 // -- SSE/HTTP metrics (file-scope — self-register at program startup) ---------
 
 static auto& sse_events_ =
@@ -36,6 +42,14 @@ static auto& sse_replays_ =
     metrics::MetricsRegistry::instance().counter("kagami_sse_replays_total", "SSE event replays on reconnect");
 static auto& sse_dead_clients_ = metrics::MetricsRegistry::instance().counter(
     "kagami_sse_dead_clients_total", "SSE clients dropped due to send failure");
+static auto& tcp_connections_ =
+    metrics::MetricsRegistry::instance().counter("kagami_tcp_connections_total", "Total TCP connections accepted");
+static auto& tcp_bytes_in_ = metrics::MetricsRegistry::instance().counter("kagami_tcp_bytes_received_total",
+                                                                          "Total bytes read from TCP sockets");
+static auto& tcp_bytes_out_ =
+    metrics::MetricsRegistry::instance().counter("kagami_tcp_bytes_sent_total", "Total bytes written to TCP sockets");
+static auto& tcp_retransmits_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_tcp_retransmits_total", "Total TCP retransmits (sampled on connection close)");
 
 namespace http {
 
@@ -95,6 +109,12 @@ struct Server::ServerState {
     std::condition_variable work_cv;
 
     std::atomic<bool> running{false};
+
+    // Worker utilization metrics
+    std::atomic<int> active_workers{0};
+    size_t num_workers = 0;
+    std::atomic<uint64_t> worker_idle_ns{0};
+    std::atomic<uint64_t> worker_busy_ns{0};
 
     // Handler tables
     using HandlerEntry = std::pair<std::string, Server::Handler>;
@@ -156,10 +176,31 @@ static bool find_header_end(const std::string& buf) {
 
 using ServerState = Server::ServerState;
 
+/// Sample TCP retransmit count from the socket before closing it.
+/// Returns 0 on unsupported platforms or if the call fails.
+static uint32_t sample_tcp_retransmits([[maybe_unused]] int fd) {
+#if defined(__linux__)
+    struct tcp_info info{};
+    socklen_t len = sizeof(info);
+    if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, &len) == 0)
+        return info.tcpi_total_retrans;
+#elif defined(__APPLE__)
+    struct tcp_connection_info info{};
+    socklen_t len = sizeof(info);
+    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &info, &len) == 0)
+        return info.tcpi_txretransmitpackets;
+#endif
+    return 0;
+}
+
 static void remove_connection(ServerState& state, uint64_t conn_id) {
     auto it = state.connections.find(conn_id);
     if (it != state.connections.end()) {
         int fd = it->second.socket.fd();
+        // Sample TCP retransmits before the socket is closed
+        uint32_t retrans = sample_tcp_retransmits(fd);
+        if (retrans > 0)
+            tcp_retransmits_.get().inc(retrans);
         state.fd_to_conn.erase(fd);
         state.connections.erase(it);
     }
@@ -411,11 +452,16 @@ static std::string serialize_response(const Response& res, const Headers& defaul
 
 static void worker_loop(Server::ServerState& state, std::stop_token st) {
     while (!st.stop_requested()) {
-        // Wait for work
+        // Wait for work (idle time)
+        auto idle_start = std::chrono::steady_clock::now();
         {
             std::unique_lock lock(state.work_mutex);
             state.work_cv.wait(lock, [&] { return state.work_channel.has_events() || st.stop_requested(); });
         }
+        auto idle_end = std::chrono::steady_clock::now();
+        state.worker_idle_ns.fetch_add(
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
+            std::memory_order_relaxed);
 
         if (st.stop_requested())
             break;
@@ -423,6 +469,10 @@ static void worker_loop(Server::ServerState& state, std::stop_token st) {
         auto item = state.work_channel.get_event();
         if (!item)
             continue;
+
+        // Track busy time
+        state.active_workers.fetch_add(1, std::memory_order_relaxed);
+        auto busy_start = std::chrono::steady_clock::now();
 
         Response res;
         res.status = 200;
@@ -441,6 +491,12 @@ static void worker_loop(Server::ServerState& state, std::stop_token st) {
             res.set_content("Internal Server Error", "text/plain");
             Log::log_print(ERR, "HTTP handler exception: %s", e.what());
         }
+
+        state.worker_busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                 std::chrono::steady_clock::now() - busy_start)
+                                                                 .count()),
+                                       std::memory_order_relaxed);
+        state.active_workers.fetch_sub(1, std::memory_order_relaxed);
 
         WorkResult result;
         result.connection_id = item->connection_id;
@@ -555,6 +611,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     state.poller.add(cfd, platform::Poller::Readable);
                     state.fd_to_conn[cfd] = conn.id;
                     state.connections.emplace(conn.id, std::move(conn));
+                    tcp_connections_.get().inc();
                 }
             }
             else if (ev.fd == state.notifier_fd) {
@@ -593,6 +650,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         total += static_cast<size_t>(w);
                     }
                     conn->socket.set_non_blocking(true);
+
+                    tcp_bytes_out_.get().inc(total);
 
                     // Only keep alive if the full response was written successfully
                     should_keep_alive = should_keep_alive && (total == response_data.size());
@@ -645,6 +704,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     ssize_t r = conn->socket.recv(buf, sizeof(buf));
                     if (r > 0) {
                         conn->recv_buf.append(buf, static_cast<size_t>(r));
+                        tcp_bytes_in_.get().inc(static_cast<uint64_t>(r));
                     }
                     else {
                         if (r == 0)
@@ -1106,6 +1166,7 @@ bool Server::listen_after_bind() {
 
     // Start worker threads
     size_t num_workers = CPPHTTPLIB_THREAD_POOL_COUNT;
+    state.num_workers = num_workers;
     for (size_t i = 0; i < num_workers; ++i) {
         state.workers.emplace_back([&state](std::stop_token st) { worker_loop(state, st); });
     }
@@ -1230,6 +1291,32 @@ bool Server::process_request(Stream&, const std::string&, int, const std::string
 }
 bool Server::process_and_close_socket(socket_t) {
     return false;
+}
+
+// -- Observable internals (for metrics) --------------------------------------
+
+size_t Server::work_queue_depth() const {
+    return state_ ? state_->work_channel.size() : 0;
+}
+
+size_t Server::result_queue_depth() const {
+    return state_ ? state_->result_channel.size() : 0;
+}
+
+int Server::active_workers() const {
+    return state_ ? state_->active_workers.load(std::memory_order_relaxed) : 0;
+}
+
+size_t Server::worker_count() const {
+    return state_ ? state_->num_workers : 0;
+}
+
+uint64_t Server::worker_idle_ns() const {
+    return state_ ? state_->worker_idle_ns.load(std::memory_order_relaxed) : 0;
+}
+
+uint64_t Server::worker_busy_ns() const {
+    return state_ ? state_->worker_busy_ns.load(std::memory_order_relaxed) : 0;
 }
 std::unique_ptr<detail::MatcherBase> Server::make_matcher(const std::string&) {
     return nullptr;
