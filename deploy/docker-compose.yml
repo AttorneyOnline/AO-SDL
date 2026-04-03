@@ -50,6 +50,9 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_RBAC_PERMISSION_CACHE=false
+      - GF_USERS_EDITORS_CAN_ADMIN=true
+      - GF_AUTH_BASIC_ENABLED=true
       - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN:-canary.attorneyoffline.de}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
