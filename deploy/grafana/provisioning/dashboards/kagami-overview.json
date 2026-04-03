@@ -1,0 +1,298 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Uptime",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_uptime_seconds",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Memory (RSS)",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_process_resident_bytes",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Players Online",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "thresholds": { "steps": [
+          { "color": "blue", "value": null },
+          { "color": "green", "value": 1 },
+          { "color": "yellow", "value": 50 },
+          { "color": "red", "value": 90 }
+        ]}},
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_sessions_joined",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Moderators",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{
+        "expr": "kagami_sessions_moderators",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "WS Connections",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [{
+        "expr": "kagami_ws_connections",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Characters Taken",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [{
+        "expr": "kagami_characters_taken",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+
+    {
+      "type": "row",
+      "title": "Sessions & Players",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Sessions by Protocol",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "kagami_sessions{protocol=\"ao2\"}", "legendFormat": "AO2", "refId": "A" },
+        { "expr": "kagami_sessions{protocol=\"aonx\"}", "legendFormat": "AONX", "refId": "B" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Players per Area",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_area_players",
+        "legendFormat": "{{area}}",
+        "refId": "A"
+      }]
+    },
+
+    {
+      "type": "row",
+      "title": "Network I/O",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Requests / sec",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "sum(rate(kagami_http_requests_total[1m])) by (method)",
+        "legendFormat": "{{method}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Response Bytes / sec",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "fieldConfig": {
+        "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "sum(rate(kagami_http_response_bytes_total[1m])) by (method)",
+        "legendFormat": "{{method}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Status Codes / sec",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "2.." }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "4.." }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "5.." }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [{
+        "expr": "sum(rate(kagami_http_requests_total[1m])) by (status)",
+        "legendFormat": "{{status}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "WebSocket Traffic",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "fieldConfig": {
+        "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "rate(kagami_ws_bytes_in_total[1m])", "legendFormat": "Bytes In", "refId": "A" },
+        { "expr": "rate(kagami_ws_bytes_out_total[1m])", "legendFormat": "Bytes Out", "refId": "B" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "WebSocket Frames / sec",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "fieldConfig": {
+        "defaults": { "unit": "fps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "rate(kagami_ws_frames_in_total[1m])", "legendFormat": "Frames In", "refId": "A" },
+        { "expr": "rate(kagami_ws_frames_out_total[1m])", "legendFormat": "Frames Out", "refId": "B" }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "SSE Events",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "SSE Events / sec by Type",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "fieldConfig": {
+        "defaults": { "unit": "eps", "custom": { "fillOpacity": 15, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "rate(kagami_sse_events_total[1m])",
+        "legendFormat": "{{event}}",
+        "refId": "A"
+      }]
+    },
+
+    {
+      "type": "row",
+      "title": "Server Internals",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Dispatch Lock Acquisitions / sec",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 40 },
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "rate(kagami_dispatch_lock_acquisitions_total[1m])",
+        "legendFormat": "acquisitions",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Dispatch Lock Wait Time",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 40 },
+      "fieldConfig": {
+        "defaults": { "unit": "\u00b5s", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "rate(kagami_dispatch_lock_wait_microseconds_total[1m])",
+        "legendFormat": "wait \u00b5s/sec",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 40 },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [{
+        "expr": "kagami_process_resident_bytes",
+        "legendFormat": "RSS",
+        "refId": "A"
+      }]
+    },
+
+    {
+      "type": "row",
+      "title": "Server Info",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "collapsed": false
+    },
+    {
+      "type": "table",
+      "title": "Build & Config",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 49 },
+      "targets": [
+        { "expr": "kagami_build_info", "format": "table", "instant": true, "refId": "A" },
+        { "expr": "kagami_config_info", "format": "table", "instant": true, "refId": "B" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "version|server_name|max_players|session_ttl" } } }
+      ]
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["kagami"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Kagami Overview",
+  "uid": "kagami-overview"
+}
