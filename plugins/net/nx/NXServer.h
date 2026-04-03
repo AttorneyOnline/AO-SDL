@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 class NXServer {
@@ -39,8 +40,8 @@ class NXServer {
     }
 
     /// Resolve a transport-level client_id to the user_id string exposed to
-    /// clients via the API. Returns empty string if the session is gone.
-    std::string resolve_user_id(uint64_t client_id);
+    /// clients via the API. Returns nullopt if the session is gone.
+    std::optional<std::string> resolve_user_id(uint64_t client_id);
 
   private:
     // Broadcast callbacks registered with GameRoom.
