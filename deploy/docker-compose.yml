@@ -46,8 +46,10 @@ services:
     image: grafana/grafana:latest
     restart: unless-stopped
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=kagami
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-kagami}
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN:-canary.attorneyoffline.de}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
