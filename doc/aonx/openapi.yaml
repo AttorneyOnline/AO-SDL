@@ -2429,6 +2429,11 @@ components:
           description: Action-specific data for client presentation.
 
     CharTakenEvent:
+      # TODO: use oneOf with two sub-schemas once the schema validator
+      # generator supports it:
+      #   oneOf:
+      #     - required: [char_id, available]
+      #     - required: [taken]
       type: object
       description: |
         Character availability changed. Has two shapes:

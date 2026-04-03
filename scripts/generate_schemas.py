@@ -63,6 +63,7 @@ def ref_name(ref: str) -> str:
 
 
 # Keywords we handle or can safely ignore (documentation-only).
+# TODO: add oneOf support for polymorphic schemas (e.g. CharTakenEvent).
 SUPPORTED_KEYWORDS = {
     "type", "$ref", "properties", "required", "items", "enum",
     "additionalProperties", "description", "format", "nullable",
