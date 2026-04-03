@@ -10,6 +10,7 @@
 
 #include <json.hpp>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -112,12 +113,12 @@ class JsonSchema {
     std::string validate_impl(const nlohmann::json& value, const std::string& path) const;
 
     Type type_ = Type::none;
-    std::vector<std::string> allowed_values_; // string_enum
-    std::shared_ptr<JsonSchema> item_schema_; // array, string_map
-    std::vector<Field> fields_;               // object
-    int min_length_ = 0;                      // string minLength
-    int max_length_ = 0;                      // string maxLength (0 = no limit)
-    double minimum_ = 0;                      // integer/number minimum
-    double maximum_ = 0;                      // integer/number maximum
-    bool has_range_ = false;                  // whether min/max are set
+    std::vector<std::string> allowed_values_;                   // string_enum
+    std::shared_ptr<JsonSchema> item_schema_;                   // array, string_map
+    std::vector<Field> fields_;                                 // object
+    int min_length_ = 0;                                        // string minLength
+    int max_length_ = 0;                                        // string maxLength (0 = no limit)
+    double minimum_ = -std::numeric_limits<double>::infinity(); // integer/number minimum
+    double maximum_ = std::numeric_limits<double>::infinity();  // integer/number maximum
+    bool has_range_ = false;                                    // whether min/max are set
 };

@@ -38,6 +38,10 @@ class NXServer {
         return session_ttl_seconds_.load(std::memory_order_relaxed);
     }
 
+    /// Resolve a transport-level client_id to the user_id string exposed to
+    /// clients via the API. Returns empty string if the session is gone.
+    std::string resolve_user_id(uint64_t client_id);
+
   private:
     // Broadcast callbacks registered with GameRoom.
     // Serialize events to JSON and publish as SSEEvents for NX clients.

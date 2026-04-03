@@ -5,14 +5,14 @@
 
 namespace {
 
-class ServerInfoEndpoint : public NXEndpoint {
+class ServerEndpoint : public NXEndpoint {
   public:
     const std::string& method() const override {
         static const std::string m = "GET";
         return m;
     }
     const std::string& path_pattern() const override {
-        static const std::string p = "/aonx/v1/server/info";
+        static const std::string p = "/aonx/v1/server";
         return p;
     }
     bool requires_auth() const override {
@@ -25,13 +25,17 @@ class ServerInfoEndpoint : public NXEndpoint {
                                            {"version", ao_sdl_version()},
                                            {"name", room().server_name},
                                            {"description", room().server_description},
+                                           {"motd", server().motd()},
+                                           {"online", static_cast<int>(room().session_count())},
+                                           {"max", room().max_players},
                                        });
     }
 };
 
-EndpointRegistrar reg("GET /aonx/v1/server/info", [] { return std::make_unique<ServerInfoEndpoint>(); });
+EndpointRegistrar reg("GET /aonx/v1/server", [] { return std::make_unique<ServerEndpoint>(); });
 
 } // namespace
 
-void nx_ep_server_info() {
+// Linker anchor — referenced by nx_register_endpoints().
+void nx_ep_server() {
 }

@@ -104,20 +104,21 @@ TEST_F(NXBroadcastTest, CharSelectPublishesGlobalSSEEvent) {
     while (auto evt = drain_sse())
         events.push_back(std::move(*evt));
 
-    // Find the char_taken event with character_name
+    // Find the char_taken event with char_id and available fields
     bool found_select = false;
     for (auto& e : events) {
         if (e.event == "char_taken") {
             auto j = nlohmann::json::parse(e.data);
-            if (j.contains("character_name")) {
+            if (j.contains("char_id")) {
                 found_select = true;
-                EXPECT_EQ(j["character_id"], 0);
-                EXPECT_EQ(j["character_name"], "Phoenix");
+                EXPECT_EQ(j["char_id"], "0");
+                EXPECT_EQ(j["available"], false);
+                EXPECT_TRUE(j.contains("user_id"));
                 EXPECT_EQ(e.area, ""); // global broadcast
             }
         }
     }
-    EXPECT_TRUE(found_select) << "Expected a char_taken event with character_name";
+    EXPECT_TRUE(found_select) << "Expected a char_taken event with char_id";
 }
 
 TEST_F(NXBroadcastTest, MusicChangePublishesSSEEvent) {

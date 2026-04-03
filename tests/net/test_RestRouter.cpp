@@ -635,8 +635,8 @@ TEST(EndpointFactoryTest, GlobalRegistrarPopulatesToRouter) {
 
     http::Client cli("127.0.0.1", port);
 
-    // The global factory should have registered GET /aonx/v1/server/players
-    auto res = cli.Get("/aonx/v1/server/players");
+    // The global factory should have registered GET /aonx/v1/server
+    auto res = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
     auto body = nlohmann::json::parse(res->body);
@@ -848,25 +848,25 @@ TEST_F(NXEndpointTest, ServerMotdReturnsMessage) {
     nx_->set_motd("Welcome to the courtroom!");
 
     auto cli = client();
-    auto res = cli.Get("/aonx/v1/server/motd");
+    auto res = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-    EXPECT_EQ(nlohmann::json::parse(res->body)["message"], "Welcome to the courtroom!");
+    EXPECT_EQ(nlohmann::json::parse(res->body)["motd"], "Welcome to the courtroom!");
 }
 
 TEST_F(NXEndpointTest, ServerMotdReturnsEmptyWhenUnset) {
     auto cli = client();
-    auto res = cli.Get("/aonx/v1/server/motd");
+    auto res = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-    EXPECT_EQ(nlohmann::json::parse(res->body)["message"], "");
+    EXPECT_EQ(nlohmann::json::parse(res->body)["motd"], "");
 }
 
-TEST_F(NXEndpointTest, ServerMotdNoAuthRequired) {
+TEST_F(NXEndpointTest, ServerNoAuthRequired) {
     nx_->set_motd("Test MOTD");
 
     auto cli = client();
-    auto res = cli.Get("/aonx/v1/server/motd");
+    auto res = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
 }
@@ -1486,19 +1486,19 @@ TEST_F(NXEndpointTest, SessionLifecycle_PlayerCountIncrements) {
     auto cli = client();
 
     // Baseline: 0 players
-    auto res0 = cli.Get("/aonx/v1/server/players");
+    auto res0 = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res0);
     EXPECT_EQ(nlohmann::json::parse(res0->body)["online"], 0);
 
     // Create first session
     create_session();
-    auto res1 = cli.Get("/aonx/v1/server/players");
+    auto res1 = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res1);
     EXPECT_EQ(nlohmann::json::parse(res1->body)["online"], 1);
 
     // Create second session
     create_session();
-    auto res2 = cli.Get("/aonx/v1/server/players");
+    auto res2 = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res2);
     EXPECT_EQ(nlohmann::json::parse(res2->body)["online"], 2);
 }
@@ -1508,7 +1508,7 @@ TEST_F(NXEndpointTest, SessionLifecycle_DeleteDecrementsPlayerCount) {
     auto token = create_session();
 
     // Verify 1 player
-    auto res1 = cli.Get("/aonx/v1/server/players");
+    auto res1 = cli.Get("/aonx/v1/server");
     EXPECT_EQ(nlohmann::json::parse(res1->body)["online"], 1);
 
     // Delete the session
@@ -1518,7 +1518,7 @@ TEST_F(NXEndpointTest, SessionLifecycle_DeleteDecrementsPlayerCount) {
     EXPECT_EQ(del->status, 204);
 
     // Player count should be back to 0
-    auto res2 = cli.Get("/aonx/v1/server/players");
+    auto res2 = cli.Get("/aonx/v1/server");
     EXPECT_EQ(nlohmann::json::parse(res2->body)["online"], 0);
 }
 
@@ -1564,8 +1564,8 @@ TEST_F(NXEndpointTest, SessionLifecycle_MaxPlayersEnforced) {
     // Fill up
     auto first_token = create_session();
     create_session();
-    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server/players")->body)["online"], 2);
-    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server/players")->body)["max"], 2);
+    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server")->body)["online"], 2);
+    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server")->body)["max"], 2);
 
     // Third session should be rejected
     auto res = cli.Post("/aonx/v1/session", R"({"client_name":"overflow","client_version":"1.0","hdid":"x"})",
@@ -2093,9 +2093,12 @@ TEST_F(NXEndpointTest, AreaGet_DetailIncludesHPAndTimers) {
 
 // -- Server info endpoints ---------------------------------------------------
 
-TEST_F(NXEndpointTest, ServerInfo_ReturnsMetadata) {
+TEST_F(NXEndpointTest, Server_ReturnsAllFields) {
+    nx_->set_motd("Hello world");
+    room_.max_players = 42;
+
     auto cli = client();
-    auto res = cli.Get("/aonx/v1/server/info");
+    auto res = cli.Get("/aonx/v1/server");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
 
@@ -2104,27 +2107,12 @@ TEST_F(NXEndpointTest, ServerInfo_ReturnsMetadata) {
     EXPECT_TRUE(body.contains("version"));
     EXPECT_TRUE(body.contains("name"));
     EXPECT_TRUE(body.contains("description"));
-}
-
-TEST_F(NXEndpointTest, ServerInfo_PlayersMaxMatchesConfig) {
-    room_.max_players = 42;
-    auto cli = client();
-    auto res = cli.Get("/aonx/v1/server/players");
-    ASSERT_TRUE(res);
-    EXPECT_EQ(nlohmann::json::parse(res->body)["max"], 42);
-}
-
-TEST_F(NXEndpointTest, ServerInfo_NoAuthRequiredForPublicEndpoints) {
-    auto cli = client();
-
-    auto info = cli.Get("/aonx/v1/server/info");
-    EXPECT_EQ(info->status, 200);
-
-    auto motd = cli.Get("/aonx/v1/server/motd");
-    EXPECT_EQ(motd->status, 200);
-
-    auto players = cli.Get("/aonx/v1/server/players");
-    EXPECT_EQ(players->status, 200);
+    EXPECT_TRUE(body.contains("motd"));
+    EXPECT_TRUE(body.contains("online"));
+    EXPECT_TRUE(body.contains("max"));
+    EXPECT_EQ(body["motd"], "Hello world");
+    EXPECT_EQ(body["max"], 42);
+    EXPECT_EQ(body["online"], 0);
 }
 
 // -- Full lifecycle: connect → pick char → join area → chat → leave ----------
@@ -2201,6 +2189,6 @@ TEST_F(NXEndpointTest, FullLifecycle_ConnectSelectJoinChatLeave) {
 
     // 10. Verify everything is cleaned up
     EXPECT_EQ(room_.session_count(), 0u);
-    auto pc = cli.Get("/aonx/v1/server/players");
+    auto pc = cli.Get("/aonx/v1/server");
     EXPECT_EQ(nlohmann::json::parse(pc->body)["online"], 0);
 }

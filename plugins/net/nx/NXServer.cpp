@@ -80,9 +80,18 @@ static void publish_sse(const std::string& event_type, nlohmann::json payload, c
     EventManager::instance().get_channel<SSEEvent>().publish(std::move(sse));
 }
 
+/// Resolve a client_id (transport-level) to the user_id string exposed to
+/// clients. Returns empty string if the session is not found.
+std::string NXServer::resolve_user_id(uint64_t client_id) {
+    if (auto* s = room_.get_session(client_id))
+        return std::to_string(s->session_id);
+    return {};
+}
+
 void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
     auto& a = evt.action;
     nlohmann::json j;
+    j["user_id"] = resolve_user_id(a.sender_id);
     j["character"] = a.character;
     j["message"] = a.message;
     j["showname"] = a.showname;
@@ -113,14 +122,19 @@ void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
 }
 
 void NXServer::broadcast_ooc(const std::string& area, const OOCEvent& evt) {
-    publish_sse("ooc_message", {{"name", evt.action.name}, {"message", evt.action.message}}, area);
+    publish_sse("ooc_message",
+                {{"user_id", resolve_user_id(evt.action.sender_id)},
+                 {"name", evt.action.name},
+                 {"message", evt.action.message}},
+                area);
 }
 
 void NXServer::broadcast_char_select(const CharSelectEvent& evt) {
-    publish_sse(
-        "char_taken",
-        {{"client_id", evt.client_id}, {"character_id", evt.character_id}, {"character_name", evt.character_name}},
-        ""); // global broadcast
+    publish_sse("char_taken",
+                {{"user_id", resolve_user_id(evt.client_id)},
+                 {"char_id", std::to_string(evt.character_id)},
+                 {"available", false}},
+                ""); // global broadcast
 }
 
 void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
@@ -129,7 +143,8 @@ void NXServer::broadcast_chars_taken(const std::vector<int>& taken) {
 
 void NXServer::broadcast_music(const std::string& area, const MusicEvent& evt) {
     publish_sse("music_change",
-                {{"track", evt.action.track},
+                {{"user_id", resolve_user_id(evt.action.sender_id)},
+                 {"track", evt.action.track},
                  {"showname", evt.action.showname},
                  {"channel", evt.action.channel},
                  {"looping", evt.action.looping}},
