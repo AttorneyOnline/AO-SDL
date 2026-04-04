@@ -7,8 +7,11 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
+#include <wincrypt.h>
+
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 
 #include <mutex>
 #include <stdexcept>
@@ -17,6 +20,7 @@
 #include "utils/Log.h"
 
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "crypt32.lib")
 
 namespace platform {
 
@@ -42,13 +46,33 @@ static std::once_flag g_ssl_init_flag;
 static SSL_CTX* g_client_ctx = nullptr;
 static SSL_CTX* g_server_ctx = nullptr;
 
+static void load_windows_cert_store(SSL_CTX* ctx) {
+    HCERTSTORE store = CertOpenSystemStoreW(0, L"ROOT");
+    if (!store) return;
+
+    X509_STORE* x509_store = SSL_CTX_get_cert_store(ctx);
+    PCCERT_CONTEXT cert = nullptr;
+    int loaded = 0;
+    while ((cert = CertEnumCertificatesInStore(store, cert)) != nullptr) {
+        const unsigned char* der = cert->pbCertEncoded;
+        X509* x509 = d2i_X509(nullptr, &der, cert->cbCertEncoded);
+        if (x509) {
+            X509_STORE_add_cert(x509_store, x509);
+            X509_free(x509);
+            loaded++;
+        }
+    }
+    CertCloseStore(store, 0);
+    Log::log_print(DEBUG, "OpenSSL: loaded %d root CAs from Windows cert store", loaded);
+}
+
 static void ensure_openssl() {
     std::call_once(g_ssl_init_flag, [] {
         SSL_library_init();
         SSL_load_error_strings();
         OpenSSL_add_all_algorithms();
         g_client_ctx = SSL_CTX_new(TLS_client_method());
-        SSL_CTX_set_default_verify_paths(g_client_ctx);
+        load_windows_cert_store(g_client_ctx);
         SSL_CTX_set_verify(g_client_ctx, SSL_VERIFY_PEER, nullptr);
     });
 }
