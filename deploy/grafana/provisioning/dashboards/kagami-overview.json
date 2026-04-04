@@ -791,7 +791,7 @@
       "title": "COW Copy Throughput",
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 24,
         "x": 0,
         "y": 64
       },
