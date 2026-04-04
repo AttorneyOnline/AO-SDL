@@ -52,6 +52,19 @@ class RestRouter {
         func();
     }
 
+    /// Try to execute a callable under a shared lock. Returns false without
+    /// calling func if the lock cannot be acquired immediately (e.g., an
+    /// exclusive writer is active). Use for best-effort reads where stale
+    /// data is acceptable.
+    template <typename F>
+    bool try_shared_lock(F&& func) {
+        std::shared_lock lock(dispatch_mutex_, std::try_to_lock);
+        if (!lock.owns_lock())
+            return false;
+        func();
+        return true;
+    }
+
   private:
     void dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res);
     void apply_cors_origin(const http::Request& req, http::Response& res) const;

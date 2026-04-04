@@ -163,7 +163,7 @@ int main(int /*argc*/, char* argv[]) {
     // --- Metrics endpoint (infrastructure, no auth) ---
     auto server_start_time = std::chrono::steady_clock::now();
     if (cfg.metrics_enabled()) {
-        http.Get(cfg.metrics_path(), [](const http::Request&, http::Response& res) {
+        http.GetInline(cfg.metrics_path(), [](const http::Request&, http::Response& res) {
             res.set_content(metrics::MetricsRegistry::instance().collect(), "text/plain; version=0.0.4; charset=utf-8");
         });
     }
@@ -269,25 +269,29 @@ int main(int /*argc*/, char* argv[]) {
             http_worker_busy_ns.get().set(static_cast<double>(http_server.worker_busy_ns()));
 
             // Rebuild game-state snapshot at most once per second.
+            // Uses try_shared_lock — if the dispatch lock is contended (e.g.,
+            // thousands of session creates/deletes in flight), we skip the
+            // rebuild and serve stale cached data. This ensures /metrics never
+            // blocks on the dispatch lock.
             {
                 std::lock_guard cache_lock(cache->mutex);
                 if (now - cache->last_update > std::chrono::seconds(1)) {
-                    cache->ao = cache->nx = cache->joined = cache->mods = cache->taken = 0;
-                    cache->sessions.clear();
-                    cache->areas.clear();
+                    int ao = 0, nx = 0, joined = 0, mods = 0, taken = 0;
+                    std::vector<SessionSnap> sessions;
+                    std::vector<AreaSnap> areas;
 
-                    rest_router.with_shared_lock([&] {
+                    bool acquired = rest_router.try_shared_lock([&] {
                         room.for_each_session([&](const ServerSession& s) {
-                            (s.protocol == "ao2") ? ++cache->ao : ++cache->nx;
+                            (s.protocol == "ao2") ? ++ao : ++nx;
                             if (s.joined)
-                                ++cache->joined;
+                                ++joined;
                             if (s.moderator)
-                                ++cache->mods;
+                                ++mods;
                             std::string char_name =
                                 (s.character_id >= 0 && s.character_id < (int)room.characters.size())
                                     ? room.characters[s.character_id]
                                     : "none";
-                            cache->sessions.push_back({
+                            sessions.push_back({
                                 s.session_id,
                                 s.display_name.empty() ? "(unnamed)" : s.display_name,
                                 s.protocol,
@@ -301,19 +305,28 @@ int main(int /*argc*/, char* argv[]) {
                             });
                         });
                         for (auto& [id, state] : room.area_states()) {
-                            cache->areas.push_back({state.name, state.status, state.locked,
-                                                     (int)room.sessions_in_area(state.name).size()});
+                            areas.push_back({state.name, state.status, state.locked,
+                                              (int)room.sessions_in_area(state.name).size()});
                         }
                         for (int t : room.char_taken)
                             if (t)
-                                ++cache->taken;
+                                ++taken;
                     });
 
-                    cache->event_channels.clear();
-                    for (auto& cs : EventManager::instance().snapshot_channel_stats())
-                        cache->event_channels.emplace_back(cs.raw_name, cs.count);
-
-                    cache->last_update = now;
+                    if (acquired) {
+                        cache->ao = ao;
+                        cache->nx = nx;
+                        cache->joined = joined;
+                        cache->mods = mods;
+                        cache->taken = taken;
+                        cache->sessions = std::move(sessions);
+                        cache->areas = std::move(areas);
+                        cache->event_channels.clear();
+                        for (auto& cs : EventManager::instance().snapshot_channel_stats())
+                            cache->event_channels.emplace_back(cs.raw_name, cs.count);
+                        cache->last_update = now;
+                    }
+                    // else: lock contended, serve stale cache
                 }
             }
 
