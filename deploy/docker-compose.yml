@@ -7,6 +7,8 @@ services:
       - "80:80"
       - "443:443"       # HTTPS (TCP) — HTTP/1.1 + HTTP/2
       - "443:443/udp"  # QUIC — HTTP/3
+    environment:
+      - KAGAMI_DOMAIN=${KAGAMI_DOMAIN:-canary.attorneyoffline.de}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
