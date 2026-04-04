@@ -787,13 +787,40 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "COW Copy Throughput",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_cow_copy_bytes_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "COW copy rate",
+          "refId": "A",
+          "interval": "100ms"
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "Areas",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "collapsed": false
     },
@@ -804,7 +831,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 65
+        "y": 73
       },
       "targets": [
         {
@@ -884,7 +911,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 65
+        "y": 73
       },
       "fieldConfig": {
         "defaults": {
@@ -914,7 +941,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 79
       },
       "collapsed": false
     },
@@ -925,7 +952,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -957,7 +984,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "collapsed": false
     },
@@ -968,7 +995,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 89
       },
       "targets": [
         {
@@ -997,7 +1024,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 94
       },
       "collapsed": false
     },
@@ -1008,7 +1035,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 87
+        "y": 95
       },
       "targets": [
         {
@@ -1141,7 +1168,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 97
+        "y": 105
       },
       "collapsed": false
     },
@@ -1152,7 +1179,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 98
+        "y": 106
       },
       "fieldConfig": {
         "defaults": {
@@ -1178,7 +1205,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 98
+        "y": 106
       },
       "fieldConfig": {
         "defaults": {
@@ -1205,7 +1232,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 106
+        "y": 114
       },
       "collapsed": false
     },
@@ -1216,7 +1243,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 107
+        "y": 115
       },
       "targets": [
         {
@@ -1261,7 +1288,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 125
       },
       "collapsed": false
     },
@@ -1272,7 +1299,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 118
+        "y": 126
       },
       "fieldConfig": {
         "defaults": {
@@ -1299,7 +1326,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 118
+        "y": 126
       },
       "fieldConfig": {
         "defaults": {
@@ -1326,7 +1353,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 118
+        "y": 126
       },
       "fieldConfig": {
         "defaults": {
@@ -1353,7 +1380,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 118
+        "y": 126
       },
       "fieldConfig": {
         "defaults": {
@@ -1386,7 +1413,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 126
+        "y": 134
       },
       "targets": [
         {
@@ -1410,7 +1437,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 126
+        "y": 134
       },
       "targets": [
         {
@@ -1434,7 +1461,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 126
+        "y": 134
       },
       "targets": [
         {
@@ -1458,7 +1485,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 126
+        "y": 134
       },
       "targets": [
         {
@@ -1482,7 +1509,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 130
+        "y": 138
       },
       "collapsed": false
     },
@@ -1493,7 +1520,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 131
+        "y": 139
       },
       "datasource": {
         "type": "loki",
