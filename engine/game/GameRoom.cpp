@@ -11,27 +11,26 @@ static auto& sessions_expired_ =
 #include <algorithm>
 #include <cctype>
 
-ServerSession& GameRoom::create_session(uint64_t client_id, const std::string& protocol) {
+GameRoom::SessionPtr GameRoom::create_session(uint64_t client_id, const std::string& protocol) {
     auto session = std::make_shared<ServerSession>();
     session->client_id = client_id;
     session->protocol = protocol;
     if (!areas.empty())
         session->area = areas[0];
 
-    ServerSession* raw = session.get();
     {
         std::lock_guard lock(state_swap_mutex_);
         session->session_id = next_session_id_++;
-        sessions_ = sessions_.set(client_id, std::move(session));
+        sessions_ = sessions_.set(client_id, session);
     }
 
     (protocol == "ao2") ? stats.sessions_ao.fetch_add(1, std::memory_order_relaxed)
                         : stats.sessions_nx.fetch_add(1, std::memory_order_relaxed);
-    return *raw;
+    return session;
 }
 
-ServerSession& GameRoom::create_session_with_token(uint64_t client_id, const std::string& protocol,
-                                                   const std::string& token) {
+GameRoom::SessionPtr GameRoom::create_session_with_token(uint64_t client_id, const std::string& protocol,
+                                                         const std::string& token) {
     auto session = std::make_shared<ServerSession>();
     session->client_id = client_id;
     session->protocol = protocol;
@@ -39,18 +38,17 @@ ServerSession& GameRoom::create_session_with_token(uint64_t client_id, const std
     if (!areas.empty())
         session->area = areas[0];
 
-    ServerSession* raw = session.get();
     {
         std::lock_guard lock(state_swap_mutex_);
         session->session_id = next_session_id_++;
-        sessions_ = sessions_.set(client_id, std::move(session));
+        sessions_ = sessions_.set(client_id, session);
         if (!token.empty())
             token_index_ = token_index_.set(token, client_id);
     }
 
     (protocol == "ao2") ? stats.sessions_ao.fetch_add(1, std::memory_order_relaxed)
                         : stats.sessions_nx.fetch_add(1, std::memory_order_relaxed);
-    return *raw;
+    return session;
 }
 
 void GameRoom::destroy_session(uint64_t client_id) {
@@ -162,6 +160,7 @@ std::vector<uint64_t> GameRoom::find_expired_sessions(int ttl_seconds) const {
 }
 
 GameRoom::SessionSnapshot GameRoom::sessions_snapshot() const {
+    std::lock_guard lock(state_swap_mutex_);
     return {sessions_, token_index_};
 }
 

@@ -87,11 +87,10 @@ class GameRoom {
         TokenMap tokens;
     };
 
-    ServerSession& create_session(uint64_t client_id, const std::string& protocol);
+    SessionPtr create_session(uint64_t client_id, const std::string& protocol);
 
-    /// Create a session and register its token in a single COW copy.
-    /// Avoids the double-copy of create_session + register_session_token.
-    ServerSession& create_session_with_token(uint64_t client_id, const std::string& protocol, const std::string& token);
+    /// Create a session and register its token in a single HAMT mutation.
+    SessionPtr create_session_with_token(uint64_t client_id, const std::string& protocol, const std::string& token);
 
     void destroy_session(uint64_t client_id);
     ServerSession* get_session(uint64_t client_id);
@@ -113,9 +112,9 @@ class GameRoom {
     /// Safe to call under a shared (reader) lock.
     std::vector<uint64_t> find_expired_sessions(int ttl_seconds) const;
 
-    /// Grab an immutable snapshot of all sessions. Lock-free — safe to call
-    /// from any thread without the dispatch lock. The returned snapshot stays
-    /// valid (and immutable) as long as the caller holds it.
+    /// Grab a consistent snapshot of sessions + tokens. Holds state_swap_mutex_
+    /// briefly (~20ns) to ensure both maps are from the same version.
+    /// Safe to call from any thread without the dispatch lock.
     SessionSnapshot sessions_snapshot() const;
 
     /// Invoke a callback for each active session (lock-free via HAMT snapshot).
@@ -202,7 +201,7 @@ class GameRoom {
     /// Held for ~1μs (pointer assignment), NOT for the HAMT walk or handler logic.
     /// Separate from the dispatch lock — allows session mutations to run
     /// concurrently with all other endpoint handlers.
-    std::mutex state_swap_mutex_;
+    mutable std::mutex state_swap_mutex_;
 
     uint64_t next_session_id_ = 0;
 
