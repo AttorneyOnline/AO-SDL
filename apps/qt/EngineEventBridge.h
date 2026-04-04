@@ -2,6 +2,7 @@
 
 #include <QMetaObject>
 #include <QObject>
+
 #include <functional>
 #include <vector>
 
@@ -19,7 +20,7 @@
  * Usage:
  * @code
  *   EngineEventBridge bridge;
- *   bridge.addChannel([&] {
+ *   bridge.add_channel([&] {
  *       auto& ch = EventManager::instance().get_channel<FooEvent>();
  *       while (auto ev = ch.get_event()) { ... }
  *   });
@@ -46,7 +47,7 @@ class EngineEventBridge final : public QObject {
      *
      * @param drain Function to call each iteration. Must not block.
      */
-    void addChannel(DrainFn drain);
+    void add_channel(DrainFn drain);
 
     /**
      * @brief Connect to the calling thread's event dispatcher.
@@ -62,8 +63,8 @@ class EngineEventBridge final : public QObject {
     void stop();
 
   private:
-    void drainAll();
+    void drain_all();
 
-    std::vector<DrainFn>    m_drains;
-    QMetaObject::Connection m_connection;
+    std::vector<DrainFn> drains_;
+    QMetaObject::Connection connection_;
 };

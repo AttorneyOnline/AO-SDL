@@ -18,7 +18,7 @@ class EmoteModel : public QAbstractListModel {
 
   public:
     enum Role {
-        CommentRole    = Qt::UserRole + 1,
+        CommentRole = Qt::UserRole + 1,
         IconSourceRole,
     };
 

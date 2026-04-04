@@ -18,13 +18,9 @@ std::unique_ptr<IRenderer> create_renderer(int width, int height);
 // Construction / destruction
 // --------------------------------------------------------------------------
 
-SceneTextureItem::SceneTextureItem(QQuickItem* parent)
-    : QQuickItem(parent)
-    , m_backend(create_qt_render_backend())
-{
+SceneTextureItem::SceneTextureItem(QQuickItem* parent) : QQuickItem(parent), m_backend(create_qt_render_backend()) {
     setFlag(ItemHasContents, true);
-    connect(this, &QQuickItem::windowChanged,
-            this, &SceneTextureItem::handleWindowChanged);
+    connect(this, &QQuickItem::windowChanged, this, &SceneTextureItem::handleWindowChanged);
 }
 
 SceneTextureItem::~SceneTextureItem() {
@@ -41,11 +37,8 @@ void SceneTextureItem::handleWindowChanged(QQuickWindow* win) {
         return;
 
     // DirectConnection — these slots fire on the render thread.
-    connect(win, &QQuickWindow::beforeRendering,
-            this, &SceneTextureItem::render,
-            Qt::DirectConnection);
-    connect(win, &QQuickWindow::sceneGraphInvalidated,
-            this, &SceneTextureItem::handleSceneGraphInvalidated,
+    connect(win, &QQuickWindow::beforeRendering, this, &SceneTextureItem::render, Qt::DirectConnection);
+    connect(win, &QQuickWindow::sceneGraphInvalidated, this, &SceneTextureItem::handleSceneGraphInvalidated,
             Qt::DirectConnection);
 }
 
@@ -75,11 +68,9 @@ void SceneTextureItem::initRenderer() {
         return;
     }
 
-    m_renderManager = std::make_unique<RenderManager>(
-        *rb.stateBuffer(), std::move(renderer));
+    m_renderManager = std::make_unique<RenderManager>(*rb.stateBuffer(), std::move(renderer));
 
-    rb.setRenderManager(m_renderManager.get(),
-                        rb.renderWidth(), rb.renderHeight());
+    rb.setRenderManager(m_renderManager.get(), rb.renderWidth(), rb.renderHeight());
 
     m_initialized = true;
 }
@@ -123,31 +114,26 @@ QSGNode* SceneTextureItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
     // Wrap the native texture once (the renderer's offscreen texture ID is
     // stable for its lifetime — it only changes on a resize()).
     if (texId != m_cachedTexId) {
-        auto* ri  = window()->rendererInterface();
-        auto* rhi = static_cast<QRhi*>(
-            ri->getResource(window(), QSGRendererInterface::RhiResource));
+        auto* ri = window()->rendererInterface();
+        auto* rhi = static_cast<QRhi*>(ri->getResource(window(), QSGRendererInterface::RhiResource));
 
         if (rhi) {
             delete m_rhiTexture;
             m_rhiTexture = nullptr;
 
-            auto* rhiTex = rhi->newTexture(
-                m_backend->textureFormat(),
-                QSize(RenderBridge::instance().renderWidth(),
-                      RenderBridge::instance().renderHeight()));
+            auto* rhiTex = rhi->newTexture(m_backend->textureFormat(), QSize(RenderBridge::instance().renderWidth(),
+                                                                             RenderBridge::instance().renderHeight()));
             if (rhiTex) {
                 rhiTex->createFrom({static_cast<quint64>(texId), 0});
-                m_rhiTexture  = rhiTex;
+                m_rhiTexture = rhiTex;
                 m_cachedTexId = texId;
-                node->setTexture(
-                    window()->createTextureFromRhiTexture(rhiTex));
+                node->setTexture(window()->createTextureFromRhiTexture(rhiTex));
             }
         }
     }
 
     if (RenderBridge::instance().uvFlipped())
-        node->setTextureCoordinatesTransform(
-            QSGSimpleTextureNode::MirrorVertically);
+        node->setTextureCoordinatesTransform(QSGSimpleTextureNode::MirrorVertically);
 
     node->setRect(boundingRect());
 
@@ -171,7 +157,7 @@ void SceneTextureItem::cleanup() {
     m_renderManager.reset();
 
     delete m_rhiTexture;
-    m_rhiTexture  = nullptr;
+    m_rhiTexture = nullptr;
     m_cachedTexId = 0;
 
     m_initialized = false;

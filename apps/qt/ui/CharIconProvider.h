@@ -23,11 +23,10 @@ class CharIconProvider : public QQuickImageProvider {
   public:
     explicit CharIconProvider(AssetLibrary& lib);
 
-    QImage requestImage(const QString& id, QSize* size,
-                        const QSize& requestedSize) override;
+    QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override;
 
   private:
-    AssetLibrary&          m_lib;
+    AssetLibrary& m_lib;
     QHash<QString, QImage> m_cache;
     mutable QReadWriteLock m_lock;
 };

@@ -1,42 +1,39 @@
+// The SDL frontend keeps all wiring in main() because SDL's event loop is an
+// explicit poll — the application owns the loop and calls SDL_PollEvent at the
+// top of each iteration.  Qt's event loop is framework-managed (app.exec()),
+// so engine services are bridged into it via two peer classes:
+//
+//   EngineInterface  — pure C++ engine services (networking, game loop, session
+//                      lifecycle).  Constructed first, destroyed last.  Has no
+//                      knowledge of Qt.
+//
+//   QtAppInterface   — QObject layer that wires engine events into the Qt event
+//                      loop via EngineEventBridge and exposes screen controllers
+//                      to QML.  Depends on EngineInterface, not the reverse.
+//
+// main() handles only render-pipeline setup (which must happen before
+// QGuiApplication) and coordinates the two interfaces.
+
+#include "EngineInterface.h"
+#include "QtAppInterface.h"
+#include "QtDebugContext.h"
+#include "asset/MediaManager.h"
+#include "event/EventManager.h"
+#include "event/ServerListEvent.h"
+#include "game/ServerList.h"
+#include "net/HttpPool.h"
+#include "render/IQtRenderBackend.h"
+#include "render/RenderBridge.h"
+#include "render/StateBuffer.h"
+#include "utils/Log.h"
+
 #include <QGuiApplication>
-#include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <QQuickWindow>
 
 #include <cstdio>
 
-#include "AppContext.h"
-#include "EngineEventBridge.h"
-#include "utils/Log.h"
-#include "asset/MediaManager.h"
-#include "event/AssetUrlEvent.h"
-#include "event/EventManager.h"
-#include "event/ServerListEvent.h"
-#include "event/SessionEndEvent.h"
-#include "event/SessionStartEvent.h"
-#include "game/ServerList.h"
-#include "game/GameThread.h"
-#include "game/Session.h"
-#include "net/HttpPool.h"
-#include "net/WSClientThread.h"
-#include "render/IQtRenderBackend.h"
-#include "render/RenderBridge.h"
-#include "render/StateBuffer.h"
-#include "ui/UIManager.h"
-#include "ui/controllers/CharSelectController.h"
-#include "ui/controllers/CourtroomController.h"
-#include "ui/controllers/DummyController.h"
-#include "ui/controllers/ServerListController.h"
-#include "ui/CharIconProvider.h"
-#include "ui/EmoteIconProvider.h"
-
-#include "ao/ao_plugin.h"
-#include "ao/ui/screens/ServerListScreen.h"
-
 int main(int argc, char* argv[]) {
-    // Disable stdout buffering so log output appears immediately in Qt Creator.
     setvbuf(stdout, nullptr, _IONBF, 0);
-
     Log::info("[main] starting");
 
 #if !defined(Q_OS_APPLE)
@@ -45,154 +42,56 @@ int main(int argc, char* argv[]) {
 #endif
 
     QGuiApplication app(argc, argv);
-    app.setApplicationName("Attorney Online");
+    QGuiApplication::setApplicationName("Attorney Online");
 
-    // Internal render resolution: 256×192 base at 4× scale → 1024×768.
-    constexpr int renderW = 256 * 4;
-    constexpr int renderH = 192 * 4;
+    // --- Render pipeline (must be primed before QML engine) -------------------
 
-    // Prime the bridge before the QML engine is created.  SceneTextureItem's
-    // initGL() (render thread) reads these values to construct its RenderManager.
-    StateBuffer stateBuffer;
-    RenderBridge::instance().setStateBuffer(&stateBuffer, renderW, renderH);
-    Log::debug("[main] RenderBridge primed ({}x{})", renderW, renderH);
+    constexpr int render_w = 256 * 4;
+    constexpr int render_h = 192 * 4;
 
-    // Set the shader backend before the game thread starts so that any
-    // shader loaded by the presenter resolves to the correct subdirectory
-    // (metal/ vs glsl/).  The backend name is a link-time constant from
-    // the IQtRenderBackend implementation.
-    auto gpuBackend = create_qt_render_backend();
-    MediaManager::instance().assets().set_shader_backend(gpuBackend->backendName());
-    Log::debug("[main] shader backend set to '{}'", gpuBackend->backendName());
+    StateBuffer state_buffer;
+    RenderBridge::instance().setStateBuffer(&state_buffer, render_w, render_h);
+    Log::debug("[main] RenderBridge primed ({}x{})", render_w, render_h);
 
-    // AO2 scene presenter drives the courtroom renderer.
-    auto   presenter = ao::create_presenter();
-    GameThread gameThread(stateBuffer, *presenter);
+    auto gpu_backend = create_qt_render_backend();
+    MediaManager::instance().assets().set_shader_backend(gpu_backend->backendName());
+    QtDebugContext::instance().backend_name = gpu_backend->backendName();
+    Log::debug("[main] shader backend set to '{}'", gpu_backend->backendName());
 
-    // --- Navigation -----------------------------------------------------------
+    // --- Engine + Qt interface (peers) ----------------------------------------
 
-    UIManager uiMgr;
-    uiMgr.push_screen(std::make_unique<ServerListScreen>());
+    EngineInterface engine(state_buffer);
 
-    // --- Controllers (construction order matters: crCtrl before csCtrl) ------
+    auto& qt_iface = QtAppInterface::instance();
+    qt_iface.init(engine);
 
-    CourtroomController  crController(uiMgr);
-    CharSelectController csController(uiMgr, crController);
-    ServerListController slController(uiMgr);
-    DummyController      dummyController(uiMgr);
-
-    AppContext::instance().setUIManager(&uiMgr);
-    AppContext::instance().setControllers(&slController, &csController, &crController);
-    AppContext::instance().setDummyController(&dummyController);
-    Log::debug("[main] controllers created");
-
-    // Initialise QML context before the engine loads Main.qml.
-    QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty("app", &AppContext::instance());
-    engine.addImageProvider(
-        QStringLiteral("charicon"),
-        new CharIconProvider(MediaManager::instance().assets()));
-    engine.addImageProvider(
-        QStringLiteral("emoteicon"),
-        new EmoteIconProvider(MediaManager::instance().assets()));
-    Log::debug("[main] QML engine created");
-
-    // --- Network + HTTP -------------------------------------------------------
-
-    HttpPool httpPool(4);
-
-    // Kick off the server-list fetch immediately.
-    Log::info("[main] fetching server list");
-    httpPool.get(
-        "http://servers.aceattorneyonline.com", "/servers",
-        [](HttpResponse resp) {
-            Log::debug("[main] server list HTTP response: {}", resp.status);
-            if (resp.status == 200) {
-                ServerList svlist(resp.body);
-                EventManager::instance()
-                    .get_channel<ServerListEvent>()
-                    .publish(ServerListEvent(std::move(svlist)));
-            }
-        });
-
-    auto protocol = ao::create_protocol();
-    WSClientThread netThread(*protocol);
-
-    // --- Event bridge ---------------------------------------------------------
-    //
-    // All drains run on the main thread, in registration order, each time the
-    // Qt event loop wakes up.
-
-    std::unique_ptr<Session> activeSession;
-
-    EngineEventBridge bridge;
-
-    // 1. Deliver HTTP callbacks to their originators on the main thread.
-    bridge.addChannel([&] { httpPool.poll(); });
-
-    // 2. Session lifecycle.
-    bridge.addChannel([&] {
-        if (EventManager::instance().get_channel<SessionStartEvent>().get_event()) {
-            Log::info("[main] session started");
-            activeSession = std::make_unique<Session>(
-                MediaManager::instance().mounts_ref(),
-                MediaManager::instance().assets());
-            activeSession->add_http_mount(
-                "https://attorneyoffline.de/base/", httpPool, 300);
-        }
-
-        auto& assetCh = EventManager::instance().get_channel<AssetUrlEvent>();
-        while (auto ev = assetCh.get_event()) {
-            if (activeSession) {
-                Log::debug("[main] adding asset mount: {}", ev->url());
-                activeSession->add_http_mount(ev->url(), httpPool);
-            }
-        }
-
-        if (EventManager::instance().get_channel<SessionEndEvent>().get_event()) {
-            Log::info("[main] session ended");
-            activeSession.reset();
-        }
-    });
-
-    // 3. Drain all controllers — each pulls only its own EventChannels.
-    bridge.addChannel([&] {
-        slController.drain();
-        csController.drain();
-        crController.drain();
-        // DummyController::drain() is a no-op; skip for clarity.
-    });
-
-    // 4. Propagate UIManager's active screen id to QML for Loader navigation.
-    bridge.addChannel([&] { AppContext::instance().syncCurrentScreenId(); });
-
-    bridge.start();
-    Log::debug("[main] event bridge started");
-
-    // --- QML ------------------------------------------------------------------
-
-    Log::info("[main] loading QML module");
-    engine.loadFromModule("AO", "Main");
-    if (engine.rootObjects().isEmpty()) {
-        Log::fatal("[main] QML engine failed to load — no root objects");
-        bridge.stop();
-        netThread.stop();
-        gameThread.stop();
-        httpPool.stop();
+    if (!qt_iface.setup_qml()) {
+        qt_iface.stop();
+        engine.stop();
         MediaManager::instance().shutdown();
         return -1;
     }
-    Log::info("[main] QML loaded, entering event loop");
+
+    // Kick off the server-list fetch now that HTTP pool is ready.
+    Log::info("[main] fetching server list");
+    engine.http().get("http://servers.aceattorneyonline.com", "/servers", [](HttpResponse resp) {
+        Log::debug("[main] server list HTTP response: {}", resp.status);
+        if (resp.status == 200) {
+            ServerList sv_list(resp.body);
+            EventManager::instance().get_channel<ServerListEvent>().publish(ServerListEvent(std::move(sv_list)));
+        }
+    });
+
+    qt_iface.start();
+    Log::info("[main] entering event loop");
 
     int result = app.exec();
 
     // --- Shutdown (reverse construction order) --------------------------------
 
     Log::info("[main] event loop exited (code {}), shutting down", result);
-    bridge.stop();
-    netThread.stop();
-    gameThread.stop();
-    httpPool.stop();
+    qt_iface.stop();
+    engine.stop();
     MediaManager::instance().shutdown();
     Log::info("[main] shutdown complete");
 

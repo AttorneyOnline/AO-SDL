@@ -51,6 +51,6 @@ class SceneTextureItem : public QQuickItem {
     bool m_initialized = false;
 
     // Scene-graph wrapper for the renderer's offscreen texture.
-    QRhiTexture* m_rhiTexture  = nullptr;
-    uintptr_t    m_cachedTexId = 0;
+    QRhiTexture* m_rhiTexture = nullptr;
+    uintptr_t m_cachedTexId = 0;
 };

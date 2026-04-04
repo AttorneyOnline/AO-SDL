@@ -16,7 +16,7 @@ class ChatModel : public QAbstractListModel {
 
   public:
     enum Role {
-        SenderRole   = Qt::UserRole + 1,
+        SenderRole = Qt::UserRole + 1,
         MessageRole,
         IsSystemRole,
     };
@@ -24,7 +24,7 @@ class ChatModel : public QAbstractListModel {
     struct ChatLine {
         QString sender;
         QString message;
-        bool    isSystem = false;
+        bool isSystem = false;
     };
 
     explicit ChatModel(QObject* parent = nullptr);

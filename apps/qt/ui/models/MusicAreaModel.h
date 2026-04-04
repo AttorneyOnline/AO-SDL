@@ -21,7 +21,7 @@ class MusicAreaModel : public QAbstractListModel {
 
   public:
     enum Role {
-        NameRole        = Qt::UserRole + 1,
+        NameRole = Qt::UserRole + 1,
         PlayerCountRole,
         IsAreaRole,
         StatusRole,
@@ -31,8 +31,8 @@ class MusicAreaModel : public QAbstractListModel {
 
     struct Entry {
         QString name;
-        int     playerCount = 0;
-        bool    isArea      = false;
+        int playerCount = 0;
+        bool isArea = false;
         QString status;
         QString cm;
         QString lock;

@@ -38,23 +38,23 @@ class CourtroomController : public IQtScreenController {
     Q_OBJECT
 
     // --- Read-only models ---
-    Q_PROPERTY(ChatModel*       chatModel       READ chatModel       CONSTANT)
+    Q_PROPERTY(ChatModel* chatModel READ chatModel CONSTANT)
     Q_PROPERTY(PlayerListModel* playerListModel READ playerListModel CONSTANT)
-    Q_PROPERTY(EvidenceModel*   evidenceModel   READ evidenceModel   CONSTANT)
-    Q_PROPERTY(MusicAreaModel*  musicAreaModel  READ musicAreaModel  CONSTANT)
-    Q_PROPERTY(EmoteModel*      emoteModel      READ emoteModel      CONSTANT)
+    Q_PROPERTY(EvidenceModel* evidenceModel READ evidenceModel CONSTANT)
+    Q_PROPERTY(MusicAreaModel* musicAreaModel READ musicAreaModel CONSTANT)
+    Q_PROPERTY(EmoteModel* emoteModel READ emoteModel CONSTANT)
 
     // --- HUD scalars ---
-    Q_PROPERTY(int     defHp       READ defHp       NOTIFY defHpChanged)
-    Q_PROPERTY(int     proHp       READ proHp       NOTIFY proHpChanged)
-    Q_PROPERTY(QString nowPlaying  READ nowPlaying  NOTIFY nowPlayingChanged)
+    Q_PROPERTY(int defHp READ defHp NOTIFY defHpChanged)
+    Q_PROPERTY(int proHp READ proHp NOTIFY proHpChanged)
+    Q_PROPERTY(QString nowPlaying READ nowPlaying NOTIFY nowPlayingChanged)
 
     // --- IC message composition state ---
-    Q_PROPERTY(QString charName      READ charName      NOTIFY charNameChanged)
-    Q_PROPERTY(QString showname      READ showname      WRITE setShowname   NOTIFY shownameChanged)
-    Q_PROPERTY(QString side          READ side          NOTIFY sideChanged)
-    Q_PROPERTY(int     selectedEmote READ selectedEmote NOTIFY selectedEmoteChanged)
-    Q_PROPERTY(bool    preAnim       READ preAnim       WRITE setPreAnim    NOTIFY preAnimChanged)
+    Q_PROPERTY(QString charName READ charName NOTIFY charNameChanged)
+    Q_PROPERTY(QString showname READ showname WRITE setShowname NOTIFY shownameChanged)
+    Q_PROPERTY(QString side READ side NOTIFY sideChanged)
+    Q_PROPERTY(int selectedEmote READ selectedEmote NOTIFY selectedEmoteChanged)
+    Q_PROPERTY(bool preAnim READ preAnim WRITE setPreAnim NOTIFY preAnimChanged)
 
   public:
     explicit CourtroomController(UIManager& uiMgr, QObject* parent = nullptr);
@@ -62,23 +62,49 @@ class CourtroomController : public IQtScreenController {
     void drain() override;
 
     // --- Model accessors ---
-    ChatModel*       chatModel()       { return &m_chat;      }
-    PlayerListModel* playerListModel() { return &m_players;   }
-    EvidenceModel*   evidenceModel()   { return &m_evidence;  }
-    MusicAreaModel*  musicAreaModel()  { return &m_musicArea; }
-    EmoteModel*      emoteModel()      { return &m_emotes;    }
+    ChatModel* chatModel() {
+        return &m_chat;
+    }
+    PlayerListModel* playerListModel() {
+        return &m_players;
+    }
+    EvidenceModel* evidenceModel() {
+        return &m_evidence;
+    }
+    MusicAreaModel* musicAreaModel() {
+        return &m_musicArea;
+    }
+    EmoteModel* emoteModel() {
+        return &m_emotes;
+    }
 
     // --- HUD accessors ---
-    int     defHp()      const { return m_defHp;     }
-    int     proHp()      const { return m_proHp;     }
-    QString nowPlaying() const { return m_nowPlaying; }
+    int defHp() const {
+        return m_defHp;
+    }
+    int proHp() const {
+        return m_proHp;
+    }
+    QString nowPlaying() const {
+        return m_nowPlaying;
+    }
 
     // --- IC composition accessors ---
-    QString charName()      const { return m_charName;      }
-    QString showname()      const { return m_showname;      }
-    QString side()          const { return m_side;          }
-    int     selectedEmote() const { return m_selectedEmote; }
-    bool    preAnim()       const { return m_preAnim;       }
+    QString charName() const {
+        return m_charName;
+    }
+    QString showname() const {
+        return m_showname;
+    }
+    QString side() const {
+        return m_side;
+    }
+    int selectedEmote() const {
+        return m_selectedEmote;
+    }
+    bool preAnim() const {
+        return m_preAnim;
+    }
 
     // --- Setters (QML write-back) ---
     void setShowname(const QString& v);
@@ -144,24 +170,24 @@ class CourtroomController : public IQtScreenController {
     void applyCharacterData();
 
     // --- Models ---
-    ChatModel       m_chat;
+    ChatModel m_chat;
     PlayerListModel m_players;
-    EvidenceModel   m_evidence;
-    MusicAreaModel  m_musicArea;
-    EmoteModel      m_emotes;
+    EvidenceModel m_evidence;
+    MusicAreaModel m_musicArea;
+    EmoteModel m_emotes;
 
     // --- HUD state ---
-    int     m_defHp     = 0;
-    int     m_proHp     = 0;
+    int m_defHp = 0;
+    int m_proHp = 0;
     QString m_nowPlaying;
 
     // --- IC composition state ---
     QString m_charName;
     QString m_showname;
     QString m_side;
-    int     m_charId       = -1;
-    int     m_selectedEmote = 0;
-    bool    m_preAnim       = false;
+    int m_charId = -1;
+    int m_selectedEmote = 0;
+    bool m_preAnim = false;
 
     // --- Character-sheet load tracking (mirrors SDL's last_load_gen_) ---
     int m_lastLoadGen = -1;
@@ -169,19 +195,19 @@ class CourtroomController : public IQtScreenController {
     // --- Area / track cache for incremental ARUP rebuilds ---
     struct AreaState {
         std::string name;
-        int         playerCount = -1;
-        std::string status      = "Unknown";
-        std::string cm          = "Unknown";
-        std::string lock        = "Unknown";
+        int playerCount = -1;
+        std::string status = "Unknown";
+        std::string cm = "Unknown";
+        std::string lock = "Unknown";
     };
-    std::vector<AreaState>   m_areas;
+    std::vector<AreaState> m_areas;
     std::vector<std::string> m_tracks;
 
     // --- Player cache for incremental PR/PU events ---
     struct PlayerCacheEntry {
         QString name;
         QString character;
-        int     areaId = -1;
+        int areaId = -1;
     };
     std::map<int, PlayerCacheEntry> m_playerCache;
 

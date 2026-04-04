@@ -20,8 +20,7 @@
 - `HttpPool` (4 threads) + master-server list fetch on startup
 - `NetworkThread` driven by `ao::create_protocol()`
 - `Session` lifecycle: `SessionStartEvent` → create session + add fallback HTTP mount; `AssetUrlEvent` → add server mount; `SessionEndEvent` → destroy session
-- `AppContext` singleton exposes controllers + `currentScreenId` Q_PROPERTY to QML; `syncCurrentScreenId()` drains UIManager → emits change signal
-- `DummyScreen` + `DummyController` added for Phase 2 nav testing (kept as debug scaffold)
+- `QtAppInterface` singleton owns UIManager, controllers, and EngineEventBridge; exposes controllers + `currentScreenId` Q_PROPERTY to QML; `syncCurrentScreenId()` drains UIManager → emits change signal
 
 ### Phase 3 — Event-driven controllers, UIManager as authority ✓
 - **`IQtScreenController`**: `sync(Screen&)` → `drain()` (no Screen parameter); `navActionRequested` signal removed; controllers navigate via `UIManager` directly
@@ -40,7 +39,8 @@
 apps/qt/
 ├── main.cpp                          Phase 3 wiring — all controllers, bridge, ao::create_presenter()
 ├── CMakeLists.txt                    All sources + QML files registered
-├── AppContext.h/.cpp                 QML context object: controllers + currentScreenId + syncCurrentScreenId()
+├── EngineInterface.h/.cpp            Pure C++ — owns engine services (HttpPool, GameThread, net, session)
+├── QtAppInterface.h/.cpp             QObject — owns UIManager, controllers, EngineEventBridge; QML "app" context property
 ├── EngineEventBridge.h/.cpp          Qt event-loop → drain lambda dispatcher
 ├── NullScenePresenter.h              Kept but no longer used in main; RGB cycling stub
 │
@@ -55,7 +55,6 @@ apps/qt/
 │   │   ├── ServerListController.h/.cpp  drain=ServerListEvent; connectToServer→ServerConnectEvent+push
 │   │   ├── CharSelectController.h/.cpp  drain=CharList+CharsCheck+UIEvent; prefetch; pushCourtroom
 │   │   ├── CourtroomController.h/.cpp   drain=all courtroom events; setInitialCharName(); disconnect→pop_to_root
-│   │   ├── DummyController.h/.cpp       drain=no-op; goBack()→pop_screen()
 │   │   └── IQtScreenController.h        (see above)
 │   │
 │   ├── models/
@@ -67,14 +66,12 @@ apps/qt/
 │   │   └── PlayerListModel.h/.cpp
 │   │
 │   └── screens/
-│       └── DummyScreen.h             Nav marker only; no state; ID="dummy"
 │
 └── qml/
     ├── Main.qml                      ApplicationWindow + SceneTextureItem + Loader on currentScreenId
     ├── ServerListScreen.qml          ListView + direct-connect field
     ├── CharSelectScreen.qml          GridView of chars (name+taken); selectCharacter on click
     ├── CourtroomScreen.qml           Top HUD bar + right OOC chat panel
-    └── DummyScreen.qml               Debug: "Go Back" → dummyController.goBack()
 ```
 
 ---
@@ -86,9 +83,9 @@ apps/qt/
 | UIManager is the only navigation authority | Controllers hold `UIManager&`; call `push_screen` / `pop_screen` / `pop_to_root` directly |
 | No `UIManager::handle_events()` called | EngineEventBridge drains controllers, not UIManager |
 | No `Screen` as data source | Controllers consume EventChannels directly; Screens are navigation markers only |
-| `currentScreenId` drives QML Loader | `AppContext::syncCurrentScreenId()` drains UIManager → emits Q_PROPERTY change signal |
+| `currentScreenId` drives QML Loader | `QtAppInterface::syncCurrentScreenId()` drains UIManager → emits Q_PROPERTY change signal |
 | GL work stays on render thread | `SceneTextureItem::initGL()` / `renderGL()` run on Qt's render thread; controllers on main thread |
-| No `QtUIRenderer` | Removed from build entirely |
+| No `QtUIRenderer` | Deleted |
 
 ---
 
@@ -98,7 +95,6 @@ apps/qt/
 - **Audio** — `AudioThread` + audio device not wired; `ao::create_presenter()` will play music once AudioThread is added.
 - **Courtroom HUD** — health bars, emote grid, IC textbox, evidence panel not exposed to QML.
 - **`CharSelectController::selectCharacter()` double-click shortcut** — re-selecting the same character pushes CourtroomScreen directly (matches SDL behavior); verify server expects the extra round-trip or not.
-- **`DummyScreen` removal** — safe to delete once Phase 4 is stable; currently harmless.
 - **Window polish** — title, resize constraints, DPI scaling, discrete-GPU preference (already done for Windows via `gpu_preference.cpp`).
 - **Font embedding** — NotoEmoji from embedded assets.
 

@@ -1,7 +1,7 @@
 #include "EvidenceModel.h"
 
-EvidenceModel::EvidenceModel(QObject* parent)
-    : QAbstractListModel(parent) {}
+EvidenceModel::EvidenceModel(QObject* parent) : QAbstractListModel(parent) {
+}
 
 void EvidenceModel::reset(const std::vector<EvidenceItem>& items) {
     beginResetModel();
@@ -24,23 +24,26 @@ int EvidenceModel::rowCount(const QModelIndex& parent) const {
 }
 
 QVariant EvidenceModel::data(const QModelIndex& index, int role) const {
-    if (!index.isValid() || index.row() < 0
-        || index.row() >= static_cast<int>(m_entries.size()))
+    if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(m_entries.size()))
         return {};
 
     const EvidenceItem& e = m_entries[index.row()];
     switch (role) {
-    case NameRole:        return QString::fromStdString(e.name);
-    case DescriptionRole: return QString::fromStdString(e.description);
-    case ImageRole:       return QString::fromStdString(e.image);
-    default:              return {};
+    case NameRole:
+        return QString::fromStdString(e.name);
+    case DescriptionRole:
+        return QString::fromStdString(e.description);
+    case ImageRole:
+        return QString::fromStdString(e.image);
+    default:
+        return {};
     }
 }
 
 QHash<int, QByteArray> EvidenceModel::roleNames() const {
     return {
-        { NameRole,        "name"        },
-        { DescriptionRole, "description" },
-        { ImageRole,       "image"       },
+        {NameRole, "name"},
+        {DescriptionRole, "description"},
+        {ImageRole, "image"},
     };
 }

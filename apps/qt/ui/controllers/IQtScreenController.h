@@ -20,8 +20,8 @@ class IQtScreenController : public QObject {
     Q_DISABLE_COPY_MOVE(IQtScreenController)
 
   public:
-    explicit IQtScreenController(QObject* parent = nullptr)
-        : QObject(parent) {}
+    explicit IQtScreenController(QObject* parent = nullptr) : QObject(parent) {
+    }
 
     ~IQtScreenController() override = default;
 

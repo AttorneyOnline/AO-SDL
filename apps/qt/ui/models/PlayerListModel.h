@@ -17,17 +17,17 @@ class PlayerListModel : public QAbstractListModel {
 
   public:
     enum Role {
-        PlayerIdRole  = Qt::UserRole + 1,
+        PlayerIdRole = Qt::UserRole + 1,
         NameRole,
         CharacterRole,
         AreaIdRole,
     };
 
     struct PlayerEntry {
-        int     playerId  = -1;
+        int playerId = -1;
         QString name;
         QString character;
-        int     areaId    = -1;
+        int areaId = -1;
     };
 
     explicit PlayerListModel(QObject* parent = nullptr);

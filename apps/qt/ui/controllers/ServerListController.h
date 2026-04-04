@@ -31,7 +31,9 @@ class ServerListController : public IQtScreenController {
     /// IQtScreenController
     void drain() override;
 
-    ServerListModel* model() { return &m_model; }
+    ServerListModel* model() {
+        return &m_model;
+    }
 
     /// Connect to the server at the given index in the model.
     Q_INVOKABLE void connectToServer(int index);
@@ -42,7 +44,7 @@ class ServerListController : public IQtScreenController {
   private:
     void doConnect(const std::string& host, uint16_t port);
 
-    UIManager&               m_uiMgr;
-    ServerListModel          m_model;
+    UIManager& m_uiMgr;
+    ServerListModel m_model;
     std::vector<ServerEntry> m_entries; ///< Mirrored from ServerListEvent for connectToServer().
 };

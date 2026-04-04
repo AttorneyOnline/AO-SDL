@@ -10,9 +10,8 @@
 #include <memory>
 
 ServerListController::ServerListController(UIManager& uiMgr, QObject* parent)
-    : IQtScreenController(parent)
-    , m_uiMgr(uiMgr)
-{}
+    : IQtScreenController(parent), m_uiMgr(uiMgr) {
+}
 
 void ServerListController::drain() {
     auto& ch = EventManager::instance().get_channel<ServerListEvent>();
@@ -34,7 +33,8 @@ void ServerListController::connectToServer(int index) {
     uint16_t port = 0;
     if (entry.ws_port)
         port = *entry.ws_port;
-    else if (entry.tcp_port) port = *entry.tcp_port;
+    else if (entry.tcp_port)
+        port = *entry.tcp_port;
 
     if (port == 0)
         return;
@@ -48,9 +48,7 @@ void ServerListController::directConnect(const QString& host, quint16 port) {
 
 void ServerListController::doConnect(const std::string& host, uint16_t port) {
     Log::info("[ServerListController] connecting to {}:{}", host, port);
-    EventManager::instance()
-        .get_channel<ServerConnectEvent>()
-        .publish(ServerConnectEvent(host, port));
+    EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(host, port));
 
     m_uiMgr.push_screen(std::make_unique<CharSelectScreen>());
 }

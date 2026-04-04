@@ -39,8 +39,7 @@ qt_add_qml_module(aoqt
         qml/screens/CourtroomScreen.qml
         qml/screens/ServerListScreen.qml
         qml/screens/CharSelectScreen.qml
-        qml/screens/DummyScreen.qml
-    SOURCES
+SOURCES
         render/SceneTextureItem.h
         render/SceneTextureItem.cpp
 )
@@ -64,11 +63,14 @@ target_sources(aoqt PRIVATE
     render/RenderBridge.h
     render/RenderBridge.cpp
 
+    EngineInterface.h
+    EngineInterface.cpp
+
     EngineEventBridge.h
     EngineEventBridge.cpp
 
-    AppContext.h
-    AppContext.cpp
+    QtAppInterface.h
+    QtAppInterface.cpp
 
     ui/CharIconProvider.h
     ui/CharIconProvider.cpp
@@ -82,8 +84,8 @@ target_sources(aoqt PRIVATE
     ui/controllers/CharSelectController.cpp
     ui/controllers/CourtroomController.h
     ui/controllers/CourtroomController.cpp
-    ui/controllers/DummyController.h
-    ui/controllers/DummyController.cpp
+    ui/controllers/DebugController.h
+    ui/controllers/DebugController.cpp
 
     ui/models/CharListModel.h
     ui/models/CharListModel.cpp

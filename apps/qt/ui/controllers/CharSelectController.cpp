@@ -16,13 +16,9 @@
 #include <format>
 #include <memory>
 
-CharSelectController::CharSelectController(UIManager&           uiMgr,
-                                           CourtroomController& crCtrl,
-                                           QObject*             parent)
-    : IQtScreenController(parent)
-    , m_uiMgr(uiMgr)
-    , m_crCtrl(crCtrl)
-{}
+CharSelectController::CharSelectController(UIManager& uiMgr, CourtroomController& crCtrl, QObject* parent)
+    : IQtScreenController(parent), m_uiMgr(uiMgr), m_crCtrl(crCtrl) {
+}
 
 void CharSelectController::drain() {
     // New character list: rebuild roster.
@@ -32,10 +28,10 @@ void CharSelectController::drain() {
         m_chars.reserve(ev->get_characters().size());
         for (const auto& folder : ev->get_characters())
             m_chars.push_back({folder, false});
-        m_hydrateCursor  = 0;
+        m_hydrateCursor = 0;
         m_prefetchCursor = 0;
-        m_retryCursor    = 0;
-        m_selected       = -1;
+        m_retryCursor = 0;
+        m_selected = -1;
         m_model.clear();
         Log::info("[CharSelectController] received character list ({} characters)", m_chars.size());
     }
@@ -62,13 +58,11 @@ void CharSelectController::drain() {
     auto& uiCh = EventManager::instance().get_channel<UIEvent>();
     while (auto ev = uiCh.get_event()) {
         if (ev->get_type() == UIEventType::ENTERED_COURTROOM) {
-            Log::info("[CharSelectController] entering courtroom as '{}' (id={})",
-                      ev->get_character_name(), ev->get_char_id());
+            Log::info("[CharSelectController] entering courtroom as '{}' (id={})", ev->get_character_name(),
+                      ev->get_char_id());
             // Inject character name into CourtroomController before pushing.
             m_crCtrl.setInitialCharName(ev->get_character_name());
-            m_uiMgr.push_screen(
-                std::make_unique<CourtroomScreen>(ev->get_character_name(),
-                                                  ev->get_char_id()));
+            m_uiMgr.push_screen(std::make_unique<CourtroomScreen>(ev->get_character_name(), ev->get_char_id()));
         }
     }
 }
@@ -79,21 +73,17 @@ void CharSelectController::selectCharacter(int index) {
     if (m_chars[index].taken && index != m_selected)
         return;
 
-    Log::debug("[CharSelectController] selectCharacter index={} folder='{}'",
-               index, m_chars[index].folder);
+    Log::debug("[CharSelectController] selectCharacter index={} folder='{}'", index, m_chars[index].folder);
 
     if (index == m_selected) {
         // Already confirmed — push the courtroom directly without server round-trip.
         m_crCtrl.setInitialCharName(m_chars[index].folder);
-        m_uiMgr.push_screen(
-            std::make_unique<CourtroomScreen>(m_chars[index].folder, index));
+        m_uiMgr.push_screen(std::make_unique<CourtroomScreen>(m_chars[index].folder, index));
         return;
     }
 
     m_selected = index;
-    EventManager::instance()
-        .get_channel<CharSelectRequestEvent>()
-        .publish(CharSelectRequestEvent(index));
+    EventManager::instance().get_channel<CharSelectRequestEvent>().publish(CharSelectRequestEvent(index));
 }
 
 void CharSelectController::disconnect() {
@@ -109,8 +99,7 @@ void CharSelectController::hydrateModel() {
     if (m_hydrateCursor >= static_cast<int>(m_chars.size()))
         return;
 
-    int end = std::min(m_hydrateCursor + kHydrateBatch,
-                       static_cast<int>(m_chars.size()));
+    int end = std::min(m_hydrateCursor + kHydrateBatch, static_cast<int>(m_chars.size()));
 
     std::vector<CharListModel::CharEntry> batch;
     batch.reserve(end - m_hydrateCursor);
@@ -118,8 +107,7 @@ void CharSelectController::hydrateModel() {
         const auto& c = m_chars[i];
         QString source;
         if (c.iconResolved)
-            source = QStringLiteral("image://charicon/")
-                   + QString::fromStdString(c.folder);
+            source = QStringLiteral("image://charicon/") + QString::fromStdString(c.folder);
         batch.push_back({QString::fromStdString(c.folder), c.taken, source});
     }
 
@@ -131,17 +119,14 @@ void CharSelectController::prefetchIcons() {
     if (m_chars.empty())
         return;
 
-    AssetLibrary& lib  = MediaManager::instance().assets();
-    auto          exts = MediaManager::instance().mounts_ref().http_extensions(0);
+    AssetLibrary& lib = MediaManager::instance().assets();
+    auto exts = MediaManager::instance().mounts_ref().http_extensions(0);
     if (exts.empty())
         exts = {"webp", "apng", "gif", "png"};
 
     // Drip-feed HTTP prefetch requests — 32 per tick on the initial pass.
-    for (int i = 0; i < 32 && m_prefetchCursor < static_cast<int>(m_chars.size());
-         ++i, ++m_prefetchCursor)
-    {
-        std::string path =
-            std::format("characters/{}/char_icon", m_chars[m_prefetchCursor].folder);
+    for (int i = 0; i < 32 && m_prefetchCursor < static_cast<int>(m_chars.size()); ++i, ++m_prefetchCursor) {
+        std::string path = std::format("characters/{}/char_icon", m_chars[m_prefetchCursor].folder);
         lib.prefetch(path, exts, 0);
     }
 
@@ -149,11 +134,8 @@ void CharSelectController::prefetchIcons() {
     if (m_prefetchCursor >= static_cast<int>(m_chars.size())) {
         if (m_retryCursor >= static_cast<int>(m_chars.size()))
             m_retryCursor = 0;
-        for (int i = 0; i < 16 && m_retryCursor < static_cast<int>(m_chars.size());
-             ++i, ++m_retryCursor)
-        {
-            std::string path =
-                std::format("characters/{}/char_icon", m_chars[m_retryCursor].folder);
+        for (int i = 0; i < 16 && m_retryCursor < static_cast<int>(m_chars.size()); ++i, ++m_retryCursor) {
+            std::string path = std::format("characters/{}/char_icon", m_chars[m_retryCursor].folder);
             // Prefetch unconditionally — AssetLibrary deduplicates in-flight requests.
             lib.prefetch(path, exts, 0);
         }
@@ -174,8 +156,7 @@ void CharSelectController::resolveIcons() {
         if (m_chars[i].iconResolved)
             continue;
 
-        std::string path =
-            std::format("characters/{}/char_icon", m_chars[i].folder);
+        std::string path = std::format("characters/{}/char_icon", m_chars[i].folder);
         auto img = lib.image(path);
         if (!img)
             continue;
@@ -186,8 +167,7 @@ void CharSelectController::resolveIcons() {
         // Otherwise hydrateModel() will include the source when it
         // appends this row in a future tick.
         if (i < m_hydrateCursor) {
-            QString source = QStringLiteral("image://charicon/")
-                           + QString::fromStdString(m_chars[i].folder);
+            QString source = QStringLiteral("image://charicon/") + QString::fromStdString(m_chars[i].folder);
             m_model.setIconSource(i, source);
         }
 

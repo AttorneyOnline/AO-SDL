@@ -1,7 +1,7 @@
 #include "EmoteModel.h"
 
-EmoteModel::EmoteModel(QObject* parent)
-    : QAbstractListModel(parent) {}
+EmoteModel::EmoteModel(QObject* parent) : QAbstractListModel(parent) {
+}
 
 void EmoteModel::reset(std::vector<Entry> entries) {
     beginResetModel();
@@ -26,15 +26,18 @@ QVariant EmoteModel::data(const QModelIndex& index, int role) const {
         return {};
     const auto& e = m_entries[index.row()];
     switch (role) {
-    case CommentRole:    return e.comment;
-    case IconSourceRole: return e.iconSource;
-    default:             return {};
+    case CommentRole:
+        return e.comment;
+    case IconSourceRole:
+        return e.iconSource;
+    default:
+        return {};
     }
 }
 
 QHash<int, QByteArray> EmoteModel::roleNames() const {
     return {
-        { CommentRole,    "comment"    },
-        { IconSourceRole, "iconSource" },
+        {CommentRole, "comment"},
+        {IconSourceRole, "iconSource"},
     };
 }

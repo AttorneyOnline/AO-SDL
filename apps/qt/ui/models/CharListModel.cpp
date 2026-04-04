@@ -1,7 +1,7 @@
 #include "CharListModel.h"
 
-CharListModel::CharListModel(QObject* parent)
-    : QAbstractListModel(parent) {}
+CharListModel::CharListModel(QObject* parent) : QAbstractListModel(parent) {
+}
 
 void CharListModel::clear() {
     if (m_entries.empty())
@@ -15,7 +15,7 @@ void CharListModel::appendBatch(const std::vector<CharEntry>& batch) {
     if (batch.empty())
         return;
     int first = static_cast<int>(m_entries.size());
-    int last  = first + static_cast<int>(batch.size()) - 1;
+    int last = first + static_cast<int>(batch.size()) - 1;
     beginInsertRows({}, first, last);
     m_entries.insert(m_entries.end(), batch.begin(), batch.end());
     endInsertRows();
@@ -48,23 +48,26 @@ int CharListModel::rowCount(const QModelIndex& parent) const {
 }
 
 QVariant CharListModel::data(const QModelIndex& index, int role) const {
-    if (!index.isValid() || index.row() < 0
-        || index.row() >= static_cast<int>(m_entries.size()))
+    if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(m_entries.size()))
         return {};
 
     const CharEntry& e = m_entries[index.row()];
     switch (role) {
-    case NameRole:       return e.name;
-    case TakenRole:      return e.taken;
-    case IconSourceRole: return e.iconSource;
-    default:             return {};
+    case NameRole:
+        return e.name;
+    case TakenRole:
+        return e.taken;
+    case IconSourceRole:
+        return e.iconSource;
+    default:
+        return {};
     }
 }
 
 QHash<int, QByteArray> CharListModel::roleNames() const {
     return {
-        { NameRole,       "name"       },
-        { TakenRole,      "taken"      },
-        { IconSourceRole, "iconSource" },
+        {NameRole, "name"},
+        {TakenRole, "taken"},
+        {IconSourceRole, "iconSource"},
     };
 }

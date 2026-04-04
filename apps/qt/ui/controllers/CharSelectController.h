@@ -32,14 +32,14 @@ class CharSelectController : public IQtScreenController {
     Q_PROPERTY(CharListModel* model READ model CONSTANT)
 
   public:
-    explicit CharSelectController(UIManager&          uiMgr,
-                                  CourtroomController& crCtrl,
-                                  QObject*             parent = nullptr);
+    explicit CharSelectController(UIManager& uiMgr, CourtroomController& crCtrl, QObject* parent = nullptr);
 
     /// IQtScreenController
     void drain() override;
 
-    CharListModel* model() { return &m_model; }
+    CharListModel* model() {
+        return &m_model;
+    }
 
     /// Select the character at index.  Publishes CharSelectRequestEvent.
     Q_INVOKABLE void selectCharacter(int index);
@@ -50,23 +50,23 @@ class CharSelectController : public IQtScreenController {
   private:
     struct CharEntry {
         std::string folder;
-        bool        taken         = false;
-        bool        iconResolved  = false;
+        bool taken = false;
+        bool iconResolved = false;
     };
 
     void hydrateModel();
     void prefetchIcons();
     void resolveIcons();
 
-    UIManager&           m_uiMgr;
+    UIManager& m_uiMgr;
     CourtroomController& m_crCtrl;
-    CharListModel        m_model;
+    CharListModel m_model;
 
     std::vector<CharEntry> m_chars;
-    int                    m_selected       = -1;
-    int                    m_hydrateCursor  = 0;
-    int                    m_prefetchCursor = 0;
-    int                    m_retryCursor    = 0;
+    int m_selected = -1;
+    int m_hydrateCursor = 0;
+    int m_prefetchCursor = 0;
+    int m_retryCursor = 0;
 
     /// Entries inserted into the model per tick during initial hydration.
     static constexpr int kHydrateBatch = 64;

@@ -20,7 +20,7 @@ class RenderBridge : public QObject {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(RenderBridge)
 
-    Q_PROPERTY(int renderWidth  READ renderWidth  CONSTANT)
+    Q_PROPERTY(int renderWidth READ renderWidth CONSTANT)
     Q_PROPERTY(int renderHeight READ renderHeight CONSTANT)
 
   public:
@@ -35,7 +35,9 @@ class RenderBridge : public QObject {
      */
     void setStateBuffer(StateBuffer* buf, int renderWidth, int renderHeight);
 
-    StateBuffer* stateBuffer() const { return m_stateBuffer; }
+    StateBuffer* stateBuffer() const {
+        return m_stateBuffer;
+    }
 
     /**
      * @brief Bind the RenderManager and its render dimensions.
@@ -45,13 +47,19 @@ class RenderBridge : public QObject {
      */
     void setRenderManager(RenderManager* rm, int renderWidth, int renderHeight);
 
-    RenderManager* renderManager() const { return m_renderManager; }
+    RenderManager* renderManager() const {
+        return m_renderManager;
+    }
 
     /// Render-resolution width passed to create_renderer().
-    int renderWidth()  const { return m_renderWidth;  }
+    int renderWidth() const {
+        return m_renderWidth;
+    }
 
     /// Render-resolution height passed to create_renderer().
-    int renderHeight() const { return m_renderHeight; }
+    int renderHeight() const {
+        return m_renderHeight;
+    }
 
     /**
      * @brief Advance the render pipeline by one frame.
@@ -80,8 +88,8 @@ class RenderBridge : public QObject {
   private:
     explicit RenderBridge(QObject* parent = nullptr);
 
-    StateBuffer*   m_stateBuffer   = nullptr;
+    StateBuffer* m_stateBuffer = nullptr;
     RenderManager* m_renderManager = nullptr;
-    int            m_renderWidth   = 0;
-    int            m_renderHeight  = 0;
+    int m_renderWidth = 0;
+    int m_renderHeight = 0;
 };

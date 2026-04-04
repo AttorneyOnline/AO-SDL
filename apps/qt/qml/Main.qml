@@ -17,9 +17,19 @@ ApplicationWindow {
             case "server_list": return "screens/ServerListScreen.qml"
             case "char_select": return "screens/CharSelectScreen.qml"
             case "courtroom":   return "screens/CourtroomScreen.qml"
-            case "dummy":       return "screens/DummyScreen.qml"
             default:            return ""
             }
         }
+    }
+
+    // Debug overlay — toggled with F12.
+    DebugOverlay {
+        id: debugOverlay
+        visible: false
+    }
+
+    Shortcut {
+        sequence: "F12"
+        onActivated: debugOverlay.visible = !debugOverlay.visible
     }
 }

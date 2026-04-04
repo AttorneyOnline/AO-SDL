@@ -18,7 +18,7 @@ class EvidenceModel : public QAbstractListModel {
 
   public:
     enum Role {
-        NameRole        = Qt::UserRole + 1,
+        NameRole = Qt::UserRole + 1,
         DescriptionRole,
         ImageRole,
     };
