@@ -57,6 +57,8 @@ cmake --build out/build/x64-debug
 
 Available presets: `x64-debug`, `x64-release`, `x86-debug`, `x86-release`, `linux-debug`, `macos-debug`, `macos-release`.
 
+> **Note — LTO is disabled on MSVC.**  SDL2 sets `/Gs1048576` (1 MB stack probe threshold) to avoid C runtime dependencies in its freestanding code.  With LTCG, the linker merges translation units during a global code generation pass, and SDL's high `/Gs` value poisons the result: merged functions lose `__chkstk` stack probes even when the game's TUs were compiled with the default `/Gs4096`.  On Windows, thread stacks grow via a single guard page that must be touched sequentially — without `__chkstk`, any function with a frame larger than one page can jump past the guard into uncommitted memory, crashing with an ACCESS_VIOLATION indistinguishable from a null-pointer deref.  LTO remains enabled for GCC/Clang (macOS, Linux) where stack growth is handled by the kernel and no compiler cooperation is needed.
+
 ### Run Tests
 
 ```sh

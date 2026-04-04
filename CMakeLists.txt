@@ -4,22 +4,18 @@ project(aosdl LANGUAGES CXX C)
 if(MSVC)
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
-
-    # SDL2 sets /Gs1048576 (1 MB stack probe threshold) in its CMakeLists.
-    # With LTO, MSVC's LTCG can inline SDL code into game functions, and the
-    # merged function inherits the high threshold — so __chkstk is never
-    # emitted for frames under 1 MB. This causes stack overflow crashes when
-    # large inlined frames (>4 KB) skip the guard page on threads with small
-    # committed stacks.  Force the default 4 KB threshold on our own code.
-    add_compile_options(/Gs4096)
 endif()
 
 if(WIN32)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
-# LTO for Release builds (significantly reduces binary size)
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+# LTO for Release builds (significantly reduces binary size).
+# Disabled on MSVC: LTCG's global code generation merges TUs with conflicting
+# /Gs flags (SDL2 sets /Gs1048576 to avoid CRT deps).  The merged functions
+# lose __chkstk stack probes, causing stack overflow crashes on Windows threads
+# whose committed stack is smaller than the inlined frame.  See README.md.
+if(NOT MSVC AND (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel"))
     include(CheckIPOSupported)
     check_ipo_supported(RESULT IPO_SUPPORTED)
     if(IPO_SUPPORTED)
@@ -105,17 +101,6 @@ if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(SDL2_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
     set(SDL2_DISABLE_UNINSTALL ON CACHE BOOL "" FORCE)
     add_subdirectory(third-party/SDL)
-
-    # SDL2 sets /GS- and /Gs1048576 on its DIRECTORY to avoid CRT dependencies
-    # in its freestanding functions.  With LTO (LTCG) the linker performs global
-    # code generation and the /Gs1048576 from SDL's TUs poisons the entire link:
-    # merged functions lose __chkstk even when the other TU was compiled with
-    # /Gs4096.  Override it — we link the CRT anyway, so __chkstk is available.
-    if(MSVC)
-        get_property(_sdl_opts DIRECTORY third-party/SDL PROPERTY COMPILE_OPTIONS)
-        list(REMOVE_ITEM _sdl_opts "/Gs1048576")
-        set_property(DIRECTORY third-party/SDL PROPERTY COMPILE_OPTIONS ${_sdl_opts})
-    endif()
 endif()
 
 # --- bit7z — archive extraction only ----------------------------------------
