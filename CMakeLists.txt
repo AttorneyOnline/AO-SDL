@@ -4,6 +4,14 @@ project(aosdl LANGUAGES CXX C)
 if(MSVC)
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+
+    # SDL2 sets /Gs1048576 (1 MB stack probe threshold) in its CMakeLists.
+    # With LTO, MSVC's LTCG can inline SDL code into game functions, and the
+    # merged function inherits the high threshold — so __chkstk is never
+    # emitted for frames under 1 MB. This causes stack overflow crashes when
+    # large inlined frames (>4 KB) skip the guard page on threads with small
+    # committed stacks.  Force the default 4 KB threshold on our own code.
+    add_compile_options(/Gs4096)
 endif()
 
 if(WIN32)

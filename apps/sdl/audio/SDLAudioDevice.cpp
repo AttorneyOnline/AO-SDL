@@ -143,8 +143,8 @@ void SDLAudioDevice::mix(float* output, int frames) {
             int out_pos = 0;
 
             while (remaining > 0) {
-                int to_read = std::min(remaining, (int)(sizeof(mix_buf_) / sizeof(mix_buf_[0]) / 2));
-                int got = ch.stream->read_frames(mix_buf_, to_read);
+                int to_read = std::min(remaining, (int)(mix_buf_.size() / 2));
+                int got = ch.stream->read_frames(mix_buf_.data(), to_read);
 
                 for (int i = 0; i < got * 2; ++i)
                     output[out_pos * 2 + i] += mix_buf_[i] * vol;
