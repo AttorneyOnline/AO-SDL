@@ -291,7 +291,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 8
       },
       "collapsed": false
     },
@@ -302,7 +302,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 5
+        "y": 9
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -331,7 +331,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 5
+        "y": 9
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -360,7 +360,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 5
+        "y": 9
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -394,7 +394,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 17
       },
       "collapsed": false
     },
@@ -405,7 +405,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 14
+        "y": 18
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -434,7 +434,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 14
+        "y": 18
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -463,7 +463,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 14
+        "y": 18
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -497,7 +497,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 14
+        "y": 18
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -526,7 +526,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 26
       },
       "collapsed": false
     },
@@ -537,7 +537,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 23
+        "y": 27
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -571,7 +571,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 23
+        "y": 27
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -605,7 +605,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 23
+        "y": 27
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -634,7 +634,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 35
       },
       "collapsed": false
     },
@@ -645,7 +645,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 32
+        "y": 36
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -674,7 +674,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 32
+        "y": 36
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -703,7 +703,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 32
+        "y": 36
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -732,7 +732,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 44
       },
       "collapsed": false
     },
@@ -743,7 +743,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 41
+        "y": 45
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -777,7 +777,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 41
+        "y": 45
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -809,7 +809,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 41
+        "y": 45
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -840,7 +840,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 41
+        "y": 45
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -874,7 +874,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 53
       },
       "collapsed": false
     },
@@ -885,7 +885,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 50
+        "y": 54
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -914,7 +914,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 50
+        "y": 54
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -945,7 +945,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 50
+        "y": 54
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -977,7 +977,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 62
       },
       "collapsed": false
     },
@@ -988,7 +988,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 59
+        "y": 63
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1022,7 +1022,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 59
+        "y": 63
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1056,7 +1056,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 59
+        "y": 63
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1085,7 +1085,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 71
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1114,7 +1114,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 77
       },
       "collapsed": false
     },
@@ -1125,7 +1125,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 74
+        "y": 78
       },
       "targets": [
         {
@@ -1204,7 +1204,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 74
+        "y": 78
       },
       "fieldConfig": {
         "defaults": {
@@ -1236,7 +1236,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 84
       },
       "collapsed": false
     },
@@ -1247,7 +1247,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 85
       },
       "targets": [
         {
@@ -1275,7 +1275,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 89
       },
       "collapsed": false
     },
@@ -1286,7 +1286,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 90
       },
       "targets": [
         {
@@ -1414,7 +1414,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 96
+        "y": 100
       },
       "collapsed": false
     },
@@ -1425,7 +1425,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 97
+        "y": 101
       },
       "fieldConfig": {
         "defaults": {
@@ -1453,7 +1453,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 97
+        "y": 101
       },
       "fieldConfig": {
         "defaults": {
@@ -1482,7 +1482,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 105
+        "y": 109
       },
       "collapsed": false
     },
@@ -1493,7 +1493,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 106
+        "y": 110
       },
       "targets": [
         {
@@ -1537,7 +1537,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 116
+        "y": 120
       },
       "collapsed": false
     },
@@ -1548,7 +1548,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 117
+        "y": 121
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1577,7 +1577,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 117
+        "y": 121
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1606,7 +1606,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 117
+        "y": 121
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1635,7 +1635,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 117
+        "y": 121
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1669,7 +1669,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 125
+        "y": 129
       },
       "fieldConfig": {
         "defaults": {
@@ -1692,7 +1692,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 125
+        "y": 129
       },
       "fieldConfig": {
         "defaults": {
@@ -1715,7 +1715,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 125
+        "y": 129
       },
       "fieldConfig": {
         "defaults": {
@@ -1738,7 +1738,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 125
+        "y": 129
       },
       "fieldConfig": {
         "defaults": {
@@ -1761,7 +1761,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 129
+        "y": 133
       },
       "collapsed": false
     },
@@ -1772,7 +1772,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 130
+        "y": 134
       },
       "datasource": {
         "type": "loki",
@@ -1795,6 +1795,90 @@
         "dedupStrategy": "none",
         "enableInfiniteScrolling": true
       }
+    },
+    {
+      "type": "gauge",
+      "title": "System Load",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 4
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "orange",
+                "value": 0.75
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "max((irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))) or vector(0), (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))) or vector(0))",
+          "legendFormat": "system load",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "System Load Breakdown",
+      "gridPos": {
+        "h": 4,
+        "w": 18,
+        "x": 6,
+        "y": 4
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "legendFormat": "worker pool",
+          "refId": "A"
+        },
+        {
+          "expr": "irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "legendFormat": "poll thread",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }
