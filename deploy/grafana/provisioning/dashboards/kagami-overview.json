@@ -6,13 +6,106 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "links": [],
+  "refresh": "5s",
+  "liveNow": true,
+  "schemaVersion": 39,
+  "tags": [
+    "kagami"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Server",
+        "type": "custom",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [
+          {
+            "text": "All",
+            "value": "$__all",
+            "selected": true
+          },
+          {
+            "text": "staging",
+            "value": "staging",
+            "selected": false
+          },
+          {
+            "text": "canary",
+            "value": "canary",
+            "selected": false
+          }
+        ],
+        "query": "staging,canary",
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "log_level",
+        "label": "Log Level",
+        "type": "custom",
+        "current": {
+          "text": "All",
+          "value": ".+"
+        },
+        "options": [
+          {
+            "text": "All",
+            "value": ".+",
+            "selected": true
+          },
+          {
+            "text": "Debug",
+            "value": "debug",
+            "selected": false
+          },
+          {
+            "text": "Info",
+            "value": "info",
+            "selected": false
+          },
+          {
+            "text": "Warn",
+            "value": "warn",
+            "selected": false
+          },
+          {
+            "text": "Error",
+            "value": "error",
+            "selected": false
+          },
+          {
+            "text": "Critical",
+            "value": "critical",
+            "selected": false
+          }
+        ],
+        "query": "debug,info,warn,error,critical",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Kagami Overview",
+  "uid": "kagami-overview",
   "panels": [
     {
       "type": "stat",
       "title": "Uptime",
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 0
       },
@@ -25,24 +118,18 @@
       "targets": [
         {
           "expr": "kagami_uptime_seconds{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
-      "title": "Memory (RSS)",
+      "title": "Memory",
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 4,
+        "w": 3,
+        "x": 3,
         "y": 0
       },
       "fieldConfig": {
@@ -54,133 +141,148 @@
       "targets": [
         {
           "expr": "kagami_process_resident_bytes{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
-      "title": "Players Online",
+      "title": "Online",
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 8,
+        "w": 3,
+        "x": 6,
         "y": 0
       },
       "fieldConfig": {
         "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          }
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(kagami_sessions{instance=~\"$instance\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Joined",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
         },
         "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_sessions_joined{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
       "title": "Moderators",
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 12,
         "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_sessions_moderators{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
-      "title": "WS Connections",
+      "title": "WS Conns",
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 16,
+        "w": 3,
+        "x": 15,
         "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_ws_connections{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
-      "title": "Characters Taken",
+      "title": "TCP Conns",
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 3,
+        "x": 18,
         "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_http_open_connections{instance=~\"$instance\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Chars Taken",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_characters_taken{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "row",
@@ -198,17 +300,17 @@
       "title": "Sessions by Protocol",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 5
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
           "custom": {
-            "fillOpacity": 20,
-            "stacking": {
-              "mode": "normal"
-            },
+            "fillOpacity": 10,
             "connectNulls": true
           }
         },
@@ -216,35 +318,28 @@
       },
       "targets": [
         {
-          "expr": "kagami_sessions{instance=~\"$instance\",protocol=\"ao2\"}",
-          "legendFormat": "AO2",
+          "expr": "kagami_sessions{instance=~\"$instance\"}",
+          "legendFormat": "{{protocol}}",
           "refId": "A"
-        },
-        {
-          "expr": "kagami_sessions{instance=~\"$instance\",protocol=\"aonx\"}",
-          "legendFormat": "AONX",
-          "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
       "title": "Players per Area",
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 5
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
           "custom": {
-            "fillOpacity": 20,
-            "stacking": {
-              "mode": "normal"
-            },
+            "fillOpacity": 10,
             "connectNulls": true
           }
         },
@@ -256,13 +351,45 @@
           "legendFormat": "{{area}}",
           "refId": "A"
         }
-      ],
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Connection Types Over Time",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 5
+      },
       "maxDataPoints": 10000,
-      "interval": "1s"
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_ws_connections{instance=~\"$instance\"}",
+          "legendFormat": "WebSocket (AO2)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kagami_sessions{instance=~\"$instance\",protocol=\"aonx\"})",
+          "legendFormat": "REST/SSE (AONX)",
+          "refId": "B"
+        }
+      ]
     },
     {
       "type": "row",
-      "title": "Network I/O",
+      "title": "HTTP Traffic",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -273,16 +400,18 @@
     },
     {
       "type": "timeseries",
-      "title": "HTTP Requests / sec",
+      "title": "Requests / sec",
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 14
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
+          "unit": "ops",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
@@ -292,23 +421,52 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kagami_http_requests_total{instance=~\"$instance\"}[1m])) by (method)",
-          "legendFormat": "{{method}}",
+          "expr": "sum by (method) (irate(kagami_http_requests_total{instance=~\"$instance\"}[2s]))",
+          "legendFormat": "{{{{method}}}}",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
-      "title": "HTTP Response Bytes / sec",
+      "title": "Status Codes / sec",
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 14
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (irate(kagami_http_requests_total{instance=~\"$instance\"}[2s]))",
+          "legendFormat": "{{{{status}}}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Throughput",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
@@ -321,98 +479,68 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kagami_http_response_bytes_total{instance=~\"$instance\"}[1m])) by (method)",
-          "legendFormat": "{{method}}",
+          "expr": "irate(kagami_http_request_bytes_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "request bytes/s",
           "refId": "A"
+        },
+        {
+          "expr": "irate(kagami_http_response_bytes_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "response bytes/s",
+          "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
-      "title": "HTTP Status Codes / sec",
+      "title": "Open Connections",
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 18,
         "y": 14
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
+          "unit": "short",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "2.."
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "4.."
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "5.."
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "targets": [
         {
-          "expr": "sum(rate(kagami_http_requests_total{instance=~\"$instance\"}[1m])) by (status)",
-          "legendFormat": "{{status}}",
+          "expr": "kagami_http_open_connections{instance=~\"$instance\"}",
+          "legendFormat": "TCP connections",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
+    },
+    {
+      "type": "row",
+      "title": "WebSocket & SSE",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "WebSocket Traffic",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 22
+        "y": 23
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
@@ -425,31 +553,31 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "Bytes In",
+          "expr": "irate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "Bytes Out",
+          "expr": "irate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "tx",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
       "title": "WebSocket Frames / sec",
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 22
+        "w": 8,
+        "x": 8,
+        "y": 23
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "fps",
+          "unit": "ops",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
@@ -459,47 +587,33 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_frames_in_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "Frames In",
+          "expr": "irate(kagami_ws_frames_in_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_ws_frames_out_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "Frames Out",
+          "expr": "irate(kagami_ws_frames_out_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "tx",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "row",
-      "title": "SSE Events",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 30
-      },
-      "collapsed": false
+      ]
     },
     {
       "type": "timeseries",
-      "title": "SSE Events / sec by Type",
+      "title": "SSE Events / sec",
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 31
+        "w": 8,
+        "x": 16,
+        "y": 23
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "eps",
+          "unit": "ops",
           "custom": {
-            "fillOpacity": 15,
-            "stacking": {
-              "mode": "normal"
-            },
+            "fillOpacity": 10,
             "connectNulls": true
           }
         },
@@ -507,34 +621,34 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_sse_events_total{instance=~\"$instance\"}[1m])",
+          "expr": "irate(kagami_sse_events_total{instance=~\"$instance\"}[2s])",
           "legendFormat": "{{event}}",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "row",
-      "title": "Server Internals",
+      "title": "Dispatch Lock",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 31
       },
       "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "Dispatch Lock Acquisitions / sec",
+      "title": "Acquisitions / sec",
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 40
+        "y": 32
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -551,48 +665,19 @@
           "legendFormat": "acquisitions",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
-      "title": "Dispatch Lock Wait Time",
+      "title": "Avg Wait per Request",
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 40
+        "y": 32
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "\u00b5s",
-          "custom": {
-            "fillOpacity": 10,
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "irate(kagami_dispatch_lock_wait_nanoseconds_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "wait \u00b5s/sec",
-          "refId": "A"
-        }
-      ],
       "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "timeseries",
-      "title": "Avg Lock Wait per Request",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 40
-      },
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "ns",
@@ -609,19 +694,19 @@
           "legendFormat": "avg wait/req",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
-      "title": "Lock Hold Time by Endpoint",
+      "title": "Hold Time by Endpoint",
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
-        "y": 48
+        "x": 16,
+        "y": 32
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "ns",
@@ -638,19 +723,30 @@
           "legendFormat": "{{endpoint}}",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Worker Pool",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "Worker Utilization",
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 48
+        "w": 6,
+        "x": 0,
+        "y": 41
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -672,19 +768,82 @@
           "legendFormat": "total",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
-      "title": "HTTP Queue Depth",
+      "title": "Worker Section Breakdown",
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 48
+        "w": 6,
+        "x": 6,
+        "y": 41
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "custom": {
+            "fillOpacity": 20,
+            "connectNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (section) (irate(kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "legendFormat": "{{section}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Per-Worker Utilization %",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 41
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": true
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (worker) (kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\",section=\"handler\"}) / sum by (worker) (kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\",section=~\"handler|idle\"})",
+          "legendFormat": "worker {{worker}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 41
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -706,19 +865,133 @@
           "legendFormat": "result queue",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Poll Thread",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "TCP Traffic",
+      "title": "Events / sec",
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 56
+        "y": 50
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_http_poll_events_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "events/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Utilization %",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 50
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": true
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "legendFormat": "utilization",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Section Breakdown",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 50
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "custom": {
+            "fillOpacity": 20,
+            "connectNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_http_poll_section_nanoseconds_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "{{section}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "System Resources",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "TCP Socket Traffic",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 59
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
@@ -740,9 +1013,7 @@
           "legendFormat": "tx",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
@@ -751,11 +1022,13 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 56
+        "y": 59
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ops",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
@@ -774,9 +1047,7 @@
           "legendFormat": "retransmits/s",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
@@ -785,8 +1056,10 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 56
+        "y": 59
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
@@ -803,19 +1076,19 @@
           "legendFormat": "RSS",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
       "title": "HAMT Node Copy Throughput",
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 67
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
@@ -829,198 +1102,7 @@
       "targets": [
         {
           "expr": "irate(kagami_cow_copy_bytes_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "COW copy rate",
-          "refId": "A"
-        }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "timeseries",
-      "title": "Poll Thread Events/sec",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 72
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": {
-            "fillOpacity": 10,
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "irate(kagami_http_poll_events_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "events/s",
-          "refId": "A"
-        }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "timeseries",
-      "title": "Poll Thread Idle vs Busy",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 72
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ns",
-          "custom": {
-            "fillOpacity": 10,
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "busy ns/s",
-          "refId": "A"
-        },
-        {
-          "expr": "irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "idle ns/s",
-          "refId": "B"
-        }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "timeseries",
-      "title": "Poll Thread Utilization %",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 72
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "custom": {
-            "fillOpacity": 10,
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
-          "legendFormat": "utilization",
-          "refId": "A"
-        }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "timeseries",
-      "title": "Poll Loop Section Breakdown",
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 80
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ns",
-          "custom": {
-            "fillOpacity": 20,
-            "stacking": {
-              "mode": "normal"
-            },
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "irate(kagami_http_poll_section_nanoseconds_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "{{section}}",
-          "refId": "A"
-        }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "timeseries",
-      "title": "Worker Section Breakdown (all workers)",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 88
-      },
-      "maxDataPoints": 10000,
-      "interval": "1s",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ns",
-          "custom": {
-            "fillOpacity": 20,
-            "stacking": {
-              "mode": "normal"
-            },
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum by (section) (irate(kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\"}[2s]))",
-          "legendFormat": "{{section}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Per-Worker Utilization % (handler/total)",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 88
-      },
-      "maxDataPoints": 10000,
-      "interval": "1s",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "custom": {
-            "fillOpacity": 10,
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum by (worker) (kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\",section=\"handler\"}) / sum by (worker) (kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\",section=~\"handler|idle\"})",
-          "legendFormat": "worker {{worker}}",
+          "legendFormat": "HAMT copy rate",
           "refId": "A"
         }
       ]
@@ -1032,7 +1114,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 96
+        "y": 73
       },
       "collapsed": false
     },
@@ -1043,7 +1125,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 97
+        "y": 74
       },
       "targets": [
         {
@@ -1122,7 +1204,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 97
+        "y": 74
       },
       "fieldConfig": {
         "defaults": {
@@ -1149,56 +1231,12 @@
     },
     {
       "type": "row",
-      "title": "Connections",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 103
-      },
-      "collapsed": false
-    },
-    {
-      "type": "timeseries",
-      "title": "Connection Types Over Time",
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 104
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 15,
-            "connectNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "kagami_ws_connections{instance=~\"$instance\"}",
-          "legendFormat": "WebSocket (AO2)",
-          "refId": "A"
-        },
-        {
-          "expr": "kagami_sessions{instance=~\"$instance\",protocol=\"aonx\"}",
-          "legendFormat": "REST/SSE (AONX)",
-          "refId": "B"
-        }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
-    },
-    {
-      "type": "row",
       "title": "Server Info",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 112
+        "y": 80
       },
       "collapsed": false
     },
@@ -1209,7 +1247,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 113
+        "y": 81
       },
       "targets": [
         {
@@ -1232,12 +1270,12 @@
     },
     {
       "type": "row",
-      "title": "Active Sessions (per-client)",
+      "title": "Active Sessions",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 85
       },
       "collapsed": false
     },
@@ -1248,7 +1286,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 119
+        "y": 86
       },
       "targets": [
         {
@@ -1371,12 +1409,12 @@
     },
     {
       "type": "row",
-      "title": "Event Channels",
+      "title": "Event Channels & Errors",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 129
+        "y": 96
       },
       "collapsed": false
     },
@@ -1387,7 +1425,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 130
+        "y": 97
       },
       "fieldConfig": {
         "defaults": {
@@ -1415,7 +1453,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 130
+        "y": 97
       },
       "fieldConfig": {
         "defaults": {
@@ -1444,7 +1482,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 138
+        "y": 105
       },
       "collapsed": false
     },
@@ -1455,7 +1493,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 139
+        "y": 106
       },
       "targets": [
         {
@@ -1499,7 +1537,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 149
+        "y": 116
       },
       "collapsed": false
     },
@@ -1510,8 +1548,10 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 150
+        "y": 117
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -1524,13 +1564,11 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_sessions_expired_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "expired",
+          "expr": "irate(kagami_sessions_expired_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "expired/s",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
@@ -1539,11 +1577,13 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 150
+        "y": 117
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "eps",
+          "unit": "ops",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
@@ -1553,13 +1593,11 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ao_errors_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "{{type}}",
+          "expr": "irate(kagami_ao_errors_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "errors/s",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
@@ -1568,11 +1606,13 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 150
+        "y": 117
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "eps",
+          "unit": "ops",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
@@ -1582,26 +1622,26 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_handshake_failures_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "failures",
+          "expr": "irate(kagami_ws_handshake_failures_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "failures/s",
           "refId": "A"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "timeseries",
-      "title": "SSE Replays & Dead Clients / sec",
+      "title": "SSE Replays & Dead Clients",
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 150
+        "y": 117
       },
+      "maxDataPoints": 10000,
+      "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "eps",
+          "unit": "ops",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": true
@@ -1611,18 +1651,16 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_sse_replays_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "replays",
+          "expr": "irate(kagami_sse_replays_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "replays/s",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_sse_dead_clients_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "dead clients",
+          "expr": "irate(kagami_sse_dead_clients_total{instance=~\"$instance\"}[2s])",
+          "legendFormat": "dead clients/s",
           "refId": "B"
         }
-      ],
-      "maxDataPoints": 10000,
-      "interval": "1s"
+      ]
     },
     {
       "type": "stat",
@@ -1631,21 +1669,21 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 158
+        "y": 125
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_config_ops_total{instance=~\"$instance\",op=\"load\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
@@ -1654,21 +1692,21 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 158
+        "y": 125
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_config_ops_total{instance=~\"$instance\",op=\"save\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
@@ -1677,44 +1715,44 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 158
+        "y": 125
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_max_players{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "stat",
-      "title": "Sessions Expired (total)",
+      "title": "Sessions Expired",
       "gridPos": {
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 158
+        "y": 125
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
       },
       "targets": [
         {
           "expr": "kagami_sessions_expired_total{instance=~\"$instance\"}",
+          "legendFormat": "",
           "refId": "A"
         }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      ]
     },
     {
       "type": "row",
@@ -1723,7 +1761,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 162
+        "y": 129
       },
       "collapsed": false
     },
@@ -1734,7 +1772,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 163
+        "y": 130
       },
       "datasource": {
         "type": "loki",
@@ -1758,98 +1796,5 @@
         "enableInfiniteScrolling": true
       }
     }
-  ],
-  "refresh": "5s",
-  "liveNow": true,
-  "schemaVersion": 39,
-  "tags": [
-    "kagami"
-  ],
-  "templating": {
-    "list": [
-      {
-        "name": "instance",
-        "label": "Server",
-        "type": "custom",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "options": [
-          {
-            "text": "All",
-            "value": "$__all",
-            "selected": true
-          },
-          {
-            "text": "staging",
-            "value": "staging",
-            "selected": false
-          },
-          {
-            "text": "canary",
-            "value": "canary",
-            "selected": false
-          }
-        ],
-        "query": "staging,canary",
-        "multi": false,
-        "includeAll": true,
-        "allValue": ".*"
-      },
-      {
-        "name": "log_level",
-        "label": "Log Level",
-        "type": "custom",
-        "current": {
-          "text": "All",
-          "value": ".+"
-        },
-        "options": [
-          {
-            "text": "All",
-            "value": ".+",
-            "selected": true
-          },
-          {
-            "text": "Debug",
-            "value": "debug",
-            "selected": false
-          },
-          {
-            "text": "Info",
-            "value": "info",
-            "selected": false
-          },
-          {
-            "text": "Warn",
-            "value": "warn",
-            "selected": false
-          },
-          {
-            "text": "Error",
-            "value": "error",
-            "selected": false
-          },
-          {
-            "text": "Critical",
-            "value": "critical",
-            "selected": false
-          }
-        ],
-        "query": "debug,info,warn,error,critical",
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".+"
-      }
-    ]
-  },
-  "time": {
-    "from": "now-5m",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "browser",
-  "title": "Kagami Overview",
-  "uid": "kagami-overview"
+  ]
 }
