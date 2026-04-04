@@ -11,6 +11,12 @@
 
 	# Everything else goes to kagami (game server API, /metrics, root)
 	handle {
-		reverse_proxy kagami:80
+		reverse_proxy kagami:80 {
+			transport http {
+				keepalive 60s
+				keepalive_idle_conns 64
+				max_conns_per_host 256
+			}
+		}
 	}
 }
