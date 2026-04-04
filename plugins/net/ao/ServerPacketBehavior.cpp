@@ -77,6 +77,7 @@ void AOPacketRD::handle_server(AOServer& server, ServerSession& session) {
 
     proto->state = AOProtocolState::JOINED;
     session.joined = true;
+    server.room().stats.joined.fetch_add(1, std::memory_order_relaxed);
 
     auto& room = server.room();
 

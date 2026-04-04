@@ -60,6 +60,7 @@ NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const st
     session.display_name = client_name;
     session.client_software = client_name + "/" + client_version;
     session.joined = true;
+    room_.stats.joined.fetch_add(1, std::memory_order_relaxed);
     Log::log_print(INFO, "NX: session created (%s, client=%s)", format_client_id(id).c_str(),
                    session.client_software.c_str());
     return {session.session_token, session.session_id, session.moderator};

@@ -215,6 +215,8 @@ int main(int /*argc*/, char* argv[]) {
             reg.gauge("kagami_http_worker_idle_nanoseconds_total", "Cumulative worker idle time in nanoseconds");
         auto& http_worker_busy_ns =
             reg.gauge("kagami_http_worker_busy_nanoseconds_total", "Cumulative worker busy time in nanoseconds");
+        auto& cow_copy_bytes =
+            reg.gauge("kagami_cow_copy_bytes_total", "Cumulative bytes copied during COW session map mutations");
 
         auto cors = cfg.cors_origins();
         server_info
@@ -224,40 +226,14 @@ int main(int /*argc*/, char* argv[]) {
             .set(1);
         max_players.get().set(cfg.max_players());
 
-        // Cached game-state snapshot — rebuilt at most once per second to avoid
-        // holding the dispatch lock on every 10Hz Prometheus scrape. Without
-        // caching, the shared lock held by the collector can starve writers
-        // (session create/destroy) under high scrape rates.
-        struct SessionSnap {
-            uint64_t session_id;
-            std::string display_name, protocol, area, character;
-            uint64_t bytes_sent, bytes_recv, pkts_sent, pkts_recv;
-            int64_t idle_secs;
-        };
-        struct AreaSnap {
-            std::string name, status;
-            bool locked;
-            int player_count;
-        };
-        struct GameStateCache {
-            std::mutex mutex;
-            std::chrono::steady_clock::time_point last_update{};
-            int ao = 0, nx = 0, joined = 0, mods = 0, taken = 0;
-            std::vector<SessionSnap> sessions;
-            std::vector<AreaSnap> areas;
-            std::vector<std::pair<std::string, uint64_t>> event_channels;
-        };
-        auto cache = std::make_shared<GameStateCache>();
-
         reg.add_collector([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &area_info,
                            &chars_taken, &event_publishes, &session_bytes_sent, &session_bytes_recv,
                            &session_packets_sent, &session_packets_recv, &session_idle, &http_work_queue,
                            &http_result_queue, &http_active_workers, &http_worker_count, &http_worker_idle_ns,
-                           &http_worker_busy_ns, &http_server = http, &rest_router, &room, &server_start_time,
-                           cache] {
+                           &http_worker_busy_ns, &cow_copy_bytes, &http_server = http, &room,
+                           &server_start_time] {
             auto now = std::chrono::steady_clock::now();
-            auto elapsed = now - server_start_time;
-            uptime.get().set(std::chrono::duration<double>(elapsed).count());
+            uptime.get().set(std::chrono::duration<double>(now - server_start_time).count());
             rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
 
             // HTTP worker pool metrics (lock-free — read atomics directly)
@@ -268,99 +244,56 @@ int main(int /*argc*/, char* argv[]) {
             http_worker_idle_ns.get().set(static_cast<double>(http_server.worker_idle_ns()));
             http_worker_busy_ns.get().set(static_cast<double>(http_server.worker_busy_ns()));
 
-            // Rebuild game-state snapshot at most once per second.
-            // Uses try_shared_lock — if the dispatch lock is contended (e.g.,
-            // thousands of session creates/deletes in flight), we skip the
-            // rebuild and serve stale cached data. This ensures /metrics never
-            // blocks on the dispatch lock.
-            {
-                std::lock_guard cache_lock(cache->mutex);
-                if (now - cache->last_update > std::chrono::seconds(1)) {
-                    int ao = 0, nx = 0, joined = 0, mods = 0, taken = 0;
-                    std::vector<SessionSnap> sessions;
-                    std::vector<AreaSnap> areas;
+            // Aggregate session stats (lock-free atomic reads)
+            sessions_g.labels({"ao2"}).set(room.stats.sessions_ao.load(std::memory_order_relaxed));
+            sessions_g.labels({"aonx"}).set(room.stats.sessions_nx.load(std::memory_order_relaxed));
+            sessions_joined.get().set(room.stats.joined.load(std::memory_order_relaxed));
+            sessions_mods.get().set(room.stats.moderators.load(std::memory_order_relaxed));
+            chars_taken.get().set(room.stats.chars_taken.load(std::memory_order_relaxed));
+            cow_copy_bytes.get().set(static_cast<double>(room.cow_copy_bytes()));
 
-                    bool acquired = rest_router.try_shared_lock([&] {
-                        room.for_each_session([&](const ServerSession& s) {
-                            (s.protocol == "ao2") ? ++ao : ++nx;
-                            if (s.joined)
-                                ++joined;
-                            if (s.moderator)
-                                ++mods;
-                            std::string char_name =
-                                (s.character_id >= 0 && s.character_id < (int)room.characters.size())
-                                    ? room.characters[s.character_id]
-                                    : "none";
-                            sessions.push_back({
-                                s.session_id,
-                                s.display_name.empty() ? "(unnamed)" : s.display_name,
-                                s.protocol,
-                                s.area,
-                                std::move(char_name),
-                                s.bytes_sent.load(std::memory_order_relaxed),
-                                s.bytes_received.load(std::memory_order_relaxed),
-                                s.packets_sent.load(std::memory_order_relaxed),
-                                s.packets_received.load(std::memory_order_relaxed),
-                                std::chrono::duration_cast<std::chrono::seconds>(now - s.last_activity()).count(),
-                            });
-                        });
-                        for (auto& [id, state] : room.area_states()) {
-                            areas.push_back({state.name, state.status, state.locked,
-                                              (int)room.sessions_in_area(state.name).size()});
-                        }
-                        for (int t : room.char_taken)
-                            if (t)
-                                ++taken;
-                    });
-
-                    if (acquired) {
-                        cache->ao = ao;
-                        cache->nx = nx;
-                        cache->joined = joined;
-                        cache->mods = mods;
-                        cache->taken = taken;
-                        cache->sessions = std::move(sessions);
-                        cache->areas = std::move(areas);
-                        cache->event_channels.clear();
-                        for (auto& cs : EventManager::instance().snapshot_channel_stats())
-                            cache->event_channels.emplace_back(cs.raw_name, cs.count);
-                        cache->last_update = now;
-                    }
-                    // else: lock contended, serve stale cache
-                }
-            }
-
-            // Populate gauges from cached snapshot (no dispatch lock held).
-            sessions_g.labels({"ao2"}).set(cache->ao);
-            sessions_g.labels({"aonx"}).set(cache->nx);
-            sessions_joined.get().set(cache->joined);
-            sessions_mods.get().set(cache->mods);
-            chars_taken.get().set(cache->taken);
+            // Per-session + area detail (lock-free via COW snapshot).
+            // Grabs an immutable snapshot of the session map — no dispatch lock,
+            // no contention with writers. The snapshot stays valid for the
+            // duration of this iteration.
+            auto snap = room.sessions_snapshot();
 
             area_players.clear();
             area_info.clear();
-            for (auto& a : cache->areas) {
-                area_players.labels({a.name, a.status}).set(a.player_count);
-                area_info.labels({a.name, a.status, a.locked ? "true" : "false"}).set(1);
+            for (auto& [id, state] : room.area_states()) {
+                int count = 0;
+                for (auto& [sid, s] : *snap.sessions)
+                    if (s->area == state.name)
+                        ++count;
+                area_players.labels({state.name, state.status}).set(count);
+                area_info.labels({state.name, state.status, state.locked ? "true" : "false"}).set(1);
             }
+
             session_bytes_sent.clear();
             session_bytes_recv.clear();
             session_packets_sent.clear();
             session_packets_recv.clear();
             session_idle.clear();
 
-            for (auto& s : cache->sessions) {
-                std::vector<std::string> labels = {std::to_string(s.session_id), s.display_name, s.protocol, s.area,
-                                                   s.character};
-                session_bytes_sent.labels(labels).set(static_cast<double>(s.bytes_sent));
-                session_bytes_recv.labels(labels).set(static_cast<double>(s.bytes_recv));
-                session_packets_sent.labels(labels).set(static_cast<double>(s.pkts_sent));
-                session_packets_recv.labels(labels).set(static_cast<double>(s.pkts_recv));
-                session_idle.labels(labels).set(static_cast<double>(s.idle_secs));
+            for (auto& [id, s] : *snap.sessions) {
+                std::string char_name = (s->character_id >= 0 && s->character_id < (int)room.characters.size())
+                                            ? room.characters[s->character_id]
+                                            : "none";
+                std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol,
+                                                   s->area, std::move(char_name)};
+                session_bytes_sent.labels(labels).set(static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
+                session_bytes_recv.labels(labels).set(
+                    static_cast<double>(s->bytes_received.load(std::memory_order_relaxed)));
+                session_packets_sent.labels(labels).set(
+                    static_cast<double>(s->packets_sent.load(std::memory_order_relaxed)));
+                session_packets_recv.labels(labels).set(
+                    static_cast<double>(s->packets_received.load(std::memory_order_relaxed)));
+                session_idle.labels(labels).set(static_cast<double>(
+                    std::chrono::duration_cast<std::chrono::seconds>(now - s->last_activity()).count()));
             }
 
-            for (auto& [name, count] : cache->event_channels)
-                event_publishes.labels({name}).set(static_cast<double>(count));
+            for (auto& cs : EventManager::instance().snapshot_channel_stats())
+                event_publishes.labels({cs.raw_name}).set(static_cast<double>(cs.count));
         });
     }
 
