@@ -136,10 +136,18 @@ struct Server::ServerState {
     std::atomic<uint64_t> poll_events_total{0};
 
     // Poll loop section profiling (cumulative nanoseconds per section)
-    enum PollSection { ACCEPT, SSE_PUBLISH, RESPONSE_SEND, RECV, PARSE_DISPATCH, INLINE_HANDLER, SSE_KEEPALIVE, NUM_SECTIONS };
-    static constexpr const char* poll_section_names[] = {
-        "accept", "sse_publish", "response_send", "recv", "parse_dispatch", "inline_handler", "sse_keepalive"
+    enum PollSection {
+        ACCEPT,
+        SSE_PUBLISH,
+        RESPONSE_SEND,
+        RECV,
+        PARSE_DISPATCH,
+        INLINE_HANDLER,
+        SSE_KEEPALIVE,
+        NUM_SECTIONS
     };
+    static constexpr const char* poll_section_names[] = {"accept",         "sse_publish",    "response_send", "recv",
+                                                         "parse_dispatch", "inline_handler", "sse_keepalive"};
     std::atomic<uint64_t> poll_section_ns[NUM_SECTIONS] = {};
 
     // Inline handlers — run on the poll thread, bypass the worker queue.
@@ -484,8 +492,8 @@ struct SectionScope {
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     ~SectionScope() {
         counter.fetch_add(
-            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now() - start).count()),
+            static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()),
             std::memory_order_relaxed);
     }
 };
@@ -504,8 +512,8 @@ static void worker_loop(Server::ServerState& state, std::stop_token st, size_t w
             state.work_cv.wait(lock, [&] { return state.work_channel.has_events() || st.stop_requested(); });
         }
         auto idle_end = std::chrono::steady_clock::now();
-        auto idle_elapsed = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count());
+        auto idle_elapsed =
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count());
         state.worker_idle_ns.fetch_add(idle_elapsed, std::memory_order_relaxed);
         pw.idle_ns.fetch_add(idle_elapsed, std::memory_order_relaxed);
         pw.section_ns[ServerState::W_IDLE].fetch_add(idle_elapsed, std::memory_order_relaxed);
@@ -548,7 +556,8 @@ static void worker_loop(Server::ServerState& state, std::stop_token st, size_t w
         }
 
         auto busy_elapsed = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busy_start).count());
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busy_start)
+                .count());
         state.worker_busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
         pw.busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
         state.active_workers.fetch_sub(1, std::memory_order_relaxed);
@@ -692,54 +701,54 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
 
                 // Process completed results
                 {
-                SectionScope _s{state.poll_section_ns[ServerState::RESPONSE_SEND]};
-                while (auto result = state.result_channel.get_event()) {
-                    auto conn_it = state.connections.find(result->connection_id);
-                    if (conn_it == state.connections.end())
-                        continue;
-                    HttpConnection* conn = &conn_it->second;
+                    SectionScope _s{state.poll_section_ns[ServerState::RESPONSE_SEND]};
+                    while (auto result = state.result_channel.get_event()) {
+                        auto conn_it = state.connections.find(result->connection_id);
+                        if (conn_it == state.connections.end())
+                            continue;
+                        HttpConnection* conn = &conn_it->second;
 
-                    // Determine keep-alive before serializing (so we can include
-                    // the Connection header in the response).
-                    auto resp_conn_hdr = result->response.get_header_value("Connection");
-                    bool should_keep_alive =
-                        result->request_keep_alive && !detail::case_ignore::equal(resp_conn_hdr, "close");
+                        // Determine keep-alive before serializing (so we can include
+                        // the Connection header in the response).
+                        auto resp_conn_hdr = result->response.get_header_value("Connection");
+                        bool should_keep_alive =
+                            result->request_keep_alive && !detail::case_ignore::equal(resp_conn_hdr, "close");
 
-                    std::string response_data =
-                        serialize_response(result->response, state.default_headers, result->is_head, should_keep_alive);
+                        std::string response_data = serialize_response(result->response, state.default_headers,
+                                                                       result->is_head, should_keep_alive);
 
-                    // Blocking write with a timeout so a slow/stalled client
-                    // can't block the poll thread indefinitely.
-                    conn->socket.set_non_blocking(false);
-                    conn->socket.set_send_timeout(5000); // 5 second write timeout
-                    size_t total = 0;
-                    while (total < response_data.size()) {
-                        ssize_t w = conn->socket.send(response_data.data() + total, response_data.size() - total);
-                        if (w <= 0)
-                            break;
-                        total += static_cast<size_t>(w);
+                        // Blocking write with a timeout so a slow/stalled client
+                        // can't block the poll thread indefinitely.
+                        conn->socket.set_non_blocking(false);
+                        conn->socket.set_send_timeout(5000); // 5 second write timeout
+                        size_t total = 0;
+                        while (total < response_data.size()) {
+                            ssize_t w = conn->socket.send(response_data.data() + total, response_data.size() - total);
+                            if (w <= 0)
+                                break;
+                            total += static_cast<size_t>(w);
+                        }
+                        conn->socket.set_non_blocking(true);
+
+                        tcp_bytes_out_.get().inc(total);
+
+                        // Only keep alive if the full response was written successfully
+                        should_keep_alive = should_keep_alive && (total == response_data.size());
+
+                        if (should_keep_alive) {
+                            // Reset connection state for the next request on this socket
+                            conn->headers_complete = false;
+                            conn->dispatched = false;
+                            conn->header_end_pos = 0;
+                            conn->content_length = 0;
+                            conn->recv_buf.clear();
+                            conn->keep_alive = true;
+                        }
+                        else {
+                            state.poller.remove(conn->socket.fd());
+                            remove_connection(state, result->connection_id);
+                        }
                     }
-                    conn->socket.set_non_blocking(true);
-
-                    tcp_bytes_out_.get().inc(total);
-
-                    // Only keep alive if the full response was written successfully
-                    should_keep_alive = should_keep_alive && (total == response_data.size());
-
-                    if (should_keep_alive) {
-                        // Reset connection state for the next request on this socket
-                        conn->headers_complete = false;
-                        conn->dispatched = false;
-                        conn->header_end_pos = 0;
-                        conn->content_length = 0;
-                        conn->recv_buf.clear();
-                        conn->keep_alive = true;
-                    }
-                    else {
-                        state.poller.remove(conn->socket.fd());
-                        remove_connection(state, result->connection_id);
-                    }
-                }
                 } // end RESPONSE_SEND scope
             }
             else {
@@ -1056,8 +1065,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                 Log::log_print(ERR, "Inline handler exception: %s", e.what());
                             }
                             // Send response directly from the poll thread
-                            std::string resp_data =
-                                serialize_response(res, state.default_headers, is_head, false);
+                            std::string resp_data = serialize_response(res, state.default_headers, is_head, false);
                             conn->socket.set_non_blocking(false);
                             conn->socket.send(resp_data.data(), resp_data.size());
                             conn->socket.set_non_blocking(true);
@@ -1096,11 +1104,10 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
             }
         }
 
-        state.poll_busy_ns.fetch_add(
-            static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::steady_clock::now() - poll_end).count()),
-            std::memory_order_relaxed);
+        state.poll_busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                               std::chrono::steady_clock::now() - poll_end)
+                                                               .count()),
+                                     std::memory_order_relaxed);
 
         // --- SSE keepalive (every ~30s) ---
         auto now = std::chrono::steady_clock::now();

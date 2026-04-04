@@ -452,3 +452,4 @@ apps/flutter/.pub/
 # Flutter sub-project VS Code (use root .vscode instead)
 apps/flutter/.vscode/
 profiles/
+build-asan

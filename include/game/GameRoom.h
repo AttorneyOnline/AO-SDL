@@ -91,8 +91,7 @@ class GameRoom {
 
     /// Create a session and register its token in a single COW copy.
     /// Avoids the double-copy of create_session + register_session_token.
-    ServerSession& create_session_with_token(uint64_t client_id, const std::string& protocol,
-                                              const std::string& token);
+    ServerSession& create_session_with_token(uint64_t client_id, const std::string& protocol, const std::string& token);
 
     void destroy_session(uint64_t client_id);
     ServerSession* get_session(uint64_t client_id);
@@ -212,8 +211,8 @@ class GameRoom {
     uint64_t cow_copy_bytes() const {
         return SessionMap::copy_bytes_total() + TokenMap::copy_bytes_total();
     }
-  private:
 
+  private:
     // Character ID index (Phase 3)
     std::vector<std::string> char_ids_;                     ///< Parallel to `characters`.
     std::unordered_map<std::string, int> char_id_to_index_; ///< char_id hash → index.
