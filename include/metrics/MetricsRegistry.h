@@ -57,12 +57,14 @@ class MetricsRegistry {
         for (auto& fn : collectors_)
             fn();
 
-        // Serialize all families
+        // Serialize all families. Reserve based on last output size to
+        // avoid repeated reallocations.
         PrometheusFormatter fmt;
         std::string out;
-        out.reserve(4096);
+        out.reserve(last_collect_size_ + last_collect_size_ / 4); // +25% headroom
         for (auto& family : families_)
             fmt.format(*family, out);
+        last_collect_size_ = out.size();
         return out;
     }
 
@@ -72,6 +74,7 @@ class MetricsRegistry {
     std::vector<std::unique_ptr<MetricFamilyBase>> families_;
     std::vector<std::function<void()>> collectors_;
     std::mutex collect_mutex_;
+    size_t last_collect_size_ = 4096;
 };
 
 } // namespace metrics

@@ -18,27 +18,39 @@ namespace metrics {
 class PrometheusFormatter {
   public:
     /// Render a single metric family to Prometheus text format.
+    /// Writes directly to the output buffer — no intermediate allocations.
     void format(const MetricFamilyBase& family, std::string& out) const {
-        out += "# HELP " + family.name() + " " + family.help() + "\n";
-        out += "# TYPE " + family.name() + " " + family.type_string() + "\n";
+        out += "# HELP ";
+        out += family.name();
+        out += ' ';
+        out += family.help();
+        out += '\n';
+        out += "# TYPE ";
+        out += family.name();
+        out += ' ';
+        out += family.type_string();
+        out += '\n';
+
+        auto& label_names = family.label_names();
 
         family.visit([&](const std::vector<std::string>& label_values, double value) {
             out += family.name();
 
-            // Append labels if present
-            auto& label_names = family.label_names();
             if (!label_names.empty() && !label_values.empty()) {
                 out += '{';
                 for (size_t i = 0; i < label_names.size() && i < label_values.size(); ++i) {
                     if (i > 0)
                         out += ',';
-                    out += label_names[i] + "=\"" + escape_label_value(label_values[i]) + "\"";
+                    out += label_names[i];
+                    out += "=\"";
+                    append_escaped(out, label_values[i]);
+                    out += '"';
                 }
                 out += '}';
             }
 
             out += ' ';
-            out += format_value(value);
+            append_value(out, value);
             out += '\n';
         });
 
@@ -46,10 +58,8 @@ class PrometheusFormatter {
     }
 
   private:
-    /// Escape backslash, double-quote, and newline in label values.
-    static std::string escape_label_value(const std::string& s) {
-        std::string out;
-        out.reserve(s.size());
+    /// Escape and append directly to output — no temporary string.
+    static void append_escaped(std::string& out, const std::string& s) {
         for (char c : s) {
             if (c == '\\')
                 out += "\\\\";
@@ -60,24 +70,34 @@ class PrometheusFormatter {
             else
                 out += c;
         }
-        return out;
     }
 
-    /// Format a double value. Integers are printed without decimal point.
-    static std::string format_value(double v) {
-        if (std::isinf(v))
-            return v > 0 ? "+Inf" : "-Inf";
-        if (std::isnan(v))
-            return "NaN";
-        // If it's a whole number, print without decimals
-        if (v >= 0 && v == static_cast<double>(static_cast<uint64_t>(v)) && v < 1e15)
-            return std::to_string(static_cast<uint64_t>(v));
-        if (v < 0 && v == static_cast<double>(static_cast<int64_t>(v)) && v > -1e15)
-            return std::to_string(static_cast<int64_t>(v));
-        // Otherwise use enough precision
-        std::ostringstream ss;
-        ss << v;
-        return ss.str();
+    /// Format a double directly into the output buffer.
+    static void append_value(std::string& out, double v) {
+        if (std::isinf(v)) {
+            out += v > 0 ? "+Inf" : "-Inf";
+            return;
+        }
+        if (std::isnan(v)) {
+            out += "NaN";
+            return;
+        }
+        // Integer fast path — avoids ostringstream
+        if (v >= 0 && v == static_cast<double>(static_cast<uint64_t>(v)) && v < 1e15) {
+            char buf[24];
+            auto len = std::snprintf(buf, sizeof(buf), "%llu", static_cast<unsigned long long>(v));
+            out.append(buf, static_cast<size_t>(len));
+            return;
+        }
+        if (v < 0 && v == static_cast<double>(static_cast<int64_t>(v)) && v > -1e15) {
+            char buf[24];
+            auto len = std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v));
+            out.append(buf, static_cast<size_t>(len));
+            return;
+        }
+        char buf[32];
+        auto len = std::snprintf(buf, sizeof(buf), "%g", v);
+        out.append(buf, static_cast<size_t>(len));
     }
 };
 
