@@ -105,6 +105,17 @@ if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(SDL2_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
     set(SDL2_DISABLE_UNINSTALL ON CACHE BOOL "" FORCE)
     add_subdirectory(third-party/SDL)
+
+    # SDL2 sets /GS- and /Gs1048576 on its DIRECTORY to avoid CRT dependencies
+    # in its freestanding functions.  With LTO (LTCG) the linker performs global
+    # code generation and the /Gs1048576 from SDL's TUs poisons the entire link:
+    # merged functions lose __chkstk even when the other TU was compiled with
+    # /Gs4096.  Override it — we link the CRT anyway, so __chkstk is available.
+    if(MSVC)
+        get_property(_sdl_opts DIRECTORY third-party/SDL PROPERTY COMPILE_OPTIONS)
+        list(REMOVE_ITEM _sdl_opts "/Gs1048576")
+        set_property(DIRECTORY third-party/SDL PROPERTY COMPILE_OPTIONS ${_sdl_opts})
+    endif()
 endif()
 
 # --- bit7z — archive extraction only ----------------------------------------
