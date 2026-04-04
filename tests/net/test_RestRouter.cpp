@@ -531,8 +531,9 @@ TEST(GameRoomTest, ExpireSessionsRemovesStale) {
     room.register_session_token("stale", 2);
     s2->character_id = 0;
     room.char_taken[0] = 1;
-    s2->last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(600)).time_since_epoch().count(),
-                              std::memory_order_relaxed);
+    s2->last_activity_ns.store(
+        (std::chrono::steady_clock::now() - std::chrono::seconds(600)).time_since_epoch().count(),
+        std::memory_order_relaxed);
 
     EXPECT_EQ(room.session_count(), 2u);
     Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
@@ -552,8 +553,9 @@ TEST(GameRoomTest, ExpireSessionsSkipsAO2) {
 
     // AO2 session has empty token — should never be expired
     auto s = room.create_session(1, "ao2");
-    s->last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(9999)).time_since_epoch().count(),
-                             std::memory_order_relaxed);
+    s->last_activity_ns.store(
+        (std::chrono::steady_clock::now() - std::chrono::seconds(9999)).time_since_epoch().count(),
+        std::memory_order_relaxed);
 
     Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
     int expired = room.expire_sessions(300);
