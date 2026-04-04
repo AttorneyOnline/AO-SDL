@@ -674,6 +674,13 @@ class Server {
     virtual bool is_valid() const;
 
     Server& Get(const std::string& pattern, Handler handler);
+
+    /// Register a GET handler that runs inline on the poll thread instead of
+    /// being dispatched to a worker. Use for endpoints that must stay responsive
+    /// even when the worker pool is saturated (e.g., /metrics, health checks).
+    /// The handler MUST be fast and non-blocking — it runs on the poll thread.
+    Server& GetInline(const std::string& pattern, Handler handler);
+
     Server& Post(const std::string& pattern, Handler handler);
     Server& Post(const std::string& pattern, HandlerWithContentReader handler);
     Server& Put(const std::string& pattern, Handler handler);

@@ -116,8 +116,13 @@ struct Server::ServerState {
     std::atomic<uint64_t> worker_idle_ns{0};
     std::atomic<uint64_t> worker_busy_ns{0};
 
-    // Handler tables
+    // Inline handlers — run on the poll thread, bypass the worker queue.
+    // Use for endpoints that must stay responsive regardless of worker load
+    // (e.g., /metrics, health checks).
     using HandlerEntry = std::pair<std::string, Server::Handler>;
+    std::vector<HandlerEntry> inline_get_handlers;
+
+    // Handler tables (dispatched to worker threads)
     std::vector<HandlerEntry> get_handlers;
     std::vector<HandlerEntry> post_handlers;
     std::vector<HandlerEntry> put_handlers;
@@ -967,6 +972,36 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     // Track if this is a HEAD request
                     bool is_head = (req.method == "HEAD");
 
+                    // Check inline handlers first — these run on the poll
+                    // thread and bypass the worker queue entirely. Used for
+                    // endpoints that must stay responsive under worker saturation.
+                    if (req.method == "GET" || req.method == "HEAD") {
+                        auto inline_handler = find_handler(state.inline_get_handlers, req.path, req);
+                        if (inline_handler) {
+                            Response res;
+                            res.status = 200;
+                            try {
+                                inline_handler(req, res);
+                            }
+                            catch (const std::exception& e) {
+                                res.status = 500;
+                                res.set_content("Internal Server Error", "text/plain");
+                                Log::log_print(ERR, "Inline handler exception: %s", e.what());
+                            }
+                            // Send response directly from the poll thread
+                            std::string resp_data =
+                                serialize_response(res, state.default_headers, is_head, false);
+                            conn->socket.set_non_blocking(false);
+                            conn->socket.send(resp_data.data(), resp_data.size());
+                            conn->socket.set_non_blocking(true);
+                            tcp_bytes_out_.get().inc(resp_data.size());
+                            // Close connection (inline handlers don't support keep-alive)
+                            state.poller.remove(ev.fd);
+                            remove_connection(state, conn->id);
+                            continue;
+                        }
+                    }
+
                     // Find handler — HEAD dispatches to GET handlers (RFC 9110 §9.3.2)
                     Server::Handler handler;
                     if (req.method == "GET" || req.method == "HEAD")
@@ -1032,6 +1067,11 @@ bool Server::is_valid() const {
 // Route registration — store handler with pattern string
 Server& Server::Get(const std::string& pattern, Handler handler) {
     state_->get_handlers.emplace_back(pattern, std::move(handler));
+    return *this;
+}
+
+Server& Server::GetInline(const std::string& pattern, Handler handler) {
+    state_->inline_get_handlers.emplace_back(pattern, std::move(handler));
     return *this;
 }
 
