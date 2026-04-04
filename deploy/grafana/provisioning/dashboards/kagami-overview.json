@@ -422,7 +422,7 @@
       "targets": [
         {
           "expr": "sum by (method) (irate(kagami_http_requests_total{instance=~\"$instance\"}[2s]))",
-          "legendFormat": "{{{{method}}}}",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ]
@@ -451,7 +451,7 @@
       "targets": [
         {
           "expr": "sum by (status) (irate(kagami_http_requests_total{instance=~\"$instance\"}[2s]))",
-          "legendFormat": "{{{{status}}}}",
+          "legendFormat": "{{status}}",
           "refId": "A"
         }
       ]
@@ -932,7 +932,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "expr": "kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"})",
           "legendFormat": "utilization",
           "refId": "A"
         }
@@ -1838,7 +1838,7 @@
       },
       "targets": [
         {
-          "expr": "max((irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))) or vector(0), (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))) or vector(0))",
+          "expr": "max(label_replace(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"}), \"component\", \"worker\", \"\", \"\") or label_replace(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}), \"component\", \"poll\", \"\", \"\"))",
           "legendFormat": "system load",
           "refId": "A"
         }
@@ -1869,12 +1869,12 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "expr": "kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"})",
           "legendFormat": "worker pool",
           "refId": "A"
         },
         {
-          "expr": "irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) / (irate(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"}[2s]) + irate(kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "expr": "kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"})",
           "legendFormat": "poll thread",
           "refId": "B"
         }
