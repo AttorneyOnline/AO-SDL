@@ -31,10 +31,10 @@ class NXBroadcastTest : public ::testing::Test {
         nx_ = std::make_unique<NXServer>(room_);
 
         // Create a session for the sender
-        auto& session = room_.create_session(1, "aonx");
-        session.area = "Courtroom 1";
-        session.display_name = "TestPlayer";
-        session.joined = true;
+        auto session = room_.create_session(1, "aonx");
+        session->area = "Courtroom 1";
+        session->display_name = "TestPlayer";
+        session->joined = true;
     }
 
     /// Drain the next SSEEvent from the channel, or return nullopt.

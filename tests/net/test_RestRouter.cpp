@@ -215,10 +215,10 @@ TEST_F(RestRouterTest, AuthSuccessPassesSession) {
     auto* ep_ptr = ep.get();
     router_.register_endpoint(std::move(ep));
 
-    auto& session = room_.create_session(1, "aonx");
-    session.session_token = "validtoken";
+    auto session = room_.create_session(1, "aonx");
+    session->session_token = "validtoken";
     room_.register_session_token("validtoken", 1);
-    session.joined = true;
+    session->joined = true;
 
     router_.set_auth_func(
         [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
@@ -238,16 +238,16 @@ TEST_F(RestRouterTest, AuthTouchesSession) {
     auto ep = std::make_unique<StubEndpoint>("GET", "/secret", true, RestResponse::json(200, {}));
     router_.register_endpoint(std::move(ep));
 
-    auto& session = room_.create_session(1, "aonx");
-    session.session_token = "tok";
+    auto session = room_.create_session(1, "aonx");
+    session->session_token = "tok";
     room_.register_session_token("tok", 1);
-    session.joined = true;
+    session->joined = true;
 
     // Backdate the last_activity
-    session.last_activity_ns.store(
+    session->last_activity_ns.store(
         (std::chrono::steady_clock::now() - std::chrono::seconds(100)).time_since_epoch().count(),
         std::memory_order_relaxed);
-    auto old_activity = session.last_activity();
+    auto old_activity = session->last_activity();
 
     router_.set_auth_func(
         [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
@@ -259,7 +259,7 @@ TEST_F(RestRouterTest, AuthTouchesSession) {
 
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 200);
-    EXPECT_GT(session.last_activity(), old_activity);
+    EXPECT_GT(session->last_activity(), old_activity);
 }
 
 TEST_F(RestRouterTest, DeleteMethod) {
@@ -503,15 +503,15 @@ TEST_F(RestRouterTest, CorsPreflightOnUnmatchedRouteStillHasHeaders) {
 TEST(GameRoomTest, FindSessionByToken) {
     GameRoom room;
     room.areas = {"Lobby"};
-    auto& s1 = room.create_session(1, "aonx");
-    s1.session_token = "token_a";
+    auto s1 = room.create_session(1, "aonx");
+    s1->session_token = "token_a";
     room.register_session_token("token_a", 1);
-    auto& s2 = room.create_session(2, "aonx");
-    s2.session_token = "token_b";
+    auto s2 = room.create_session(2, "aonx");
+    s2->session_token = "token_b";
     room.register_session_token("token_b", 2);
 
-    EXPECT_EQ(room.find_session_by_token("token_a"), &s1);
-    EXPECT_EQ(room.find_session_by_token("token_b"), &s2);
+    EXPECT_EQ(room.find_session_by_token("token_a"), s1.get());
+    EXPECT_EQ(room.find_session_by_token("token_b"), s2.get());
     EXPECT_EQ(room.find_session_by_token("nonexistent"), nullptr);
 }
 
@@ -521,17 +521,17 @@ TEST(GameRoomTest, ExpireSessionsRemovesStale) {
     room.characters = {"Phoenix"};
     room.reset_taken();
 
-    auto& s1 = room.create_session(1, "aonx");
-    s1.session_token = "active";
+    auto s1 = room.create_session(1, "aonx");
+    s1->session_token = "active";
     room.register_session_token("active", 1);
-    s1.touch();
+    s1->touch();
 
-    auto& s2 = room.create_session(2, "aonx");
-    s2.session_token = "stale";
+    auto s2 = room.create_session(2, "aonx");
+    s2->session_token = "stale";
     room.register_session_token("stale", 2);
-    s2.character_id = 0;
+    s2->character_id = 0;
     room.char_taken[0] = 1;
-    s2.last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(600)).time_since_epoch().count(),
+    s2->last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(600)).time_since_epoch().count(),
                               std::memory_order_relaxed);
 
     EXPECT_EQ(room.session_count(), 2u);
@@ -551,8 +551,8 @@ TEST(GameRoomTest, ExpireSessionsSkipsAO2) {
     room.areas = {"Lobby"};
 
     // AO2 session has empty token — should never be expired
-    auto& s = room.create_session(1, "ao2");
-    s.last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(9999)).time_since_epoch().count(),
+    auto s = room.create_session(1, "ao2");
+    s->last_activity_ns.store((std::chrono::steady_clock::now() - std::chrono::seconds(9999)).time_since_epoch().count(),
                              std::memory_order_relaxed);
 
     Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
