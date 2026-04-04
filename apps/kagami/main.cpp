@@ -447,18 +447,25 @@ int main(int /*argc*/, char* argv[]) {
 
             // Periodic session expiry sweep (~every 30s).
             // Two-phase: scan under shared lock (cheap, doesn't block requests),
-            // then destroy under exclusive lock (fast, only touches expired IDs).
+            // then destroy in batches under exclusive lock. Batching prevents
+            // holding the lock for seconds when thousands of sessions expire.
             auto now = std::chrono::steady_clock::now();
             if (now - last_sweep > std::chrono::seconds(30)) {
                 std::vector<uint64_t> to_expire;
                 rest_router.with_shared_lock(
                     [&] { to_expire = room.find_expired_sessions(cfg.session_ttl_seconds()); });
                 if (!to_expire.empty()) {
-                    rest_router.with_lock([&] {
-                        for (auto client_id : to_expire)
-                            room.destroy_session(client_id);
-                        room.broadcast_chars_taken();
-                    });
+                    Log::log_print(INFO, "Expiring %zu sessions", to_expire.size());
+                    constexpr size_t BATCH_SIZE = 64;
+                    for (size_t i = 0; i < to_expire.size(); i += BATCH_SIZE) {
+                        size_t end = std::min(i + BATCH_SIZE, to_expire.size());
+                        rest_router.with_lock([&] {
+                            for (size_t j = i; j < end; ++j)
+                                room.destroy_session(to_expire[j]);
+                            room.broadcast_chars_taken();
+                        });
+                        // Yield between batches so HTTP requests can be served
+                    }
                     metrics::MetricsRegistry::instance()
                         .counter("kagami_sessions_expired_total", "Sessions expired by TTL")
                         .get()
