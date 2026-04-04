@@ -21,6 +21,9 @@ class SessionCreateEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return false;
     }
+    bool lock_free() const override {
+        return true;
+    }
     bool sensitive() const override {
         return true;
     }

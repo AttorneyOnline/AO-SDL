@@ -15,6 +15,7 @@
 #include "game/AreaState.h"
 #include "game/GameAction.h"
 #include "game/ServerSession.h"
+#include "utils/PersistentMap.h"
 
 #include <atomic>
 #include <cstdint>
@@ -76,17 +77,23 @@ class GameRoom {
     // sessions_snapshot() and iterate freely without any lock.
 
     using SessionPtr = std::shared_ptr<ServerSession>;
-    using SessionMap = std::unordered_map<uint64_t, SessionPtr>;
-    using TokenMap = std::unordered_map<std::string, uint64_t>;
+    using SessionMap = PersistentMap<uint64_t, SessionPtr>;
+    using TokenMap = PersistentMap<std::string, uint64_t>;
 
-    /// Snapshot type: a shared_ptr to an immutable map. Readers hold this while
-    /// iterating — the map won't be freed until all readers drop their copy.
+    /// Snapshot of sessions + tokens. Copying is free (just refcount bumps
+    /// on the HAMT root nodes). Safe to iterate from any thread.
     struct SessionSnapshot {
-        std::shared_ptr<const SessionMap> sessions;
-        std::shared_ptr<const TokenMap> tokens;
+        SessionMap sessions;
+        TokenMap tokens;
     };
 
     ServerSession& create_session(uint64_t client_id, const std::string& protocol);
+
+    /// Create a session and register its token in a single COW copy.
+    /// Avoids the double-copy of create_session + register_session_token.
+    ServerSession& create_session_with_token(uint64_t client_id, const std::string& protocol,
+                                              const std::string& token);
+
     void destroy_session(uint64_t client_id);
     ServerSession* get_session(uint64_t client_id);
     size_t session_count() const;
@@ -112,12 +119,11 @@ class GameRoom {
     /// valid (and immutable) as long as the caller holds it.
     SessionSnapshot sessions_snapshot() const;
 
-    /// Invoke a callback for each active session (lock-free via COW snapshot).
+    /// Invoke a callback for each active session (lock-free via HAMT snapshot).
     template <typename F>
     void for_each_session(F&& func) const {
         auto snap = sessions_snapshot();
-        for (auto& [id, session] : *snap.sessions)
-            func(*session);
+        snap.sessions.for_each([&](const uint64_t&, const SessionPtr& session) { func(*session); });
     }
 
     /// All sessions in a given area.
@@ -187,32 +193,25 @@ class GameRoom {
     void handle_music(const MusicAction& action);
 
   private:
-    /// COW session map — mutated by copying, then atomically swapped.
-    /// Use sessions_snapshot() for lock-free reads, cow_mutate() for writes.
-    std::shared_ptr<const SessionMap> sessions_ = std::make_shared<const SessionMap>();
-    std::shared_ptr<const TokenMap> token_index_ = std::make_shared<const TokenMap>();
+    /// Persistent (HAMT) session and token maps. Mutations produce new
+    /// versions that share structure with the old — O(log32 N) per mutation
+    /// instead of O(N) full-map copy. Snapshots are free (root ptr copy).
+    SessionMap sessions_;
+    TokenMap token_index_;
 
-    /// Copy the current maps, apply a mutation, swap atomically.
-    /// Returns a reference to the session (in the new map) for the given client_id,
-    /// or nullptr if the mutation didn't create/retain one.
-    template <typename F>
-    void cow_mutate(F&& func) {
-        auto new_sessions = std::make_shared<SessionMap>(*sessions_);
-        auto new_tokens = std::make_shared<TokenMap>(*token_index_);
-        func(*new_sessions, *new_tokens);
-        auto copy_bytes = new_sessions->size() * (sizeof(uint64_t) + sizeof(SessionPtr)) +
-                          new_tokens->size() * (sizeof(std::string) + sizeof(uint64_t));
-        cow_copy_bytes_.fetch_add(copy_bytes, std::memory_order_relaxed);
-        sessions_ = std::move(new_sessions);
-        token_index_ = std::move(new_tokens);
-    }
+    /// Lightweight mutex protecting only the HAMT root pointer swap.
+    /// Held for ~1μs (pointer assignment), NOT for the HAMT walk or handler logic.
+    /// Separate from the dispatch lock — allows session mutations to run
+    /// concurrently with all other endpoint handlers.
+    std::mutex state_swap_mutex_;
 
     uint64_t next_session_id_ = 0;
 
-    /// Cumulative bytes copied during COW mutations (for metrics).
-    std::atomic<uint64_t> cow_copy_bytes_{0};
   public:
-    uint64_t cow_copy_bytes() const { return cow_copy_bytes_.load(std::memory_order_relaxed); }
+    /// Cumulative bytes copied during HAMT node mutations (sessions + tokens).
+    uint64_t cow_copy_bytes() const {
+        return SessionMap::copy_bytes_total() + TokenMap::copy_bytes_total();
+    }
   private:
 
     // Character ID index (Phase 3)

@@ -168,23 +168,22 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
             rest_req.bearer_token = auth_header.substr(7);
         }
 
-        // Lock for auth + handler — prevents session from being destroyed
-        // between the auth check and the handler call. Read-only endpoints
-        // use a shared lock so they can run concurrently with each other;
-        // mutating endpoints take an exclusive lock.
+        // Lock strategy depends on endpoint type:
+        //   lock_free:  no dispatch lock — endpoint manages own synchronization
+        //   readonly:   shared lock — concurrent with other readers
+        //   mutating:   exclusive lock — serialized with all other endpoints
         RestResponse rest_res;
         {
             auto lock_start = std::chrono::steady_clock::now();
 
-            // Acquire shared or exclusive lock based on endpoint type.
-            // Both lock types are held in a unique_lock/shared_lock that
-            // releases on scope exit.
             std::unique_lock<std::shared_mutex> exclusive_lock(dispatch_mutex_, std::defer_lock);
             std::shared_lock<std::shared_mutex> shared_lock(dispatch_mutex_, std::defer_lock);
-            if (endpoint.readonly())
-                shared_lock.lock();
-            else
-                exclusive_lock.lock();
+            if (!endpoint.lock_free()) {
+                if (endpoint.readonly())
+                    shared_lock.lock();
+                else
+                    exclusive_lock.lock();
+            }
 
             auto lock_acquired = std::chrono::steady_clock::now();
             dispatch_lock_acquisitions_.get().inc();
@@ -206,6 +205,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
                     return;
                 }
 
+                // Auth lookup is lock-free — reads HAMT snapshot via find()
                 rest_req.session = auth_func_(rest_req.bearer_token);
                 if (!rest_req.session) {
                     Log::log_print(VERBOSE, "REST: << 401 %s %s (bad token)", req.method.c_str(), req.path.c_str());

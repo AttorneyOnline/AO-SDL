@@ -54,13 +54,16 @@ NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const st
     // TODO: store hdid on session for future ban/rate-limiting support
     (void)hdid;
     uint64_t id = next_rest_id_++;
-    auto& session = room_.create_session(id, "aonx");
-    session.session_token = generate_token();
-    room_.register_session_token(session.session_token, id);
+    auto token = generate_token();
+
+    // Single COW copy: creates session + registers token in one operation
+    auto& session = room_.create_session_with_token(id, "aonx", token);
     session.display_name = client_name;
     session.client_software = client_name + "/" + client_version;
     session.joined = true;
     room_.stats.joined.fetch_add(1, std::memory_order_relaxed);
+
+    // Log after mutation is complete (not under the dispatch lock's critical path)
     Log::log_print(INFO, "NX: session created (%s, client=%s)", format_client_id(id).c_str(),
                    session.client_software.c_str());
     return {session.session_token, session.session_id, session.moderator};
