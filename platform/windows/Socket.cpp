@@ -48,7 +48,8 @@ static SSL_CTX* g_server_ctx = nullptr;
 
 static void load_windows_cert_store(SSL_CTX* ctx) {
     HCERTSTORE store = CertOpenSystemStoreW(0, L"ROOT");
-    if (!store) return;
+    if (!store)
+        return;
 
     X509_STORE* x509_store = SSL_CTX_get_cert_store(ctx);
     PCCERT_CONTEXT cert = nullptr;

@@ -78,8 +78,12 @@ class PersistentMap {
         };
         std::vector<NodeEntry> entries;
 
-        bool has(int slot) const { return (bitmap >> slot) & 1; }
-        int index(int slot) const { return std::popcount(bitmap & ((1u << slot) - 1)); }
+        bool has(int slot) const {
+            return (bitmap >> slot) & 1;
+        }
+        int index(int slot) const {
+            return std::popcount(bitmap & ((1u << slot) - 1));
+        }
     };
     using NodePtr = std::shared_ptr<const Node>;
 
@@ -99,9 +103,8 @@ class PersistentMap {
         }
 
         bool operator==(const const_iterator& o) const {
-            return stack_.size() == o.stack_.size() &&
-                   (stack_.empty() || (stack_.back().node == o.stack_.back().node &&
-                                      stack_.back().idx == o.stack_.back().idx));
+            return stack_.size() == o.stack_.size() && (stack_.empty() || (stack_.back().node == o.stack_.back().node &&
+                                                                           stack_.back().idx == o.stack_.back().idx));
         }
         bool operator!=(const const_iterator& o) const {
             return !(*this == o);

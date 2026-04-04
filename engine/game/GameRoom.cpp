@@ -31,7 +31,7 @@ ServerSession& GameRoom::create_session(uint64_t client_id, const std::string& p
 }
 
 ServerSession& GameRoom::create_session_with_token(uint64_t client_id, const std::string& protocol,
-                                                    const std::string& token) {
+                                                   const std::string& token) {
     auto session = std::make_shared<ServerSession>();
     session->client_id = client_id;
     session->protocol = protocol;
