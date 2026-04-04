@@ -16,8 +16,10 @@
 #include "game/GameAction.h"
 #include "game/ServerSession.h"
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -56,14 +58,38 @@ class GameRoom {
             cb(char_taken);
     }
 
+    // --- Atomic aggregate stats (lock-free reads for metrics) ---
+    // Updated at each mutation site so the metrics collector can read
+    // them without acquiring the dispatch lock.
+    struct {
+        std::atomic<int> sessions_ao{0};
+        std::atomic<int> sessions_nx{0};
+        std::atomic<int> joined{0};
+        std::atomic<int> moderators{0};
+        std::atomic<int> chars_taken{0};
+    } stats;
+
     // --- Session management (unified across protocols) ---
+    //
+    // Sessions are stored in a copy-on-write map: writers copy the pointer map,
+    // mutate the copy, then atomically swap it in. Readers grab a snapshot via
+    // sessions_snapshot() and iterate freely without any lock.
+
+    using SessionPtr = std::shared_ptr<ServerSession>;
+    using SessionMap = std::unordered_map<uint64_t, SessionPtr>;
+    using TokenMap = std::unordered_map<std::string, uint64_t>;
+
+    /// Snapshot type: a shared_ptr to an immutable map. Readers hold this while
+    /// iterating — the map won't be freed until all readers drop their copy.
+    struct SessionSnapshot {
+        std::shared_ptr<const SessionMap> sessions;
+        std::shared_ptr<const TokenMap> tokens;
+    };
 
     ServerSession& create_session(uint64_t client_id, const std::string& protocol);
     void destroy_session(uint64_t client_id);
     ServerSession* get_session(uint64_t client_id);
-    size_t session_count() const {
-        return sessions_.size();
-    }
+    size_t session_count() const;
 
     /// Register a session token for O(1) lookup. Call after setting
     /// session.session_token on a newly created session.
@@ -81,11 +107,17 @@ class GameRoom {
     /// Safe to call under a shared (reader) lock.
     std::vector<uint64_t> find_expired_sessions(int ttl_seconds) const;
 
-    /// Invoke a callback for each active session.
+    /// Grab an immutable snapshot of all sessions. Lock-free — safe to call
+    /// from any thread without the dispatch lock. The returned snapshot stays
+    /// valid (and immutable) as long as the caller holds it.
+    SessionSnapshot sessions_snapshot() const;
+
+    /// Invoke a callback for each active session (lock-free via COW snapshot).
     template <typename F>
     void for_each_session(F&& func) const {
-        for (auto& [id, session] : sessions_)
-            func(session);
+        auto snap = sessions_snapshot();
+        for (auto& [id, session] : *snap.sessions)
+            func(*session);
     }
 
     /// All sessions in a given area.
@@ -155,9 +187,33 @@ class GameRoom {
     void handle_music(const MusicAction& action);
 
   private:
-    std::unordered_map<uint64_t, ServerSession> sessions_;
-    std::unordered_map<std::string, uint64_t> token_index_; ///< token → client_id for O(1) lookup.
+    /// COW session map — mutated by copying, then atomically swapped.
+    /// Use sessions_snapshot() for lock-free reads, cow_mutate() for writes.
+    std::shared_ptr<const SessionMap> sessions_ = std::make_shared<const SessionMap>();
+    std::shared_ptr<const TokenMap> token_index_ = std::make_shared<const TokenMap>();
+
+    /// Copy the current maps, apply a mutation, swap atomically.
+    /// Returns a reference to the session (in the new map) for the given client_id,
+    /// or nullptr if the mutation didn't create/retain one.
+    template <typename F>
+    void cow_mutate(F&& func) {
+        auto new_sessions = std::make_shared<SessionMap>(*sessions_);
+        auto new_tokens = std::make_shared<TokenMap>(*token_index_);
+        func(*new_sessions, *new_tokens);
+        auto copy_bytes = new_sessions->size() * (sizeof(uint64_t) + sizeof(SessionPtr)) +
+                          new_tokens->size() * (sizeof(std::string) + sizeof(uint64_t));
+        cow_copy_bytes_.fetch_add(copy_bytes, std::memory_order_relaxed);
+        sessions_ = std::move(new_sessions);
+        token_index_ = std::move(new_tokens);
+    }
+
     uint64_t next_session_id_ = 0;
+
+    /// Cumulative bytes copied during COW mutations (for metrics).
+    std::atomic<uint64_t> cow_copy_bytes_{0};
+  public:
+    uint64_t cow_copy_bytes() const { return cow_copy_bytes_.load(std::memory_order_relaxed); }
+  private:
 
     // Character ID index (Phase 3)
     std::vector<std::string> char_ids_;                     ///< Parallel to `characters`.
