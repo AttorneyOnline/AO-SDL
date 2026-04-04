@@ -17,6 +17,9 @@ class SessionDeleteEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    bool lock_free() const override {
+        return true;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         server().destroy_session(req.session->client_id);

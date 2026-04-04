@@ -775,6 +775,9 @@ class Server {
 
     // -- Observable internals (for metrics) ----------------------------------
 
+    /// Number of currently open TCP connections.
+    size_t open_connections() const;
+
     /// Number of pending work items (requests waiting for a worker thread).
     size_t work_queue_depth() const;
 
@@ -792,6 +795,33 @@ class Server {
 
     /// Cumulative nanoseconds workers spent executing handlers.
     uint64_t worker_busy_ns() const;
+
+    /// Cumulative nanoseconds the poll thread spent waiting in kevent/epoll.
+    uint64_t poll_idle_ns() const;
+
+    /// Cumulative nanoseconds the poll thread spent handling events.
+    uint64_t poll_busy_ns() const;
+
+    /// Total events processed by the poll thread.
+    uint64_t poll_events_total() const;
+
+    /// Number of poll loop sections being profiled.
+    size_t poll_section_count() const;
+
+    /// Name of the i-th poll section.
+    const char* poll_section_name(size_t i) const;
+
+    /// Cumulative nanoseconds for the i-th poll section.
+    uint64_t poll_section_ns(size_t i) const;
+
+    /// Number of worker sections being profiled.
+    size_t worker_section_count() const;
+
+    /// Name of the i-th worker section.
+    const char* worker_section_name(size_t i) const;
+
+    /// Cumulative nanoseconds for worker w, section s.
+    uint64_t worker_section_ns(size_t w, size_t s) const;
 
   protected:
     bool process_request(Stream& strm, const std::string& remote_addr, int remote_port, const std::string& local_addr,

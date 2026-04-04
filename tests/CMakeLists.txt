@@ -55,6 +55,7 @@ set(TEST_SOURCES
     utils/test_Crypto.cpp
     utils/test_Log.cpp
     utils/test_Metrics.cpp
+    utils/test_PersistentMap.cpp
     net/test_WSClientThread.cpp
     net/test_HttpClient.cpp
     net/test_HttpServer.cpp

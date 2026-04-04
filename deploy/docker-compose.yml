@@ -5,7 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      - "443:443"       # HTTPS (TCP) — HTTP/1.1 + HTTP/2
+      - "443:443/udp"  # QUIC — HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

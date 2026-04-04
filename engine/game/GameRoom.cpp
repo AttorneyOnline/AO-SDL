@@ -14,28 +14,53 @@ static auto& sessions_expired_ =
 ServerSession& GameRoom::create_session(uint64_t client_id, const std::string& protocol) {
     auto session = std::make_shared<ServerSession>();
     session->client_id = client_id;
-    session->session_id = next_session_id_++;
     session->protocol = protocol;
     if (!areas.empty())
         session->area = areas[0];
 
     ServerSession* raw = session.get();
-    cow_mutate([&](SessionMap& sm, TokenMap&) { sm[client_id] = std::move(session); });
+    {
+        std::lock_guard lock(state_swap_mutex_);
+        session->session_id = next_session_id_++;
+        sessions_ = sessions_.set(client_id, std::move(session));
+    }
 
     (protocol == "ao2") ? stats.sessions_ao.fetch_add(1, std::memory_order_relaxed)
                         : stats.sessions_nx.fetch_add(1, std::memory_order_relaxed);
-    Log::log_print(INFO, "GameRoom: session created for %s", format_client_id(client_id).c_str());
+    return *raw;
+}
+
+ServerSession& GameRoom::create_session_with_token(uint64_t client_id, const std::string& protocol,
+                                                    const std::string& token) {
+    auto session = std::make_shared<ServerSession>();
+    session->client_id = client_id;
+    session->protocol = protocol;
+    session->session_token = token;
+    if (!areas.empty())
+        session->area = areas[0];
+
+    ServerSession* raw = session.get();
+    {
+        std::lock_guard lock(state_swap_mutex_);
+        session->session_id = next_session_id_++;
+        sessions_ = sessions_.set(client_id, std::move(session));
+        if (!token.empty())
+            token_index_ = token_index_.set(token, client_id);
+    }
+
+    (protocol == "ao2") ? stats.sessions_ao.fetch_add(1, std::memory_order_relaxed)
+                        : stats.sessions_nx.fetch_add(1, std::memory_order_relaxed);
     return *raw;
 }
 
 void GameRoom::destroy_session(uint64_t client_id) {
-    auto it = sessions_->find(client_id);
-    if (it == sessions_->end())
+    auto* sp = sessions_.find(client_id);
+    if (!sp)
         return;
 
-    auto& session = *it->second;
+    auto& session = **sp;
 
-    // Update atomic stats before erasing
+    // Update atomic stats
     (session.protocol == "ao2") ? stats.sessions_ao.fetch_sub(1, std::memory_order_relaxed)
                                 : stats.sessions_nx.fetch_sub(1, std::memory_order_relaxed);
     if (session.joined)
@@ -43,41 +68,53 @@ void GameRoom::destroy_session(uint64_t client_id) {
     if (session.moderator)
         stats.moderators.fetch_sub(1, std::memory_order_relaxed);
 
-    // Free character slot
     int char_id = session.character_id;
     if (char_id >= 0 && char_id < static_cast<int>(char_taken.size())) {
         char_taken[char_id] = 0;
         stats.chars_taken.fetch_sub(1, std::memory_order_relaxed);
     }
 
-    cow_mutate([&](SessionMap& sm, TokenMap& tm) {
+    {
+        std::lock_guard lock(state_swap_mutex_);
         if (!session.session_token.empty())
-            tm.erase(session.session_token);
-        sm.erase(client_id);
-    });
-
-    Log::log_print(INFO, "GameRoom: session destroyed for %s", format_client_id(client_id).c_str());
+            token_index_ = token_index_.erase(session.session_token);
+        sessions_ = sessions_.erase(client_id);
+    }
 }
 
 ServerSession* GameRoom::get_session(uint64_t client_id) {
-    auto it = sessions_->find(client_id);
-    return it != sessions_->end() ? it->second.get() : nullptr;
+    auto* sp = sessions_.find(client_id);
+    return sp ? sp->get() : nullptr;
 }
 
 size_t GameRoom::session_count() const {
-    return sessions_->size();
+    return sessions_.size();
 }
 
 void GameRoom::register_session_token(const std::string& token, uint64_t client_id) {
-    if (!token.empty())
-        cow_mutate([&](SessionMap&, TokenMap& tm) { tm[token] = client_id; });
+    if (!token.empty()) {
+        std::lock_guard lock(state_swap_mutex_);
+        token_index_ = token_index_.set(token, client_id);
+    }
 }
 
 ServerSession* GameRoom::find_session_by_token(const std::string& token) {
-    auto it = token_index_->find(token);
-    if (it == token_index_->end())
+    // Grab a consistent snapshot of both maps — the swap mutex ensures
+    // we don't read token_index_ from version N and sessions_ from N+1.
+    // The mutex is held only for two pointer copies (~20ns), not for the
+    // HAMT lookups themselves.
+    TokenMap tokens;
+    SessionMap sessions;
+    {
+        std::lock_guard lock(state_swap_mutex_);
+        tokens = token_index_;
+        sessions = sessions_;
+    }
+    auto* cid = tokens.find(token);
+    if (!cid)
         return nullptr;
-    return get_session(it->second);
+    auto* sp = sessions.find(*cid);
+    return sp ? sp->get() : nullptr;
 }
 
 int GameRoom::expire_sessions(int ttl_seconds) {
@@ -86,15 +123,15 @@ int GameRoom::expire_sessions(int ttl_seconds) {
     auto now = std::chrono::steady_clock::now();
     int expired = 0;
 
-    // Collect expired IDs first (can't modify during COW iteration)
+    // Collect expired IDs first, then destroy
     std::vector<uint64_t> to_expire;
-    for (auto& [client_id, session] : *sessions_) {
+    sessions_.for_each([&](const uint64_t& client_id, const SessionPtr& session) {
         if (!session->session_token.empty()) {
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session->last_activity()).count();
             if (elapsed > ttl_seconds)
                 to_expire.push_back(client_id);
         }
-    }
+    });
 
     for (auto cid : to_expire) {
         destroy_session(cid);
@@ -114,13 +151,13 @@ std::vector<uint64_t> GameRoom::find_expired_sessions(int ttl_seconds) const {
     if (ttl_seconds <= 0)
         return result;
     auto now = std::chrono::steady_clock::now();
-    for (auto& [client_id, session] : *sessions_) {
+    sessions_.for_each([&](const uint64_t& client_id, const SessionPtr& session) {
         if (!session->session_token.empty()) {
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session->last_activity()).count();
             if (elapsed > ttl_seconds)
                 result.push_back(client_id);
         }
-    }
+    });
     return result;
 }
 
@@ -130,10 +167,10 @@ GameRoom::SessionSnapshot GameRoom::sessions_snapshot() const {
 
 std::vector<ServerSession*> GameRoom::sessions_in_area(const std::string& area) {
     std::vector<ServerSession*> result;
-    for (auto& [id, s] : *sessions_) {
+    sessions_.for_each([&](const uint64_t&, const SessionPtr& s) {
         if (s->area == area)
             result.push_back(s.get());
-    }
+    });
     return result;
 }
 

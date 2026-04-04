@@ -19,7 +19,7 @@ class SessionRenewEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
-    bool readonly() const override {
+    bool lock_free() const override {
         return true;
     }
     bool sensitive() const override {

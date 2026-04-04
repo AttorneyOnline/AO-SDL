@@ -110,11 +110,37 @@ struct Server::ServerState {
 
     std::atomic<bool> running{false};
 
+    // Connection count (atomic for cross-thread reads from metrics)
+    std::atomic<int> open_connections{0};
+
     // Worker utilization metrics
     std::atomic<int> active_workers{0};
     size_t num_workers = 0;
     std::atomic<uint64_t> worker_idle_ns{0};
     std::atomic<uint64_t> worker_busy_ns{0};
+
+    // Per-worker metrics (indexed by worker thread number)
+    static constexpr size_t MAX_WORKERS = 64;
+    enum WorkerSection { W_IDLE, W_DEQUEUE, W_HANDLER, W_RESULT, NUM_WORKER_SECTIONS };
+    static constexpr const char* worker_section_names[] = {"idle", "dequeue", "handler", "result"};
+    struct PerWorkerStats {
+        std::atomic<uint64_t> idle_ns{0};
+        std::atomic<uint64_t> busy_ns{0};
+        std::atomic<uint64_t> section_ns[NUM_WORKER_SECTIONS] = {};
+    };
+    PerWorkerStats per_worker[MAX_WORKERS];
+
+    // Poll thread utilization metrics
+    std::atomic<uint64_t> poll_idle_ns{0};
+    std::atomic<uint64_t> poll_busy_ns{0};
+    std::atomic<uint64_t> poll_events_total{0};
+
+    // Poll loop section profiling (cumulative nanoseconds per section)
+    enum PollSection { ACCEPT, SSE_PUBLISH, RESPONSE_SEND, RECV, PARSE_DISPATCH, INLINE_HANDLER, SSE_KEEPALIVE, NUM_SECTIONS };
+    static constexpr const char* poll_section_names[] = {
+        "accept", "sse_publish", "response_send", "recv", "parse_dispatch", "inline_handler", "sse_keepalive"
+    };
+    std::atomic<uint64_t> poll_section_ns[NUM_SECTIONS] = {};
 
     // Inline handlers — run on the poll thread, bypass the worker queue.
     // Use for endpoints that must stay responsive regardless of worker load
@@ -208,6 +234,7 @@ static void remove_connection(ServerState& state, uint64_t conn_id) {
             tcp_retransmits_.get().inc(retrans);
         state.fd_to_conn.erase(fd);
         state.connections.erase(it);
+        state.open_connections.fetch_sub(1, std::memory_order_relaxed);
     }
 }
 
@@ -451,11 +478,24 @@ static std::string serialize_response(const Response& res, const Headers& defaul
     return out;
 }
 
+/// RAII guard that accumulates elapsed nanoseconds into an atomic counter.
+struct SectionScope {
+    std::atomic<uint64_t>& counter;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    ~SectionScope() {
+        counter.fetch_add(
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - start).count()),
+            std::memory_order_relaxed);
+    }
+};
+
 // ===========================================================================
 // Worker thread loop
 // ===========================================================================
 
-static void worker_loop(Server::ServerState& state, std::stop_token st) {
+static void worker_loop(Server::ServerState& state, std::stop_token st, size_t worker_id) {
+    auto& pw = state.per_worker[worker_id < ServerState::MAX_WORKERS ? worker_id : 0];
     while (!st.stop_requested()) {
         // Wait for work (idle time)
         auto idle_start = std::chrono::steady_clock::now();
@@ -464,56 +504,67 @@ static void worker_loop(Server::ServerState& state, std::stop_token st) {
             state.work_cv.wait(lock, [&] { return state.work_channel.has_events() || st.stop_requested(); });
         }
         auto idle_end = std::chrono::steady_clock::now();
-        state.worker_idle_ns.fetch_add(
-            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
-            std::memory_order_relaxed);
+        auto idle_elapsed = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count());
+        state.worker_idle_ns.fetch_add(idle_elapsed, std::memory_order_relaxed);
+        pw.idle_ns.fetch_add(idle_elapsed, std::memory_order_relaxed);
+        pw.section_ns[ServerState::W_IDLE].fetch_add(idle_elapsed, std::memory_order_relaxed);
 
         if (st.stop_requested())
             break;
 
-        auto item = state.work_channel.get_event();
+        // Dequeue
+        std::optional<WorkItem> item;
+        {
+            SectionScope _s{pw.section_ns[ServerState::W_DEQUEUE]};
+            item = state.work_channel.get_event();
+        }
         if (!item)
             continue;
 
-        // Track busy time
+        // Handler execution
         state.active_workers.fetch_add(1, std::memory_order_relaxed);
         auto busy_start = std::chrono::steady_clock::now();
 
         Response res;
         res.status = 200;
 
-        try {
-            if (item->handler) {
-                item->handler(item->request, res);
+        {
+            SectionScope _s{pw.section_ns[ServerState::W_HANDLER]};
+            try {
+                if (item->handler) {
+                    item->handler(item->request, res);
+                }
+                else {
+                    res.status = 404;
+                    res.set_content("Not Found", "text/plain");
+                }
             }
-            else {
-                res.status = 404;
-                res.set_content("Not Found", "text/plain");
+            catch (const std::exception& e) {
+                res.status = 500;
+                res.set_content("Internal Server Error", "text/plain");
+                Log::log_print(ERR, "HTTP handler exception: %s", e.what());
             }
-        }
-        catch (const std::exception& e) {
-            res.status = 500;
-            res.set_content("Internal Server Error", "text/plain");
-            Log::log_print(ERR, "HTTP handler exception: %s", e.what());
         }
 
-        state.worker_busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                                 std::chrono::steady_clock::now() - busy_start)
-                                                                 .count()),
-                                       std::memory_order_relaxed);
+        auto busy_elapsed = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busy_start).count());
+        state.worker_busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
+        pw.busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
         state.active_workers.fetch_sub(1, std::memory_order_relaxed);
 
-        WorkResult result;
-        result.connection_id = item->connection_id;
-        result.response = std::move(res);
-        result.is_head = item->is_head;
-        // Propagate keep-alive from the request's Connection header
-        auto conn_hdr = item->request.get_header_value("Connection");
-        result.request_keep_alive = detail::case_ignore::equal(conn_hdr, "keep-alive");
-        state.result_channel.publish(std::move(result));
-
-        // Wake the poll thread
-        state.poller.notify();
+        // Build and publish result
+        {
+            SectionScope _s{pw.section_ns[ServerState::W_RESULT]};
+            WorkResult result;
+            result.connection_id = item->connection_id;
+            result.response = std::move(res);
+            result.is_head = item->is_head;
+            auto conn_hdr = item->request.get_header_value("Connection");
+            result.request_keep_alive = detail::case_ignore::equal(conn_hdr, "keep-alive");
+            state.result_channel.publish(std::move(result));
+            state.poller.notify();
+        }
     }
 }
 
@@ -592,12 +643,20 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
     platform::Poller::Event events[MAX_EVENTS];
 
     while (state.running.load()) {
+        auto poll_start = std::chrono::steady_clock::now();
         int n = state.poller.poll(events, MAX_EVENTS, 100);
+        auto poll_end = std::chrono::steady_clock::now();
+        state.poll_idle_ns.fetch_add(
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(poll_end - poll_start).count()),
+            std::memory_order_relaxed);
+        if (n > 0)
+            state.poll_events_total.fetch_add(static_cast<uint64_t>(n), std::memory_order_relaxed);
 
         for (int i = 0; i < n; ++i) {
             auto& ev = events[i];
 
             if (ev.fd == state.listener_fd) {
+                SectionScope _s{state.poll_section_ns[ServerState::ACCEPT]};
                 // Accept new connections
                 while (true) {
                     std::string remote_addr;
@@ -617,17 +676,23 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     state.fd_to_conn[cfd] = conn.id;
                     state.connections.emplace(conn.id, std::move(conn));
                     tcp_connections_.get().inc();
+                    state.open_connections.fetch_add(1, std::memory_order_relaxed);
                 }
             }
             else if (ev.fd == state.notifier_fd) {
                 state.poller.drain_notifier();
 
                 // Drain SSE events from global EventManager
-                while (auto sse = EventManager::instance().get_channel<SSEEvent>().get_event()) {
-                    srv->push_sse(sse->event, sse->data, sse->area);
+                {
+                    SectionScope _s{state.poll_section_ns[ServerState::SSE_PUBLISH]};
+                    while (auto sse = EventManager::instance().get_channel<SSEEvent>().get_event()) {
+                        srv->push_sse(sse->event, sse->data, sse->area);
+                    }
                 }
 
                 // Process completed results
+                {
+                SectionScope _s{state.poll_section_ns[ServerState::RESPONSE_SEND]};
                 while (auto result = state.result_channel.get_event()) {
                     auto conn_it = state.connections.find(result->connection_id);
                     if (conn_it == state.connections.end())
@@ -675,8 +740,10 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         remove_connection(state, result->connection_id);
                     }
                 }
+                } // end RESPONSE_SEND scope
             }
             else {
+                SectionScope _s{state.poll_section_ns[ServerState::RECV]};
                 // O(1) SSE connection disconnect detection
                 {
                     std::lock_guard sse_lock(state.sse_mutex);
@@ -1029,9 +1096,16 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
             }
         }
 
+        state.poll_busy_ns.fetch_add(
+            static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - poll_end).count()),
+            std::memory_order_relaxed);
+
         // --- SSE keepalive (every ~30s) ---
         auto now = std::chrono::steady_clock::now();
         if (now - state.last_keepalive > std::chrono::seconds(30)) {
+            SectionScope _s{state.poll_section_ns[ServerState::SSE_KEEPALIVE]};
             state.last_keepalive = now;
             std::lock_guard sse_lock(state.sse_mutex);
             std::vector<int> dead_fds;
@@ -1208,7 +1282,7 @@ bool Server::listen_after_bind() {
     size_t num_workers = CPPHTTPLIB_THREAD_POOL_COUNT;
     state.num_workers = num_workers;
     for (size_t i = 0; i < num_workers; ++i) {
-        state.workers.emplace_back([&state](std::stop_token st) { worker_loop(state, st); });
+        state.workers.emplace_back([&state, i](std::stop_token st) { worker_loop(state, st, i); });
     }
 
     // Run poll loop on this thread (blocks)
@@ -1335,6 +1409,10 @@ bool Server::process_and_close_socket(socket_t) {
 
 // -- Observable internals (for metrics) --------------------------------------
 
+size_t Server::open_connections() const {
+    return state_ ? static_cast<size_t>(std::max(0, state_->open_connections.load(std::memory_order_relaxed))) : 0;
+}
+
 size_t Server::work_queue_depth() const {
     return state_ ? state_->work_channel.size() : 0;
 }
@@ -1357,6 +1435,46 @@ uint64_t Server::worker_idle_ns() const {
 
 uint64_t Server::worker_busy_ns() const {
     return state_ ? state_->worker_busy_ns.load(std::memory_order_relaxed) : 0;
+}
+
+uint64_t Server::poll_idle_ns() const {
+    return state_ ? state_->poll_idle_ns.load(std::memory_order_relaxed) : 0;
+}
+
+uint64_t Server::poll_busy_ns() const {
+    return state_ ? state_->poll_busy_ns.load(std::memory_order_relaxed) : 0;
+}
+
+uint64_t Server::poll_events_total() const {
+    return state_ ? state_->poll_events_total.load(std::memory_order_relaxed) : 0;
+}
+
+size_t Server::poll_section_count() const {
+    return ServerState::NUM_SECTIONS;
+}
+
+const char* Server::poll_section_name(size_t i) const {
+    return i < ServerState::NUM_SECTIONS ? ServerState::poll_section_names[i] : "unknown";
+}
+
+uint64_t Server::poll_section_ns(size_t i) const {
+    if (!state_ || i >= ServerState::NUM_SECTIONS)
+        return 0;
+    return state_->poll_section_ns[i].load(std::memory_order_relaxed);
+}
+
+size_t Server::worker_section_count() const {
+    return ServerState::NUM_WORKER_SECTIONS;
+}
+
+const char* Server::worker_section_name(size_t i) const {
+    return i < ServerState::NUM_WORKER_SECTIONS ? ServerState::worker_section_names[i] : "unknown";
+}
+
+uint64_t Server::worker_section_ns(size_t w, size_t s) const {
+    if (!state_ || w >= state_->num_workers || s >= ServerState::NUM_WORKER_SECTIONS)
+        return 0;
+    return state_->per_worker[w].section_ns[s].load(std::memory_order_relaxed);
 }
 std::unique_ptr<detail::MatcherBase> Server::make_matcher(const std::string&) {
     return nullptr;

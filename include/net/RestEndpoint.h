@@ -27,5 +27,12 @@ class RestEndpoint {
         return false;
     }
 
+    /// If true, the handler manages its own synchronization and runs with
+    /// NO dispatch lock held. Use for endpoints backed by lock-free data
+    /// structures (e.g., HAMT-based session create/delete).
+    virtual bool lock_free() const {
+        return false;
+    }
+
     virtual RestResponse handle(const RestRequest& req) = 0;
 };

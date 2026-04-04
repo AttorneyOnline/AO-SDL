@@ -20,8 +20,10 @@
 
 #include "net/Http.h"
 
+#include <condition_variable>
 #include <csignal>
 #include <filesystem>
+#include <mutex>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -167,7 +169,10 @@ int main(int /*argc*/, char* argv[]) {
     auto server_start_time = std::chrono::steady_clock::now();
     struct MetricsTextCache {
         std::mutex mutex;
+        std::condition_variable cv;
         std::shared_ptr<const std::string> text = std::make_shared<const std::string>();
+        bool requested = false;
+
         void store(std::shared_ptr<const std::string> t) {
             std::lock_guard lock(mutex);
             text = std::move(t);
@@ -176,11 +181,29 @@ int main(int /*argc*/, char* argv[]) {
             std::lock_guard lock(mutex);
             return text;
         }
+        /// Signal the metrics thread to regenerate.
+        void request_refresh() {
+            {
+                std::lock_guard lock(mutex);
+                requested = true;
+            }
+            cv.notify_one();
+        }
+        /// Wait for a refresh request or timeout. Returns true if requested.
+        bool wait_for_request(std::stop_token& st, std::chrono::milliseconds timeout) {
+            std::unique_lock lock(mutex);
+            cv.wait_for(lock, timeout, [&] { return requested || st.stop_requested(); });
+            bool was_requested = requested;
+            requested = false;
+            return was_requested;
+        }
     };
     auto metrics_cache = std::make_shared<MetricsTextCache>();
+    std::jthread metrics_thread_handle; // kept alive for server lifetime
 
     if (cfg.metrics_enabled()) {
         http.GetInline(cfg.metrics_path(), [&metrics_cache](const http::Request&, http::Response& res) {
+            metrics_cache->request_refresh();
             auto text = metrics_cache->load();
             res.set_content(*text, "text/plain; version=0.0.4; charset=utf-8");
         });
@@ -224,6 +247,7 @@ int main(int /*argc*/, char* argv[]) {
                                                {"session_id", "display_name", "protocol", "area", "character"});
         auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
                                        {"session_id", "display_name", "protocol", "area", "character"});
+        auto& http_open_conns = reg.gauge("kagami_http_open_connections", "Currently open TCP connections");
         auto& http_work_queue = reg.gauge("kagami_http_work_queue_depth", "Pending requests in worker queue");
         auto& http_result_queue = reg.gauge("kagami_http_result_queue_depth", "Pending results awaiting poll thread");
         auto& http_active_workers =
@@ -235,6 +259,18 @@ int main(int /*argc*/, char* argv[]) {
             reg.gauge("kagami_http_worker_busy_nanoseconds_total", "Cumulative worker busy time in nanoseconds");
         auto& cow_copy_bytes =
             reg.gauge("kagami_cow_copy_bytes_total", "Cumulative bytes copied during COW session map mutations");
+        auto& poll_idle_ns =
+            reg.gauge("kagami_http_poll_idle_nanoseconds_total", "Cumulative poll thread idle time in nanoseconds");
+        auto& poll_busy_ns =
+            reg.gauge("kagami_http_poll_busy_nanoseconds_total", "Cumulative poll thread busy time in nanoseconds");
+        auto& poll_events =
+            reg.gauge("kagami_http_poll_events_total", "Total events processed by poll thread");
+        auto& poll_section_ns =
+            reg.gauge("kagami_http_poll_section_nanoseconds_total",
+                       "Cumulative poll thread time per section in nanoseconds", {"section"});
+        auto& worker_section_ns =
+            reg.gauge("kagami_http_worker_section_nanoseconds_total",
+                       "Cumulative worker time per worker per section", {"worker", "section"});
 
         auto cors = cfg.cors_origins();
         server_info
@@ -251,15 +287,18 @@ int main(int /*argc*/, char* argv[]) {
         std::jthread metrics_thread([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players,
                                      &area_info, &chars_taken, &event_publishes, &session_bytes_sent,
                                      &session_bytes_recv, &session_packets_sent, &session_packets_recv, &session_idle,
-                                     &http_work_queue, &http_result_queue, &http_active_workers, &http_worker_count,
-                                     &http_worker_idle_ns, &http_worker_busy_ns, &cow_copy_bytes, &http_server = http,
-                                     &room, &server_start_time, &reg, &metrics_cache](std::stop_token st) {
+                                     &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers, &http_worker_count,
+                                     &http_worker_idle_ns, &http_worker_busy_ns, &cow_copy_bytes, &poll_idle_ns,
+                                     &poll_busy_ns, &poll_events, &poll_section_ns, &worker_section_ns,
+                                     &http_server = http, &room, &server_start_time, &reg,
+                                     &metrics_cache](std::stop_token st) {
             while (!st.stop_requested()) {
                 auto now = std::chrono::steady_clock::now();
                 uptime.get().set(std::chrono::duration<double>(now - server_start_time).count());
                 rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
 
                 // HTTP worker pool metrics (lock-free — read atomics directly)
+                http_open_conns.get().set(static_cast<double>(http_server.open_connections()));
                 http_work_queue.get().set(static_cast<double>(http_server.work_queue_depth()));
                 http_result_queue.get().set(static_cast<double>(http_server.result_queue_depth()));
                 http_active_workers.get().set(static_cast<double>(http_server.active_workers()));
@@ -275,6 +314,20 @@ int main(int /*argc*/, char* argv[]) {
                 chars_taken.get().set(room.stats.chars_taken.load(std::memory_order_relaxed));
                 cow_copy_bytes.get().set(static_cast<double>(room.cow_copy_bytes()));
 
+                // Poll thread metrics (lock-free — read atomics directly)
+                poll_idle_ns.get().set(static_cast<double>(http_server.poll_idle_ns()));
+                poll_busy_ns.get().set(static_cast<double>(http_server.poll_busy_ns()));
+                poll_events.get().set(static_cast<double>(http_server.poll_events_total()));
+                for (size_t i = 0; i < http_server.poll_section_count(); ++i)
+                    poll_section_ns.labels({http_server.poll_section_name(i)})
+                        .set(static_cast<double>(http_server.poll_section_ns(i)));
+
+                // Per-worker section breakdown
+                for (size_t w = 0; w < http_server.worker_count(); ++w)
+                    for (size_t s = 0; s < http_server.worker_section_count(); ++s)
+                        worker_section_ns.labels({std::to_string(w), http_server.worker_section_name(s)})
+                            .set(static_cast<double>(http_server.worker_section_ns(w, s)));
+
                 // Per-session + area detail (lock-free via COW snapshot)
                 auto snap = room.sessions_snapshot();
 
@@ -282,9 +335,10 @@ int main(int /*argc*/, char* argv[]) {
                 area_info.clear();
                 for (auto& [id, state] : room.area_states()) {
                     int count = 0;
-                    for (auto& [sid, s] : *snap.sessions)
+                    snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
                         if (s->area == state.name)
                             ++count;
+                    });
                     area_players.labels({state.name, state.status}).set(count);
                     area_info.labels({state.name, state.status, state.locked ? "true" : "false"}).set(1);
                 }
@@ -295,7 +349,7 @@ int main(int /*argc*/, char* argv[]) {
                 session_packets_recv.clear();
                 session_idle.clear();
 
-                for (auto& [id, s] : *snap.sessions) {
+                snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
                     std::string char_name = (s->character_id >= 0 && s->character_id < (int)room.characters.size())
                                                 ? room.characters[s->character_id]
                                                 : "none";
@@ -311,7 +365,7 @@ int main(int /*argc*/, char* argv[]) {
                         static_cast<double>(s->packets_received.load(std::memory_order_relaxed)));
                     session_idle.labels(labels).set(static_cast<double>(
                         std::chrono::duration_cast<std::chrono::seconds>(now - s->last_activity()).count()));
-                }
+                });
 
                 for (auto& cs : EventManager::instance().snapshot_channel_stats())
                     event_publishes.labels({cs.raw_name}).set(static_cast<double>(cs.count));
@@ -320,9 +374,12 @@ int main(int /*argc*/, char* argv[]) {
                 auto text = std::make_shared<const std::string>(reg.collect());
                 metrics_cache->store(std::move(text));
 
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+                // Wait for the next scrape request, or regenerate every 2s as a
+                // fallback (for dashboards that auto-refresh without scraping).
+                metrics_cache->wait_for_request(st, std::chrono::seconds(2));
             }
         });
+        metrics_thread_handle = std::move(metrics_thread);
     }
 
     // Preflight handler for the SSE endpoint (registered outside RestRouter).
