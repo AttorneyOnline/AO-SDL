@@ -233,6 +233,12 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         res.status = rest_res.status;
         if (rest_res.status == 204 || rest_res.body.is_null()) {
             Log::log_print(VERBOSE, "REST: << %d %s %s", rest_res.status, req.method.c_str(), req.path.c_str());
+            // Per-session traffic counters (request only, no response body)
+            if (rest_req.session) {
+                rest_req.session->bytes_received.fetch_add(req.body.size(), std::memory_order_relaxed);
+                rest_req.session->packets_received.fetch_add(1, std::memory_order_relaxed);
+                rest_req.session->packets_sent.fetch_add(1, std::memory_order_relaxed);
+            }
         }
         else {
             auto body = rest_res.body.dump();
@@ -243,6 +249,13 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
                 Log::log_print(VERBOSE, "REST: << %d %s %s %s", rest_res.status, req.method.c_str(), req.path.c_str(),
                                body.c_str());
             http_response_bytes_.labels({req.method, endpoint.path_pattern()}).inc(body.size());
+            // Per-session traffic counters
+            if (rest_req.session) {
+                rest_req.session->bytes_received.fetch_add(req.body.size(), std::memory_order_relaxed);
+                rest_req.session->packets_received.fetch_add(1, std::memory_order_relaxed);
+                rest_req.session->bytes_sent.fetch_add(body.size(), std::memory_order_relaxed);
+                rest_req.session->packets_sent.fetch_add(1, std::memory_order_relaxed);
+            }
             res.set_content(std::move(body), rest_res.content_type);
         }
 

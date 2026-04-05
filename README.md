@@ -43,11 +43,19 @@ cmake --build build
 **Linux:**
 ```sh
 # Install system dependencies (Ubuntu/Debian)
-sudo apt install cmake ninja-build libglew-dev libssl-dev
+sudo apt install cmake ninja-build libglew-dev libssl-dev liburing-dev
 
 cmake --preset linux-debug
 cmake --build out/build/linux-debug
 ```
+
+On Linux, the build uses **io_uring** by default for high-performance completion-based I/O (requires kernel 5.7+ and `liburing-dev`). To fall back to epoll:
+
+```sh
+cmake --preset linux-debug -DAO_USE_IO_URING=OFF
+```
+
+If `liburing` is not found at configure time, the build automatically falls back to epoll with a warning.
 
 **Windows (Developer Command Prompt or PowerShell with VS environment):**
 ```sh

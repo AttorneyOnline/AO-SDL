@@ -50,11 +50,32 @@ class Http2Connection {
     using ResponseCallback = std::function<void(Response)>;
     void submit_get_async(const std::string& path, int urgency, ResponseCallback on_complete);
 
+    /// Submit a POST request with a body. Returns a future.
+    std::future<Response> submit_post(const std::string& path, const std::string& body,
+                                      const std::string& content_type,
+                                      const std::vector<std::pair<std::string, std::string>>& extra_headers = {},
+                                      int urgency = 3);
+
+    /// Submit a POST request with a completion callback.
+    void submit_post_async(const std::string& path, const std::string& body,
+                           const std::string& content_type,
+                           const std::vector<std::pair<std::string, std::string>>& extra_headers,
+                           int urgency, ResponseCallback on_complete);
+
     /// True if the connection is still alive and accepting new streams.
     bool is_alive() const;
 
     /// Shut down the connection gracefully.
     void shutdown();
+
+    // StreamData is public so the nghttp2 data provider callback can access it.
+    struct StreamData {
+        std::promise<Response> promise;
+        ResponseCallback callback;
+        Response response;
+        std::string request_body; // kept alive for POST body data provider
+        size_t body_offset = 0;
+    };
 
   private:
     Http2Connection(platform::Socket socket, const std::string& host);
@@ -62,12 +83,6 @@ class Http2Connection {
     void io_loop();
     bool pump_once();
     void send_pending();
-
-    struct StreamData {
-        std::promise<Response> promise;
-        ResponseCallback callback;
-        Response response;
-    };
 
     platform::Socket socket_;
     std::string host_;

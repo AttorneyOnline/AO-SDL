@@ -33,7 +33,7 @@ struct Poller::Impl {
     }
 };
 
-Poller::Poller() : impl_(std::make_unique<Impl>()) {
+Poller::Poller(unsigned /*io_buffers*/) : impl_(std::make_unique<Impl>()) {
 }
 Poller::~Poller() = default;
 Poller::Poller(Poller&&) noexcept = default;
@@ -117,9 +117,22 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
         auto it = impl_->user_data_map.find(ep.data.fd);
         if (it != impl_->user_data_map.end())
             ud = it->second;
-        out[i] = Event{ep.data.fd, flags, ud};
+        out[i] = Event{ep.data.fd, flags, ud, nullptr, 0, 0};
     }
     return n;
+}
+
+// -- buffer recycling (no-op for epoll) -------------------------------------
+
+void Poller::recycle_buffer(uint16_t /*buffer_id*/) {
+}
+
+Poller::IoStats Poller::io_stats() const { return {}; }
+
+// -- send (no-op for epoll — caller handles send inline) --------------------
+
+bool Poller::submit_send(int /*fd*/, const void* /*data*/, size_t /*len*/, size_t* /*bytes_sent*/) {
+    return true; // synchronous — caller must send inline
 }
 
 // -- notifier ---------------------------------------------------------------

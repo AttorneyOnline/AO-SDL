@@ -8,6 +8,8 @@
  */
 #pragma once
 
+#include "platform/Poll.h"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -822,6 +824,9 @@ class Server {
 
     /// Cumulative nanoseconds for worker w, section s.
     uint64_t worker_section_ns(size_t w, size_t s) const;
+
+    /// io_uring diagnostic stats (all zero on non-io_uring backends).
+    platform::Poller::IoStats io_stats() const;
 
   protected:
     bool process_request(Stream& strm, const std::string& remote_addr, int remote_port, const std::string& local_addr,

@@ -1,0 +1,21 @@
+{
+    "bind_address": "0.0.0.0",
+    "http_port": 80,
+    "ws_port": 27015,
+    "cors_origin": "*",
+    "server_name": "Kagami Staging (ECS)",
+    "server_description": "Staging server on ECS/Fargate behind ALB",
+    "max_players": 4294967295,
+    "motd": "Hello from ECS!",
+    "session_ttl_seconds": 300,
+    "log_level": "verbose",
+    "metrics_enabled": true,
+    "metrics_path": "/metrics",
+    "cloudwatch": {
+        "region": "us-west-2",
+        "log_group": "/kagami/ecs",
+        "log_stream": "server",
+        "flush_interval": 5,
+        "log_level": "verbose"
+    }
+}

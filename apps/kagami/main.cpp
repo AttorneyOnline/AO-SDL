@@ -253,21 +253,21 @@ int main(int /*argc*/, char* argv[]) {
         auto& http_active_workers =
             reg.gauge("kagami_http_active_workers", "Worker threads currently executing handlers");
         auto& http_worker_count = reg.gauge("kagami_http_worker_count", "Total worker threads");
-        auto& http_worker_idle_ns =
-            reg.gauge("kagami_http_worker_idle_nanoseconds_total", "Cumulative worker idle time in nanoseconds");
-        auto& http_worker_busy_ns =
-            reg.gauge("kagami_http_worker_busy_nanoseconds_total", "Cumulative worker busy time in nanoseconds");
+        auto& http_worker_util =
+            reg.gauge("kagami_http_worker_utilization", "Worker pool utilization (0-1, avg across workers)");
+        auto& http_worker_util_per =
+            reg.gauge("kagami_http_worker_utilization_per_worker", "Per-worker utilization (0-1)", {"worker"});
         auto& cow_copy_bytes =
             reg.gauge("kagami_cow_copy_bytes_total", "Cumulative bytes copied during COW session map mutations");
-        auto& poll_idle_ns =
-            reg.gauge("kagami_http_poll_idle_nanoseconds_total", "Cumulative poll thread idle time in nanoseconds");
-        auto& poll_busy_ns =
-            reg.gauge("kagami_http_poll_busy_nanoseconds_total", "Cumulative poll thread busy time in nanoseconds");
+        auto& poll_util =
+            reg.gauge("kagami_http_poll_utilization", "Poll thread utilization (0-1)");
         auto& poll_events = reg.gauge("kagami_http_poll_events_total", "Total events processed by poll thread");
         auto& poll_section_ns = reg.gauge("kagami_http_poll_section_nanoseconds_total",
                                           "Cumulative poll thread time per section in nanoseconds", {"section"});
         auto& worker_section_ns = reg.gauge("kagami_http_worker_section_nanoseconds_total",
                                             "Cumulative worker time per worker per section", {"worker", "section"});
+        auto& io_uring_stats = reg.gauge("kagami_io_uring_ops_total",
+                                         "io_uring operation counters", {"op"});
 
         auto cors = cfg.cors_origins();
         server_info
@@ -285,9 +285,16 @@ int main(int /*argc*/, char* argv[]) {
             [&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &area_info, &chars_taken,
              &event_publishes, &session_bytes_sent, &session_bytes_recv, &session_packets_sent, &session_packets_recv,
              &session_idle, &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers,
-             &http_worker_count, &http_worker_idle_ns, &http_worker_busy_ns, &cow_copy_bytes, &poll_idle_ns,
-             &poll_busy_ns, &poll_events, &poll_section_ns, &worker_section_ns, &http_server = http, &room,
+             &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util,
+             &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats, &http_server = http, &room,
              &server_start_time, &reg, &metrics_cache](std::stop_token st) {
+                // Previous cumulative values for delta computation
+                uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
+                uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
+                size_t worker_count = 0;
+                std::vector<uint64_t> prev_pw_busy;
+                std::vector<uint64_t> prev_pw_idle;
+
                 while (!st.stop_requested()) {
                     auto now = std::chrono::steady_clock::now();
                     uptime.get().set(std::chrono::duration<double>(now - server_start_time).count());
@@ -299,8 +306,39 @@ int main(int /*argc*/, char* argv[]) {
                     http_result_queue.get().set(static_cast<double>(http_server.result_queue_depth()));
                     http_active_workers.get().set(static_cast<double>(http_server.active_workers()));
                     http_worker_count.get().set(static_cast<double>(http_server.worker_count()));
-                    http_worker_idle_ns.get().set(static_cast<double>(http_server.worker_idle_ns()));
-                    http_worker_busy_ns.get().set(static_cast<double>(http_server.worker_busy_ns()));
+
+                    // Worker utilization — compute delta since last tick
+                    {
+                        auto cur_busy = http_server.worker_busy_ns();
+                        auto cur_idle = http_server.worker_idle_ns();
+                        auto d_busy = cur_busy - prev_worker_busy;
+                        auto d_idle = cur_idle - prev_worker_idle;
+                        auto d_total = d_busy + d_idle;
+                        http_worker_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                        prev_worker_busy = cur_busy;
+                        prev_worker_idle = cur_idle;
+                    }
+
+                    // Per-worker utilization (lazy init — workers start after metrics thread)
+                    if (worker_count == 0) {
+                        worker_count = http_server.worker_count();
+                        prev_pw_busy.resize(worker_count, 0);
+                        prev_pw_idle.resize(worker_count, 0);
+                    }
+                    for (size_t w = 0; w < worker_count; ++w) {
+                        // idle is section index 0, busy = sum of dequeue(1) + handler(2) + result(3)
+                        auto cur_idle = http_server.worker_section_ns(w, 0);
+                        uint64_t cur_busy = 0;
+                        for (size_t s = 1; s < http_server.worker_section_count(); ++s)
+                            cur_busy += http_server.worker_section_ns(w, s);
+                        auto d_busy = cur_busy - prev_pw_busy[w];
+                        auto d_idle = cur_idle - prev_pw_idle[w];
+                        auto d_total = d_busy + d_idle;
+                        http_worker_util_per.labels({std::to_string(w)})
+                            .set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                        prev_pw_busy[w] = cur_busy;
+                        prev_pw_idle[w] = cur_idle;
+                    }
 
                     // Aggregate session stats (lock-free atomic reads)
                     sessions_g.labels({"ao2"}).set(room.stats.sessions_ao.load(std::memory_order_relaxed));
@@ -310,16 +348,38 @@ int main(int /*argc*/, char* argv[]) {
                     chars_taken.get().set(room.stats.chars_taken.load(std::memory_order_relaxed));
                     cow_copy_bytes.get().set(static_cast<double>(room.cow_copy_bytes()));
 
-                    // Poll thread metrics (lock-free — read atomics directly)
-                    poll_idle_ns.get().set(static_cast<double>(http_server.poll_idle_ns()));
-                    poll_busy_ns.get().set(static_cast<double>(http_server.poll_busy_ns()));
+                    // Poll thread utilization — delta since last tick
+                    {
+                        auto cur_busy = http_server.poll_busy_ns();
+                        auto cur_idle = http_server.poll_idle_ns();
+                        auto d_busy = cur_busy - prev_poll_busy;
+                        auto d_idle = cur_idle - prev_poll_idle;
+                        auto d_total = d_busy + d_idle;
+                        poll_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                        prev_poll_busy = cur_busy;
+                        prev_poll_idle = cur_idle;
+                    }
                     poll_events.get().set(static_cast<double>(http_server.poll_events_total()));
                     for (size_t i = 0; i < http_server.poll_section_count(); ++i)
                         poll_section_ns.labels({http_server.poll_section_name(i)})
                             .set(static_cast<double>(http_server.poll_section_ns(i)));
 
-                    // Per-worker section breakdown
-                    for (size_t w = 0; w < http_server.worker_count(); ++w)
+                    // io_uring stats (no-op on non-io_uring backends)
+                    {
+                        auto ios = http_server.io_stats();
+                        io_uring_stats.labels({"recv_submitted"}).set(static_cast<double>(ios.recv_submitted));
+                        io_uring_stats.labels({"recv_completed"}).set(static_cast<double>(ios.recv_completed));
+                        io_uring_stats.labels({"recv_enobufs"}).set(static_cast<double>(ios.recv_enobufs));
+                        io_uring_stats.labels({"send_submitted"}).set(static_cast<double>(ios.send_submitted));
+                        io_uring_stats.labels({"send_completed"}).set(static_cast<double>(ios.send_completed));
+                        io_uring_stats.labels({"send_partial"}).set(static_cast<double>(ios.send_partial));
+                        io_uring_stats.labels({"send_errors"}).set(static_cast<double>(ios.send_errors));
+                        io_uring_stats.labels({"sqe_full"}).set(static_cast<double>(ios.sqe_full));
+                        io_uring_stats.labels({"cqe_reaped"}).set(static_cast<double>(ios.cqe_reaped));
+                    }
+
+                    // Per-worker section breakdown (cumulative, for drill-down)
+                    for (size_t w = 0; w < worker_count; ++w)
                         for (size_t s = 0; s < http_server.worker_section_count(); ++s)
                             worker_section_ns.labels({std::to_string(w), http_server.worker_section_name(s)})
                                 .set(static_cast<double>(http_server.worker_section_ns(w, s)));
