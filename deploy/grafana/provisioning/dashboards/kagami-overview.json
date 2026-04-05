@@ -311,7 +311,7 @@
           "unit": "short",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -340,7 +340,7 @@
           "unit": "short",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -369,7 +369,7 @@
           "unit": "short",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -414,7 +414,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -443,7 +443,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -472,7 +472,7 @@
           "unit": "Bps",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -506,7 +506,7 @@
           "unit": "short",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -546,7 +546,7 @@
           "unit": "Bps",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -580,7 +580,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -614,7 +614,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -654,7 +654,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -683,7 +683,7 @@
           "unit": "ns",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -712,7 +712,7 @@
           "unit": "ns",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -752,7 +752,7 @@
           "unit": "short",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -786,7 +786,7 @@
           "unit": "ns",
           "custom": {
             "fillOpacity": 20,
-            "connectNulls": true,
+            "connectNulls": false,
             "stacking": {
               "mode": "normal"
             }
@@ -818,7 +818,7 @@
           "unit": "percentunit",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           },
           "min": 0,
           "max": 1
@@ -827,7 +827,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (worker) (kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\",section=\"handler\"}) / sum by (worker) (kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\",section=~\"handler|idle\"})",
+          "expr": "kagami_http_worker_utilization_per_worker{instance=~\"$instance\"}",
           "legendFormat": "worker {{worker}}",
           "refId": "A"
         }
@@ -849,7 +849,7 @@
           "unit": "short",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -894,7 +894,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -923,7 +923,7 @@
           "unit": "percentunit",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           },
           "min": 0,
           "max": 1
@@ -932,7 +932,7 @@
       },
       "targets": [
         {
-          "expr": "kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"})",
+          "expr": "kagami_http_poll_utilization{instance=~\"$instance\"}",
           "legendFormat": "utilization",
           "refId": "A"
         }
@@ -954,7 +954,7 @@
           "unit": "ns",
           "custom": {
             "fillOpacity": 20,
-            "connectNulls": true,
+            "connectNulls": false,
             "stacking": {
               "mode": "normal"
             }
@@ -971,13 +971,71 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "io_uring Operations",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 62
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_completed|send_completed\"}[5s])",
+          "legendFormat": "{{op}}/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "io_uring Errors & Pressure",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 62
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_enobufs|send_errors|send_partial|sqe_full\"}[5s])",
+          "legendFormat": "{{op}}/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "System Resources",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 78
       },
       "collapsed": false
     },
@@ -988,7 +1046,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 63
+        "y": 79
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -997,7 +1055,7 @@
           "unit": "Bps",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1022,7 +1080,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 63
+        "y": 79
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1031,7 +1089,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1056,7 +1114,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 63
+        "y": 79
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1065,7 +1123,7 @@
           "unit": "bytes",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1085,7 +1143,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 87
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1094,7 +1152,7 @@
           "unit": "Bps",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1114,7 +1172,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 77
+        "y": 93
       },
       "collapsed": false
     },
@@ -1125,7 +1183,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 78
+        "y": 94
       },
       "targets": [
         {
@@ -1204,7 +1262,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 78
+        "y": 94
       },
       "fieldConfig": {
         "defaults": {
@@ -1214,7 +1272,7 @@
               "mode": "normal"
             },
             "lineWidth": 2,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1236,7 +1294,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 100
       },
       "collapsed": false
     },
@@ -1247,7 +1305,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 101
       },
       "targets": [
         {
@@ -1275,7 +1333,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 89
+        "y": 105
       },
       "collapsed": false
     },
@@ -1286,7 +1344,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 90
+        "y": 106
       },
       "targets": [
         {
@@ -1414,7 +1472,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 100
+        "y": 116
       },
       "collapsed": false
     },
@@ -1425,13 +1483,13 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 101
+        "y": 117
       },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1453,14 +1511,14 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 101
+        "y": 117
       },
       "fieldConfig": {
         "defaults": {
           "unit": "eps",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1482,7 +1540,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 109
+        "y": 125
       },
       "collapsed": false
     },
@@ -1493,7 +1551,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 110
+        "y": 126
       },
       "targets": [
         {
@@ -1537,7 +1595,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 120
+        "y": 136
       },
       "collapsed": false
     },
@@ -1548,7 +1606,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 121
+        "y": 137
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1557,7 +1615,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1577,7 +1635,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 121
+        "y": 137
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1586,7 +1644,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1606,7 +1664,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 121
+        "y": 137
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1615,7 +1673,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1635,7 +1693,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 121
+        "y": 137
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1644,7 +1702,7 @@
           "unit": "ops",
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
@@ -1669,7 +1727,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 129
+        "y": 145
       },
       "fieldConfig": {
         "defaults": {
@@ -1692,7 +1750,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 129
+        "y": 145
       },
       "fieldConfig": {
         "defaults": {
@@ -1715,7 +1773,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 129
+        "y": 145
       },
       "fieldConfig": {
         "defaults": {
@@ -1738,7 +1796,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 129
+        "y": 145
       },
       "fieldConfig": {
         "defaults": {
@@ -1761,7 +1819,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 133
+        "y": 149
       },
       "collapsed": false
     },
@@ -1772,7 +1830,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 134
+        "y": 150
       },
       "datasource": {
         "type": "loki",
@@ -1838,7 +1896,7 @@
       },
       "targets": [
         {
-          "expr": "max(label_replace(kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"}), \"component\", \"worker\", \"\", \"\") or label_replace(kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"}), \"component\", \"poll\", \"\", \"\"))",
+          "expr": "max(kagami_http_worker_utilization{instance=~\"$instance\"} or kagami_http_poll_utilization{instance=~\"$instance\"})",
           "legendFormat": "system load",
           "refId": "A"
         }
@@ -1862,19 +1920,19 @@
           "max": 1,
           "custom": {
             "fillOpacity": 10,
-            "connectNulls": true
+            "connectNulls": false
           }
         },
         "overrides": []
       },
       "targets": [
         {
-          "expr": "kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_worker_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_worker_idle_nanoseconds_total{instance=~\"$instance\"})",
+          "expr": "kagami_http_worker_utilization{instance=~\"$instance\"}",
           "legendFormat": "worker pool",
           "refId": "A"
         },
         {
-          "expr": "kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} / (kagami_http_poll_busy_nanoseconds_total{instance=~\"$instance\"} + kagami_http_poll_idle_nanoseconds_total{instance=~\"$instance\"})",
+          "expr": "kagami_http_poll_utilization{instance=~\"$instance\"}",
           "legendFormat": "poll thread",
           "refId": "B"
         }

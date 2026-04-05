@@ -25,7 +25,7 @@ struct Poller::Impl {
     SOCKET notify_write = INVALID_SOCKET;
 };
 
-Poller::Poller() : impl_(std::make_unique<Impl>()) {
+Poller::Poller(unsigned /*io_buffers*/) : impl_(std::make_unique<Impl>()) {
 }
 Poller::~Poller() = default;
 Poller::Poller(Poller&&) noexcept = default;
@@ -121,9 +121,22 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
         if (it != impl_->entries.end())
             ud = it->second.user_data;
 
-        out[count++] = Event{fd, flags, ud};
+        out[count++] = Event{fd, flags, ud, nullptr, 0, 0};
     }
     return count;
+}
+
+// -- buffer recycling (no-op for WSAPoll) -----------------------------------
+
+void Poller::recycle_buffer(uint16_t /*buffer_id*/) {
+}
+
+Poller::IoStats Poller::io_stats() const { return {}; }
+
+// -- send (no-op for WSAPoll — caller handles send inline) ------------------
+
+bool Poller::submit_send(int /*fd*/, const void* /*data*/, size_t /*len*/, size_t* /*bytes_sent*/) {
+    return true; // synchronous — caller must send inline
 }
 
 // -- notifier (self-connected loopback TCP pair) ----------------------------

@@ -201,6 +201,126 @@ void Http2Connection::submit_get_async(const std::string& path, int urgency, Res
     streams_[id] = std::move(sd);
 }
 
+// ---------------------------------------------------------------------------
+// POST support
+// ---------------------------------------------------------------------------
+
+/// nghttp2 data source read callback — reads from StreamData::request_body.
+/// The source->ptr points to the StreamData which lives until stream close.
+static ssize_t post_body_read_callback(nghttp2_session*, int32_t, uint8_t* buf, size_t length,
+                                       uint32_t* data_flags, nghttp2_data_source* source, void*) {
+    auto* sd = static_cast<Http2Connection::StreamData*>(source->ptr);
+    size_t remaining = sd->request_body.size() - sd->body_offset;
+    size_t nread = std::min(remaining, length);
+    std::memcpy(buf, sd->request_body.data() + sd->body_offset, nread);
+    sd->body_offset += nread;
+    if (sd->body_offset >= sd->request_body.size())
+        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+    return static_cast<ssize_t>(nread);
+}
+
+std::future<Http2Connection::Response> Http2Connection::submit_post(
+    const std::string& path, const std::string& body, const std::string& content_type,
+    const std::vector<std::pair<std::string, std::string>>& extra_headers, int urgency) {
+
+    std::lock_guard lock(mutex_);
+
+    if (!alive_) {
+        std::promise<Response> p;
+        p.set_value(Response{0, "", "connection closed"});
+        return p.get_future();
+    }
+
+    std::string priority_value = "u=" + std::to_string(std::clamp(urgency, 0, 7));
+    std::string content_length = std::to_string(body.size());
+
+    // Build headers: :method, :path, :scheme, :authority, priority, content-type, content-length, extras
+    std::vector<nghttp2_nv> hdrs;
+    hdrs.push_back({(uint8_t*)":method", (uint8_t*)"POST", 7, 4,
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back({(uint8_t*)":path", (uint8_t*)path.data(), 5, path.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)":scheme", (uint8_t*)"https", 7, 5,
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back({(uint8_t*)":authority", (uint8_t*)host_.data(), 10, host_.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"priority", (uint8_t*)priority_value.data(), 8, priority_value.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"content-type", (uint8_t*)content_type.data(), 12, content_type.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"content-length", (uint8_t*)content_length.data(), 14, content_length.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    for (auto& [k, v] : extra_headers) {
+        hdrs.push_back({(uint8_t*)k.data(), (uint8_t*)v.data(), k.size(), v.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    }
+
+    auto sd = std::make_unique<StreamData>();
+    sd->request_body = body;
+    auto future = sd->promise.get_future();
+
+    nghttp2_data_provider2 data_prd;
+    data_prd.source.ptr = sd.get();
+    data_prd.read_callback = post_body_read_callback;
+
+    int32_t id = nghttp2_submit_request2(session_, nullptr, hdrs.data(),
+                                         hdrs.size(), &data_prd, nullptr);
+    if (id < 0) {
+        sd->promise.set_value(Response{0, "", "submit failed: " + std::string(nghttp2_strerror(id))});
+        return future;
+    }
+
+    streams_[id] = std::move(sd);
+    return future;
+}
+
+void Http2Connection::submit_post_async(
+    const std::string& path, const std::string& body, const std::string& content_type,
+    const std::vector<std::pair<std::string, std::string>>& extra_headers, int urgency,
+    ResponseCallback on_complete) {
+
+    std::lock_guard lock(mutex_);
+
+    if (!alive_) {
+        on_complete(Response{0, "", "connection closed"});
+        return;
+    }
+
+    std::string priority_value = "u=" + std::to_string(std::clamp(urgency, 0, 7));
+    std::string content_length = std::to_string(body.size());
+
+    std::vector<nghttp2_nv> hdrs;
+    hdrs.push_back({(uint8_t*)":method", (uint8_t*)"POST", 7, 4,
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back({(uint8_t*)":path", (uint8_t*)path.data(), 5, path.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)":scheme", (uint8_t*)"https", 7, 5,
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back({(uint8_t*)":authority", (uint8_t*)host_.data(), 10, host_.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"priority", (uint8_t*)priority_value.data(), 8, priority_value.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"content-type", (uint8_t*)content_type.data(), 12, content_type.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"content-length", (uint8_t*)content_length.data(), 14, content_length.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    for (auto& [k, v] : extra_headers) {
+        hdrs.push_back({(uint8_t*)k.data(), (uint8_t*)v.data(), k.size(), v.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    }
+
+    auto sd = std::make_unique<StreamData>();
+    sd->request_body = body;
+    sd->callback = std::move(on_complete);
+
+    nghttp2_data_provider2 data_prd;
+    data_prd.source.ptr = sd.get();
+    data_prd.read_callback = post_body_read_callback;
+
+    int32_t id = nghttp2_submit_request2(session_, nullptr, hdrs.data(),
+                                         hdrs.size(), &data_prd, nullptr);
+    if (id < 0) {
+        sd->callback(Response{0, "", "submit failed: " + std::string(nghttp2_strerror(id))});
+        return;
+    }
+
+    streams_[id] = std::move(sd);
+}
+
 bool Http2Connection::is_alive() const {
     return alive_;
 }

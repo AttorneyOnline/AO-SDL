@@ -66,6 +66,9 @@ struct HttpConnection {
     size_t header_end_pos = 0; ///< Byte offset of "\r\n\r\n" in recv_buf.
     size_t content_length = 0; ///< Expected body length from Content-Length header.
     bool keep_alive = false;
+    // Async send state (io_uring completion mode)
+    std::string pending_send;       ///< Response data kept alive during async send.
+    bool send_keep_alive = false;   ///< Keep-alive decision for pending send.
 };
 
 // Events passed between poll thread and workers.
@@ -521,19 +524,22 @@ static void worker_loop(Server::ServerState& state, std::stop_token st, size_t w
         if (st.stop_requested())
             break;
 
+        // Everything from here until the next idle wait is "busy" time
+        auto busy_start = std::chrono::steady_clock::now();
+        state.active_workers.fetch_add(1, std::memory_order_relaxed);
+
         // Dequeue
         std::optional<WorkItem> item;
         {
             SectionScope _s{pw.section_ns[ServerState::W_DEQUEUE]};
             item = state.work_channel.get_event();
         }
-        if (!item)
+        if (!item) {
+            state.active_workers.fetch_sub(1, std::memory_order_relaxed);
             continue;
+        }
 
         // Handler execution
-        state.active_workers.fetch_add(1, std::memory_order_relaxed);
-        auto busy_start = std::chrono::steady_clock::now();
-
         Response res;
         res.status = 200;
 
@@ -555,13 +561,6 @@ static void worker_loop(Server::ServerState& state, std::stop_token st, size_t w
             }
         }
 
-        auto busy_elapsed = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busy_start)
-                .count());
-        state.worker_busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
-        pw.busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
-        state.active_workers.fetch_sub(1, std::memory_order_relaxed);
-
         // Build and publish result
         {
             SectionScope _s{pw.section_ns[ServerState::W_RESULT]};
@@ -574,6 +573,13 @@ static void worker_loop(Server::ServerState& state, std::stop_token st, size_t w
             state.result_channel.publish(std::move(result));
             state.poller.notify();
         }
+
+        auto busy_elapsed = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busy_start)
+                .count());
+        state.worker_busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
+        pw.busy_ns.fetch_add(busy_elapsed, std::memory_order_relaxed);
+        state.active_workers.fetch_sub(1, std::memory_order_relaxed);
     }
 }
 
@@ -655,6 +661,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
         auto poll_start = std::chrono::steady_clock::now();
         int n = state.poller.poll(events, MAX_EVENTS, 100);
         auto poll_end = std::chrono::steady_clock::now();
+        // The time spent inside poll() is always idle — we were blocked in
+        // the kernel waiting for events, not doing useful work.
         state.poll_idle_ns.fetch_add(
             static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(poll_end - poll_start).count()),
             std::memory_order_relaxed);
@@ -717,39 +725,80 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         std::string response_data = serialize_response(result->response, state.default_headers,
                                                                        result->is_head, should_keep_alive);
 
-                        // Blocking write with a timeout so a slow/stalled client
-                        // can't block the poll thread indefinitely.
-                        conn->socket.set_non_blocking(false);
-                        conn->socket.set_send_timeout(5000); // 5 second write timeout
-                        size_t total = 0;
-                        while (total < response_data.size()) {
-                            ssize_t w = conn->socket.send(response_data.data() + total, response_data.size() - total);
-                            if (w <= 0)
-                                break;
-                            total += static_cast<size_t>(w);
-                        }
-                        conn->socket.set_non_blocking(true);
+                        size_t bytes_sent = 0;
+                        bool sync = state.poller.submit_send(conn->socket.fd(),
+                                                             response_data.data(), response_data.size(),
+                                                             &bytes_sent);
 
-                        tcp_bytes_out_.get().inc(total);
+                        if (sync) {
+                            // Readiness backend — send inline (blocking)
+                            conn->socket.set_non_blocking(false);
+                            conn->socket.set_send_timeout(5000);
+                            size_t total = 0;
+                            while (total < response_data.size()) {
+                                ssize_t w = conn->socket.send(
+                                    response_data.data() + total, response_data.size() - total);
+                                if (w <= 0)
+                                    break;
+                                total += static_cast<size_t>(w);
+                            }
+                            conn->socket.set_non_blocking(true);
+                            tcp_bytes_out_.get().inc(total);
 
-                        // Only keep alive if the full response was written successfully
-                        should_keep_alive = should_keep_alive && (total == response_data.size());
-
-                        if (should_keep_alive) {
-                            // Reset connection state for the next request on this socket
-                            conn->headers_complete = false;
-                            conn->dispatched = false;
-                            conn->header_end_pos = 0;
-                            conn->content_length = 0;
-                            conn->recv_buf.clear();
-                            conn->keep_alive = true;
-                        }
-                        else {
-                            state.poller.remove(conn->socket.fd());
-                            remove_connection(state, result->connection_id);
+                            should_keep_alive = should_keep_alive && (total == response_data.size());
+                            if (should_keep_alive) {
+                                conn->headers_complete = false;
+                                conn->dispatched = false;
+                                conn->header_end_pos = 0;
+                                conn->content_length = 0;
+                                conn->recv_buf.clear();
+                                conn->keep_alive = true;
+                            }
+                            else {
+                                state.poller.remove(conn->socket.fd());
+                                remove_connection(state, result->connection_id);
+                            }
+                        } else {
+                            // Completion backend — send is async.
+                            // Store state; SendDone event handles cleanup.
+                            conn->pending_send = std::move(response_data);
+                            conn->send_keep_alive = should_keep_alive;
+                            // Mark as dispatched to prevent processing new
+                            // requests on this connection until the send completes.
+                            conn->dispatched = true;
                         }
                     }
                 } // end RESPONSE_SEND scope
+            }
+            else if (ev.flags & platform::Poller::SendDone) {
+                // Async send completed (io_uring)
+                SectionScope _s{state.poll_section_ns[ServerState::RESPONSE_SEND]};
+                auto fd_it = state.fd_to_conn.find(ev.fd);
+                if (fd_it == state.fd_to_conn.end())
+                    continue;
+                auto conn_it = state.connections.find(fd_it->second);
+                if (conn_it == state.connections.end())
+                    continue;
+                HttpConnection* conn = &conn_it->second;
+
+                tcp_bytes_out_.get().inc(ev.data_len);
+
+                bool fully_sent = !(ev.flags & platform::Poller::Error)
+                                  && ev.data_len == conn->pending_send.size();
+                bool should_keep_alive = conn->send_keep_alive && fully_sent;
+                conn->pending_send.clear();
+
+                if (should_keep_alive) {
+                    conn->headers_complete = false;
+                    conn->dispatched = false;
+                    conn->header_end_pos = 0;
+                    conn->content_length = 0;
+                    conn->recv_buf.clear();
+                    conn->keep_alive = true;
+                } else {
+                    state.poller.remove(ev.fd);
+                    remove_connection(state, conn->id);
+                }
             }
             else {
                 SectionScope _s{state.poll_section_ns[ServerState::RECV]};
@@ -758,9 +807,19 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     std::lock_guard sse_lock(state.sse_mutex);
                     auto sse_it = state.sse_by_fd.find(ev.fd);
                     if (sse_it != state.sse_by_fd.end()) {
-                        char discard[64];
-                        ssize_t n = sse_it->second.socket.recv(discard, sizeof(discard));
-                        if (n <= 0) {
+                        if (ev.data_len > 0) {
+                            // Completion mode: any data from SSE client is unexpected → recycle and check
+                            state.poller.recycle_buffer(ev.buffer_id);
+                        }
+                        // In both modes, check for disconnect
+                        bool disconnected = (ev.flags & platform::Poller::HangUp) || (ev.data_len == 0 && !(ev.flags & platform::Poller::Readable));
+                        if (!disconnected && ev.data_len == 0) {
+                            // Readiness mode: probe with recv
+                            char discard[64];
+                            ssize_t n = sse_it->second.socket.recv(discard, sizeof(discard));
+                            disconnected = (n <= 0);
+                        }
+                        if (disconnected) {
                             state.poller.remove(ev.fd);
                             state.sse_by_fd.erase(sse_it);
                         }
@@ -777,20 +836,28 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     continue;
                 HttpConnection* conn = &conn_it->second;
 
-                // Drain all available data (edge-triggered poller won't re-fire
-                // for data already in the kernel buffer).
-                char buf[8192];
+                // Completion mode (io_uring): data already read by the kernel.
+                // Readiness mode (epoll/kqueue): drain manually.
                 bool closed = false;
-                while (true) {
-                    ssize_t r = conn->socket.recv(buf, sizeof(buf));
-                    if (r > 0) {
-                        conn->recv_buf.append(buf, static_cast<size_t>(r));
-                        tcp_bytes_in_.get().inc(static_cast<uint64_t>(r));
-                    }
-                    else {
-                        if (r == 0)
-                            closed = true;
-                        break; // would-block or closed
+                if (ev.data_len > 0) {
+                    conn->recv_buf.append(static_cast<const char*>(ev.data), ev.data_len);
+                    tcp_bytes_in_.get().inc(static_cast<uint64_t>(ev.data_len));
+                    state.poller.recycle_buffer(ev.buffer_id);
+                } else {
+                    // Drain all available data (edge-triggered poller won't
+                    // re-fire for data already in the kernel buffer).
+                    char buf[8192];
+                    while (true) {
+                        ssize_t r = conn->socket.recv(buf, sizeof(buf));
+                        if (r > 0) {
+                            conn->recv_buf.append(buf, static_cast<size_t>(r));
+                            tcp_bytes_in_.get().inc(static_cast<uint64_t>(r));
+                        }
+                        else {
+                            if (r == 0)
+                                closed = true;
+                            break; // would-block or closed
+                        }
                     }
                 }
                 if (closed && conn->recv_buf.empty()) {
@@ -1104,11 +1171,6 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
             }
         }
 
-        state.poll_busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                               std::chrono::steady_clock::now() - poll_end)
-                                                               .count()),
-                                     std::memory_order_relaxed);
-
         // --- SSE keepalive (every ~30s) ---
         auto now = std::chrono::steady_clock::now();
         if (now - state.last_keepalive > std::chrono::seconds(30)) {
@@ -1127,6 +1189,12 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                 state.sse_by_fd.erase(fd);
             }
         }
+
+        // Attribute all post-poll work (event handling + SSE keepalive) as busy
+        state.poll_busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                               std::chrono::steady_clock::now() - poll_end)
+                                                               .count()),
+                                     std::memory_order_relaxed);
     }
 }
 
@@ -1483,6 +1551,11 @@ uint64_t Server::worker_section_ns(size_t w, size_t s) const {
         return 0;
     return state_->per_worker[w].section_ns[s].load(std::memory_order_relaxed);
 }
+
+platform::Poller::IoStats Server::io_stats() const {
+    return state_ ? state_->poller.io_stats() : platform::Poller::IoStats{};
+}
+
 std::unique_ptr<detail::MatcherBase> Server::make_matcher(const std::string&) {
     return nullptr;
 }

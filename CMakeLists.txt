@@ -437,13 +437,34 @@ elseif(WIN32)
         platform/windows/Poll.cpp
     )
 else()
+    # io_uring: completion-mode I/O backend (Linux 5.7+, liburing).
+    # Eliminates per-connection recv() syscalls from the poll thread.
+    # Disable with -DAO_USE_IO_URING=OFF to fall back to epoll.
+    option(AO_USE_IO_URING "Use io_uring instead of epoll for I/O (Linux 5.7+)" ON)
+
     target_sources(aoengine PRIVATE
         platform/linux/SystemFonts.cpp
         platform/linux/HardwareId.cpp
         platform/linux/Time.cpp
         platform/linux/Socket.cpp
-        platform/linux/Poll.cpp
     )
+    if(AO_USE_IO_URING)
+        find_library(LIBURING_LIB uring)
+        find_path(LIBURING_INCLUDE liburing.h)
+        if(LIBURING_LIB AND LIBURING_INCLUDE)
+            target_sources(aoengine PRIVATE platform/linux/Poll_uring.cpp)
+            target_include_directories(aoengine PRIVATE ${LIBURING_INCLUDE})
+            target_link_libraries(aoengine PRIVATE ${LIBURING_LIB})
+            target_compile_definitions(aoengine PUBLIC AO_HAS_IO_URING=1)
+            message(STATUS "I/O backend: io_uring (liburing found at ${LIBURING_LIB})")
+        else()
+            message(WARNING "AO_USE_IO_URING=ON but liburing not found — falling back to epoll")
+            target_sources(aoengine PRIVATE platform/linux/Poll.cpp)
+        endif()
+    else()
+        target_sources(aoengine PRIVATE platform/linux/Poll.cpp)
+        message(STATUS "I/O backend: epoll (io_uring disabled)")
+    endif()
 endif()
 
 set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)

@@ -13,7 +13,7 @@ FROM ubuntu:24.04 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build \
         python3 python3-yaml \
-        libssl-dev \
+        libssl-dev liburing-dev \
         git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -42,7 +42,7 @@ RUN strip build/apps/kagami/kagami
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libssl3t64 ca-certificates \
+        libssl3t64 liburing2 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
