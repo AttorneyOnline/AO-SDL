@@ -127,6 +127,9 @@ class WebSocketServer {
      */
     void on_client_disconnected(std::function<void(ClientId)> callback);
 
+    /// io_uring diagnostic stats for the WS server's poller.
+    platform::Poller::IoStats io_stats() const { return poller_.io_stats(); }
+
   private:
     struct ClientConnection {
         ClientId id = 0;
