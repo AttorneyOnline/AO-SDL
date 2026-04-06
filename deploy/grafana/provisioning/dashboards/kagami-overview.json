@@ -532,7 +532,7 @@
     },
     {
       "type": "timeseries",
-      "title": "WebSocket Traffic",
+      "title": "WebSocket Traffic (port 27015)",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -553,12 +553,12 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[2s])",
+          "expr": "rate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "irate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[2s])",
+          "expr": "rate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "tx",
           "refId": "B"
         }
@@ -566,7 +566,7 @@
     },
     {
       "type": "timeseries",
-      "title": "WebSocket Frames / sec",
+      "title": "WebSocket Frames/sec (port 27015)",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -587,12 +587,12 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_ws_frames_in_total{instance=~\"$instance\"}[2s])",
+          "expr": "rate(kagami_ws_frames_in_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "irate(kagami_ws_frames_out_total{instance=~\"$instance\"}[2s])",
+          "expr": "rate(kagami_ws_frames_out_total{instance=~\"$instance\"}[5s])",
           "legendFormat": "tx",
           "refId": "B"
         }
@@ -623,6 +623,95 @@
         {
           "expr": "irate(kagami_sse_events_total{instance=~\"$instance\"}[2s])",
           "legendFormat": "{{event}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "WS Poll Utilization %",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 36
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_ws_poll_utilization{instance=~\"$instance\"}",
+          "legendFormat": "utilization",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "WS Dispatch Rate",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 36
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_ws_dispatch_rate{instance=~\"$instance\"}",
+          "legendFormat": "frames dispatched/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "WS Send Failures",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 36
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_ws_send_failures_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "send failures/s",
           "refId": "A"
         }
       ]
@@ -994,7 +1083,7 @@
       "targets": [
         {
           "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_completed|send_completed\"}[5s])",
-          "legendFormat": "{{op}}/s",
+          "legendFormat": "{{server}} {{op}}/s",
           "refId": "A"
         }
       ]
@@ -1023,7 +1112,7 @@
       "targets": [
         {
           "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_enobufs|send_errors|send_partial|sqe_full\"}[5s])",
-          "legendFormat": "{{op}}/s",
+          "legendFormat": "{{server}} {{op}}/s",
           "refId": "A"
         }
       ]
@@ -1041,7 +1130,7 @@
     },
     {
       "type": "timeseries",
-      "title": "TCP Socket Traffic",
+      "title": "HTTP TCP Traffic (port 80)",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1075,7 +1164,7 @@
     },
     {
       "type": "timeseries",
-      "title": "TCP Connections & Retransmits",
+      "title": "HTTP TCP Connections (port 80)",
       "gridPos": {
         "h": 8,
         "w": 8,

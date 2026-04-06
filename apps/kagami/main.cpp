@@ -200,6 +200,14 @@ int main(int /*argc*/, char* argv[]) {
     };
     auto metrics_cache = std::make_shared<MetricsTextCache>();
     std::jthread metrics_thread_handle; // kept alive for server lifetime
+    std::atomic<WebSocketServer*> ws_ptr{nullptr}; // set after WS construction, read by metrics thread
+
+    // WS poll thread utilization tracking (shared between WS thread and metrics thread)
+    struct WsPollStats {
+        std::atomic<uint64_t> idle_ns{0};
+        std::atomic<uint64_t> busy_ns{0};
+        std::atomic<uint64_t> frames_dispatched{0};
+    } ws_poll_stats;
 
     if (cfg.metrics_enabled()) {
         http.GetInline(cfg.metrics_path(), [&metrics_cache](const http::Request&, http::Response& res) {
@@ -267,7 +275,11 @@ int main(int /*argc*/, char* argv[]) {
         auto& worker_section_ns = reg.gauge("kagami_http_worker_section_nanoseconds_total",
                                             "Cumulative worker time per worker per section", {"worker", "section"});
         auto& io_uring_stats = reg.gauge("kagami_io_uring_ops_total",
-                                         "io_uring operation counters", {"op"});
+                                         "io_uring operation counters", {"server", "op"});
+        auto& ws_poll_util = reg.gauge("kagami_ws_poll_utilization",
+                                       "WebSocket poll thread utilization (0-1)");
+        auto& ws_dispatch_rate = reg.gauge("kagami_ws_dispatch_rate",
+                                           "WebSocket frames dispatched per second");
 
         auto cors = cfg.cors_origins();
         server_info
@@ -286,7 +298,8 @@ int main(int /*argc*/, char* argv[]) {
              &event_publishes, &session_bytes_sent, &session_bytes_recv, &session_packets_sent, &session_packets_recv,
              &session_idle, &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers,
              &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util,
-             &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats, &http_server = http, &room,
+             &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats,
+             &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate, &http_server = http, &room,
              &server_start_time, &reg, &metrics_cache](std::stop_token st) {
                 // Previous cumulative values for delta computation
                 uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
@@ -364,18 +377,45 @@ int main(int /*argc*/, char* argv[]) {
                         poll_section_ns.labels({http_server.poll_section_name(i)})
                             .set(static_cast<double>(http_server.poll_section_ns(i)));
 
-                    // io_uring stats (no-op on non-io_uring backends)
+                    // io_uring stats for both HTTP and WS pollers
+                    auto emit_io_stats = [&](const std::string& server, const platform::Poller::IoStats& ios) {
+                        io_uring_stats.labels({server, "recv_submitted"}).set(static_cast<double>(ios.recv_submitted));
+                        io_uring_stats.labels({server, "recv_completed"}).set(static_cast<double>(ios.recv_completed));
+                        io_uring_stats.labels({server, "recv_enobufs"}).set(static_cast<double>(ios.recv_enobufs));
+                        io_uring_stats.labels({server, "send_submitted"}).set(static_cast<double>(ios.send_submitted));
+                        io_uring_stats.labels({server, "send_completed"}).set(static_cast<double>(ios.send_completed));
+                        io_uring_stats.labels({server, "send_partial"}).set(static_cast<double>(ios.send_partial));
+                        io_uring_stats.labels({server, "send_errors"}).set(static_cast<double>(ios.send_errors));
+                        io_uring_stats.labels({server, "sqe_full"}).set(static_cast<double>(ios.sqe_full));
+                        io_uring_stats.labels({server, "cqe_reaped"}).set(static_cast<double>(ios.cqe_reaped));
+                    };
+                    emit_io_stats("http", http_server.io_stats());
+                    if (auto* wsp = ws_ptr.load(std::memory_order_acquire))
+                        emit_io_stats("ws", wsp->io_stats());
+
+                    // WS poll thread utilization (delta-based, same as HTTP)
                     {
-                        auto ios = http_server.io_stats();
-                        io_uring_stats.labels({"recv_submitted"}).set(static_cast<double>(ios.recv_submitted));
-                        io_uring_stats.labels({"recv_completed"}).set(static_cast<double>(ios.recv_completed));
-                        io_uring_stats.labels({"recv_enobufs"}).set(static_cast<double>(ios.recv_enobufs));
-                        io_uring_stats.labels({"send_submitted"}).set(static_cast<double>(ios.send_submitted));
-                        io_uring_stats.labels({"send_completed"}).set(static_cast<double>(ios.send_completed));
-                        io_uring_stats.labels({"send_partial"}).set(static_cast<double>(ios.send_partial));
-                        io_uring_stats.labels({"send_errors"}).set(static_cast<double>(ios.send_errors));
-                        io_uring_stats.labels({"sqe_full"}).set(static_cast<double>(ios.sqe_full));
-                        io_uring_stats.labels({"cqe_reaped"}).set(static_cast<double>(ios.cqe_reaped));
+                        static uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
+                        static uint64_t prev_ws_dispatched = 0;
+                        static auto prev_ws_time = std::chrono::steady_clock::now();
+
+                        auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
+                        auto cur_idle = ws_poll_stats.idle_ns.load(std::memory_order_relaxed);
+                        auto cur_disp = ws_poll_stats.frames_dispatched.load(std::memory_order_relaxed);
+                        auto cur_time = std::chrono::steady_clock::now();
+
+                        auto d_busy = cur_busy - prev_ws_busy;
+                        auto d_idle = cur_idle - prev_ws_idle;
+                        auto d_total = d_busy + d_idle;
+                        ws_poll_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+
+                        double dt = std::chrono::duration<double>(cur_time - prev_ws_time).count();
+                        ws_dispatch_rate.get().set(dt > 0 ? (cur_disp - prev_ws_dispatched) / dt : 0.0);
+
+                        prev_ws_busy = cur_busy;
+                        prev_ws_idle = cur_idle;
+                        prev_ws_dispatched = cur_disp;
+                        prev_ws_time = cur_time;
                     }
 
                     // Per-worker section breakdown (cumulative, for drill-down)
@@ -491,6 +531,7 @@ int main(int /*argc*/, char* argv[]) {
     // --- WebSocket server + protocol routing ---
     auto listener = std::make_unique<PlatformServerSocket>(cfg.bind_address());
     WebSocketServer ws(std::move(listener));
+    ws_ptr.store(&ws, std::memory_order_release);
     // Wire AO2 send function to WebSocket transport.
     // AONX clients use REST+SSE — no WebSocket involvement.
     auto ws_send = [&ws](uint64_t id, const std::string& data) {
@@ -523,13 +564,21 @@ int main(int /*argc*/, char* argv[]) {
     std::jthread ws_thread([&](std::stop_token st) {
         auto last_sweep = std::chrono::steady_clock::now();
         while (!st.stop_requested()) {
-            // Block up to 10ms in the kernel waiting for socket activity.
-            // Replaces sleep_for — wakes instantly when data arrives.
+            // Idle: time spent in poll() waiting for socket activity
+            auto idle_start = std::chrono::steady_clock::now();
             auto frames = ws.poll(10);
+            auto idle_end = std::chrono::steady_clock::now();
+            ws_poll_stats.idle_ns.fetch_add(
+                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
+                std::memory_order_relaxed);
+
+            // Busy: time spent dispatching frames
+            auto busy_start = std::chrono::steady_clock::now();
             for (auto& [client_id, frame] : frames) {
                 std::string data(frame.data.begin(), frame.data.end());
                 Log::log_print(VERBOSE, "WS frame from %s: %s", format_client_id(client_id).c_str(), data.c_str());
                 rest_router.with_lock([&] { ao_backend.on_client_message(client_id, data); });
+                ws_poll_stats.frames_dispatched.fetch_add(1, std::memory_order_relaxed);
             }
 
             // Periodic session expiry sweep (~every 30s).
@@ -560,6 +609,11 @@ int main(int /*argc*/, char* argv[]) {
                 }
                 last_sweep = now;
             }
+
+            ws_poll_stats.busy_ns.fetch_add(
+                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - busy_start).count()),
+                std::memory_order_relaxed);
         }
     });
 
