@@ -280,6 +280,8 @@ int main(int /*argc*/, char* argv[]) {
                                        "WebSocket poll thread utilization (0-1)");
         auto& ws_dispatch_rate = reg.gauge("kagami_ws_dispatch_rate",
                                            "WebSocket frames dispatched per second");
+        auto& lock_util = reg.gauge("kagami_dispatch_lock",
+                                    "Dispatch mutex stats", {"type"});
 
         auto cors = cfg.cors_origins();
         server_info
@@ -299,7 +301,8 @@ int main(int /*argc*/, char* argv[]) {
              &session_idle, &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers,
              &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util,
              &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats,
-             &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate, &http_server = http, &room,
+             &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate,
+             &lock_util, &rest_router, &http_server = http, &room,
              &server_start_time, &reg, &metrics_cache](std::stop_token st) {
                 // Previous cumulative values for delta computation
                 uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
@@ -393,11 +396,13 @@ int main(int /*argc*/, char* argv[]) {
                     if (auto* wsp = ws_ptr.load(std::memory_order_acquire))
                         emit_io_stats("ws", wsp->io_stats());
 
-                    // WS poll thread utilization (delta-based, same as HTTP)
+                    // WS poll thread utilization (EMA-smoothed)
                     {
                         static uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
                         static uint64_t prev_ws_dispatched = 0;
                         static auto prev_ws_time = std::chrono::steady_clock::now();
+                        static double ema_util = 0.0;
+                        constexpr double ALPHA = 0.3; // smoothing factor (lower = smoother)
 
                         auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
                         auto cur_idle = ws_poll_stats.idle_ns.load(std::memory_order_relaxed);
@@ -407,7 +412,9 @@ int main(int /*argc*/, char* argv[]) {
                         auto d_busy = cur_busy - prev_ws_busy;
                         auto d_idle = cur_idle - prev_ws_idle;
                         auto d_total = d_busy + d_idle;
-                        ws_poll_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                        double instant_util = d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0;
+                        ema_util = ALPHA * instant_util + (1.0 - ALPHA) * ema_util;
+                        ws_poll_util.get().set(ema_util);
 
                         double dt = std::chrono::duration<double>(cur_time - prev_ws_time).count();
                         ws_dispatch_rate.get().set(dt > 0 ? (cur_disp - prev_ws_dispatched) / dt : 0.0);
@@ -416,6 +423,21 @@ int main(int /*argc*/, char* argv[]) {
                         prev_ws_idle = cur_idle;
                         prev_ws_dispatched = cur_disp;
                         prev_ws_time = cur_time;
+                    }
+
+                    // Dispatch lock stats (cumulative counters from all callers)
+                    {
+                        auto& ls = rest_router.lock_stats;
+                        lock_util.labels({"exclusive_acquisitions"}).set(
+                            static_cast<double>(ls.exclusive_acquisitions.load(std::memory_order_relaxed)));
+                        lock_util.labels({"exclusive_wait_ns"}).set(
+                            static_cast<double>(ls.exclusive_wait_ns.load(std::memory_order_relaxed)));
+                        lock_util.labels({"exclusive_hold_ns"}).set(
+                            static_cast<double>(ls.exclusive_hold_ns.load(std::memory_order_relaxed)));
+                        lock_util.labels({"shared_acquisitions"}).set(
+                            static_cast<double>(ls.shared_acquisitions.load(std::memory_order_relaxed)));
+                        lock_util.labels({"shared_wait_ns"}).set(
+                            static_cast<double>(ls.shared_wait_ns.load(std::memory_order_relaxed)));
                     }
 
                     // Per-worker section breakdown (cumulative, for drill-down)

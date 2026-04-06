@@ -634,7 +634,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 36
+        "y": 35
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -665,7 +665,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 36
+        "y": 35
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -694,7 +694,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 36
+        "y": 35
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -723,7 +723,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 43
       },
       "collapsed": false
     },
@@ -734,7 +734,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 36
+        "y": 44
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -750,9 +750,14 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "acquisitions",
+          "expr": "irate(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_acquisitions\"}[5s])",
+          "legendFormat": "exclusive/s",
           "refId": "A"
+        },
+        {
+          "expr": "irate(kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_acquisitions\"}[5s])",
+          "legendFormat": "shared/s",
+          "refId": "B"
         }
       ]
     },
@@ -763,7 +768,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 36
+        "y": 44
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -779,20 +784,25 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_dispatch_lock_wait_nanoseconds_total{instance=~\"$instance\"}[2s]) / irate(kagami_dispatch_lock_acquisitions_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "avg wait/req",
+          "expr": "increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_wait_ns\"}[10s]) / clamp_min(increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_acquisitions\"}[10s]), 1)",
+          "legendFormat": "exclusive avg wait",
           "refId": "A"
+        },
+        {
+          "expr": "increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_wait_ns\"}[10s]) / clamp_min(increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_acquisitions\"}[10s]), 1)",
+          "legendFormat": "shared avg wait",
+          "refId": "B"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Hold Time by Endpoint",
+      "title": "Exclusive Hold Time",
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 36
+        "y": 44
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -808,8 +818,8 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_dispatch_lock_hold_nanoseconds_total{instance=~\"$instance\"}[2s])",
-          "legendFormat": "{{endpoint}}",
+          "expr": "irate(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_hold_ns\"}[5s])",
+          "legendFormat": "hold ns/s",
           "refId": "A"
         }
       ]
@@ -821,7 +831,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 52
       },
       "collapsed": false
     },
@@ -832,7 +842,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 45
+        "y": 53
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -866,7 +876,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 45
+        "y": 53
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -898,7 +908,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 45
+        "y": 53
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -929,7 +939,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 45
+        "y": 53
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -963,7 +973,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 61
       },
       "collapsed": false
     },
@@ -974,7 +984,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 54
+        "y": 62
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1003,7 +1013,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 54
+        "y": 62
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1034,7 +1044,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 54
+        "y": 62
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1066,7 +1076,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 70
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1095,7 +1105,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 70
       },
       "maxDataPoints": 10000,
       "interval": "1s",
