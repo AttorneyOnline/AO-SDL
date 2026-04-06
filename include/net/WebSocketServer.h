@@ -151,7 +151,7 @@ class WebSocketServer {
     uint64_t next_client_id_ = 1;
     bool running_ = false;
     mutable std::mutex mutex_;
-    platform::Poller poller_;
+    platform::Poller poller_{0}; // readiness-only: WS server does its own recv/send
 
     std::function<void(ClientId)> on_connected_;
     std::function<void(ClientId)> on_disconnected_;
