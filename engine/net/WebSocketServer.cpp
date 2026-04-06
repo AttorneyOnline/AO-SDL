@@ -84,15 +84,11 @@ void WebSocketServer::stop() {
 }
 
 std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) {
-    // Wait for socket activity before acquiring the lock.
-    // This replaces the caller's sleep_for() with kernel-level waiting.
-    {
-        constexpr int MAX_POLL_EVENTS = 64;
-        platform::Poller::Event events[MAX_POLL_EVENTS];
-        poller_.poll(events, MAX_POLL_EVENTS, timeout_ms);
-        // We don't inspect the events — we just needed the wake-up.
-        // The actual accept/read logic below handles all sockets.
-    }
+    // Poll for events — on io_uring this delivers completed recv data,
+    // on epoll/kqueue it delivers readiness notifications.
+    constexpr int MAX_POLL_EVENTS = 256;
+    platform::Poller::Event events[MAX_POLL_EVENTS];
+    int nevents = poller_.poll(events, MAX_POLL_EVENTS, timeout_ms);
 
     std::vector<ClientFrame> result;
     std::vector<ClientId> newly_connected;
@@ -103,11 +99,46 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
         if (!running_)
             return {};
 
-        accept_new_clients();
+        // Dispatch completion/readiness events to client recv buffers
+        for (int i = 0; i < nevents; ++i) {
+            auto& ev = events[i];
 
+            // Listener socket — accept new clients
+            if (ev.fd == listener_->fd()) {
+                accept_new_clients();
+                continue;
+            }
+
+            // Find the client for this fd
+            auto fd_it = fd_to_client_.find(ev.fd);
+            if (fd_it == fd_to_client_.end())
+                continue;
+            auto cl_it = clients_.find(fd_it->second);
+            if (cl_it == clients_.end())
+                continue;
+            auto& client = cl_it->second;
+
+            // Completion data from io_uring
+            if (ev.data_len > 0) {
+                client.recv_buf.insert(client.recv_buf.end(),
+                                       static_cast<const uint8_t*>(ev.data),
+                                       static_cast<const uint8_t*>(ev.data) + ev.data_len);
+                poller_.recycle_buffer(ev.buffer_id);
+            }
+
+            if (ev.flags & (platform::Poller::HangUp | platform::Poller::Error))
+                client.closed = true;
+        }
+
+        // Process all clients that have data or need handshake/read
         std::vector<ClientId> dead_clients;
 
         for (auto& [id, client] : clients_) {
+            if (client.closed) {
+                dead_clients.push_back(id);
+                continue;
+            }
+
             if (!client.handshake_complete) {
                 try {
                     if (!perform_server_handshake(client))
@@ -122,8 +153,6 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                     continue;
                 }
                 catch (...) {
-                    Log::log_print(WARNING, "WS handshake failed for client %llu: unknown exception",
-                                   (unsigned long long)id);
                     ws_handshake_failures_.get().inc();
                     dead_clients.push_back(id);
                     continue;
@@ -149,8 +178,6 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
         }
     }
 
-    // Fire callbacks outside the lock to avoid deadlock when
-    // callbacks call send()/broadcast() which re-acquire the mutex.
     for (auto id : newly_connected) {
         if (on_connected_)
             on_connected_(id);
@@ -322,35 +349,52 @@ void WebSocketServer::on_client_disconnected(std::function<void(ClientId)> callb
 
 // --- Private ---
 
+std::vector<uint8_t> WebSocketServer::drain_client(ClientConnection& client) {
+    std::vector<uint8_t> bytes;
+
+    // 1. Consume any data delivered by io_uring completions
+    if (!client.recv_buf.empty()) {
+        bytes.swap(client.recv_buf);
+    }
+
+    // 2. Also drain the socket (readiness mode, or io_uring fallback data)
+    try {
+        do {
+            auto chunk = client.socket->recv();
+            if (chunk.empty())
+                break;
+            bytes.insert(bytes.end(), chunk.begin(), chunk.end());
+        } while (client.socket->bytes_available());
+    }
+    catch (...) {
+        if (bytes.empty())
+            throw;
+        // If we already have data, process it before propagating the error
+    }
+
+    return bytes;
+}
+
 void WebSocketServer::accept_new_clients() {
     // Accept all pending connections (non-blocking)
     while (auto client_socket = listener_->accept()) {
         client_socket->set_non_blocking(true);
 
-        // Register with poller for read readiness
         int cfd = client_socket->fd();
         if (cfd >= 0)
             poller_.add(cfd, platform::Poller::Readable);
 
         ClientConnection conn;
         conn.id = next_client_id_++;
+        if (cfd >= 0)
+            fd_to_client_[cfd] = conn.id;
         conn.socket = std::move(client_socket);
         clients_.emplace(conn.id, std::move(conn));
     }
 }
 
 bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
-    // Read raw bytes from client
-    std::vector<uint8_t> bytes;
-    try {
-        do {
-            auto chunk = client.socket->recv();
-            bytes.insert(bytes.end(), chunk.begin(), chunk.end());
-        } while (client.socket->bytes_available());
-    }
-    catch (...) {
-        throw;
-    }
+    auto bytes = drain_client(client);
 
     if (bytes.empty() && client.extra_data.empty())
         return false;
@@ -441,19 +485,14 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
 std::vector<WebSocketFrame> WebSocketServer::read_client_frames(ClientConnection& client) {
     std::vector<WebSocketFrame> messages;
 
-    // Read available data
-    std::vector<uint8_t> bytes;
-    bytes.insert(bytes.end(), client.extra_data.begin(), client.extra_data.end());
-    client.extra_data.clear();
+    // Drain completion buffer + socket into working buffer
+    auto bytes = drain_client(client);
 
-    try {
-        do {
-            auto chunk = client.socket->recv();
-            bytes.insert(bytes.end(), chunk.begin(), chunk.end());
-        } while (client.socket->bytes_available());
-    }
-    catch (...) {
-        throw;
+    // Prepend any leftover partial frame data from last call
+    if (!client.extra_data.empty()) {
+        client.extra_data.insert(client.extra_data.end(), bytes.begin(), bytes.end());
+        bytes.swap(client.extra_data);
+        client.extra_data.clear();
     }
 
     if (bytes.empty())
@@ -621,10 +660,12 @@ void WebSocketServer::remove_client(ClientId id) {
     if (it == clients_.end())
         return;
 
-    // Remove from poller before destroying the socket
+    // Remove from poller and fd map before destroying the socket
     int cfd = it->second.socket->fd();
-    if (cfd >= 0)
+    if (cfd >= 0) {
         poller_.remove(cfd);
+        fd_to_client_.erase(cfd);
+    }
 
     clients_.erase(it);
 }

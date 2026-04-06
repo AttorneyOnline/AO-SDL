@@ -134,10 +134,15 @@ class WebSocketServer {
         bool handshake_complete = false;
         std::vector<uint8_t> extra_data;
         std::vector<uint8_t> fragment_buf;
+        std::vector<uint8_t> recv_buf; ///< Data delivered by io_uring completions.
+        bool closed = false;           ///< Set by HangUp/Error events.
         Opcode fragment_opcode = TEXT;
         bool in_fragment = false;
         std::string selected_subprotocol;
     };
+
+    /// Drain recv_buf + socket into a single byte vector.
+    std::vector<uint8_t> drain_client(ClientConnection& client);
 
     void accept_new_clients();
     bool perform_server_handshake(ClientConnection& client);
@@ -147,11 +152,12 @@ class WebSocketServer {
 
     std::unique_ptr<IServerSocket> listener_;
     std::map<ClientId, ClientConnection> clients_;
+    std::unordered_map<int, ClientId> fd_to_client_; ///< fd → client ID for event dispatch.
     std::vector<std::string> supported_subprotocols_;
     uint64_t next_client_id_ = 1;
     bool running_ = false;
     mutable std::mutex mutex_;
-    platform::Poller poller_{0}; // readiness-only: WS server does its own recv/send
+    platform::Poller poller_;
 
     std::function<void(ClientId)> on_connected_;
     std::function<void(ClientId)> on_disconnected_;
