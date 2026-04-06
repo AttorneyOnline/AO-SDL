@@ -402,7 +402,7 @@ int main(int /*argc*/, char* argv[]) {
                         static uint64_t prev_ws_dispatched = 0;
                         static auto prev_ws_time = std::chrono::steady_clock::now();
                         static double ema_util = 0.0;
-                        constexpr double ALPHA = 0.3; // smoothing factor (lower = smoother)
+                        constexpr double ALPHA = 0.1; // smoothing factor (lower = smoother)
 
                         auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
                         auto cur_idle = ws_poll_stats.idle_ns.load(std::memory_order_relaxed);
@@ -425,19 +425,40 @@ int main(int /*argc*/, char* argv[]) {
                         prev_ws_time = cur_time;
                     }
 
-                    // Dispatch lock stats (cumulative counters from all callers)
+                    // Dispatch lock stats (delta-based, computed server-side)
                     {
+                        static uint64_t prev_excl_acq = 0, prev_excl_wait = 0, prev_excl_hold = 0;
+                        static uint64_t prev_shared_acq = 0, prev_shared_wait = 0;
+
                         auto& ls = rest_router.lock_stats;
-                        lock_util.labels({"exclusive_acquisitions"}).set(
-                            static_cast<double>(ls.exclusive_acquisitions.load(std::memory_order_relaxed)));
-                        lock_util.labels({"exclusive_wait_ns"}).set(
-                            static_cast<double>(ls.exclusive_wait_ns.load(std::memory_order_relaxed)));
-                        lock_util.labels({"exclusive_hold_ns"}).set(
-                            static_cast<double>(ls.exclusive_hold_ns.load(std::memory_order_relaxed)));
-                        lock_util.labels({"shared_acquisitions"}).set(
-                            static_cast<double>(ls.shared_acquisitions.load(std::memory_order_relaxed)));
-                        lock_util.labels({"shared_wait_ns"}).set(
-                            static_cast<double>(ls.shared_wait_ns.load(std::memory_order_relaxed)));
+                        auto cur_excl_acq = ls.exclusive_acquisitions.load(std::memory_order_relaxed);
+                        auto cur_excl_wait = ls.exclusive_wait_ns.load(std::memory_order_relaxed);
+                        auto cur_excl_hold = ls.exclusive_hold_ns.load(std::memory_order_relaxed);
+                        auto cur_shared_acq = ls.shared_acquisitions.load(std::memory_order_relaxed);
+                        auto cur_shared_wait = ls.shared_wait_ns.load(std::memory_order_relaxed);
+
+                        auto d_excl_acq = cur_excl_acq - prev_excl_acq;
+                        auto d_excl_wait = cur_excl_wait - prev_excl_wait;
+                        auto d_excl_hold = cur_excl_hold - prev_excl_hold;
+                        auto d_shared_acq = cur_shared_acq - prev_shared_acq;
+                        auto d_shared_wait = cur_shared_wait - prev_shared_wait;
+
+                        // Acquisitions per second
+                        lock_util.labels({"exclusive_acquisitions_per_sec"}).set(d_excl_acq / 2.0);
+                        lock_util.labels({"shared_acquisitions_per_sec"}).set(d_shared_acq / 2.0);
+                        // Average wait per acquisition (nanoseconds)
+                        lock_util.labels({"exclusive_avg_wait_ns"}).set(
+                            d_excl_acq > 0 ? static_cast<double>(d_excl_wait) / d_excl_acq : 0.0);
+                        lock_util.labels({"shared_avg_wait_ns"}).set(
+                            d_shared_acq > 0 ? static_cast<double>(d_shared_wait) / d_shared_acq : 0.0);
+                        // Hold time per second (ns of exclusive hold per second of wall time)
+                        lock_util.labels({"exclusive_hold_ns_per_sec"}).set(d_excl_hold / 2.0);
+
+                        prev_excl_acq = cur_excl_acq;
+                        prev_excl_wait = cur_excl_wait;
+                        prev_excl_hold = cur_excl_hold;
+                        prev_shared_acq = cur_shared_acq;
+                        prev_shared_wait = cur_shared_wait;
                     }
 
                     // Per-worker section breakdown (cumulative, for drill-down)
