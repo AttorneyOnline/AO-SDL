@@ -369,11 +369,26 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
         headers.emplace(kv);
     }
 
-    // Validate WebSocket upgrade request
+    // Validate WebSocket upgrade request.
+    // RFC 6455 §4.2.1: the Connection header must *contain* the "Upgrade"
+    // token (case-insensitive), not necessarily be exactly "Upgrade".
+    // Proxies like ALB send "keep-alive, Upgrade".
     if (!ws::case_insensitive_equal(headers["Upgrade"], "websocket"))
         throw WebSocketException("Missing or invalid Upgrade header");
-    if (!ws::case_insensitive_equal(headers["Connection"], "Upgrade"))
-        throw WebSocketException("Missing or invalid Connection header");
+    {
+        bool has_upgrade_token = false;
+        std::istringstream conn_stream(headers["Connection"]);
+        std::string token;
+        while (std::getline(conn_stream, token, ',')) {
+            token = ws::trim(token);
+            if (ws::case_insensitive_equal(token, "Upgrade")) {
+                has_upgrade_token = true;
+                break;
+            }
+        }
+        if (!has_upgrade_token)
+            throw WebSocketException("Missing or invalid Connection header");
+    }
 
     auto key_it = headers.find("Sec-WebSocket-Key");
     if (key_it == headers.end() || key_it->second.empty())
