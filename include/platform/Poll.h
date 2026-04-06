@@ -17,6 +17,8 @@ class Poller {
     ///                    backends (io_uring).  Each buffer is 8 KB.  Ignored
     ///                    by readiness backends (epoll/kqueue/WSAPoll).
     ///                    Must be a power of two.  Default: 4096 (32 MB).
+    ///                    Pass 0 to force readiness-only mode (no completion
+    ///                    recv/send — useful when the caller does its own I/O).
     explicit Poller(unsigned io_buffers = 4096);
     ~Poller();
     Poller(Poller&& other) noexcept;

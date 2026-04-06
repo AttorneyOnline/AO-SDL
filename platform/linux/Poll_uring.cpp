@@ -78,9 +78,9 @@ struct Poller::Impl {
     };
     std::unordered_map<int, FdState> fds;
 
-    explicit Impl(unsigned io_buffers) : buf_count(io_buffers) {
-        // Ring entries should be at least as large as the buffer count
-        // so we can have one SQE per buffer in flight.
+    bool readiness_only = false; // when true, use OP_POLL for all fds (no completion recv/send)
+
+    explicit Impl(unsigned io_buffers) : buf_count(io_buffers), readiness_only(io_buffers == 0) {
         unsigned ring_entries = std::max(io_buffers, 256u);
 
         struct io_uring_params params{};
@@ -88,22 +88,23 @@ struct Poller::Impl {
         if (ret < 0)
             throw std::runtime_error(std::string("io_uring_queue_init: ") + strerror(-ret));
 
-        // Set up provided buffer ring
-        buf_pool = new uint8_t[buf_count * BUF_SIZE];
-        buf_ring = io_uring_setup_buf_ring(&ring, buf_count, BUF_GROUP_ID, 0, &ret);
-        if (!buf_ring) {
-            delete[] buf_pool;
-            io_uring_queue_exit(&ring);
-            throw std::runtime_error(std::string("io_uring_setup_buf_ring: ") + strerror(-ret));
-        }
+        if (!readiness_only) {
+            // Set up provided buffer ring for completion-mode recv
+            buf_pool = new uint8_t[buf_count * BUF_SIZE];
+            buf_ring = io_uring_setup_buf_ring(&ring, buf_count, BUF_GROUP_ID, 0, &ret);
+            if (!buf_ring) {
+                delete[] buf_pool;
+                io_uring_queue_exit(&ring);
+                throw std::runtime_error(std::string("io_uring_setup_buf_ring: ") + strerror(-ret));
+            }
 
-        // Register all buffers in the ring
-        for (unsigned i = 0; i < buf_count; ++i) {
-            io_uring_buf_ring_add(buf_ring, buf_pool + i * BUF_SIZE, BUF_SIZE,
-                                  static_cast<uint16_t>(i),
-                                  io_uring_buf_ring_mask(buf_count), i);
+            for (unsigned i = 0; i < buf_count; ++i) {
+                io_uring_buf_ring_add(buf_ring, buf_pool + i * BUF_SIZE, BUF_SIZE,
+                                      static_cast<uint16_t>(i),
+                                      io_uring_buf_ring_mask(buf_count), i);
+            }
+            io_uring_buf_ring_advance(buf_ring, buf_count);
         }
-        io_uring_buf_ring_advance(buf_ring, buf_count);
     }
 
     ~Impl() {
@@ -213,10 +214,11 @@ void Poller::add(int fd, uint32_t interest, void* user_data) {
     impl_->fds[fd] = {interest, user_data, false};
 
     // Decide mode:
+    // - readiness_only=true: all fds use OP_POLL (caller does its own recv)
     // - Notifier (eventfd): readiness (needs drain_notifier)
     // - Listener socket: readiness (needs accept)
     // - Regular connection: completion (kernel does recv, delivers buffer)
-    bool use_readiness = (fd == impl_->efd) || is_listener(fd);
+    bool use_readiness = impl_->readiness_only || (fd == impl_->efd) || is_listener(fd);
 
     if (use_readiness) {
         impl_->submit_poll(fd, interest);

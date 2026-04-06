@@ -2,6 +2,7 @@
 
 #include "metrics/MetricsRegistry.h"
 #include "net/WebSocketCommon.h"
+#include "utils/Log.h"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -113,7 +114,16 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                         continue;
                     newly_connected.push_back(id);
                 }
+                catch (const std::exception& e) {
+                    Log::log_print(WARNING, "WS handshake failed for client %llu: %s",
+                                   (unsigned long long)id, e.what());
+                    ws_handshake_failures_.get().inc();
+                    dead_clients.push_back(id);
+                    continue;
+                }
                 catch (...) {
+                    Log::log_print(WARNING, "WS handshake failed for client %llu: unknown exception",
+                                   (unsigned long long)id);
                     ws_handshake_failures_.get().inc();
                     dead_clients.push_back(id);
                     continue;
