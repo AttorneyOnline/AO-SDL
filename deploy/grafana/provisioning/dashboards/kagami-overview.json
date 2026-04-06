@@ -750,12 +750,12 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_acquisitions\"}[5s])",
+          "expr": "kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_acquisitions_per_sec\"}",
           "legendFormat": "exclusive/s",
           "refId": "A"
         },
         {
-          "expr": "irate(kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_acquisitions\"}[5s])",
+          "expr": "kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_acquisitions_per_sec\"}",
           "legendFormat": "shared/s",
           "refId": "B"
         }
@@ -784,12 +784,12 @@
       },
       "targets": [
         {
-          "expr": "increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_wait_ns\"}[10s]) / clamp_min(increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_acquisitions\"}[10s]), 1)",
+          "expr": "kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_avg_wait_ns\"}",
           "legendFormat": "exclusive avg wait",
           "refId": "A"
         },
         {
-          "expr": "increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_wait_ns\"}[10s]) / clamp_min(increase(kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_acquisitions\"}[10s]), 1)",
+          "expr": "kagami_dispatch_lock{instance=~\"$instance\",type=\"shared_avg_wait_ns\"}",
           "legendFormat": "shared avg wait",
           "refId": "B"
         }
@@ -818,7 +818,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_hold_ns\"}[5s])",
+          "expr": "kagami_dispatch_lock{instance=~\"$instance\",type=\"exclusive_hold_ns_per_sec\"}",
           "legendFormat": "hold ns/s",
           "refId": "A"
         }
