@@ -684,12 +684,17 @@
           "expr": "kagami_ws_dispatch_rate{instance=~\"$instance\"}",
           "legendFormat": "frames dispatched/s",
           "refId": "A"
+        },
+        {
+          "expr": "kagami_ws_work_queue_depth{instance=~\"$instance\"}",
+          "legendFormat": "queue depth",
+          "refId": "B"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "WS Send Failures",
+      "title": "WS Worker Pool",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -700,19 +705,47 @@
       "interval": "1s",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "percentunit",
           "custom": {
             "fillOpacity": 10,
             "connectNulls": false
-          }
+          },
+          "min": 0,
+          "max": 1
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "active workers"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "max",
+                "value": 4
+              }
+            ]
+          }
+        ]
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_send_failures_total{instance=~\"$instance\"}[5s])",
-          "legendFormat": "send failures/s",
+          "expr": "kagami_ws_worker_utilization{instance=~\"$instance\"}",
+          "legendFormat": "utilization",
           "refId": "A"
+        },
+        {
+          "expr": "kagami_ws_active_workers{instance=~\"$instance\"}",
+          "legendFormat": "active workers",
+          "refId": "B"
         }
       ]
     },
@@ -1995,7 +2028,7 @@
       },
       "targets": [
         {
-          "expr": "max(\n  label_replace(kagami_http_worker_utilization{instance=~\"$instance\"}, \"__component__\", \"worker\", \"\", \"\")\n  or\n  label_replace(kagami_http_poll_utilization{instance=~\"$instance\"}, \"__component__\", \"poll\", \"\", \"\")\n  or\n  label_replace(kagami_ws_poll_utilization{instance=~\"$instance\"}, \"__component__\", \"ws\", \"\", \"\")\n)",
+          "expr": "max(\n  label_replace(kagami_http_worker_utilization{instance=~\"$instance\"}, \"__c__\", \"a\", \"\", \"\")\n  or label_replace(kagami_http_poll_utilization{instance=~\"$instance\"}, \"__c__\", \"b\", \"\", \"\")\n  or label_replace(kagami_ws_poll_utilization{instance=~\"$instance\"}, \"__c__\", \"c\", \"\", \"\")\n  or label_replace(kagami_ws_worker_utilization{instance=~\"$instance\"}, \"__c__\", \"d\", \"\", \"\")\n)",
           "legendFormat": "system load",
           "refId": "A",
           "instant": true
@@ -2040,6 +2073,11 @@
           "expr": "kagami_ws_poll_utilization{instance=~\"$instance\"}",
           "legendFormat": "ws poll thread",
           "refId": "C"
+        },
+        {
+          "expr": "kagami_ws_worker_utilization{instance=~\"$instance\"}",
+          "legendFormat": "ws workers",
+          "refId": "D"
         }
       ]
     }
