@@ -2235,3 +2235,86 @@ TEST_F(NXEndpointTest, FullLifecycle_ConnectSelectJoinChatLeave) {
     auto pc = cli.Get("/aonx/v1/server");
     EXPECT_EQ(nlohmann::json::parse(pc->body)["online"], 0);
 }
+
+// ---------------------------------------------------------------------------
+// Per-session REST traffic counters
+// ---------------------------------------------------------------------------
+
+TEST_F(RestRouterTest, SessionTrafficCountersWithResponseBody) {
+    // Authenticated endpoint returning a JSON body — should record
+    // bytes_received, bytes_sent, packets_received, packets_sent.
+    auto ep = std::make_unique<StubEndpoint>("POST", "/echo", true, RestResponse::json(200, {{"reply", "hello"}}));
+    router_.register_endpoint(std::move(ep));
+
+    auto session = room_.create_session(1, "aonx");
+    session->session_token = "traffic_tok";
+    room_.register_session_token("traffic_tok", 1);
+    session->joined = true;
+
+    router_.set_auth_func(
+        [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
+
+    start();
+    auto cli = client();
+    http::Headers headers = {{"Authorization", "Bearer traffic_tok"}};
+    std::string body = R"({"data":"test"})";
+    auto res = cli.Post("/echo", headers, body, "application/json");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+
+    // Session should have recorded traffic
+    EXPECT_GT(session->bytes_received.load(), 0u);
+    EXPECT_GT(session->bytes_sent.load(), 0u);
+    EXPECT_EQ(session->packets_received.load(), 1u);
+    EXPECT_EQ(session->packets_sent.load(), 1u);
+}
+
+TEST_F(RestRouterTest, SessionTrafficCountersNoBody) {
+    // Authenticated endpoint returning 204 (no body) — should still
+    // record packets but bytes_sent stays 0.
+    auto ep = std::make_unique<StubEndpoint>("DELETE", "/item", true, RestResponse{204, nullptr});
+    router_.register_endpoint(std::move(ep));
+
+    auto session = room_.create_session(1, "aonx");
+    session->session_token = "del_tok";
+    room_.register_session_token("del_tok", 1);
+    session->joined = true;
+
+    router_.set_auth_func(
+        [this](const std::string& token) -> ServerSession* { return room_.find_session_by_token(token); });
+
+    start();
+    auto cli = client();
+    http::Headers headers = {{"Authorization", "Bearer del_tok"}};
+    auto res = cli.Delete("/item", headers);
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+
+    // bytes_sent should be 0 (no body), but packets should be counted
+    EXPECT_EQ(session->bytes_sent.load(), 0u);
+    EXPECT_EQ(session->packets_received.load(), 1u);
+    EXPECT_EQ(session->packets_sent.load(), 1u);
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch lock stats
+// ---------------------------------------------------------------------------
+
+TEST_F(RestRouterTest, ExclusiveLockStatsRecorded) {
+    // with_lock should record exclusive_acquisitions and timing
+    router_.with_lock([] { /* no-op */ });
+
+    EXPECT_EQ(router_.lock_stats.exclusive_acquisitions.load(), 1u);
+    // wait_ns and hold_ns are >= 0 (could be 0 on fast machines)
+    EXPECT_GE(router_.lock_stats.exclusive_hold_ns.load(), 0u);
+}
+
+TEST_F(RestRouterTest, SharedLockStatsRecorded) {
+    // with_shared_lock should record shared_acquisitions and timing
+    router_.with_shared_lock([] { /* no-op */ });
+
+    EXPECT_EQ(router_.lock_stats.shared_acquisitions.load(), 1u);
+    EXPECT_GE(router_.lock_stats.shared_wait_ns.load(), 0u);
+}
