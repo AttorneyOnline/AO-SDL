@@ -13,8 +13,8 @@
 
 MetricsCollector::MetricsCollector(GameRoom& room, RestRouter& router, const ServerSettings& cfg,
                                    std::chrono::steady_clock::time_point start_time)
-    : cache_(std::make_shared<MetricsTextCache>()), room_(room), router_(router), cfg_(cfg),
-      start_time_(start_time) {}
+    : cache_(std::make_shared<MetricsTextCache>()), room_(room), router_(router), cfg_(cfg), start_time_(start_time) {
+}
 
 void MetricsCollector::start(http::Server& http) {
     if (!cfg_.metrics_enabled())
@@ -41,8 +41,7 @@ void MetricsCollector::start(http::Server& http) {
                                   {"version", "server_name", "max_players", "session_ttl", "http_port", "ws_port",
                                    "bind_address", "cors_origin"});
     auto& max_players = reg.gauge("kagami_max_players", "Configured max player slots");
-    auto& event_publishes =
-        reg.gauge("kagami_event_publishes", "Cumulative events published per channel", {"channel"});
+    auto& event_publishes = reg.gauge("kagami_event_publishes", "Cumulative events published per channel", {"channel"});
     auto& session_bytes_sent = reg.gauge("kagami_session_bytes_sent", "Bytes sent per session",
                                          {"session_id", "display_name", "protocol", "area", "character"});
     auto& session_bytes_recv = reg.gauge("kagami_session_bytes_received", "Bytes received per session",
@@ -56,8 +55,7 @@ void MetricsCollector::start(http::Server& http) {
     auto& http_open_conns = reg.gauge("kagami_http_open_connections", "Currently open TCP connections");
     auto& http_work_queue = reg.gauge("kagami_http_work_queue_depth", "Pending requests in worker queue");
     auto& http_result_queue = reg.gauge("kagami_http_result_queue_depth", "Pending results awaiting poll thread");
-    auto& http_active_workers =
-        reg.gauge("kagami_http_active_workers", "Worker threads currently executing handlers");
+    auto& http_active_workers = reg.gauge("kagami_http_active_workers", "Worker threads currently executing handlers");
     auto& http_worker_count = reg.gauge("kagami_http_worker_count", "Total worker threads");
     auto& http_worker_util =
         reg.gauge("kagami_http_worker_utilization", "Worker pool utilization (0-1, avg across workers)");
@@ -76,8 +74,7 @@ void MetricsCollector::start(http::Server& http) {
     auto& ws_dispatch_rate = reg.gauge("kagami_ws_dispatch_rate", "WebSocket frames dispatched per second");
     auto& ws_worker_util = reg.gauge("kagami_ws_worker_utilization", "WS worker pool utilization (0-1)");
     auto& ws_worker_active = reg.gauge("kagami_ws_active_workers", "WS workers currently executing handlers");
-    auto& ws_work_queue_depth =
-        reg.gauge("kagami_ws_work_queue_depth", "Pending WS frames awaiting worker dispatch");
+    auto& ws_work_queue_depth = reg.gauge("kagami_ws_work_queue_depth", "Pending WS frames awaiting worker dispatch");
     auto& lock_util = reg.gauge("kagami_dispatch_lock", "Dispatch mutex stats", {"type"});
 
     auto cors = cfg_.cors_origins();
@@ -178,8 +175,7 @@ void MetricsCollector::start(http::Server& http) {
             }
             poll_events.get().set(static_cast<double>(http.poll_events_total()));
             for (size_t i = 0; i < http.poll_section_count(); ++i)
-                poll_section_ns.labels({http.poll_section_name(i)})
-                    .set(static_cast<double>(http.poll_section_ns(i)));
+                poll_section_ns.labels({http.poll_section_name(i)}).set(static_cast<double>(http.poll_section_ns(i)));
 
             // io_uring stats
             auto emit_io_stats = [&](const std::string& server, const platform::Poller::IoStats& ios) {
@@ -202,7 +198,7 @@ void MetricsCollector::start(http::Server& http) {
                 auto& wps = ws_pool_->poll_stats();
                 auto cur_busy = wps.busy_ns.load(std::memory_order_relaxed);
                 auto cur_idle = wps.idle_ns.load(std::memory_order_relaxed);
-                auto cur_disp = wps.frames_dispatched.load(std::memory_order_relaxed);
+                auto cur_disp = ws_pool_->worker_stats().frames_processed.load(std::memory_order_relaxed);
                 auto cur_time = std::chrono::steady_clock::now();
 
                 auto d_busy = cur_busy - prev_ws_busy;
@@ -300,8 +296,8 @@ void MetricsCollector::start(http::Server& http) {
                 std::string char_name = (s->character_id >= 0 && s->character_id < (int)room_.characters.size())
                                             ? room_.characters[s->character_id]
                                             : "none";
-                std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol,
-                                                   s->area, std::move(char_name)};
+                std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol, s->area,
+                                                   std::move(char_name)};
                 session_bytes_sent.labels(labels).set(
                     static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
                 session_bytes_recv.labels(labels).set(

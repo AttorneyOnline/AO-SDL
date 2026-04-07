@@ -7,15 +7,9 @@
 
 namespace {
 
-class StatusCommand : public ReplCommand {
+class StatusCommand : public SimpleReplCommand {
   public:
-    const std::string& name() const override {
-        static const std::string n = "/status";
-        return n;
-    }
-    const std::string& description() const override {
-        static const std::string d = "Show server status";
-        return d;
+    StatusCommand() : SimpleReplCommand("/status", "Show server status") {
     }
     void execute(ServerContext& ctx, const std::vector<std::string>&) override {
         ctx.ui.print("Server:     " + ctx.cfg.server_name());
@@ -30,4 +24,5 @@ ReplCommandRegistrar reg("/status", [] { return std::make_unique<StatusCommand>(
 
 } // namespace
 
-void repl_cmd_status() {}
+void repl_cmd_status() {
+}

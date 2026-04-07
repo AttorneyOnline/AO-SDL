@@ -8,15 +8,9 @@
 
 namespace {
 
-class SessionsCommand : public ReplCommand {
+class SessionsCommand : public SimpleReplCommand {
   public:
-    const std::string& name() const override {
-        static const std::string n = "/sessions";
-        return n;
-    }
-    const std::string& description() const override {
-        static const std::string d = "List active sessions";
-        return d;
+    SessionsCommand() : SimpleReplCommand("/sessions", "List active sessions") {
     }
     void execute(ServerContext& ctx, const std::vector<std::string>&) override {
         ctx.rest_router.with_lock([&] {
@@ -45,4 +39,5 @@ ReplCommandRegistrar reg("/sessions", [] { return std::make_unique<SessionsComma
 
 } // namespace
 
-void repl_cmd_sessions() {}
+void repl_cmd_sessions() {
+}

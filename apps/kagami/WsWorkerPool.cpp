@@ -1,12 +1,12 @@
 #include "WsWorkerPool.h"
 
+#include "ServerSettings.h"
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketFrame.h"
 #include "net/WebSocketServer.h"
 #include "net/ao/AOServer.h"
-#include "ServerSettings.h"
 #include "utils/Log.h"
 
 #include <algorithm>
@@ -66,7 +66,7 @@ void WsWorkerPool::start() {
                 auto busy_start = std::chrono::steady_clock::now();
 
                 router_.with_lock([&] { ao_.on_client_message(item.client_id, item.data); });
-                poll_stats_.frames_dispatched.fetch_add(1, std::memory_order_relaxed);
+                worker_stats_.frames_processed.fetch_add(1, std::memory_order_relaxed);
 
                 worker_stats_.busy_ns.fetch_add(
                     static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -111,8 +111,7 @@ void WsWorkerPool::start() {
             auto now = std::chrono::steady_clock::now();
             if (now - last_sweep > std::chrono::seconds(30)) {
                 std::vector<uint64_t> to_expire;
-                router_.with_shared_lock(
-                    [&] { to_expire = room_.find_expired_sessions(cfg_.session_ttl_seconds()); });
+                router_.with_shared_lock([&] { to_expire = room_.find_expired_sessions(cfg_.session_ttl_seconds()); });
                 if (!to_expire.empty()) {
                     Log::log_print(INFO, "Expiring %zu sessions", to_expire.size());
                     constexpr size_t BATCH_SIZE = 64;
@@ -133,8 +132,8 @@ void WsWorkerPool::start() {
             }
 
             poll_stats_.busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                                     std::chrono::steady_clock::now() - busy_start)
-                                                                     .count()),
+                                                                    std::chrono::steady_clock::now() - busy_start)
+                                                                    .count()),
                                           std::memory_order_relaxed);
         }
         // Wake workers so they can check stop_requested

@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>  // jthread
+#include <thread> // jthread
 #include <vector>
 
 class WebSocketServer;
@@ -20,13 +20,13 @@ class ServerSettings;
 struct WsPollStats {
     std::atomic<uint64_t> idle_ns{0};
     std::atomic<uint64_t> busy_ns{0};
-    std::atomic<uint64_t> frames_dispatched{0};
 };
 
 struct WsWorkerStats {
     std::atomic<uint64_t> idle_ns{0};
     std::atomic<uint64_t> busy_ns{0};
     std::atomic<int> active{0};
+    std::atomic<uint64_t> frames_processed{0};
 };
 
 /// Manages the WebSocket worker thread pool and I/O poll thread.
@@ -42,8 +42,12 @@ class WsWorkerPool {
     /// Spawn worker threads and the poll thread. Wires ao_backend.set_send_func().
     void start();
 
-    const WsPollStats& poll_stats() const { return poll_stats_; }
-    const WsWorkerStats& worker_stats() const { return worker_stats_; }
+    const WsPollStats& poll_stats() const {
+        return poll_stats_;
+    }
+    const WsWorkerStats& worker_stats() const {
+        return worker_stats_;
+    }
 
     /// Total frames queued across all slots (acquires per-slot locks).
     size_t total_queued() const;

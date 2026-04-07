@@ -99,14 +99,6 @@ int main(int /*argc*/, char* argv[]) {
     auto server_start_time = std::chrono::steady_clock::now();
     MetricsCollector metrics(room, rest_router, cfg, server_start_time);
 
-    // WS connection gauge (registered here because ws doesn't exist yet)
-    if (cfg.metrics_enabled()) {
-        auto& reg = metrics::MetricsRegistry::instance();
-        auto& ws_conns = reg.gauge("kagami_ws_connections", "Active WebSocket connections");
-        // Collector registered after ws is constructed (below)
-        (void)ws_conns;
-    }
-
     // --- SSE endpoint (AONX) ---
     http.Options("/aonx/v1/events", [](const http::Request&, http::Response& res) { res.status = 204; });
 
@@ -158,7 +150,8 @@ int main(int /*argc*/, char* argv[]) {
     metrics.set_ws(&ws);
 
     if (cfg.metrics_enabled()) {
-        auto& ws_conns = metrics::MetricsRegistry::instance().gauge("kagami_ws_connections", "Active WebSocket connections");
+        auto& ws_conns =
+            metrics::MetricsRegistry::instance().gauge("kagami_ws_connections", "Active WebSocket connections");
         metrics::MetricsRegistry::instance().add_collector(
             [&ws_conns, &ws] { ws_conns.get().set(static_cast<double>(ws.client_count())); });
     }
