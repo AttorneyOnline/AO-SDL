@@ -9,8 +9,16 @@ PlatformTcpSocket::PlatformTcpSocket(const std::string& host, uint16_t port) : h
 PlatformTcpSocket::PlatformTcpSocket(platform::Socket&& connected_sock) : port_(0), sock_(std::move(connected_sock)) {
 }
 
+PlatformTcpSocket::PlatformTcpSocket(platform::Socket&& connected_sock, std::string remote_addr)
+    : port_(0), sock_(std::move(connected_sock)), remote_addr_(std::move(remote_addr)) {
+}
+
 int PlatformTcpSocket::fd() const {
     return sock_.fd();
+}
+
+std::string PlatformTcpSocket::remote_addr() const {
+    return remote_addr_;
 }
 
 void PlatformTcpSocket::enable_ssl(const std::string& hostname) {

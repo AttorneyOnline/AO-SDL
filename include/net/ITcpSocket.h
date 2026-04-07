@@ -75,4 +75,12 @@ class ITcpSocket {
     virtual int fd() const {
         return -1;
     }
+
+    /**
+     * @brief Remote peer address string (e.g. "192.168.1.1" or "2600:1f13::1").
+     * @return The address, or empty string if unknown (e.g. mock sockets).
+     */
+    virtual std::string remote_addr() const {
+        return "";
+    }
 };

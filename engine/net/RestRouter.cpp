@@ -140,6 +140,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         RestRequest rest_req;
         rest_req.method = req.method;
         rest_req.path = req.path;
+        rest_req.remote_addr = req.remote_addr;
 
         for (auto& [key, value] : req.path_params)
             rest_req.path_params[key] = value;

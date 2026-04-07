@@ -383,6 +383,7 @@ add_library(aoengine STATIC
     engine/net/WebSocketServer.cpp
     engine/net/Http.cpp
     engine/net/HttpServer.cpp
+    engine/net/RateLimiter.cpp
     engine/net/PlatformTcpSocket.cpp
     engine/net/PlatformServerSocket.cpp
     engine/net/WSClientThread.cpp

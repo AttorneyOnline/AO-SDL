@@ -14,6 +14,9 @@ class PlatformTcpSocket : public ITcpSocket {
     /// Construct from an already-connected platform socket (from server accept).
     explicit PlatformTcpSocket(platform::Socket&& connected_sock);
 
+    /// Construct from an accepted socket with known remote address.
+    PlatformTcpSocket(platform::Socket&& connected_sock, std::string remote_addr);
+
     /// Enable TLS for this socket. Must be called before connect().
     /// The hostname is used for SNI and certificate verification.
     void enable_ssl(const std::string& hostname);
@@ -23,6 +26,7 @@ class PlatformTcpSocket : public ITcpSocket {
     void set_connect_timeout(int timeout_ms);
 
     int fd() const override;
+    std::string remote_addr() const override;
 
     void connect() override;
     void set_non_blocking(bool non_blocking) override;
@@ -37,4 +41,5 @@ class PlatformTcpSocket : public ITcpSocket {
     std::string ssl_hostname_;       // non-empty = upgrade to TLS after connect
     int connect_timeout_ms_ = 10000; // 10 second default
     platform::Socket sock_;
+    std::string remote_addr_;
 };

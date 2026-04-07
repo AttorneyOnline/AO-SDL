@@ -135,6 +135,9 @@ class WebSocketServer {
         return poller_.io_stats();
     }
 
+    /// Get the remote address of a connected client. Returns empty string if unknown.
+    std::string get_client_addr(ClientId client_id) const;
+
     /// Queue a send for a client. The data is copied and will be sent
     /// on the next flush_sends() call from the poll thread.
     /// Thread-safe — workers call this from any thread.
@@ -149,6 +152,9 @@ class WebSocketServer {
     struct ClientConnection {
         ClientId id = 0;
         std::unique_ptr<ITcpSocket> socket;
+        std::string remote_addr;                                              ///< Peer IP address.
+        std::chrono::steady_clock::time_point connected_at;                   ///< When TCP was accepted.
+        std::chrono::steady_clock::time_point last_data_at;                   ///< Last time data was received.
         bool handshake_complete = false;
         std::vector<uint8_t> extra_data;
         std::vector<uint8_t> fragment_buf;
