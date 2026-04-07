@@ -1995,9 +1995,10 @@
       },
       "targets": [
         {
-          "expr": "max(kagami_http_worker_utilization{instance=~\"$instance\"} or kagami_http_poll_utilization{instance=~\"$instance\"})",
+          "expr": "max(\n  label_replace(kagami_http_worker_utilization{instance=~\"$instance\"}, \"__component__\", \"worker\", \"\", \"\")\n  or\n  label_replace(kagami_http_poll_utilization{instance=~\"$instance\"}, \"__component__\", \"poll\", \"\", \"\")\n  or\n  label_replace(kagami_ws_poll_utilization{instance=~\"$instance\"}, \"__component__\", \"ws\", \"\", \"\")\n)",
           "legendFormat": "system load",
-          "refId": "A"
+          "refId": "A",
+          "instant": true
         }
       ]
     },
@@ -2034,6 +2035,11 @@
           "expr": "kagami_http_poll_utilization{instance=~\"$instance\"}",
           "legendFormat": "poll thread",
           "refId": "B"
+        },
+        {
+          "expr": "kagami_ws_poll_utilization{instance=~\"$instance\"}",
+          "legendFormat": "ws poll thread",
+          "refId": "C"
         }
       ]
     }

@@ -657,6 +657,18 @@ std::vector<WebSocketFrame> WebSocketServer::read_client_frames(ClientConnection
 
 void WebSocketServer::send_frame(ClientConnection& client, const WebSocketFrame& frame) {
     auto wire = frame.serialize();
+    int fd = client.socket->fd();
+    if (fd >= 0) {
+        // Store the wire data in the client so it stays alive during async send
+        client.pending_send = std::move(wire);
+        if (!poller_.submit_send(fd, client.pending_send.data(), client.pending_send.size(), nullptr)) {
+            return; // Async send in flight (io_uring)
+        }
+        // Synchronous fallback (epoll/kqueue)
+        client.socket->send(client.pending_send.data(), client.pending_send.size());
+        client.pending_send.clear();
+        return;
+    }
     client.socket->send(wire.data(), wire.size());
 }
 

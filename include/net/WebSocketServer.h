@@ -137,8 +137,9 @@ class WebSocketServer {
         bool handshake_complete = false;
         std::vector<uint8_t> extra_data;
         std::vector<uint8_t> fragment_buf;
-        std::vector<uint8_t> recv_buf; ///< Data delivered by io_uring completions.
-        bool closed = false;           ///< Set by HangUp/Error events.
+        std::vector<uint8_t> recv_buf;     ///< Data delivered by io_uring completions.
+        std::vector<uint8_t> pending_send; ///< Kept alive during async io_uring send.
+        bool closed = false;               ///< Set by HangUp/Error events.
         Opcode fragment_opcode = TEXT;
         bool in_fragment = false;
         std::string selected_subprotocol;
