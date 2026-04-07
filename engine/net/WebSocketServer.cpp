@@ -27,8 +27,8 @@ static auto& ws_bytes_out_ =
     metrics::MetricsRegistry::instance().counter("kagami_ws_bytes_out_total", "WebSocket bytes sent");
 static auto& ws_handshake_failures_ =
     metrics::MetricsRegistry::instance().counter("kagami_ws_handshake_failures_total", "WebSocket handshake failures");
-static auto& ws_send_failures_ =
-    metrics::MetricsRegistry::instance().counter("kagami_ws_send_failures_total", "WebSocket send failures (dropped clients)");
+static auto& ws_send_failures_ = metrics::MetricsRegistry::instance().counter(
+    "kagami_ws_send_failures_total", "WebSocket send failures (dropped clients)");
 static auto& ws_connections_ =
     metrics::MetricsRegistry::instance().gauge("kagami_ws_connections", "Active WebSocket connections");
 
@@ -103,15 +103,18 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
         if (!running_)
             return {};
 
+        // Always try accepting new clients (non-blocking — returns immediately
+        // if none pending). This ensures mock sockets in tests work, and
+        // handles the case where accept events arrive between poll cycles.
+        accept_new_clients();
+
         // Dispatch completion/readiness events to client recv buffers
         for (int i = 0; i < nevents; ++i) {
             auto& ev = events[i];
 
-            // Listener socket — accept new clients
-            if (ev.fd == listener_->fd()) {
-                accept_new_clients();
+            // Listener socket — already handled above
+            if (ev.fd == listener_->fd())
                 continue;
-            }
 
             // Find the client for this fd
             auto fd_it = fd_to_client_.find(ev.fd);
@@ -124,8 +127,7 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
 
             // Completion data from io_uring
             if (ev.data_len > 0) {
-                client.recv_buf.insert(client.recv_buf.end(),
-                                       static_cast<const uint8_t*>(ev.data),
+                client.recv_buf.insert(client.recv_buf.end(), static_cast<const uint8_t*>(ev.data),
                                        static_cast<const uint8_t*>(ev.data) + ev.data_len);
                 poller_.recycle_buffer(ev.buffer_id);
             }
@@ -150,8 +152,8 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                     newly_connected.push_back(id);
                 }
                 catch (const std::exception& e) {
-                    Log::log_print(WARNING, "WS handshake failed for client %llu: %s",
-                                   (unsigned long long)id, e.what());
+                    Log::log_print(WARNING, "WS handshake failed for client %llu: %s", (unsigned long long)id,
+                                   e.what());
                     ws_handshake_failures_.get().inc();
                     dead_clients.push_back(id);
                     continue;
