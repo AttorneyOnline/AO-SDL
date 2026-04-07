@@ -48,8 +48,9 @@ class RestRouter {
             std::memory_order_relaxed);
         func();
         lock_stats.exclusive_hold_ns.fetch_add(
-            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now() - acquired).count()),
+            static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - acquired)
+                    .count()),
             std::memory_order_relaxed);
     }
 

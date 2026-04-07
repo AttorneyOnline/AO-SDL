@@ -13,6 +13,7 @@
 #include "net/WebSocketFrame.h"
 #include "platform/Poll.h"
 
+#include <atomic>
 #include <deque>
 
 #include <cstdint>
@@ -130,7 +131,9 @@ class WebSocketServer {
     void on_client_disconnected(std::function<void(ClientId)> callback);
 
     /// io_uring diagnostic stats for the WS server's poller.
-    platform::Poller::IoStats io_stats() const { return poller_.io_stats(); }
+    platform::Poller::IoStats io_stats() const {
+        return poller_.io_stats();
+    }
 
     /// Queue a send for a client. The data is copied and will be sent
     /// on the next flush_sends() call from the poll thread.
@@ -149,8 +152,8 @@ class WebSocketServer {
         bool handshake_complete = false;
         std::vector<uint8_t> extra_data;
         std::vector<uint8_t> fragment_buf;
-        std::vector<uint8_t> recv_buf;     ///< Data delivered by io_uring completions.
-        bool closed = false;               ///< Set by HangUp/Error events.
+        std::vector<uint8_t> recv_buf; ///< Data delivered by io_uring completions.
+        bool closed = false;           ///< Set by HangUp/Error events.
         Opcode fragment_opcode = TEXT;
         bool in_fragment = false;
         std::string selected_subprotocol;

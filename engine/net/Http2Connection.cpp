@@ -205,16 +205,16 @@ void Http2Connection::submit_get_async(const std::string& path, int urgency, Res
 // POST support
 // ---------------------------------------------------------------------------
 
-static std::vector<nghttp2_nv> build_post_headers(const std::string& path, const std::string& host,
-    const std::string& priority_value, const std::string& content_type,
-    const std::string& content_length,
-    const std::vector<std::pair<std::string, std::string>>& extra_headers) {
+static std::vector<nghttp2_nv>
+build_post_headers(const std::string& path, const std::string& host, const std::string& priority_value,
+                   const std::string& content_type, const std::string& content_length,
+                   const std::vector<std::pair<std::string, std::string>>& extra_headers) {
     std::vector<nghttp2_nv> hdrs;
-    hdrs.push_back({(uint8_t*)":method", (uint8_t*)"POST", 7, 4,
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back(
+        {(uint8_t*)":method", (uint8_t*)"POST", 7, 4, NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
     hdrs.push_back({(uint8_t*)":path", (uint8_t*)path.data(), 5, path.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)":scheme", (uint8_t*)"https", 7, 5,
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back(
+        {(uint8_t*)":scheme", (uint8_t*)"https", 7, 5, NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
     hdrs.push_back({(uint8_t*)":authority", (uint8_t*)host.data(), 10, host.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
     hdrs.push_back({(uint8_t*)"priority", (uint8_t*)priority_value.data(), 8, priority_value.size(),
                     NGHTTP2_NV_FLAG_NO_COPY_NAME});
@@ -230,8 +230,8 @@ static std::vector<nghttp2_nv> build_post_headers(const std::string& path, const
 
 /// nghttp2 data source read callback — reads from StreamData::request_body.
 /// The source->ptr points to the StreamData which lives until stream close.
-static ssize_t post_body_read_callback(nghttp2_session*, int32_t, uint8_t* buf, size_t length,
-                                       uint32_t* data_flags, nghttp2_data_source* source, void*) {
+static ssize_t post_body_read_callback(nghttp2_session*, int32_t, uint8_t* buf, size_t length, uint32_t* data_flags,
+                                       nghttp2_data_source* source, void*) {
     auto* sd = static_cast<Http2Connection::StreamData*>(source->ptr);
     size_t remaining = sd->request_body.size() - sd->body_offset;
     size_t nread = std::min(remaining, length);
@@ -242,9 +242,9 @@ static ssize_t post_body_read_callback(nghttp2_session*, int32_t, uint8_t* buf, 
     return static_cast<ssize_t>(nread);
 }
 
-std::future<Http2Connection::Response> Http2Connection::submit_post(
-    const std::string& path, const std::string& body, const std::string& content_type,
-    const std::vector<std::pair<std::string, std::string>>& extra_headers, int urgency) {
+std::future<Http2Connection::Response>
+Http2Connection::submit_post(const std::string& path, const std::string& body, const std::string& content_type,
+                             const std::vector<std::pair<std::string, std::string>>& extra_headers, int urgency) {
 
     std::lock_guard lock(mutex_);
 
@@ -266,8 +266,7 @@ std::future<Http2Connection::Response> Http2Connection::submit_post(
     data_prd.source.ptr = sd.get();
     data_prd.read_callback = post_body_read_callback;
 
-    int32_t id = nghttp2_submit_request2(session_, nullptr, hdrs.data(),
-                                         hdrs.size(), &data_prd, nullptr);
+    int32_t id = nghttp2_submit_request2(session_, nullptr, hdrs.data(), hdrs.size(), &data_prd, nullptr);
     if (id < 0) {
         sd->promise.set_value(Response{0, "", "submit failed: " + std::string(nghttp2_strerror(id))});
         return future;
@@ -277,10 +276,10 @@ std::future<Http2Connection::Response> Http2Connection::submit_post(
     return future;
 }
 
-void Http2Connection::submit_post_async(
-    const std::string& path, const std::string& body, const std::string& content_type,
-    const std::vector<std::pair<std::string, std::string>>& extra_headers, int urgency,
-    ResponseCallback on_complete) {
+void Http2Connection::submit_post_async(const std::string& path, const std::string& body,
+                                        const std::string& content_type,
+                                        const std::vector<std::pair<std::string, std::string>>& extra_headers,
+                                        int urgency, ResponseCallback on_complete) {
 
     std::lock_guard lock(mutex_);
 
@@ -301,8 +300,7 @@ void Http2Connection::submit_post_async(
     data_prd.source.ptr = sd.get();
     data_prd.read_callback = post_body_read_callback;
 
-    int32_t id = nghttp2_submit_request2(session_, nullptr, hdrs.data(),
-                                         hdrs.size(), &data_prd, nullptr);
+    int32_t id = nghttp2_submit_request2(session_, nullptr, hdrs.data(), hdrs.size(), &data_prd, nullptr);
     if (id < 0) {
         sd->callback(Response{0, "", "submit failed: " + std::string(nghttp2_strerror(id))});
         return;

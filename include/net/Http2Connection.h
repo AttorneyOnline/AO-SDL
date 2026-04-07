@@ -51,16 +51,14 @@ class Http2Connection {
     void submit_get_async(const std::string& path, int urgency, ResponseCallback on_complete);
 
     /// Submit a POST request with a body. Returns a future.
-    std::future<Response> submit_post(const std::string& path, const std::string& body,
-                                      const std::string& content_type,
+    std::future<Response> submit_post(const std::string& path, const std::string& body, const std::string& content_type,
                                       const std::vector<std::pair<std::string, std::string>>& extra_headers = {},
                                       int urgency = 3);
 
     /// Submit a POST request with a completion callback.
-    void submit_post_async(const std::string& path, const std::string& body,
-                           const std::string& content_type,
-                           const std::vector<std::pair<std::string, std::string>>& extra_headers,
-                           int urgency, ResponseCallback on_complete);
+    void submit_post_async(const std::string& path, const std::string& body, const std::string& content_type,
+                           const std::vector<std::pair<std::string, std::string>>& extra_headers, int urgency,
+                           ResponseCallback on_complete);
 
     /// True if the connection is still alive and accepting new streams.
     bool is_alive() const;

@@ -199,7 +199,7 @@ int main(int /*argc*/, char* argv[]) {
         }
     };
     auto metrics_cache = std::make_shared<MetricsTextCache>();
-    std::jthread metrics_thread_handle; // kept alive for server lifetime
+    std::jthread metrics_thread_handle;            // kept alive for server lifetime
     std::atomic<WebSocketServer*> ws_ptr{nullptr}; // set after WS construction, read by metrics thread
 
     // WS poll thread utilization tracking (shared between WS thread and metrics thread)
@@ -215,7 +215,10 @@ int main(int /*argc*/, char* argv[]) {
         std::atomic<uint64_t> busy_ns{0};
         std::atomic<int> active{0};
     } ws_worker_stats;
-    struct WsWorkItem { uint64_t client_id; std::string data; };
+    struct WsWorkItem {
+        uint64_t client_id;
+        std::string data;
+    };
     std::mutex ws_work_mutex;
     std::condition_variable ws_work_cv;
     std::deque<WsWorkItem> ws_work_queue;
@@ -278,27 +281,20 @@ int main(int /*argc*/, char* argv[]) {
             reg.gauge("kagami_http_worker_utilization_per_worker", "Per-worker utilization (0-1)", {"worker"});
         auto& cow_copy_bytes =
             reg.gauge("kagami_cow_copy_bytes_total", "Cumulative bytes copied during COW session map mutations");
-        auto& poll_util =
-            reg.gauge("kagami_http_poll_utilization", "Poll thread utilization (0-1)");
+        auto& poll_util = reg.gauge("kagami_http_poll_utilization", "Poll thread utilization (0-1)");
         auto& poll_events = reg.gauge("kagami_http_poll_events_total", "Total events processed by poll thread");
         auto& poll_section_ns = reg.gauge("kagami_http_poll_section_nanoseconds_total",
                                           "Cumulative poll thread time per section in nanoseconds", {"section"});
         auto& worker_section_ns = reg.gauge("kagami_http_worker_section_nanoseconds_total",
                                             "Cumulative worker time per worker per section", {"worker", "section"});
-        auto& io_uring_stats = reg.gauge("kagami_io_uring_ops_total",
-                                         "io_uring operation counters", {"server", "op"});
-        auto& ws_poll_util = reg.gauge("kagami_ws_poll_utilization",
-                                       "WebSocket poll thread utilization (0-1)");
-        auto& ws_dispatch_rate = reg.gauge("kagami_ws_dispatch_rate",
-                                           "WebSocket frames dispatched per second");
-        auto& ws_worker_util = reg.gauge("kagami_ws_worker_utilization",
-                                         "WS worker pool utilization (0-1)");
-        auto& ws_worker_active = reg.gauge("kagami_ws_active_workers",
-                                           "WS workers currently executing handlers");
-        auto& ws_work_queue_depth = reg.gauge("kagami_ws_work_queue_depth",
-                                              "Pending WS frames awaiting worker dispatch");
-        auto& lock_util = reg.gauge("kagami_dispatch_lock",
-                                    "Dispatch mutex stats", {"type"});
+        auto& io_uring_stats = reg.gauge("kagami_io_uring_ops_total", "io_uring operation counters", {"server", "op"});
+        auto& ws_poll_util = reg.gauge("kagami_ws_poll_utilization", "WebSocket poll thread utilization (0-1)");
+        auto& ws_dispatch_rate = reg.gauge("kagami_ws_dispatch_rate", "WebSocket frames dispatched per second");
+        auto& ws_worker_util = reg.gauge("kagami_ws_worker_utilization", "WS worker pool utilization (0-1)");
+        auto& ws_worker_active = reg.gauge("kagami_ws_active_workers", "WS workers currently executing handlers");
+        auto& ws_work_queue_depth =
+            reg.gauge("kagami_ws_work_queue_depth", "Pending WS frames awaiting worker dispatch");
+        auto& lock_util = reg.gauge("kagami_dispatch_lock", "Dispatch mutex stats", {"type"});
 
         auto cors = cfg.cors_origins();
         server_info
@@ -312,262 +308,261 @@ int main(int /*argc*/, char* argv[]) {
         // every 1 second. The /metrics endpoint serves the cached string.
         // This keeps both the poll thread and worker pool free from metrics
         // overhead regardless of session count.
-        std::jthread metrics_thread(
-            [&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players, &area_info, &chars_taken,
-             &event_publishes, &session_bytes_sent, &session_bytes_recv, &session_packets_sent, &session_packets_recv,
-             &session_idle, &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers,
-             &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util,
-             &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats,
-             &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate,
-             &ws_worker_util, &ws_worker_active, &ws_work_queue_depth,
-             &ws_worker_stats, &ws_work_mutex, &ws_work_queue,
-             &lock_util, &rest_router, &http_server = http, &room,
-             &server_start_time, &reg, &metrics_cache](std::stop_token st) {
-                // Previous cumulative values for delta computation
-                uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
-                uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
-                size_t worker_count = 0;
-                std::vector<uint64_t> prev_pw_busy;
-                std::vector<uint64_t> prev_pw_idle;
+        std::jthread metrics_thread([&uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players,
+                                     &area_info, &chars_taken, &event_publishes, &session_bytes_sent,
+                                     &session_bytes_recv, &session_packets_sent, &session_packets_recv, &session_idle,
+                                     &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers,
+                                     &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes,
+                                     &poll_util, &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats,
+                                     &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate, &ws_worker_util,
+                                     &ws_worker_active, &ws_work_queue_depth, &ws_worker_stats, &ws_work_mutex,
+                                     &ws_work_queue, &lock_util, &rest_router, &http_server = http, &room,
+                                     &server_start_time, &reg, &metrics_cache](std::stop_token st) {
+            // Previous cumulative values for delta computation
+            uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
+            uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
+            size_t worker_count = 0;
+            std::vector<uint64_t> prev_pw_busy;
+            std::vector<uint64_t> prev_pw_idle;
 
-                // WS poll utilization tracking
-                uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
-                uint64_t prev_ws_dispatched = 0;
-                auto prev_ws_time = std::chrono::steady_clock::now();
-                double ema_util = 0.0;
+            // WS poll utilization tracking
+            uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
+            uint64_t prev_ws_dispatched = 0;
+            auto prev_ws_time = std::chrono::steady_clock::now();
+            double ema_util = 0.0;
 
-                // WS worker utilization tracking
-                uint64_t prev_ws_wk_busy = 0, prev_ws_wk_idle = 0;
+            // WS worker utilization tracking
+            uint64_t prev_ws_wk_busy = 0, prev_ws_wk_idle = 0;
 
-                // Dispatch lock stats tracking
-                uint64_t prev_excl_acq = 0, prev_excl_wait = 0, prev_excl_hold = 0;
-                uint64_t prev_shared_acq = 0, prev_shared_wait = 0;
-                auto prev_lock_time = std::chrono::steady_clock::now();
+            // Dispatch lock stats tracking
+            uint64_t prev_excl_acq = 0, prev_excl_wait = 0, prev_excl_hold = 0;
+            uint64_t prev_shared_acq = 0, prev_shared_wait = 0;
+            auto prev_lock_time = std::chrono::steady_clock::now();
 
-                while (!st.stop_requested()) {
-                    auto now = std::chrono::steady_clock::now();
-                    uptime.get().set(std::chrono::duration<double>(now - server_start_time).count());
-                    rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
+            while (!st.stop_requested()) {
+                auto now = std::chrono::steady_clock::now();
+                uptime.get().set(std::chrono::duration<double>(now - server_start_time).count());
+                rss.get().set(static_cast<double>(metrics::process_rss_bytes()));
 
-                    // HTTP worker pool metrics (lock-free — read atomics directly)
-                    http_open_conns.get().set(static_cast<double>(http_server.open_connections()));
-                    http_work_queue.get().set(static_cast<double>(http_server.work_queue_depth()));
-                    http_result_queue.get().set(static_cast<double>(http_server.result_queue_depth()));
-                    http_active_workers.get().set(static_cast<double>(http_server.active_workers()));
-                    http_worker_count.get().set(static_cast<double>(http_server.worker_count()));
+                // HTTP worker pool metrics (lock-free — read atomics directly)
+                http_open_conns.get().set(static_cast<double>(http_server.open_connections()));
+                http_work_queue.get().set(static_cast<double>(http_server.work_queue_depth()));
+                http_result_queue.get().set(static_cast<double>(http_server.result_queue_depth()));
+                http_active_workers.get().set(static_cast<double>(http_server.active_workers()));
+                http_worker_count.get().set(static_cast<double>(http_server.worker_count()));
 
-                    // Worker utilization — compute delta since last tick
-                    {
-                        auto cur_busy = http_server.worker_busy_ns();
-                        auto cur_idle = http_server.worker_idle_ns();
-                        auto d_busy = cur_busy - prev_worker_busy;
-                        auto d_idle = cur_idle - prev_worker_idle;
-                        auto d_total = d_busy + d_idle;
-                        http_worker_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
-                        prev_worker_busy = cur_busy;
-                        prev_worker_idle = cur_idle;
-                    }
-
-                    // Per-worker utilization (lazy init — workers start after metrics thread)
-                    if (worker_count == 0) {
-                        worker_count = http_server.worker_count();
-                        prev_pw_busy.resize(worker_count, 0);
-                        prev_pw_idle.resize(worker_count, 0);
-                    }
-                    for (size_t w = 0; w < worker_count; ++w) {
-                        // idle is section index 0, busy = sum of dequeue(1) + handler(2) + result(3)
-                        auto cur_idle = http_server.worker_section_ns(w, 0);
-                        uint64_t cur_busy = 0;
-                        for (size_t s = 1; s < http_server.worker_section_count(); ++s)
-                            cur_busy += http_server.worker_section_ns(w, s);
-                        auto d_busy = cur_busy - prev_pw_busy[w];
-                        auto d_idle = cur_idle - prev_pw_idle[w];
-                        auto d_total = d_busy + d_idle;
-                        http_worker_util_per.labels({std::to_string(w)})
-                            .set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
-                        prev_pw_busy[w] = cur_busy;
-                        prev_pw_idle[w] = cur_idle;
-                    }
-
-                    // Aggregate session stats (lock-free atomic reads)
-                    sessions_g.labels({"ao2"}).set(room.stats.sessions_ao.load(std::memory_order_relaxed));
-                    sessions_g.labels({"aonx"}).set(room.stats.sessions_nx.load(std::memory_order_relaxed));
-                    sessions_joined.get().set(room.stats.joined.load(std::memory_order_relaxed));
-                    sessions_mods.get().set(room.stats.moderators.load(std::memory_order_relaxed));
-                    chars_taken.get().set(room.stats.chars_taken.load(std::memory_order_relaxed));
-                    cow_copy_bytes.get().set(static_cast<double>(room.cow_copy_bytes()));
-
-                    // Poll thread utilization — delta since last tick
-                    {
-                        auto cur_busy = http_server.poll_busy_ns();
-                        auto cur_idle = http_server.poll_idle_ns();
-                        auto d_busy = cur_busy - prev_poll_busy;
-                        auto d_idle = cur_idle - prev_poll_idle;
-                        auto d_total = d_busy + d_idle;
-                        poll_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
-                        prev_poll_busy = cur_busy;
-                        prev_poll_idle = cur_idle;
-                    }
-                    poll_events.get().set(static_cast<double>(http_server.poll_events_total()));
-                    for (size_t i = 0; i < http_server.poll_section_count(); ++i)
-                        poll_section_ns.labels({http_server.poll_section_name(i)})
-                            .set(static_cast<double>(http_server.poll_section_ns(i)));
-
-                    // io_uring stats for both HTTP and WS pollers
-                    auto emit_io_stats = [&](const std::string& server, const platform::Poller::IoStats& ios) {
-                        io_uring_stats.labels({server, "recv_submitted"}).set(static_cast<double>(ios.recv_submitted));
-                        io_uring_stats.labels({server, "recv_completed"}).set(static_cast<double>(ios.recv_completed));
-                        io_uring_stats.labels({server, "recv_enobufs"}).set(static_cast<double>(ios.recv_enobufs));
-                        io_uring_stats.labels({server, "send_submitted"}).set(static_cast<double>(ios.send_submitted));
-                        io_uring_stats.labels({server, "send_completed"}).set(static_cast<double>(ios.send_completed));
-                        io_uring_stats.labels({server, "send_partial"}).set(static_cast<double>(ios.send_partial));
-                        io_uring_stats.labels({server, "send_errors"}).set(static_cast<double>(ios.send_errors));
-                        io_uring_stats.labels({server, "sqe_full"}).set(static_cast<double>(ios.sqe_full));
-                        io_uring_stats.labels({server, "cqe_reaped"}).set(static_cast<double>(ios.cqe_reaped));
-                    };
-                    emit_io_stats("http", http_server.io_stats());
-                    if (auto* wsp = ws_ptr.load(std::memory_order_acquire))
-                        emit_io_stats("ws", wsp->io_stats());
-
-                    // WS poll thread utilization (EMA-smoothed)
-                    {
-                        constexpr double ALPHA = 0.1; // smoothing factor (lower = smoother)
-
-                        auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
-                        auto cur_idle = ws_poll_stats.idle_ns.load(std::memory_order_relaxed);
-                        auto cur_disp = ws_poll_stats.frames_dispatched.load(std::memory_order_relaxed);
-                        auto cur_time = std::chrono::steady_clock::now();
-
-                        auto d_busy = cur_busy - prev_ws_busy;
-                        auto d_idle = cur_idle - prev_ws_idle;
-                        auto d_total = d_busy + d_idle;
-                        double instant_util = d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0;
-                        ema_util = ALPHA * instant_util + (1.0 - ALPHA) * ema_util;
-                        ws_poll_util.get().set(ema_util);
-
-                        double dt = std::chrono::duration<double>(cur_time - prev_ws_time).count();
-                        ws_dispatch_rate.get().set(dt > 0 ? (cur_disp - prev_ws_dispatched) / dt : 0.0);
-
-                        prev_ws_busy = cur_busy;
-                        prev_ws_idle = cur_idle;
-                        prev_ws_dispatched = cur_disp;
-                        prev_ws_time = cur_time;
-                    }
-
-                    // WS worker pool utilization (delta-based)
-                    {
-                        auto cur_busy = ws_worker_stats.busy_ns.load(std::memory_order_relaxed);
-                        auto cur_idle = ws_worker_stats.idle_ns.load(std::memory_order_relaxed);
-                        auto d_busy = cur_busy - prev_ws_wk_busy;
-                        auto d_idle = cur_idle - prev_ws_wk_idle;
-                        auto d_total = d_busy + d_idle;
-                        ws_worker_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
-                        prev_ws_wk_busy = cur_busy;
-                        prev_ws_wk_idle = cur_idle;
-
-                        ws_worker_active.get().set(ws_worker_stats.active.load(std::memory_order_relaxed));
-
-                        {
-                            std::lock_guard lock(ws_work_mutex);
-                            ws_work_queue_depth.get().set(static_cast<double>(ws_work_queue.size()));
-                        }
-                    }
-
-                    // Dispatch lock stats (delta-based, computed server-side)
-                    {
-                        auto& ls = rest_router.lock_stats;
-                        auto cur_excl_acq = ls.exclusive_acquisitions.load(std::memory_order_relaxed);
-                        auto cur_excl_wait = ls.exclusive_wait_ns.load(std::memory_order_relaxed);
-                        auto cur_excl_hold = ls.exclusive_hold_ns.load(std::memory_order_relaxed);
-                        auto cur_shared_acq = ls.shared_acquisitions.load(std::memory_order_relaxed);
-                        auto cur_shared_wait = ls.shared_wait_ns.load(std::memory_order_relaxed);
-
-                        auto d_excl_acq = cur_excl_acq - prev_excl_acq;
-                        auto d_excl_wait = cur_excl_wait - prev_excl_wait;
-                        auto d_excl_hold = cur_excl_hold - prev_excl_hold;
-                        auto d_shared_acq = cur_shared_acq - prev_shared_acq;
-                        auto d_shared_wait = cur_shared_wait - prev_shared_wait;
-
-                        auto cur_lock_time = std::chrono::steady_clock::now();
-                        double lock_dt = std::chrono::duration<double>(cur_lock_time - prev_lock_time).count();
-
-                        // Acquisitions per second
-                        lock_util.labels({"exclusive_acquisitions_per_sec"}).set(lock_dt > 0 ? d_excl_acq / lock_dt : 0.0);
-                        lock_util.labels({"shared_acquisitions_per_sec"}).set(lock_dt > 0 ? d_shared_acq / lock_dt : 0.0);
-                        // Average wait per acquisition (nanoseconds)
-                        lock_util.labels({"exclusive_avg_wait_ns"}).set(
-                            d_excl_acq > 0 ? static_cast<double>(d_excl_wait) / d_excl_acq : 0.0);
-                        lock_util.labels({"shared_avg_wait_ns"}).set(
-                            d_shared_acq > 0 ? static_cast<double>(d_shared_wait) / d_shared_acq : 0.0);
-                        // Hold time per second (ns of exclusive hold per second of wall time)
-                        lock_util.labels({"exclusive_hold_ns_per_sec"}).set(lock_dt > 0 ? d_excl_hold / lock_dt : 0.0);
-
-                        prev_lock_time = cur_lock_time;
-
-                        prev_excl_acq = cur_excl_acq;
-                        prev_excl_wait = cur_excl_wait;
-                        prev_excl_hold = cur_excl_hold;
-                        prev_shared_acq = cur_shared_acq;
-                        prev_shared_wait = cur_shared_wait;
-                    }
-
-                    // Per-worker section breakdown (cumulative, for drill-down)
-                    for (size_t w = 0; w < worker_count; ++w)
-                        for (size_t s = 0; s < http_server.worker_section_count(); ++s)
-                            worker_section_ns.labels({std::to_string(w), http_server.worker_section_name(s)})
-                                .set(static_cast<double>(http_server.worker_section_ns(w, s)));
-
-                    // Per-session + area detail (lock-free via COW snapshot)
-                    auto snap = room.sessions_snapshot();
-
-                    area_players.clear();
-                    area_info.clear();
-                    for (auto& [id, state] : room.area_states()) {
-                        int count = 0;
-                        snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
-                            if (s->area == state.name)
-                                ++count;
-                        });
-                        area_players.labels({state.name, state.status}).set(count);
-                        area_info.labels({state.name, state.status, state.locked ? "true" : "false"}).set(1);
-                    }
-
-                    session_bytes_sent.clear();
-                    session_bytes_recv.clear();
-                    session_packets_sent.clear();
-                    session_packets_recv.clear();
-                    session_idle.clear();
-
-                    snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
-                        std::string char_name = (s->character_id >= 0 && s->character_id < (int)room.characters.size())
-                                                    ? room.characters[s->character_id]
-                                                    : "none";
-                        std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol,
-                                                           s->area, std::move(char_name)};
-                        session_bytes_sent.labels(labels).set(
-                            static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
-                        session_bytes_recv.labels(labels).set(
-                            static_cast<double>(s->bytes_received.load(std::memory_order_relaxed)));
-                        session_packets_sent.labels(labels).set(
-                            static_cast<double>(s->packets_sent.load(std::memory_order_relaxed)));
-                        session_packets_recv.labels(labels).set(
-                            static_cast<double>(s->packets_received.load(std::memory_order_relaxed)));
-                        session_idle.labels(labels).set(static_cast<double>(
-                            std::chrono::duration_cast<std::chrono::seconds>(now - s->last_activity()).count()));
-                    });
-
-                    for (auto& cs : EventManager::instance().snapshot_channel_stats())
-                        event_publishes.labels({cs.raw_name}).set(static_cast<double>(cs.count));
-
-                    // Serialize and cache (no collectors needed — we populated gauges above)
-                    auto text = std::make_shared<const std::string>(reg.collect());
-                    metrics_cache->store(std::move(text));
-
-                    // Wait for the next scrape request, or regenerate every 2s as a
-                    // fallback (for dashboards that auto-refresh without scraping).
-                    metrics_cache->wait_for_request(st, std::chrono::seconds(2));
+                // Worker utilization — compute delta since last tick
+                {
+                    auto cur_busy = http_server.worker_busy_ns();
+                    auto cur_idle = http_server.worker_idle_ns();
+                    auto d_busy = cur_busy - prev_worker_busy;
+                    auto d_idle = cur_idle - prev_worker_idle;
+                    auto d_total = d_busy + d_idle;
+                    http_worker_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                    prev_worker_busy = cur_busy;
+                    prev_worker_idle = cur_idle;
                 }
-            });
+
+                // Per-worker utilization (lazy init — workers start after metrics thread)
+                if (worker_count == 0) {
+                    worker_count = http_server.worker_count();
+                    prev_pw_busy.resize(worker_count, 0);
+                    prev_pw_idle.resize(worker_count, 0);
+                }
+                for (size_t w = 0; w < worker_count; ++w) {
+                    // idle is section index 0, busy = sum of dequeue(1) + handler(2) + result(3)
+                    auto cur_idle = http_server.worker_section_ns(w, 0);
+                    uint64_t cur_busy = 0;
+                    for (size_t s = 1; s < http_server.worker_section_count(); ++s)
+                        cur_busy += http_server.worker_section_ns(w, s);
+                    auto d_busy = cur_busy - prev_pw_busy[w];
+                    auto d_idle = cur_idle - prev_pw_idle[w];
+                    auto d_total = d_busy + d_idle;
+                    http_worker_util_per.labels({std::to_string(w)})
+                        .set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                    prev_pw_busy[w] = cur_busy;
+                    prev_pw_idle[w] = cur_idle;
+                }
+
+                // Aggregate session stats (lock-free atomic reads)
+                sessions_g.labels({"ao2"}).set(room.stats.sessions_ao.load(std::memory_order_relaxed));
+                sessions_g.labels({"aonx"}).set(room.stats.sessions_nx.load(std::memory_order_relaxed));
+                sessions_joined.get().set(room.stats.joined.load(std::memory_order_relaxed));
+                sessions_mods.get().set(room.stats.moderators.load(std::memory_order_relaxed));
+                chars_taken.get().set(room.stats.chars_taken.load(std::memory_order_relaxed));
+                cow_copy_bytes.get().set(static_cast<double>(room.cow_copy_bytes()));
+
+                // Poll thread utilization — delta since last tick
+                {
+                    auto cur_busy = http_server.poll_busy_ns();
+                    auto cur_idle = http_server.poll_idle_ns();
+                    auto d_busy = cur_busy - prev_poll_busy;
+                    auto d_idle = cur_idle - prev_poll_idle;
+                    auto d_total = d_busy + d_idle;
+                    poll_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                    prev_poll_busy = cur_busy;
+                    prev_poll_idle = cur_idle;
+                }
+                poll_events.get().set(static_cast<double>(http_server.poll_events_total()));
+                for (size_t i = 0; i < http_server.poll_section_count(); ++i)
+                    poll_section_ns.labels({http_server.poll_section_name(i)})
+                        .set(static_cast<double>(http_server.poll_section_ns(i)));
+
+                // io_uring stats for both HTTP and WS pollers
+                auto emit_io_stats = [&](const std::string& server, const platform::Poller::IoStats& ios) {
+                    io_uring_stats.labels({server, "recv_submitted"}).set(static_cast<double>(ios.recv_submitted));
+                    io_uring_stats.labels({server, "recv_completed"}).set(static_cast<double>(ios.recv_completed));
+                    io_uring_stats.labels({server, "recv_enobufs"}).set(static_cast<double>(ios.recv_enobufs));
+                    io_uring_stats.labels({server, "send_submitted"}).set(static_cast<double>(ios.send_submitted));
+                    io_uring_stats.labels({server, "send_completed"}).set(static_cast<double>(ios.send_completed));
+                    io_uring_stats.labels({server, "send_partial"}).set(static_cast<double>(ios.send_partial));
+                    io_uring_stats.labels({server, "send_errors"}).set(static_cast<double>(ios.send_errors));
+                    io_uring_stats.labels({server, "sqe_full"}).set(static_cast<double>(ios.sqe_full));
+                    io_uring_stats.labels({server, "cqe_reaped"}).set(static_cast<double>(ios.cqe_reaped));
+                };
+                emit_io_stats("http", http_server.io_stats());
+                if (auto* wsp = ws_ptr.load(std::memory_order_acquire))
+                    emit_io_stats("ws", wsp->io_stats());
+
+                // WS poll thread utilization (EMA-smoothed)
+                {
+                    constexpr double ALPHA = 0.1; // smoothing factor (lower = smoother)
+
+                    auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
+                    auto cur_idle = ws_poll_stats.idle_ns.load(std::memory_order_relaxed);
+                    auto cur_disp = ws_poll_stats.frames_dispatched.load(std::memory_order_relaxed);
+                    auto cur_time = std::chrono::steady_clock::now();
+
+                    auto d_busy = cur_busy - prev_ws_busy;
+                    auto d_idle = cur_idle - prev_ws_idle;
+                    auto d_total = d_busy + d_idle;
+                    double instant_util = d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0;
+                    ema_util = ALPHA * instant_util + (1.0 - ALPHA) * ema_util;
+                    ws_poll_util.get().set(ema_util);
+
+                    double dt = std::chrono::duration<double>(cur_time - prev_ws_time).count();
+                    ws_dispatch_rate.get().set(dt > 0 ? (cur_disp - prev_ws_dispatched) / dt : 0.0);
+
+                    prev_ws_busy = cur_busy;
+                    prev_ws_idle = cur_idle;
+                    prev_ws_dispatched = cur_disp;
+                    prev_ws_time = cur_time;
+                }
+
+                // WS worker pool utilization (delta-based)
+                {
+                    auto cur_busy = ws_worker_stats.busy_ns.load(std::memory_order_relaxed);
+                    auto cur_idle = ws_worker_stats.idle_ns.load(std::memory_order_relaxed);
+                    auto d_busy = cur_busy - prev_ws_wk_busy;
+                    auto d_idle = cur_idle - prev_ws_wk_idle;
+                    auto d_total = d_busy + d_idle;
+                    ws_worker_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                    prev_ws_wk_busy = cur_busy;
+                    prev_ws_wk_idle = cur_idle;
+
+                    ws_worker_active.get().set(ws_worker_stats.active.load(std::memory_order_relaxed));
+
+                    {
+                        std::lock_guard lock(ws_work_mutex);
+                        ws_work_queue_depth.get().set(static_cast<double>(ws_work_queue.size()));
+                    }
+                }
+
+                // Dispatch lock stats (delta-based, computed server-side)
+                {
+                    auto& ls = rest_router.lock_stats;
+                    auto cur_excl_acq = ls.exclusive_acquisitions.load(std::memory_order_relaxed);
+                    auto cur_excl_wait = ls.exclusive_wait_ns.load(std::memory_order_relaxed);
+                    auto cur_excl_hold = ls.exclusive_hold_ns.load(std::memory_order_relaxed);
+                    auto cur_shared_acq = ls.shared_acquisitions.load(std::memory_order_relaxed);
+                    auto cur_shared_wait = ls.shared_wait_ns.load(std::memory_order_relaxed);
+
+                    auto d_excl_acq = cur_excl_acq - prev_excl_acq;
+                    auto d_excl_wait = cur_excl_wait - prev_excl_wait;
+                    auto d_excl_hold = cur_excl_hold - prev_excl_hold;
+                    auto d_shared_acq = cur_shared_acq - prev_shared_acq;
+                    auto d_shared_wait = cur_shared_wait - prev_shared_wait;
+
+                    auto cur_lock_time = std::chrono::steady_clock::now();
+                    double lock_dt = std::chrono::duration<double>(cur_lock_time - prev_lock_time).count();
+
+                    // Acquisitions per second
+                    lock_util.labels({"exclusive_acquisitions_per_sec"}).set(lock_dt > 0 ? d_excl_acq / lock_dt : 0.0);
+                    lock_util.labels({"shared_acquisitions_per_sec"}).set(lock_dt > 0 ? d_shared_acq / lock_dt : 0.0);
+                    // Average wait per acquisition (nanoseconds)
+                    lock_util.labels({"exclusive_avg_wait_ns"})
+                        .set(d_excl_acq > 0 ? static_cast<double>(d_excl_wait) / d_excl_acq : 0.0);
+                    lock_util.labels({"shared_avg_wait_ns"})
+                        .set(d_shared_acq > 0 ? static_cast<double>(d_shared_wait) / d_shared_acq : 0.0);
+                    // Hold time per second (ns of exclusive hold per second of wall time)
+                    lock_util.labels({"exclusive_hold_ns_per_sec"}).set(lock_dt > 0 ? d_excl_hold / lock_dt : 0.0);
+
+                    prev_lock_time = cur_lock_time;
+
+                    prev_excl_acq = cur_excl_acq;
+                    prev_excl_wait = cur_excl_wait;
+                    prev_excl_hold = cur_excl_hold;
+                    prev_shared_acq = cur_shared_acq;
+                    prev_shared_wait = cur_shared_wait;
+                }
+
+                // Per-worker section breakdown (cumulative, for drill-down)
+                for (size_t w = 0; w < worker_count; ++w)
+                    for (size_t s = 0; s < http_server.worker_section_count(); ++s)
+                        worker_section_ns.labels({std::to_string(w), http_server.worker_section_name(s)})
+                            .set(static_cast<double>(http_server.worker_section_ns(w, s)));
+
+                // Per-session + area detail (lock-free via COW snapshot)
+                auto snap = room.sessions_snapshot();
+
+                area_players.clear();
+                area_info.clear();
+                for (auto& [id, state] : room.area_states()) {
+                    int count = 0;
+                    snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
+                        if (s->area == state.name)
+                            ++count;
+                    });
+                    area_players.labels({state.name, state.status}).set(count);
+                    area_info.labels({state.name, state.status, state.locked ? "true" : "false"}).set(1);
+                }
+
+                session_bytes_sent.clear();
+                session_bytes_recv.clear();
+                session_packets_sent.clear();
+                session_packets_recv.clear();
+                session_idle.clear();
+
+                snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
+                    std::string char_name = (s->character_id >= 0 && s->character_id < (int)room.characters.size())
+                                                ? room.characters[s->character_id]
+                                                : "none";
+                    std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol,
+                                                       s->area, std::move(char_name)};
+                    session_bytes_sent.labels(labels).set(
+                        static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
+                    session_bytes_recv.labels(labels).set(
+                        static_cast<double>(s->bytes_received.load(std::memory_order_relaxed)));
+                    session_packets_sent.labels(labels).set(
+                        static_cast<double>(s->packets_sent.load(std::memory_order_relaxed)));
+                    session_packets_recv.labels(labels).set(
+                        static_cast<double>(s->packets_received.load(std::memory_order_relaxed)));
+                    session_idle.labels(labels).set(static_cast<double>(
+                        std::chrono::duration_cast<std::chrono::seconds>(now - s->last_activity()).count()));
+                });
+
+                for (auto& cs : EventManager::instance().snapshot_channel_stats())
+                    event_publishes.labels({cs.raw_name}).set(static_cast<double>(cs.count));
+
+                // Serialize and cache (no collectors needed — we populated gauges above)
+                auto text = std::make_shared<const std::string>(reg.collect());
+                metrics_cache->store(std::move(text));
+
+                // Wait for the next scrape request, or regenerate every 2s as a
+                // fallback (for dashboards that auto-refresh without scraping).
+                metrics_cache->wait_for_request(st, std::chrono::seconds(2));
+            }
+        });
         metrics_thread_handle = std::move(metrics_thread);
     }
 
@@ -689,7 +684,8 @@ int main(int /*argc*/, char* argv[]) {
                 }
                 auto idle_end = std::chrono::steady_clock::now();
                 ws_worker_stats.idle_ns.fetch_add(
-                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
+                    static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
                     std::memory_order_relaxed);
 
                 ws_worker_stats.active.fetch_add(1, std::memory_order_relaxed);
@@ -700,7 +696,8 @@ int main(int /*argc*/, char* argv[]) {
 
                 ws_worker_stats.busy_ns.fetch_add(
                     static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        std::chrono::steady_clock::now() - busy_start).count()),
+                                              std::chrono::steady_clock::now() - busy_start)
+                                              .count()),
                     std::memory_order_relaxed);
                 ws_worker_stats.active.fetch_sub(1, std::memory_order_relaxed);
             }
@@ -716,7 +713,8 @@ int main(int /*argc*/, char* argv[]) {
             auto frames = ws.poll(10);
             auto idle_end = std::chrono::steady_clock::now();
             ws_poll_stats.idle_ns.fetch_add(
-                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
+                static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
                 std::memory_order_relaxed);
 
             auto busy_start = std::chrono::steady_clock::now();
@@ -762,10 +760,10 @@ int main(int /*argc*/, char* argv[]) {
                 last_sweep = now;
             }
 
-            ws_poll_stats.busy_ns.fetch_add(
-                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::steady_clock::now() - busy_start).count()),
-                std::memory_order_relaxed);
+            ws_poll_stats.busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                      std::chrono::steady_clock::now() - busy_start)
+                                                                      .count()),
+                                            std::memory_order_relaxed);
         }
         ws_work_cv.notify_all(); // wake workers so they can check stop_requested
     });

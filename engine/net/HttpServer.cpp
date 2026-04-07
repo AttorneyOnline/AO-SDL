@@ -67,8 +67,8 @@ struct HttpConnection {
     size_t content_length = 0; ///< Expected body length from Content-Length header.
     bool keep_alive = false;
     // Async send state (io_uring completion mode)
-    std::string pending_send;       ///< Response data kept alive during async send.
-    bool send_keep_alive = false;   ///< Keep-alive decision for pending send.
+    std::string pending_send;     ///< Response data kept alive during async send.
+    bool send_keep_alive = false; ///< Keep-alive decision for pending send.
 };
 
 // Events passed between poll thread and workers.
@@ -726,9 +726,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                                                        result->is_head, should_keep_alive);
 
                         size_t bytes_sent = 0;
-                        bool sync = state.poller.submit_send(conn->socket.fd(),
-                                                             response_data.data(), response_data.size(),
-                                                             &bytes_sent);
+                        bool sync = state.poller.submit_send(conn->socket.fd(), response_data.data(),
+                                                             response_data.size(), &bytes_sent);
 
                         if (sync) {
                             // Readiness backend — send inline (blocking)
@@ -736,8 +735,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                             conn->socket.set_send_timeout(5000);
                             size_t total = 0;
                             while (total < response_data.size()) {
-                                ssize_t w = conn->socket.send(
-                                    response_data.data() + total, response_data.size() - total);
+                                ssize_t w =
+                                    conn->socket.send(response_data.data() + total, response_data.size() - total);
                                 if (w <= 0)
                                     break;
                                 total += static_cast<size_t>(w);
@@ -758,7 +757,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                                 state.poller.remove(conn->socket.fd());
                                 remove_connection(state, result->connection_id);
                             }
-                        } else {
+                        }
+                        else {
                             // Completion backend — send is async.
                             // Store state; SendDone event handles cleanup.
                             conn->pending_send = std::move(response_data);
@@ -783,8 +783,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
 
                 tcp_bytes_out_.get().inc(ev.data_len);
 
-                bool fully_sent = !(ev.flags & platform::Poller::Error)
-                                  && ev.data_len == conn->pending_send.size();
+                bool fully_sent = !(ev.flags & platform::Poller::Error) && ev.data_len == conn->pending_send.size();
                 bool should_keep_alive = conn->send_keep_alive && fully_sent;
                 conn->pending_send.clear();
 
@@ -795,7 +794,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     conn->content_length = 0;
                     conn->recv_buf.clear();
                     conn->keep_alive = true;
-                } else {
+                }
+                else {
                     state.poller.remove(ev.fd);
                     remove_connection(state, conn->id);
                 }
@@ -812,7 +812,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                             state.poller.recycle_buffer(ev.buffer_id);
                         }
                         // In both modes, check for disconnect
-                        bool disconnected = (ev.flags & platform::Poller::HangUp) || (ev.data_len == 0 && !(ev.flags & platform::Poller::Readable));
+                        bool disconnected = (ev.flags & platform::Poller::HangUp) ||
+                                            (ev.data_len == 0 && !(ev.flags & platform::Poller::Readable));
                         if (!disconnected && ev.data_len == 0) {
                             // Readiness mode: probe with recv
                             char discard[64];
@@ -843,7 +844,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     conn->recv_buf.append(static_cast<const char*>(ev.data), ev.data_len);
                     tcp_bytes_in_.get().inc(static_cast<uint64_t>(ev.data_len));
                     state.poller.recycle_buffer(ev.buffer_id);
-                } else {
+                }
+                else {
                     // Drain all available data (edge-triggered poller won't
                     // re-fire for data already in the kernel buffer).
                     char buf[8192];

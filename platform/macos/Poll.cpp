@@ -132,7 +132,9 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
 void Poller::recycle_buffer(uint16_t /*buffer_id*/) {
 }
 
-Poller::IoStats Poller::io_stats() const { return {}; }
+Poller::IoStats Poller::io_stats() const {
+    return {};
+}
 
 // -- send (no-op for kqueue — caller handles send inline) -------------------
 

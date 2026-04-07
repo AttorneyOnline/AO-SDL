@@ -45,12 +45,12 @@ class Poller {
     /// the bytes already read by the kernel.  The caller must call
     /// recycle_buffer() when done with the data so the buffer can be reused.
     struct Event {
-        int fd;              ///< File descriptor (matches Socket::fd()).
-        uint32_t flags;      ///< Bitmask of EventFlags indicating what is ready.
-        void* user_data;     ///< Opaque pointer passed during add().
-        const void* data;    ///< Completed read buffer (nullptr for readiness backends).
-        size_t data_len;     ///< Bytes in data (0 for readiness backends).
-        uint16_t buffer_id;  ///< Opaque buffer ID for recycle_buffer() (io_uring only).
+        int fd;             ///< File descriptor (matches Socket::fd()).
+        uint32_t flags;     ///< Bitmask of EventFlags indicating what is ready.
+        void* user_data;    ///< Opaque pointer passed during add().
+        const void* data;   ///< Completed read buffer (nullptr for readiness backends).
+        size_t data_len;    ///< Bytes in data (0 for readiness backends).
+        uint16_t buffer_id; ///< Opaque buffer ID for recycle_buffer() (io_uring only).
     };
 
     /// Return a completed-read buffer to the pool.  No-op on readiness backends.

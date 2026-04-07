@@ -31,16 +31,16 @@ namespace platform {
 // Constants
 // ---------------------------------------------------------------------------
 
-static constexpr size_t BUF_SIZE = 8192;        // bytes per buffer
+static constexpr size_t BUF_SIZE = 8192; // bytes per buffer
 static constexpr uint16_t BUF_GROUP_ID = 0;
 
 // Tags encoded in sqe->user_data to distinguish completion types.
 // The low 2 bits encode the operation type; the upper bits carry the fd.
 enum OpTag : uint8_t {
-    OP_POLL = 0,  // poll_add (readiness — for listener, notifier, writable)
-    OP_RECV = 1,  // recv with provided buffer
-    OP_SEND = 2,  // send (async write)
-    OP_NOP = 3,   // internal (e.g. cancelled)
+    OP_POLL = 0, // poll_add (readiness — for listener, notifier, writable)
+    OP_RECV = 1, // recv with provided buffer
+    OP_SEND = 2, // send (async write)
+    OP_NOP = 3,  // internal (e.g. cancelled)
 };
 
 static uint64_t make_tag(int fd, OpTag op) {
@@ -62,9 +62,9 @@ struct Poller::Impl {
     int efd = -1; // eventfd for cross-thread notification
 
     // Provided buffer pool
-    unsigned buf_count = 0;       // number of buffers (power of two)
+    unsigned buf_count = 0; // number of buffers (power of two)
     struct io_uring_buf_ring* buf_ring = nullptr;
-    uint8_t* buf_pool = nullptr;  // contiguous allocation: buf_count * BUF_SIZE
+    uint8_t* buf_pool = nullptr; // contiguous allocation: buf_count * BUF_SIZE
 
     // Per-fd state
     struct FdState {
@@ -99,8 +99,7 @@ struct Poller::Impl {
             }
 
             for (unsigned i = 0; i < buf_count; ++i) {
-                io_uring_buf_ring_add(buf_ring, buf_pool + i * BUF_SIZE, BUF_SIZE,
-                                      static_cast<uint16_t>(i),
+                io_uring_buf_ring_add(buf_ring, buf_pool + i * BUF_SIZE, BUF_SIZE, static_cast<uint16_t>(i),
                                       io_uring_buf_ring_mask(buf_count), i);
             }
             io_uring_buf_ring_advance(buf_ring, buf_count);
@@ -182,9 +181,8 @@ struct Poller::Impl {
         }
         ++stat_send_submitted;
 
-        io_uring_prep_send(sqe, fd,
-                           static_cast<const char*>(s.send_buf) + s.send_offset,
-                           s.send_len - s.send_offset, MSG_NOSIGNAL);
+        io_uring_prep_send(sqe, fd, static_cast<const char*>(s.send_buf) + s.send_offset, s.send_len - s.send_offset,
+                           MSG_NOSIGNAL);
         io_uring_sqe_set_data64(sqe, make_tag(fd, OP_SEND));
     }
 };
@@ -224,7 +222,8 @@ void Poller::add(int fd, uint32_t interest, void* user_data) {
 
     if (use_readiness) {
         impl_->submit_poll(fd, interest);
-    } else {
+    }
+    else {
         if (interest & Readable)
             impl_->submit_recv(fd);
         if (interest & Writable)
@@ -331,24 +330,29 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
                     bid,
                 };
                 impl_->submit_recv(fd);
-            } else if (cqe->res == 0) {
+            }
+            else if (cqe->res == 0) {
                 out[count++] = Event{fd, HangUp, fd_it->second.user_data, nullptr, 0, 0};
-            } else if (cqe->res == -ENOBUFS) {
+            }
+            else if (cqe->res == -ENOBUFS) {
                 ++impl_->stat_recv_enobufs;
                 Log::warn("io_uring: ENOBUFS on fd {} — buffer pool exhausted, falling back to poll", fd);
                 impl_->submit_poll(fd, Readable);
-            } else if (cqe->res != -ECANCELED) {
+            }
+            else if (cqe->res != -ECANCELED) {
                 Log::warn("io_uring: recv error on fd {}: {}", fd, strerror(-cqe->res));
                 out[count++] = Event{fd, Error, fd_it->second.user_data, nullptr, 0, 0};
             }
-        } else if (op == OP_SEND) {
+        }
+        else if (op == OP_SEND) {
             auto& s = fd_it->second;
             if (cqe->res > 0) {
                 s.send_offset += static_cast<size_t>(cqe->res);
                 if (s.send_offset < s.send_len) {
                     ++impl_->stat_send_partial;
                     impl_->do_submit_send(fd);
-                } else {
+                }
+                else {
                     ++impl_->stat_send_completed;
                     size_t total = s.send_offset;
                     s.send_buf = nullptr;
@@ -356,17 +360,19 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
                     s.send_offset = 0;
                     out[count++] = Event{fd, SendDone, fd_it->second.user_data, nullptr, total, 0};
                 }
-            } else {
+            }
+            else {
                 ++impl_->stat_send_errors;
-                Log::warn("io_uring: send error on fd {}: {} (sent {}/{})",
-                          fd, strerror(-cqe->res), s.send_offset, s.send_len);
+                Log::warn("io_uring: send error on fd {}: {} (sent {}/{})", fd, strerror(-cqe->res), s.send_offset,
+                          s.send_len);
                 size_t total = s.send_offset;
                 s.send_buf = nullptr;
                 s.send_len = 0;
                 s.send_offset = 0;
                 out[count++] = Event{fd, SendDone | Error, fd_it->second.user_data, nullptr, total, 0};
             }
-        } else if (op == OP_POLL) {
+        }
+        else if (op == OP_POLL) {
             // Readiness event (listener, notifier, writable, or fallback)
             uint32_t flags = 0;
             if (cqe->res & POLLIN)
@@ -409,7 +415,7 @@ Poller::IoStats Poller::io_stats() const {
     return {
         impl_->stat_recv_submitted, impl_->stat_recv_completed, impl_->stat_recv_enobufs,
         impl_->stat_send_submitted, impl_->stat_send_completed, impl_->stat_send_partial,
-        impl_->stat_send_errors, impl_->stat_sqe_full, impl_->stat_cqe_reaped,
+        impl_->stat_send_errors,    impl_->stat_sqe_full,       impl_->stat_cqe_reaped,
     };
 }
 
@@ -435,9 +441,7 @@ bool Poller::submit_send(int fd, const void* data, size_t len, size_t* /*bytes_s
 // ---------------------------------------------------------------------------
 
 void Poller::recycle_buffer(uint16_t buffer_id) {
-    io_uring_buf_ring_add(impl_->buf_ring,
-                          impl_->buf_pool + buffer_id * BUF_SIZE,
-                          BUF_SIZE, buffer_id,
+    io_uring_buf_ring_add(impl_->buf_ring, impl_->buf_pool + buffer_id * BUF_SIZE, BUF_SIZE, buffer_id,
                           io_uring_buf_ring_mask(impl_->buf_count), 0);
     io_uring_buf_ring_advance(impl_->buf_ring, 1);
 }
