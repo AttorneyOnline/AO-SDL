@@ -657,19 +657,52 @@ std::vector<WebSocketFrame> WebSocketServer::read_client_frames(ClientConnection
 
 void WebSocketServer::send_frame(ClientConnection& client, const WebSocketFrame& frame) {
     auto wire = frame.serialize();
-    int fd = client.socket->fd();
-    if (fd >= 0) {
-        // Store the wire data in the client so it stays alive during async send
-        client.pending_send = std::move(wire);
-        if (!poller_.submit_send(fd, client.pending_send.data(), client.pending_send.size(), nullptr)) {
-            return; // Async send in flight (io_uring)
-        }
-        // Synchronous fallback (epoll/kqueue)
-        client.socket->send(client.pending_send.data(), client.pending_send.size());
-        client.pending_send.clear();
-        return;
-    }
     client.socket->send(wire.data(), wire.size());
+}
+
+void WebSocketServer::queue_send(ClientId client_id, std::vector<uint8_t> data) {
+    std::lock_guard lock(send_queue_mutex_);
+    global_send_queue_.push_back({client_id, std::move(data)});
+}
+
+void WebSocketServer::flush_sends() {
+    // Move the queue out under lock, then process without holding it
+    std::vector<PendingSend> to_send;
+    {
+        std::lock_guard lock(send_queue_mutex_);
+        to_send.swap(global_send_queue_);
+    }
+
+    if (to_send.empty())
+        return;
+
+    std::vector<ClientId> dead_clients;
+    {
+        std::lock_guard lock(mutex_);
+        for (auto& item : to_send) {
+            auto it = clients_.find(item.client_id);
+            if (it == clients_.end() || !it->second.handshake_complete)
+                continue;
+
+            try {
+                it->second.socket->send(item.data.data(), item.data.size());
+                ws_frames_out_.get().inc();
+                ws_bytes_out_.get().inc(item.data.size());
+            }
+            catch (...) {
+                ws_send_failures_.get().inc();
+                dead_clients.push_back(item.client_id);
+            }
+        }
+
+        for (auto id : dead_clients)
+            remove_client(id);
+    }
+
+    for (auto id : dead_clients) {
+        if (on_disconnected_)
+            on_disconnected_(id);
+    }
 }
 
 void WebSocketServer::remove_client(ClientId id) {

@@ -13,6 +13,8 @@
 #include "net/WebSocketFrame.h"
 #include "platform/Poll.h"
 
+#include <deque>
+
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -130,6 +132,16 @@ class WebSocketServer {
     /// io_uring diagnostic stats for the WS server's poller.
     platform::Poller::IoStats io_stats() const { return poller_.io_stats(); }
 
+    /// Queue a send for a client. The data is copied and will be sent
+    /// on the next flush_sends() call from the poll thread.
+    /// Thread-safe — workers call this from any thread.
+    void queue_send(ClientId client_id, std::vector<uint8_t> data);
+
+    /// Flush all queued sends. Called by the poll thread after workers
+    /// have enqueued their broadcast results. Uses io_uring submit_send
+    /// when available, blocking send otherwise.
+    void flush_sends();
+
   private:
     struct ClientConnection {
         ClientId id = 0;
@@ -138,12 +150,20 @@ class WebSocketServer {
         std::vector<uint8_t> extra_data;
         std::vector<uint8_t> fragment_buf;
         std::vector<uint8_t> recv_buf;     ///< Data delivered by io_uring completions.
-        std::vector<uint8_t> pending_send; ///< Kept alive during async io_uring send.
         bool closed = false;               ///< Set by HangUp/Error events.
         Opcode fragment_opcode = TEXT;
         bool in_fragment = false;
         std::string selected_subprotocol;
+        std::deque<std::vector<uint8_t>> send_queue; ///< Per-client send queue.
     };
+
+    // Thread-safe send queue: workers push, poll thread drains
+    struct PendingSend {
+        ClientId client_id;
+        std::vector<uint8_t> data;
+    };
+    std::mutex send_queue_mutex_;
+    std::vector<PendingSend> global_send_queue_;
 
     /// Drain recv_buf + socket into a single byte vector.
     std::vector<uint8_t> drain_client(ClientConnection& client);

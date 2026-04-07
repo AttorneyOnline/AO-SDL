@@ -577,10 +577,7 @@ int main(int /*argc*/, char* argv[]) {
     ws_ptr.store(&ws, std::memory_order_release);
     // Wire AO2 send function to WebSocket transport.
     // AONX clients use REST+SSE — no WebSocket involvement.
-    auto ws_send = [&ws](uint64_t id, const std::string& data) {
-        ws.send(id, {reinterpret_cast<const uint8_t*>(data.data()), data.size()});
-    };
-    ao_backend.set_send_func(ws_send);
+    // Send function set below after worker pool is created (ws_queue_send)
 
     // WS connection gauge (registered here because ws is created after the main metrics block)
     if (cfg.metrics_enabled()) {
@@ -603,7 +600,61 @@ int main(int /*argc*/, char* argv[]) {
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
 
-    // --- WS poll + session expiry thread ---
+    // --- WS worker pool ---
+    // Workers handle game logic (dispatch lock + broadcast capture).
+    // The poll thread only does I/O: recv frames, send queued responses.
+    struct WsWorkItem {
+        uint64_t client_id;
+        std::string data;
+    };
+    std::mutex ws_work_mutex;
+    std::condition_variable ws_work_cv;
+    std::deque<WsWorkItem> ws_work_queue;
+    std::atomic<bool> ws_running{true};
+
+    // Send function that queues to the WS server's send queue instead of
+    // sending inline. Thread-safe — called from worker threads.
+    auto ws_queue_send = [&ws](uint64_t id, const std::string& data) {
+        WebSocketFrame frame;
+        frame.fin = true;
+        frame.rsv = 0;
+        frame.opcode = TEXT;
+        frame.mask = false;
+        frame.len = data.size();
+        if (frame.len <= 125)
+            frame.len_code = static_cast<uint8_t>(frame.len & 0xFF);
+        else if (frame.len <= UINT16_MAX)
+            frame.len_code = 126;
+        else
+            frame.len_code = 127;
+        frame.data.assign(reinterpret_cast<const uint8_t*>(data.data()),
+                          reinterpret_cast<const uint8_t*>(data.data()) + data.size());
+        ws.queue_send(id, frame.serialize());
+    };
+    ao_backend.set_send_func(ws_queue_send);
+
+    constexpr int WS_WORKER_COUNT = 4;
+    std::vector<std::jthread> ws_workers;
+    for (int i = 0; i < WS_WORKER_COUNT; ++i) {
+        ws_workers.emplace_back([&](std::stop_token st) {
+            while (!st.stop_requested()) {
+                WsWorkItem item;
+                {
+                    std::unique_lock lock(ws_work_mutex);
+                    ws_work_cv.wait(lock, [&] { return !ws_work_queue.empty() || st.stop_requested(); });
+                    if (st.stop_requested())
+                        break;
+                    item = std::move(ws_work_queue.front());
+                    ws_work_queue.pop_front();
+                }
+
+                rest_router.with_lock([&] { ao_backend.on_client_message(item.client_id, item.data); });
+                ws_poll_stats.frames_dispatched.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    // --- WS poll thread (I/O only) + session expiry ---
     std::jthread ws_thread([&](std::stop_token st) {
         auto last_sweep = std::chrono::steady_clock::now();
         while (!st.stop_requested()) {
@@ -615,34 +666,19 @@ int main(int /*argc*/, char* argv[]) {
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
                 std::memory_order_relaxed);
 
-            // Busy: time spent dispatching frames.
-            // Broadcasts are deferred: game state mutation happens inside the
-            // lock, but the actual socket sends happen AFTER the lock is
-            // released. This prevents 64 blocking sends from holding the
-            // exclusive dispatch mutex and starving HTTP health checks.
             auto busy_start = std::chrono::steady_clock::now();
 
-            using SendItem = std::pair<uint64_t, std::string>;
-            std::vector<SendItem> pending_sends;
-            auto capture_send = [&pending_sends](uint64_t id, const std::string& data) {
-                pending_sends.emplace_back(id, data);
-            };
-
-            for (auto& [client_id, frame] : frames) {
-                std::string data(frame.data.begin(), frame.data.end());
-                Log::log_print(VERBOSE, "WS frame from %s: %s", format_client_id(client_id).c_str(), data.c_str());
-
-                // Swap to deferred send during lock, restore after
-                ao_backend.set_send_func(capture_send);
-                rest_router.with_lock([&] { ao_backend.on_client_message(client_id, data); });
-                ao_backend.set_send_func(ws_send);
-
-                ws_poll_stats.frames_dispatched.fetch_add(1, std::memory_order_relaxed);
+            // Enqueue frames to worker pool (no lock, no game logic here)
+            if (!frames.empty()) {
+                std::lock_guard lock(ws_work_mutex);
+                for (auto& [client_id, frame] : frames) {
+                    ws_work_queue.push_back({client_id, std::string(frame.data.begin(), frame.data.end())});
+                }
+                ws_work_cv.notify_all();
             }
 
-            // Flush deferred sends outside the lock
-            for (auto& [id, payload] : pending_sends)
-                ws.send(id, {reinterpret_cast<const uint8_t*>(payload.data()), payload.size()});
+            // Flush queued sends from workers (the actual I/O)
+            ws.flush_sends();
 
             // Periodic session expiry sweep (~every 30s).
             // Two-phase: scan under shared lock (cheap, doesn't block requests),
