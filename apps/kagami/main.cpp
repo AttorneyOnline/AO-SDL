@@ -209,6 +209,17 @@ int main(int /*argc*/, char* argv[]) {
         std::atomic<uint64_t> frames_dispatched{0};
     } ws_poll_stats;
 
+    // WS worker pool state (shared between workers and metrics thread)
+    struct WsWorkerStats {
+        std::atomic<uint64_t> idle_ns{0};
+        std::atomic<uint64_t> busy_ns{0};
+        std::atomic<int> active{0};
+    } ws_worker_stats;
+    struct WsWorkItem { uint64_t client_id; std::string data; };
+    std::mutex ws_work_mutex;
+    std::condition_variable ws_work_cv;
+    std::deque<WsWorkItem> ws_work_queue;
+
     if (cfg.metrics_enabled()) {
         http.GetInline(cfg.metrics_path(), [&metrics_cache](const http::Request&, http::Response& res) {
             metrics_cache->request_refresh();
@@ -280,6 +291,12 @@ int main(int /*argc*/, char* argv[]) {
                                        "WebSocket poll thread utilization (0-1)");
         auto& ws_dispatch_rate = reg.gauge("kagami_ws_dispatch_rate",
                                            "WebSocket frames dispatched per second");
+        auto& ws_worker_util = reg.gauge("kagami_ws_worker_utilization",
+                                         "WS worker pool utilization (0-1)");
+        auto& ws_worker_active = reg.gauge("kagami_ws_active_workers",
+                                           "WS workers currently executing handlers");
+        auto& ws_work_queue_depth = reg.gauge("kagami_ws_work_queue_depth",
+                                              "Pending WS frames awaiting worker dispatch");
         auto& lock_util = reg.gauge("kagami_dispatch_lock",
                                     "Dispatch mutex stats", {"type"});
 
@@ -302,6 +319,8 @@ int main(int /*argc*/, char* argv[]) {
              &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util,
              &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats,
              &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate,
+             &ws_worker_util, &ws_worker_active, &ws_work_queue_depth,
+             &ws_worker_stats, &ws_work_mutex, &ws_work_queue,
              &lock_util, &rest_router, &http_server = http, &room,
              &server_start_time, &reg, &metrics_cache](std::stop_token st) {
                 // Previous cumulative values for delta computation
@@ -423,6 +442,27 @@ int main(int /*argc*/, char* argv[]) {
                         prev_ws_idle = cur_idle;
                         prev_ws_dispatched = cur_disp;
                         prev_ws_time = cur_time;
+                    }
+
+                    // WS worker pool utilization (delta-based)
+                    {
+                        static uint64_t prev_ws_wk_busy = 0, prev_ws_wk_idle = 0;
+
+                        auto cur_busy = ws_worker_stats.busy_ns.load(std::memory_order_relaxed);
+                        auto cur_idle = ws_worker_stats.idle_ns.load(std::memory_order_relaxed);
+                        auto d_busy = cur_busy - prev_ws_wk_busy;
+                        auto d_idle = cur_idle - prev_ws_wk_idle;
+                        auto d_total = d_busy + d_idle;
+                        ws_worker_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
+                        prev_ws_wk_busy = cur_busy;
+                        prev_ws_wk_idle = cur_idle;
+
+                        ws_worker_active.get().set(ws_worker_stats.active.load(std::memory_order_relaxed));
+
+                        {
+                            std::lock_guard lock(ws_work_mutex);
+                            ws_work_queue_depth.get().set(static_cast<double>(ws_work_queue.size()));
+                        }
                     }
 
                     // Dispatch lock stats (delta-based, computed server-side)
@@ -601,17 +641,6 @@ int main(int /*argc*/, char* argv[]) {
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
 
     // --- WS worker pool ---
-    // Workers handle game logic (dispatch lock + broadcast capture).
-    // The poll thread only does I/O: recv frames, send queued responses.
-    struct WsWorkItem {
-        uint64_t client_id;
-        std::string data;
-    };
-    std::mutex ws_work_mutex;
-    std::condition_variable ws_work_cv;
-    std::deque<WsWorkItem> ws_work_queue;
-    std::atomic<bool> ws_running{true};
-
     // Send function that queues to the WS server's send queue instead of
     // sending inline. Thread-safe — called from worker threads.
     auto ws_queue_send = [&ws](uint64_t id, const std::string& data) {
@@ -638,6 +667,7 @@ int main(int /*argc*/, char* argv[]) {
     for (int i = 0; i < WS_WORKER_COUNT; ++i) {
         ws_workers.emplace_back([&](std::stop_token st) {
             while (!st.stop_requested()) {
+                auto idle_start = std::chrono::steady_clock::now();
                 WsWorkItem item;
                 {
                     std::unique_lock lock(ws_work_mutex);
@@ -647,9 +677,22 @@ int main(int /*argc*/, char* argv[]) {
                     item = std::move(ws_work_queue.front());
                     ws_work_queue.pop_front();
                 }
+                auto idle_end = std::chrono::steady_clock::now();
+                ws_worker_stats.idle_ns.fetch_add(
+                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
+                    std::memory_order_relaxed);
+
+                ws_worker_stats.active.fetch_add(1, std::memory_order_relaxed);
+                auto busy_start = std::chrono::steady_clock::now();
 
                 rest_router.with_lock([&] { ao_backend.on_client_message(item.client_id, item.data); });
                 ws_poll_stats.frames_dispatched.fetch_add(1, std::memory_order_relaxed);
+
+                ws_worker_stats.busy_ns.fetch_add(
+                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now() - busy_start).count()),
+                    std::memory_order_relaxed);
+                ws_worker_stats.active.fetch_sub(1, std::memory_order_relaxed);
             }
         });
     }
