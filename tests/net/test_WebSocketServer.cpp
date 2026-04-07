@@ -332,3 +332,184 @@ TEST_F(WebSocketServerTest, SendFromDisconnectCallbackDoesNotDeadlock) {
     // If we get here, no deadlock. Verify c2 received the message.
     EXPECT_GT(c2->sent().size(), 0u);
 }
+
+// ---------------------------------------------------------------------------
+// ALB-compatible Connection header parsing
+// ---------------------------------------------------------------------------
+
+// Build an upgrade request with a custom Connection header value.
+static std::vector<uint8_t>
+make_upgrade_request_custom_connection(const std::string& connection_value,
+                                       const std::string& key = "dGhlIHNhbXBsZSBub25jZQ==") {
+    std::string req = "GET / HTTP/1.1\r\n"
+                      "Host: localhost\r\n"
+                      "Upgrade: websocket\r\n"
+                      "Connection: " +
+                      connection_value +
+                      "\r\n"
+                      "Sec-WebSocket-Version: 13\r\n"
+                      "Sec-WebSocket-Key: " +
+                      key + "\r\n\r\n";
+    return {req.begin(), req.end()};
+}
+
+TEST_F(WebSocketServerTest, ALBConnectionHeaderWithMultipleTokens) {
+    // AWS ALB sends "keep-alive, Upgrade" — RFC 6455 says the Connection
+    // header must *contain* the "Upgrade" token, not be exactly "Upgrade".
+    server_->start(8081);
+
+    auto client = std::make_unique<MockTcpSocket>();
+    auto* ptr = client.get();
+    client->feed(make_upgrade_request_custom_connection("keep-alive, Upgrade"));
+    mock_listener_->add_client(std::move(client));
+
+    uint64_t connected_id = 0;
+    server_->on_client_connected([&](uint64_t id) { connected_id = id; });
+    server_->poll();
+
+    EXPECT_NE(connected_id, 0u) << "ALB-style Connection header should be accepted";
+    auto& sent = ptr->sent();
+    std::string response(sent.begin(), sent.end());
+    EXPECT_NE(response.find("101 Switching Protocols"), std::string::npos);
+}
+
+TEST_F(WebSocketServerTest, ConnectionHeaderCaseInsensitive) {
+    server_->start(8081);
+
+    auto client = std::make_unique<MockTcpSocket>();
+    client->feed(make_upgrade_request_custom_connection("Keep-Alive, upgrade"));
+    mock_listener_->add_client(std::move(client));
+
+    uint64_t connected_id = 0;
+    server_->on_client_connected([&](uint64_t id) { connected_id = id; });
+    server_->poll();
+
+    EXPECT_NE(connected_id, 0u) << "Case-insensitive 'upgrade' token should be accepted";
+}
+
+TEST_F(WebSocketServerTest, ConnectionHeaderWithoutUpgradeTokenRejected) {
+    server_->start(8081);
+
+    auto client = std::make_unique<MockTcpSocket>();
+    client->feed(make_upgrade_request_custom_connection("keep-alive"));
+    mock_listener_->add_client(std::move(client));
+
+    uint64_t connected_id = 0;
+    server_->on_client_connected([&](uint64_t id) { connected_id = id; });
+    server_->poll();
+
+    EXPECT_EQ(connected_id, 0u) << "Connection header without 'Upgrade' token should be rejected";
+    EXPECT_EQ(server_->client_count(), 0u);
+}
+
+// ---------------------------------------------------------------------------
+// queue_send / flush_sends (worker-thread send path)
+// ---------------------------------------------------------------------------
+
+TEST_F(WebSocketServerTest, QueueSendAndFlush) {
+    server_->start(8081);
+    auto* client = add_connecting_client();
+
+    uint64_t cid = 0;
+    server_->on_client_connected([&](uint64_t id) { cid = id; });
+    server_->poll(); // handshake
+    ASSERT_NE(cid, 0u);
+    client->clear_sent();
+
+    // Build a pre-serialized WebSocket text frame
+    std::string payload = "queued message";
+    std::vector<uint8_t> frame;
+    frame.push_back(0x81);                                        // FIN + TEXT
+    frame.push_back(static_cast<uint8_t>(payload.size()) & 0x7F); // unmasked
+    frame.insert(frame.end(), payload.begin(), payload.end());
+
+    server_->queue_send(cid, frame);
+    // Nothing sent yet — data is queued
+    EXPECT_EQ(client->sent().size(), 0u);
+
+    server_->flush_sends();
+    // Now the frame should be delivered
+    EXPECT_GT(client->sent().size(), 0u);
+}
+
+TEST_F(WebSocketServerTest, FlushSendsToDisconnectedClientDoesNotCrash) {
+    server_->start(8081);
+    add_connecting_client();
+
+    uint64_t cid = 0;
+    server_->on_client_connected([&](uint64_t id) { cid = id; });
+    server_->poll();
+    ASSERT_NE(cid, 0u);
+
+    // Queue a send, then close the client before flushing
+    server_->queue_send(cid, {0x81, 0x02, 'h', 'i'});
+    server_->close_client(cid);
+    EXPECT_EQ(server_->client_count(), 0u);
+
+    // flush_sends should not crash on the missing client
+    server_->flush_sends();
+}
+
+TEST_F(WebSocketServerTest, FlushSendsMultipleClients) {
+    server_->start(8081);
+    auto* c1 = add_connecting_client();
+    auto* c2 = add_connecting_client();
+
+    uint64_t id1 = 0, id2 = 0;
+    int n = 0;
+    server_->on_client_connected([&](uint64_t id) {
+        if (n++ == 0)
+            id1 = id;
+        else
+            id2 = id;
+    });
+    server_->poll();
+    c1->clear_sent();
+    c2->clear_sent();
+
+    server_->queue_send(id1, {0x81, 0x02, 'h', 'i'});
+    server_->queue_send(id2, {0x81, 0x03, 'b', 'y', 'e'});
+    server_->flush_sends();
+
+    EXPECT_GT(c1->sent().size(), 0u);
+    EXPECT_GT(c2->sent().size(), 0u);
+}
+
+// ---------------------------------------------------------------------------
+// Handshake exception logging
+// ---------------------------------------------------------------------------
+
+TEST_F(WebSocketServerTest, HandshakeExceptionLogsAndDisconnects) {
+    server_->start(8081);
+
+    // Send an invalid upgrade request (missing Sec-WebSocket-Key)
+    auto client = std::make_unique<MockTcpSocket>();
+    std::string bad_req = "GET / HTTP/1.1\r\n"
+                          "Host: localhost\r\n"
+                          "Upgrade: websocket\r\n"
+                          "Connection: Upgrade\r\n"
+                          "Sec-WebSocket-Version: 13\r\n"
+                          "\r\n"; // no Sec-WebSocket-Key
+    client->feed({bad_req.begin(), bad_req.end()});
+    mock_listener_->add_client(std::move(client));
+
+    uint64_t connected_id = 0;
+    server_->on_client_connected([&](uint64_t id) { connected_id = id; });
+    server_->poll();
+
+    EXPECT_EQ(connected_id, 0u) << "Invalid handshake should not fire connected callback";
+    EXPECT_EQ(server_->client_count(), 0u);
+}
+
+// ---------------------------------------------------------------------------
+// io_stats accessor
+// ---------------------------------------------------------------------------
+
+TEST_F(WebSocketServerTest, IoStatsReturnsDefaultOnReadinessBackend) {
+    server_->start(8081);
+    auto stats = server_->io_stats();
+    // On macOS/epoll readiness backend, all stats should be zero
+    EXPECT_EQ(stats.recv_submitted, 0u);
+    EXPECT_EQ(stats.send_completed, 0u);
+    EXPECT_EQ(stats.cqe_reaped, 0u);
+}

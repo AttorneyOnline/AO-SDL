@@ -362,9 +362,12 @@ std::vector<uint8_t> WebSocketServer::drain_client(ClientConnection& client) {
     // 1. Consume any data delivered by io_uring completions
     if (!client.recv_buf.empty()) {
         bytes.swap(client.recv_buf);
+        // In completion mode the kernel already read this data — no need to
+        // also probe the socket (it would just return EAGAIN).
+        return bytes;
     }
 
-    // 2. Also drain the socket (readiness mode, or io_uring fallback data)
+    // 2. Readiness mode: drain the socket manually
     try {
         do {
             auto chunk = client.socket->recv();

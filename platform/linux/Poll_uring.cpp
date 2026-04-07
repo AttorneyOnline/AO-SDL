@@ -296,13 +296,16 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
     if (ret < 0 && ret != -ETIME)
         return 0; // error or signal
 
-    // Reap all available completions
+    // Reap all available completions.
+    // Important: always advance `seen` for every CQE inspected, even if the
+    // output array is full.  Otherwise un-advanced CQEs are re-delivered on
+    // the next poll() with potentially stale fd state.
     int count = 0;
     unsigned seen = 0;
     unsigned head;
     io_uring_for_each_cqe(&impl_->ring, head, cqe) {
-        if (count >= max_events)
-            break;
+        ++seen;
+        ++impl_->stat_cqe_reaped;
 
         uint64_t tag = io_uring_cqe_get_data64(cqe);
         int fd = tag_fd(tag);
@@ -312,7 +315,7 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
         auto fd_it = impl_->fds.find(fd);
         if (fd_it == impl_->fds.end()) {
             // fd was removed — just consume the CQE
-            goto next;
+            continue;
         }
 
         if (op == OP_RECV) {
@@ -321,18 +324,27 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
             if (cqe->res > 0) {
                 ++impl_->stat_recv_completed;
                 uint16_t bid = static_cast<uint16_t>(cqe->flags >> IORING_CQE_BUFFER_SHIFT);
-                out[count++] = Event{
-                    fd,
-                    Readable,
-                    fd_it->second.user_data,
-                    impl_->buf_pool + bid * BUF_SIZE,
-                    static_cast<size_t>(cqe->res),
-                    bid,
-                };
+                if (count < max_events) {
+                    out[count++] = Event{
+                        fd,
+                        Readable,
+                        fd_it->second.user_data,
+                        impl_->buf_pool + bid * BUF_SIZE,
+                        static_cast<size_t>(cqe->res),
+                        bid,
+                    };
+                }
+                else {
+                    // Output full — recycle the buffer since we can't deliver it
+                    io_uring_buf_ring_add(impl_->buf_ring, impl_->buf_pool + bid * BUF_SIZE, BUF_SIZE, bid,
+                                          io_uring_buf_ring_mask(impl_->buf_count), 0);
+                    io_uring_buf_ring_advance(impl_->buf_ring, 1);
+                }
                 impl_->submit_recv(fd);
             }
             else if (cqe->res == 0) {
-                out[count++] = Event{fd, HangUp, fd_it->second.user_data, nullptr, 0, 0};
+                if (count < max_events)
+                    out[count++] = Event{fd, HangUp, fd_it->second.user_data, nullptr, 0, 0};
             }
             else if (cqe->res == -ENOBUFS) {
                 ++impl_->stat_recv_enobufs;
@@ -341,7 +353,8 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
             }
             else if (cqe->res != -ECANCELED) {
                 Log::warn("io_uring: recv error on fd {}: {}", fd, strerror(-cqe->res));
-                out[count++] = Event{fd, Error, fd_it->second.user_data, nullptr, 0, 0};
+                if (count < max_events)
+                    out[count++] = Event{fd, Error, fd_it->second.user_data, nullptr, 0, 0};
             }
         }
         else if (op == OP_SEND) {
@@ -358,7 +371,8 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
                     s.send_buf = nullptr;
                     s.send_len = 0;
                     s.send_offset = 0;
-                    out[count++] = Event{fd, SendDone, fd_it->second.user_data, nullptr, total, 0};
+                    if (count < max_events)
+                        out[count++] = Event{fd, SendDone, fd_it->second.user_data, nullptr, total, 0};
                 }
             }
             else {
@@ -369,7 +383,8 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
                 s.send_buf = nullptr;
                 s.send_len = 0;
                 s.send_offset = 0;
-                out[count++] = Event{fd, SendDone | Error, fd_it->second.user_data, nullptr, total, 0};
+                if (count < max_events)
+                    out[count++] = Event{fd, SendDone | Error, fd_it->second.user_data, nullptr, total, 0};
             }
         }
         else if (op == OP_POLL) {
@@ -384,7 +399,7 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
             if (cqe->res & (POLLHUP | POLLRDHUP))
                 flags |= HangUp;
 
-            if (flags)
+            if (flags && count < max_events)
                 out[count++] = Event{fd, flags, fd_it->second.user_data, nullptr, 0, 0};
 
             // Re-arm poll for this fd (poll_add is one-shot)
@@ -392,10 +407,6 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
                 impl_->submit_poll(fd, fd_it->second.interest);
         }
         // OP_NOP: cancellation confirmations — ignore
-
-    next:
-        ++seen;
-        ++impl_->stat_cqe_reaped;
     }
 
     io_uring_cq_advance(&impl_->ring, seen);

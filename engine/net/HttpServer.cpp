@@ -725,18 +725,26 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         std::string response_data = serialize_response(result->response, state.default_headers,
                                                                        result->is_head, should_keep_alive);
 
+                        // Move response into connection-owned storage so the
+                        // buffer has a stable address for async send backends.
+                        // submit_send() on io_uring stores the pointer and the
+                        // kernel reads from it asynchronously — the data must
+                        // outlive the SQE.
+                        conn->pending_send = std::move(response_data);
+                        conn->send_keep_alive = should_keep_alive;
+
                         size_t bytes_sent = 0;
-                        bool sync = state.poller.submit_send(conn->socket.fd(), response_data.data(),
-                                                             response_data.size(), &bytes_sent);
+                        bool sync = state.poller.submit_send(conn->socket.fd(), conn->pending_send.data(),
+                                                             conn->pending_send.size(), &bytes_sent);
 
                         if (sync) {
                             // Readiness backend — send inline (blocking)
                             conn->socket.set_non_blocking(false);
                             conn->socket.set_send_timeout(5000);
                             size_t total = 0;
-                            while (total < response_data.size()) {
-                                ssize_t w =
-                                    conn->socket.send(response_data.data() + total, response_data.size() - total);
+                            while (total < conn->pending_send.size()) {
+                                ssize_t w = conn->socket.send(conn->pending_send.data() + total,
+                                                              conn->pending_send.size() - total);
                                 if (w <= 0)
                                     break;
                                 total += static_cast<size_t>(w);
@@ -744,7 +752,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                             conn->socket.set_non_blocking(true);
                             tcp_bytes_out_.get().inc(total);
 
-                            should_keep_alive = should_keep_alive && (total == response_data.size());
+                            should_keep_alive = should_keep_alive && (total == conn->pending_send.size());
+                            conn->pending_send.clear();
                             if (should_keep_alive) {
                                 conn->headers_complete = false;
                                 conn->dispatched = false;
@@ -760,11 +769,8 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         }
                         else {
                             // Completion backend — send is async.
-                            // Store state; SendDone event handles cleanup.
-                            conn->pending_send = std::move(response_data);
-                            conn->send_keep_alive = should_keep_alive;
-                            // Mark as dispatched to prevent processing new
-                            // requests on this connection until the send completes.
+                            // Data is already in conn->pending_send with a
+                            // stable address. SendDone event handles cleanup.
                             conn->dispatched = true;
                         }
                     }

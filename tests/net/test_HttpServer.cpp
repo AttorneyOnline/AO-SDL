@@ -808,3 +808,39 @@ TEST_F(HttpServerTest, BodyAccumulation_KeepAliveSecondRequest) {
     EXPECT_EQ(extract_body(resp2), "ok");
     EXPECT_EQ(call_count, 2);
 }
+
+// ---------------------------------------------------------------------------
+// io_stats accessor (readiness backend returns zeroes)
+// ---------------------------------------------------------------------------
+
+TEST_F(HttpServerTest, IoStatsReturnsDefaultOnReadinessBackend) {
+    server_.Get("/ping", [](const http::Request&, http::Response& res) { res.set_content("pong", "text/plain"); });
+    start();
+
+    auto stats = server_.io_stats();
+    EXPECT_EQ(stats.recv_submitted, 0u);
+    EXPECT_EQ(stats.send_submitted, 0u);
+    EXPECT_EQ(stats.cqe_reaped, 0u);
+}
+
+// ---------------------------------------------------------------------------
+// pending_send path (sync on readiness backends)
+// ---------------------------------------------------------------------------
+
+TEST_F(HttpServerTest, LargeResponseSentCompletely) {
+    // Exercises the send path with a response large enough to require
+    // multiple kernel sends. On readiness backends this goes through the
+    // blocking send loop; on io_uring it would use async send.
+    std::string big_body(1024 * 1024, 'X'); // 1 MB
+    server_.Get("/big", [&big_body](const http::Request&, http::Response& res) {
+        res.set_content(big_body, "application/octet-stream");
+    });
+    start();
+
+    auto cli = client();
+    auto result = cli.Get("/big");
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result->status, 200);
+    EXPECT_EQ(result->body.size(), big_body.size());
+    EXPECT_EQ(result->body, big_body);
+}

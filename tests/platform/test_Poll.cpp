@@ -302,3 +302,53 @@ TEST(PlatformPoller, ListenerReadableOnIncomingConnection) {
 
     connector.join();
 }
+
+// -- New API: recycle_buffer, io_stats, submit_send ---------------------------
+
+TEST(PlatformPoller, RecycleBufferIsNoOpOnReadinessBackend) {
+    Poller poller;
+    // Should not crash — no-op on epoll/kqueue/WSAPoll
+    poller.recycle_buffer(0);
+    poller.recycle_buffer(42);
+}
+
+TEST(PlatformPoller, IoStatsReturnsZerosOnReadinessBackend) {
+    Poller poller;
+    auto stats = poller.io_stats();
+    EXPECT_EQ(stats.recv_submitted, 0u);
+    EXPECT_EQ(stats.recv_completed, 0u);
+    EXPECT_EQ(stats.recv_enobufs, 0u);
+    EXPECT_EQ(stats.send_submitted, 0u);
+    EXPECT_EQ(stats.send_completed, 0u);
+    EXPECT_EQ(stats.send_partial, 0u);
+    EXPECT_EQ(stats.send_errors, 0u);
+    EXPECT_EQ(stats.sqe_full, 0u);
+    EXPECT_EQ(stats.cqe_reaped, 0u);
+}
+
+TEST(PlatformPoller, SubmitSendReturnsTrueOnReadinessBackend) {
+    // On readiness backends, submit_send is synchronous (returns true)
+    // and the caller must do the actual send.
+    Poller poller;
+    const char data[] = "hello";
+    size_t bytes = 0;
+    bool sync = poller.submit_send(99, data, sizeof(data), &bytes);
+    EXPECT_TRUE(sync) << "Readiness backends should return true (synchronous send)";
+}
+
+TEST(PlatformPoller, EventFieldsInitializedOnReadiness) {
+    // Verify that the new Event fields (data, data_len, buffer_id) are
+    // zero-initialized by readiness backends.
+    auto [client, server] = make_pair();
+
+    Poller poller;
+    poller.add(server, Poller::Readable);
+    client.send("x", 1);
+
+    Poller::Event events[4];
+    int n = poller.poll(events, 4, 100);
+    ASSERT_GE(n, 1);
+    EXPECT_EQ(events[0].data, nullptr);
+    EXPECT_EQ(events[0].data_len, 0u);
+    EXPECT_EQ(events[0].buffer_id, 0u);
+}

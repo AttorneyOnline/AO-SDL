@@ -729,8 +729,8 @@
                 "value": "short"
               },
               {
-                "id": "max",
-                "value": 4
+                "id": "custom.axisAutoMax",
+                "value": true
               }
             ]
           }
