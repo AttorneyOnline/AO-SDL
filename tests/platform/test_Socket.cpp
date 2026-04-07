@@ -7,6 +7,11 @@
 #include <thread>
 #include <vector>
 
+#ifndef _WIN32
+#include <netinet/in.h>
+#include <sys/socket.h>
+#endif
+
 using namespace platform;
 
 // -- Construction and validity ------------------------------------------------
@@ -333,3 +338,40 @@ TEST(PlatformSocket, NonBlockingRecvReturnsNegativeNotZero) {
 
     server.join();
 }
+
+// -- IPv6 dual-stack listening ------------------------------------------------
+
+#ifndef _WIN32
+TEST(PlatformSocket, TcpListenDualStack) {
+    // tcp_listen with "0.0.0.0" or empty address should attempt IPv6
+    // dual-stack (accepts both IPv4 and IPv6), falling back to IPv4.
+    auto listener = tcp_listen("0.0.0.0", 0);
+    ASSERT_TRUE(listener.valid());
+    uint16_t port = listener.local_port();
+    EXPECT_GT(port, 0);
+
+    // Verify we can connect via IPv4 loopback regardless of the
+    // underlying socket family (dual-stack or pure IPv4 fallback).
+    listener.set_non_blocking(true);
+    auto client = tcp_connect("127.0.0.1", port);
+    ASSERT_TRUE(client.valid());
+
+    // Accept the connection
+    listener.set_non_blocking(false);
+    std::string remote;
+    uint16_t rp = 0;
+    auto conn = tcp_accept(listener, remote, rp);
+    EXPECT_TRUE(conn.valid());
+}
+
+TEST(PlatformSocket, TcpListenExplicitIPv4Address) {
+    // Explicit IPv4 address should always work regardless of IPv6 support
+    auto listener = tcp_listen("127.0.0.1", 0);
+    ASSERT_TRUE(listener.valid());
+    uint16_t port = listener.local_port();
+    EXPECT_GT(port, 0);
+
+    auto client = tcp_connect("127.0.0.1", port);
+    ASSERT_TRUE(client.valid());
+}
+#endif
