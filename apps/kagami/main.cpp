@@ -330,6 +330,20 @@ int main(int /*argc*/, char* argv[]) {
                 std::vector<uint64_t> prev_pw_busy;
                 std::vector<uint64_t> prev_pw_idle;
 
+                // WS poll utilization tracking
+                uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
+                uint64_t prev_ws_dispatched = 0;
+                auto prev_ws_time = std::chrono::steady_clock::now();
+                double ema_util = 0.0;
+
+                // WS worker utilization tracking
+                uint64_t prev_ws_wk_busy = 0, prev_ws_wk_idle = 0;
+
+                // Dispatch lock stats tracking
+                uint64_t prev_excl_acq = 0, prev_excl_wait = 0, prev_excl_hold = 0;
+                uint64_t prev_shared_acq = 0, prev_shared_wait = 0;
+                auto prev_lock_time = std::chrono::steady_clock::now();
+
                 while (!st.stop_requested()) {
                     auto now = std::chrono::steady_clock::now();
                     uptime.get().set(std::chrono::duration<double>(now - server_start_time).count());
@@ -417,10 +431,6 @@ int main(int /*argc*/, char* argv[]) {
 
                     // WS poll thread utilization (EMA-smoothed)
                     {
-                        static uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
-                        static uint64_t prev_ws_dispatched = 0;
-                        static auto prev_ws_time = std::chrono::steady_clock::now();
-                        static double ema_util = 0.0;
                         constexpr double ALPHA = 0.1; // smoothing factor (lower = smoother)
 
                         auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
@@ -446,8 +456,6 @@ int main(int /*argc*/, char* argv[]) {
 
                     // WS worker pool utilization (delta-based)
                     {
-                        static uint64_t prev_ws_wk_busy = 0, prev_ws_wk_idle = 0;
-
                         auto cur_busy = ws_worker_stats.busy_ns.load(std::memory_order_relaxed);
                         auto cur_idle = ws_worker_stats.idle_ns.load(std::memory_order_relaxed);
                         auto d_busy = cur_busy - prev_ws_wk_busy;
@@ -467,9 +475,6 @@ int main(int /*argc*/, char* argv[]) {
 
                     // Dispatch lock stats (delta-based, computed server-side)
                     {
-                        static uint64_t prev_excl_acq = 0, prev_excl_wait = 0, prev_excl_hold = 0;
-                        static uint64_t prev_shared_acq = 0, prev_shared_wait = 0;
-
                         auto& ls = rest_router.lock_stats;
                         auto cur_excl_acq = ls.exclusive_acquisitions.load(std::memory_order_relaxed);
                         auto cur_excl_wait = ls.exclusive_wait_ns.load(std::memory_order_relaxed);
@@ -483,16 +488,21 @@ int main(int /*argc*/, char* argv[]) {
                         auto d_shared_acq = cur_shared_acq - prev_shared_acq;
                         auto d_shared_wait = cur_shared_wait - prev_shared_wait;
 
+                        auto cur_lock_time = std::chrono::steady_clock::now();
+                        double lock_dt = std::chrono::duration<double>(cur_lock_time - prev_lock_time).count();
+
                         // Acquisitions per second
-                        lock_util.labels({"exclusive_acquisitions_per_sec"}).set(d_excl_acq / 2.0);
-                        lock_util.labels({"shared_acquisitions_per_sec"}).set(d_shared_acq / 2.0);
+                        lock_util.labels({"exclusive_acquisitions_per_sec"}).set(lock_dt > 0 ? d_excl_acq / lock_dt : 0.0);
+                        lock_util.labels({"shared_acquisitions_per_sec"}).set(lock_dt > 0 ? d_shared_acq / lock_dt : 0.0);
                         // Average wait per acquisition (nanoseconds)
                         lock_util.labels({"exclusive_avg_wait_ns"}).set(
                             d_excl_acq > 0 ? static_cast<double>(d_excl_wait) / d_excl_acq : 0.0);
                         lock_util.labels({"shared_avg_wait_ns"}).set(
                             d_shared_acq > 0 ? static_cast<double>(d_shared_wait) / d_shared_acq : 0.0);
                         // Hold time per second (ns of exclusive hold per second of wall time)
-                        lock_util.labels({"exclusive_hold_ns_per_sec"}).set(d_excl_hold / 2.0);
+                        lock_util.labels({"exclusive_hold_ns_per_sec"}).set(lock_dt > 0 ? d_excl_hold / lock_dt : 0.0);
+
+                        prev_lock_time = cur_lock_time;
 
                         prev_excl_acq = cur_excl_acq;
                         prev_excl_wait = cur_excl_wait;
@@ -662,7 +672,7 @@ int main(int /*argc*/, char* argv[]) {
     };
     ao_backend.set_send_func(ws_queue_send);
 
-    constexpr int WS_WORKER_COUNT = 4;
+    const int WS_WORKER_COUNT = std::max(1u, std::thread::hardware_concurrency());
     std::vector<std::jthread> ws_workers;
     for (int i = 0; i < WS_WORKER_COUNT; ++i) {
         ws_workers.emplace_back([&](std::stop_token st) {
@@ -757,6 +767,7 @@ int main(int /*argc*/, char* argv[]) {
                     std::chrono::steady_clock::now() - busy_start).count()),
                 std::memory_order_relaxed);
         }
+        ws_work_cv.notify_all(); // wake workers so they can check stop_requested
     });
 
     // --- REPL ---

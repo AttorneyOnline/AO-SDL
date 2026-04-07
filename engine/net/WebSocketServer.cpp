@@ -484,9 +484,8 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
 
     client.socket->send(reinterpret_cast<const uint8_t*>(response.data()), response.size());
     client.handshake_complete = true;
-    ws_connections_.get().set(static_cast<double>(
-        std::count_if(clients_.begin(), clients_.end(),
-                      [](const auto& p) { return p.second.handshake_complete; })));
+    handshaked_count_.fetch_add(1, std::memory_order_relaxed);
+    ws_connections_.get().set(static_cast<double>(handshaked_count_.load(std::memory_order_relaxed)));
     return true;
 }
 
@@ -720,8 +719,9 @@ void WebSocketServer::remove_client(ClientId id) {
         fd_to_client_.erase(cfd);
     }
 
+    bool was_handshaked = it->second.handshake_complete;
     clients_.erase(it);
-    ws_connections_.get().set(static_cast<double>(
-        std::count_if(clients_.begin(), clients_.end(),
-                      [](const auto& p) { return p.second.handshake_complete; })));
+    if (was_handshaked)
+        handshaked_count_.fetch_sub(1, std::memory_order_relaxed);
+    ws_connections_.get().set(static_cast<double>(handshaked_count_.load(std::memory_order_relaxed)));
 }
