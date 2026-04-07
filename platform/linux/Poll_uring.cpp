@@ -110,6 +110,8 @@ struct Poller::Impl {
     ~Impl() {
         if (efd >= 0)
             ::close(efd);
+        if (buf_ring)
+            io_uring_free_buf_ring(&ring, buf_ring, buf_count, BUF_GROUP_ID);
         delete[] buf_pool;
         io_uring_queue_exit(&ring);
     }
@@ -300,8 +302,6 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
     unsigned seen = 0;
     unsigned head;
     io_uring_for_each_cqe(&impl_->ring, head, cqe) {
-        ++seen;
-        ++impl_->stat_cqe_reaped;
         if (count >= max_events)
             break;
 
@@ -387,7 +387,9 @@ int Poller::poll(Event* out, int max_events, int timeout_ms) {
         }
         // OP_NOP: cancellation confirmations — ignore
 
-    next:;
+    next:
+        ++seen;
+        ++impl_->stat_cqe_reaped;
     }
 
     io_uring_cq_advance(&impl_->ring, seen);

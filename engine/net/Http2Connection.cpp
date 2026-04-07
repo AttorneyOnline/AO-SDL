@@ -205,6 +205,29 @@ void Http2Connection::submit_get_async(const std::string& path, int urgency, Res
 // POST support
 // ---------------------------------------------------------------------------
 
+static std::vector<nghttp2_nv> build_post_headers(const std::string& path, const std::string& host,
+    const std::string& priority_value, const std::string& content_type,
+    const std::string& content_length,
+    const std::vector<std::pair<std::string, std::string>>& extra_headers) {
+    std::vector<nghttp2_nv> hdrs;
+    hdrs.push_back({(uint8_t*)":method", (uint8_t*)"POST", 7, 4,
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back({(uint8_t*)":path", (uint8_t*)path.data(), 5, path.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)":scheme", (uint8_t*)"https", 7, 5,
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
+    hdrs.push_back({(uint8_t*)":authority", (uint8_t*)host.data(), 10, host.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"priority", (uint8_t*)priority_value.data(), 8, priority_value.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"content-type", (uint8_t*)content_type.data(), 12, content_type.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    hdrs.push_back({(uint8_t*)"content-length", (uint8_t*)content_length.data(), 14, content_length.size(),
+                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    for (auto& [k, v] : extra_headers) {
+        hdrs.push_back({(uint8_t*)k.data(), (uint8_t*)v.data(), k.size(), v.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
+    }
+    return hdrs;
+}
+
 /// nghttp2 data source read callback — reads from StreamData::request_body.
 /// The source->ptr points to the StreamData which lives until stream close.
 static ssize_t post_body_read_callback(nghttp2_session*, int32_t, uint8_t* buf, size_t length,
@@ -233,24 +256,7 @@ std::future<Http2Connection::Response> Http2Connection::submit_post(
 
     std::string priority_value = "u=" + std::to_string(std::clamp(urgency, 0, 7));
     std::string content_length = std::to_string(body.size());
-
-    // Build headers: :method, :path, :scheme, :authority, priority, content-type, content-length, extras
-    std::vector<nghttp2_nv> hdrs;
-    hdrs.push_back({(uint8_t*)":method", (uint8_t*)"POST", 7, 4,
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
-    hdrs.push_back({(uint8_t*)":path", (uint8_t*)path.data(), 5, path.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)":scheme", (uint8_t*)"https", 7, 5,
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
-    hdrs.push_back({(uint8_t*)":authority", (uint8_t*)host_.data(), 10, host_.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)"priority", (uint8_t*)priority_value.data(), 8, priority_value.size(),
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)"content-type", (uint8_t*)content_type.data(), 12, content_type.size(),
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)"content-length", (uint8_t*)content_length.data(), 14, content_length.size(),
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    for (auto& [k, v] : extra_headers) {
-        hdrs.push_back({(uint8_t*)k.data(), (uint8_t*)v.data(), k.size(), v.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    }
+    auto hdrs = build_post_headers(path, host_, priority_value, content_type, content_length, extra_headers);
 
     auto sd = std::make_unique<StreamData>();
     sd->request_body = body;
@@ -285,23 +291,7 @@ void Http2Connection::submit_post_async(
 
     std::string priority_value = "u=" + std::to_string(std::clamp(urgency, 0, 7));
     std::string content_length = std::to_string(body.size());
-
-    std::vector<nghttp2_nv> hdrs;
-    hdrs.push_back({(uint8_t*)":method", (uint8_t*)"POST", 7, 4,
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
-    hdrs.push_back({(uint8_t*)":path", (uint8_t*)path.data(), 5, path.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)":scheme", (uint8_t*)"https", 7, 5,
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE});
-    hdrs.push_back({(uint8_t*)":authority", (uint8_t*)host_.data(), 10, host_.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)"priority", (uint8_t*)priority_value.data(), 8, priority_value.size(),
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)"content-type", (uint8_t*)content_type.data(), 12, content_type.size(),
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    hdrs.push_back({(uint8_t*)"content-length", (uint8_t*)content_length.data(), 14, content_length.size(),
-                    NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    for (auto& [k, v] : extra_headers) {
-        hdrs.push_back({(uint8_t*)k.data(), (uint8_t*)v.data(), k.size(), v.size(), NGHTTP2_NV_FLAG_NO_COPY_NAME});
-    }
+    auto hdrs = build_post_headers(path, host_, priority_value, content_type, content_length, extra_headers);
 
     auto sd = std::make_unique<StreamData>();
     sd->request_body = body;

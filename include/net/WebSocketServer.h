@@ -183,6 +183,8 @@ class WebSocketServer {
     mutable std::mutex mutex_;
     platform::Poller poller_;
 
+    std::atomic<int> handshaked_count_{0};
+
     std::function<void(ClientId)> on_connected_;
     std::function<void(ClientId)> on_disconnected_;
 };
