@@ -1,40 +1,45 @@
 #pragma once
 
-#include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-/// A single REPL command with its handler.
-struct ReplCommand {
-    std::string name;
-    std::string description;
-    std::function<void(const std::vector<std::string>& args)> handler;
+struct ServerContext;
+
+/// Polymorphic base for REPL commands.
+class ReplCommand {
+  public:
+    virtual ~ReplCommand() = default;
+    virtual const std::string& name() const = 0;
+    virtual const std::string& description() const = 0;
+    virtual void execute(ServerContext& ctx, const std::vector<std::string>& args) = 0;
 };
 
 /// Registry of REPL commands. Dispatches input lines to handlers.
 class ReplCommandRegistry {
   public:
-    void add(ReplCommand cmd) {
-        commands_[cmd.name] = std::move(cmd);
+    void add(std::unique_ptr<ReplCommand> cmd) {
+        auto name = cmd->name();
+        commands_[name] = std::move(cmd);
     }
 
     /// Try to dispatch a line. Returns false if the command was not found.
-    bool dispatch(const std::string& line) const {
+    bool dispatch(ServerContext& ctx, const std::string& line) const {
         auto tokens = tokenize(line);
         if (tokens.empty())
-            return true; // blank line, not an error
+            return true;
 
         auto it = commands_.find(tokens[0]);
         if (it == commands_.end())
             return false;
 
         std::vector<std::string> args(tokens.begin() + 1, tokens.end());
-        it->second.handler(args);
+        it->second->execute(ctx, args);
         return true;
     }
 
-    const std::unordered_map<std::string, ReplCommand>& commands() const {
+    const std::unordered_map<std::string, std::unique_ptr<ReplCommand>>& commands() const {
         return commands_;
     }
 
@@ -55,5 +60,5 @@ class ReplCommandRegistry {
         return tokens;
     }
 
-    std::unordered_map<std::string, ReplCommand> commands_;
+    std::unordered_map<std::string, std::unique_ptr<ReplCommand>> commands_;
 };
