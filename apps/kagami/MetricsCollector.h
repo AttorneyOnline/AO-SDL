@@ -27,12 +27,21 @@ class MetricsCollector {
   public:
     MetricsCollector(GameRoom& room, RestRouter& router, const ServerSettings& cfg,
                      std::chrono::steady_clock::time_point start_time);
+    MetricsCollector(const MetricsCollector&) = delete;
+    MetricsCollector(MetricsCollector&&) = delete;
+    MetricsCollector& operator=(const MetricsCollector&) = delete;
+    MetricsCollector& operator=(MetricsCollector&&) = delete;
 
     /// Set after WebSocketServer is constructed (nullable until then).
-    void set_ws(WebSocketServer* ws) { ws_ptr_.store(ws, std::memory_order_release); }
+    void set_ws(WebSocketServer* ws) {
+        ws_ptr_.store(ws, std::memory_order_release);
+    }
 
-    /// Set after WsWorkerPool is constructed (needed for queue depth + stats).
-    void set_ws_pool(WsWorkerPool* pool) { ws_pool_ = pool; }
+    /// Set before start() — not atomic because the happens-before from
+    /// start() launching the thread provides the necessary synchronization.
+    void set_ws_pool(WsWorkerPool* pool) {
+        ws_pool_ = pool;
+    }
 
     /// Register the /metrics HTTP handler and spawn the collection thread.
     void start(http::Server& http);
@@ -59,7 +68,7 @@ class MetricsCollector {
             }
             cv.notify_one();
         }
-        bool wait_for_request(std::stop_token& st, std::chrono::milliseconds timeout) {
+        bool wait_for_request(std::stop_token& st, std::chrono::steady_clock::duration timeout) {
             std::unique_lock lock(mutex);
             cv.wait_for(lock, timeout, [&] { return requested || st.stop_requested(); });
             bool was_requested = requested;

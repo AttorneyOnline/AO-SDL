@@ -16,6 +16,26 @@ class ReplCommand {
     virtual void execute(ServerContext& ctx, const std::vector<std::string>& args) = 0;
 };
 
+/// Convenience base that stores name/description, so derived classes
+/// only need to implement execute().
+class SimpleReplCommand : public ReplCommand {
+  public:
+    SimpleReplCommand(std::string name, std::string description)
+        : name_(std::move(name)), description_(std::move(description)) {
+    }
+
+    const std::string& name() const override {
+        return name_;
+    }
+    const std::string& description() const override {
+        return description_;
+    }
+
+  private:
+    std::string name_;
+    std::string description_;
+};
+
 /// Registry of REPL commands. Dispatches input lines to handlers.
 class ReplCommandRegistry {
   public:

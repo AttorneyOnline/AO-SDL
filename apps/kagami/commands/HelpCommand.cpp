@@ -5,15 +5,9 @@
 
 namespace {
 
-class HelpCommand : public ReplCommand {
+class HelpCommand : public SimpleReplCommand {
   public:
-    const std::string& name() const override {
-        static const std::string n = "/help";
-        return n;
-    }
-    const std::string& description() const override {
-        static const std::string d = "List available commands";
-        return d;
+    HelpCommand() : SimpleReplCommand("/help", "List available commands") {
     }
     void execute(ServerContext& ctx, const std::vector<std::string>&) override {
         if (!ctx.repl)
@@ -27,4 +21,5 @@ ReplCommandRegistrar reg("/help", [] { return std::make_unique<HelpCommand>(); }
 
 } // namespace
 
-void repl_cmd_help() {}
+void repl_cmd_help() {
+}
