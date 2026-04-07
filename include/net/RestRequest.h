@@ -17,5 +17,6 @@ struct RestRequest {
     std::unordered_map<std::string, std::string> query_params;
     std::optional<nlohmann::json> body;
     std::string bearer_token;
+    std::string remote_addr;          ///< Client IP, populated by RestRouter.
     ServerSession* session = nullptr; ///< Non-null after successful auth.
 };

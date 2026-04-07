@@ -339,6 +339,14 @@ std::string WebSocketServer::get_client_subprotocol(ClientId client_id) const {
     return it->second.selected_subprotocol;
 }
 
+std::string WebSocketServer::get_client_addr(ClientId client_id) const {
+    std::lock_guard lock(mutex_);
+    auto it = clients_.find(client_id);
+    if (it == clients_.end())
+        return "";
+    return it->second.remote_addr;
+}
+
 size_t WebSocketServer::client_count() const {
     std::lock_guard lock(mutex_);
     return clients_.size();
@@ -362,8 +370,7 @@ std::vector<uint8_t> WebSocketServer::drain_client(ClientConnection& client) {
     // 1. Consume any data delivered by io_uring completions
     if (!client.recv_buf.empty()) {
         bytes.swap(client.recv_buf);
-        // In completion mode the kernel already read this data — no need to
-        // also probe the socket (it would just return EAGAIN).
+        client.last_data_at = std::chrono::steady_clock::now();
         return bytes;
     }
 
@@ -379,8 +386,10 @@ std::vector<uint8_t> WebSocketServer::drain_client(ClientConnection& client) {
     catch (...) {
         if (bytes.empty())
             throw;
-        // If we already have data, process it before propagating the error
     }
+
+    if (!bytes.empty())
+        client.last_data_at = std::chrono::steady_clock::now();
 
     return bytes;
 }
@@ -394,8 +403,12 @@ void WebSocketServer::accept_new_clients() {
         if (cfd >= 0)
             poller_.add(cfd, platform::Poller::Readable);
 
+        auto now = std::chrono::steady_clock::now();
         ClientConnection conn;
         conn.id = next_client_id_++;
+        conn.remote_addr = client_socket->remote_addr();
+        conn.connected_at = now;
+        conn.last_data_at = now;
         if (cfd >= 0)
             fd_to_client_[cfd] = conn.id;
         conn.socket = std::move(client_socket);

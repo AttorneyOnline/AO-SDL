@@ -29,7 +29,7 @@ std::unique_ptr<ITcpSocket> PlatformServerSocket::accept() {
         return nullptr;
     }
 
-    return std::make_unique<PlatformTcpSocket>(std::move(client));
+    return std::make_unique<PlatformTcpSocket>(std::move(client), std::move(remote_addr));
 }
 
 void PlatformServerSocket::set_non_blocking(bool non_blocking) {
