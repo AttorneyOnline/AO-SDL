@@ -615,14 +615,34 @@ int main(int /*argc*/, char* argv[]) {
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(idle_end - idle_start).count()),
                 std::memory_order_relaxed);
 
-            // Busy: time spent dispatching frames
+            // Busy: time spent dispatching frames.
+            // Broadcasts are deferred: game state mutation happens inside the
+            // lock, but the actual socket sends happen AFTER the lock is
+            // released. This prevents 64 blocking sends from holding the
+            // exclusive dispatch mutex and starving HTTP health checks.
             auto busy_start = std::chrono::steady_clock::now();
+
+            using SendItem = std::pair<uint64_t, std::string>;
+            std::vector<SendItem> pending_sends;
+            auto capture_send = [&pending_sends](uint64_t id, const std::string& data) {
+                pending_sends.emplace_back(id, data);
+            };
+
             for (auto& [client_id, frame] : frames) {
                 std::string data(frame.data.begin(), frame.data.end());
                 Log::log_print(VERBOSE, "WS frame from %s: %s", format_client_id(client_id).c_str(), data.c_str());
+
+                // Swap to deferred send during lock, restore after
+                ao_backend.set_send_func(capture_send);
                 rest_router.with_lock([&] { ao_backend.on_client_message(client_id, data); });
+                ao_backend.set_send_func(ws_send);
+
                 ws_poll_stats.frames_dispatched.fetch_add(1, std::memory_order_relaxed);
             }
+
+            // Flush deferred sends outside the lock
+            for (auto& [id, payload] : pending_sends)
+                ws.send(id, {reinterpret_cast<const uint8_t*>(payload.data()), payload.size()});
 
             // Periodic session expiry sweep (~every 30s).
             // Two-phase: scan under shared lock (cheap, doesn't block requests),
