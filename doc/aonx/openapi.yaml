@@ -32,7 +32,7 @@ servers:
         default: https
         enum: [https, http]
       host:
-        default: canary.attorneyoffline.de
+        default: canary.yuurei.network
 
 paths:
   # ---------------------------------------------------------------------------

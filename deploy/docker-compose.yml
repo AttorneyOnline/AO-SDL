@@ -8,7 +8,7 @@ services:
       - "443:443"       # HTTPS (TCP) — HTTP/1.1 + HTTP/2
       - "443:443/udp"  # QUIC — HTTP/3
     environment:
-      - KAGAMI_DOMAIN=${KAGAMI_DOMAIN:-canary.attorneyoffline.de}
+      - KAGAMI_DOMAIN=${KAGAMI_DOMAIN:-canary.yuurei.network}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -68,7 +68,7 @@ services:
       - GF_RBAC_PERMISSION_CACHE=false
       - GF_USERS_EDITORS_CAN_ADMIN=true
       - GF_AUTH_BASIC_ENABLED=true
-      - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN:-canary.attorneyoffline.de}/grafana/
+      - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN:-canary.yuurei.network}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana_data:/var/lib/grafana

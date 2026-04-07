@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-HOST="${1:-ubuntu@canary.attorneyoffline.de}"
+HOST="${1:-ubuntu@canary.yuurei.network}"
 KEY="${2:-$HOME/.ssh/kagami-deploy.pem}"
 SSH="ssh -i $KEY $HOST"
 SCP="scp -i $KEY"
