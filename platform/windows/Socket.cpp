@@ -381,6 +381,36 @@ Socket tcp_connect(const std::string& host, uint16_t port, int timeout_ms) {
 
 Socket tcp_listen(const std::string& addr, uint16_t port, int backlog) {
     auto impl = std::make_unique<Socket::Impl>();
+
+    // Try IPv6 dual-stack first (accepts both IPv4 and IPv6).
+    bool use_ipv6 = (addr.empty() || addr == "0.0.0.0" || addr == "::" || addr.find(':') != std::string::npos);
+
+    if (use_ipv6) {
+        impl->winsock = ::socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+        if (impl->winsock != INVALID_SOCKET) {
+            int reuse = 1;
+            setsockopt(impl->winsock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+            int v6only = 0;
+            setsockopt(impl->winsock, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&v6only),
+                       sizeof(v6only));
+
+            struct sockaddr_in6 sa6{};
+            sa6.sin6_family = AF_INET6;
+            sa6.sin6_port = htons(port);
+            if (addr.empty() || addr == "0.0.0.0" || addr == "::")
+                sa6.sin6_addr = in6addr_any;
+            else
+                inet_pton(AF_INET6, addr.c_str(), &sa6.sin6_addr);
+
+            if (::bind(impl->winsock, reinterpret_cast<sockaddr*>(&sa6), sizeof(sa6)) != SOCKET_ERROR &&
+                ::listen(impl->winsock, backlog) != SOCKET_ERROR)
+                return Socket(std::move(impl));
+            closesocket(impl->winsock);
+            impl->winsock = INVALID_SOCKET;
+        }
+    }
+
+    // IPv4 fallback
     impl->winsock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (impl->winsock == INVALID_SOCKET)
         throw std::runtime_error("socket() failed");
@@ -391,19 +421,15 @@ Socket tcp_listen(const std::string& addr, uint16_t port, int backlog) {
     struct sockaddr_in sa{};
     sa.sin_family = AF_INET;
     sa.sin_port = htons(port);
-    if (addr.empty() || addr == "0.0.0.0") {
+    if (addr.empty() || addr == "0.0.0.0")
         sa.sin_addr.s_addr = INADDR_ANY;
-    }
-    else {
+    else
         inet_pton(AF_INET, addr.c_str(), &sa.sin_addr);
-    }
 
-    if (::bind(impl->winsock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == SOCKET_ERROR) {
+    if (::bind(impl->winsock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == SOCKET_ERROR)
         throw std::runtime_error("bind() failed on " + addr + ":" + std::to_string(port));
-    }
-    if (::listen(impl->winsock, backlog) == SOCKET_ERROR) {
+    if (::listen(impl->winsock, backlog) == SOCKET_ERROR)
         throw std::runtime_error("listen() failed");
-    }
     return Socket(std::move(impl));
 }
 

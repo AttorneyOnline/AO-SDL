@@ -567,6 +567,35 @@ Socket tcp_connect(const std::string &host, uint16_t port, int timeout_ms) {
 
 Socket tcp_listen(const std::string &addr, uint16_t port, int backlog) {
     auto impl = std::make_unique<Socket::Impl>();
+
+    // Try IPv6 dual-stack first (accepts both IPv4 and IPv6).
+    bool use_ipv6 = (addr.empty() || addr == "0.0.0.0" || addr == "::" || addr.find(':') != std::string::npos);
+
+    if (use_ipv6) {
+        impl->fd = ::socket(AF_INET6, SOCK_STREAM, 0);
+        if (impl->fd >= 0) {
+            int reuse = 1;
+            setsockopt(impl->fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+            int v6only = 0;
+            setsockopt(impl->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only));
+
+            struct sockaddr_in6 sa6{};
+            sa6.sin6_family = AF_INET6;
+            sa6.sin6_port = htons(port);
+            if (addr.empty() || addr == "0.0.0.0" || addr == "::")
+                sa6.sin6_addr = in6addr_any;
+            else
+                inet_pton(AF_INET6, addr.c_str(), &sa6.sin6_addr);
+
+            if (::bind(impl->fd, reinterpret_cast<sockaddr *>(&sa6), sizeof(sa6)) == 0 &&
+                ::listen(impl->fd, backlog) == 0)
+                return Socket(std::move(impl));
+            ::close(impl->fd);
+            impl->fd = -1;
+        }
+    }
+
+    // IPv4 fallback
     impl->fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (impl->fd < 0)
         throw std::runtime_error("socket() failed");
