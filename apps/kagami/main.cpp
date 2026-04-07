@@ -219,9 +219,18 @@ int main(int /*argc*/, char* argv[]) {
         uint64_t client_id;
         std::string data;
     };
-    std::mutex ws_work_mutex;
-    std::condition_variable ws_work_cv;
-    std::deque<WsWorkItem> ws_work_queue;
+    // Per-client queues ensure in-order processing: messages from the same
+    // client are always handled by the same worker (hashed by client_id).
+    // Each "slot" has its own queue, mutex, and CV so workers don't contend.
+    const int WS_SLOT_COUNT = std::max(1u, std::thread::hardware_concurrency());
+    struct WsSlot {
+        std::mutex mutex;
+        std::condition_variable cv;
+        std::deque<WsWorkItem> queue;
+    };
+    std::vector<std::unique_ptr<WsSlot>> ws_slots(WS_SLOT_COUNT);
+    for (auto& s : ws_slots)
+        s = std::make_unique<WsSlot>();
 
     if (cfg.metrics_enabled()) {
         http.GetInline(cfg.metrics_path(), [&metrics_cache](const http::Request&, http::Response& res) {
@@ -315,9 +324,9 @@ int main(int /*argc*/, char* argv[]) {
                                      &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes,
                                      &poll_util, &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats,
                                      &ws_ptr, &ws_poll_stats, &ws_poll_util, &ws_dispatch_rate, &ws_worker_util,
-                                     &ws_worker_active, &ws_work_queue_depth, &ws_worker_stats, &ws_work_mutex,
-                                     &ws_work_queue, &lock_util, &rest_router, &http_server = http, &room,
-                                     &server_start_time, &reg, &metrics_cache](std::stop_token st) {
+                                     &ws_worker_active, &ws_work_queue_depth, &ws_worker_stats, &ws_slots, &lock_util,
+                                     &rest_router, &http_server = http, &room, &server_start_time, &reg,
+                                     &metrics_cache](std::stop_token st) {
             // Previous cumulative values for delta computation
             uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
             uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
@@ -329,7 +338,6 @@ int main(int /*argc*/, char* argv[]) {
             uint64_t prev_ws_busy = 0, prev_ws_idle = 0;
             uint64_t prev_ws_dispatched = 0;
             auto prev_ws_time = std::chrono::steady_clock::now();
-            double ema_util = 0.0;
 
             // WS worker utilization tracking
             uint64_t prev_ws_wk_busy = 0, prev_ws_wk_idle = 0;
@@ -424,10 +432,8 @@ int main(int /*argc*/, char* argv[]) {
                 if (auto* wsp = ws_ptr.load(std::memory_order_acquire))
                     emit_io_stats("ws", wsp->io_stats());
 
-                // WS poll thread utilization (EMA-smoothed)
+                // WS poll thread utilization (delta-based, consistent with HTTP poll)
                 {
-                    constexpr double ALPHA = 0.1; // smoothing factor (lower = smoother)
-
                     auto cur_busy = ws_poll_stats.busy_ns.load(std::memory_order_relaxed);
                     auto cur_idle = ws_poll_stats.idle_ns.load(std::memory_order_relaxed);
                     auto cur_disp = ws_poll_stats.frames_dispatched.load(std::memory_order_relaxed);
@@ -436,9 +442,7 @@ int main(int /*argc*/, char* argv[]) {
                     auto d_busy = cur_busy - prev_ws_busy;
                     auto d_idle = cur_idle - prev_ws_idle;
                     auto d_total = d_busy + d_idle;
-                    double instant_util = d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0;
-                    ema_util = ALPHA * instant_util + (1.0 - ALPHA) * ema_util;
-                    ws_poll_util.get().set(ema_util);
+                    ws_poll_util.get().set(d_total > 0 ? static_cast<double>(d_busy) / d_total : 0.0);
 
                     double dt = std::chrono::duration<double>(cur_time - prev_ws_time).count();
                     ws_dispatch_rate.get().set(dt > 0 ? (cur_disp - prev_ws_dispatched) / dt : 0.0);
@@ -463,8 +467,12 @@ int main(int /*argc*/, char* argv[]) {
                     ws_worker_active.get().set(ws_worker_stats.active.load(std::memory_order_relaxed));
 
                     {
-                        std::lock_guard lock(ws_work_mutex);
-                        ws_work_queue_depth.get().set(static_cast<double>(ws_work_queue.size()));
+                        size_t total_queued = 0;
+                        for (auto& slot : ws_slots) {
+                            std::lock_guard lock(slot->mutex);
+                            total_queued += slot->queue.size();
+                        }
+                        ws_work_queue_depth.get().set(static_cast<double>(total_queued));
                     }
                 }
 
@@ -667,20 +675,20 @@ int main(int /*argc*/, char* argv[]) {
     };
     ao_backend.set_send_func(ws_queue_send);
 
-    const int WS_WORKER_COUNT = std::max(1u, std::thread::hardware_concurrency());
     std::vector<std::jthread> ws_workers;
-    for (int i = 0; i < WS_WORKER_COUNT; ++i) {
-        ws_workers.emplace_back([&](std::stop_token st) {
+    for (int i = 0; i < WS_SLOT_COUNT; ++i) {
+        ws_workers.emplace_back([&, slot_idx = i](std::stop_token st) {
+            auto& slot = *ws_slots[slot_idx];
             while (!st.stop_requested()) {
                 auto idle_start = std::chrono::steady_clock::now();
                 WsWorkItem item;
                 {
-                    std::unique_lock lock(ws_work_mutex);
-                    ws_work_cv.wait(lock, [&] { return !ws_work_queue.empty() || st.stop_requested(); });
+                    std::unique_lock lock(slot.mutex);
+                    slot.cv.wait(lock, [&] { return !slot.queue.empty() || st.stop_requested(); });
                     if (st.stop_requested())
                         break;
-                    item = std::move(ws_work_queue.front());
-                    ws_work_queue.pop_front();
+                    item = std::move(slot.queue.front());
+                    slot.queue.pop_front();
                 }
                 auto idle_end = std::chrono::steady_clock::now();
                 ws_worker_stats.idle_ns.fetch_add(
@@ -719,13 +727,17 @@ int main(int /*argc*/, char* argv[]) {
 
             auto busy_start = std::chrono::steady_clock::now();
 
-            // Enqueue frames to worker pool (no lock, no game logic here)
+            // Enqueue frames to per-client worker slots (ensures ordering)
             if (!frames.empty()) {
-                std::lock_guard lock(ws_work_mutex);
                 for (auto& [client_id, frame] : frames) {
-                    ws_work_queue.push_back({client_id, std::string(frame.data.begin(), frame.data.end())});
+                    int slot_idx = static_cast<int>(client_id % static_cast<uint64_t>(WS_SLOT_COUNT));
+                    auto& slot = *ws_slots[slot_idx];
+                    {
+                        std::lock_guard lock(slot.mutex);
+                        slot.queue.push_back({client_id, std::string(frame.data.begin(), frame.data.end())});
+                    }
+                    slot.cv.notify_one();
                 }
-                ws_work_cv.notify_all();
             }
 
             // Flush queued sends from workers (the actual I/O)
@@ -765,7 +777,8 @@ int main(int /*argc*/, char* argv[]) {
                                                                       .count()),
                                             std::memory_order_relaxed);
         }
-        ws_work_cv.notify_all(); // wake workers so they can check stop_requested
+        for (auto& slot : ws_slots)
+            slot->cv.notify_all(); // wake workers so they can check stop_requested
     });
 
     // --- REPL ---

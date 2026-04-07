@@ -1,4 +1,4 @@
-{$KAGAMI_DOMAIN:{$KAGAMI_DOMAIN}} {
+{$KAGAMI_DOMAIN} {
 	# Grafana (served from /grafana/, handles its own sub-path via GF_SERVER_SERVE_FROM_SUB_PATH)
 	handle /grafana* {
 		reverse_proxy grafana:3000

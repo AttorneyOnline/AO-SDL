@@ -66,7 +66,8 @@ class Http2Connection {
     /// Shut down the connection gracefully.
     void shutdown();
 
-    // StreamData is public so the nghttp2 data provider callback can access it.
+    /// Stream state — public because the nghttp2 data provider callback
+    /// (a C function pointer) needs to cast source->ptr to StreamData*.
     struct StreamData {
         std::promise<Response> promise;
         ResponseCallback callback;

@@ -12,7 +12,7 @@ scrape_configs:
 
   - job_name: kagami-ecs
     metrics_path: /metrics
-    scheme: https
+    scheme: https  # ALB terminates TLS; Prometheus scrapes via public HTTPS
     static_configs:
       - targets: ['kagami.yuurei.network:443']
         labels:
