@@ -654,7 +654,8 @@ TEST(EndpointFactoryTest, GlobalRegistrarPopulatesToRouter) {
     Log::set_sink(nullptr);
 }
 
-TEST(EndpointFactoryTest, SessionCreateRejects503WhenFull) {
+// max_players is a legacy UI hint — not enforced. Sessions are always admitted.
+TEST(EndpointFactoryTest, SessionCreateAdmitsBeyondMaxPlayers) {
     nx_register_endpoints();
     Log::set_sink([](LogLevel, const std::string&, const std::string&) {});
 
@@ -683,12 +684,10 @@ TEST(EndpointFactoryTest, SessionCreateRejects503WhenFull) {
     ASSERT_TRUE(res1);
     EXPECT_EQ(res1->status, 201);
 
-    // Second session should be rejected — server is full (max_players=1)
+    // Second session should also succeed — max_players is not enforced
     auto res2 = cli.Post("/aonx/v1/session", session_body, "application/json");
     ASSERT_TRUE(res2);
-    EXPECT_EQ(res2->status, 503);
-    auto body = nlohmann::json::parse(res2->body);
-    EXPECT_EQ(body["reason"], "Server is full");
+    EXPECT_EQ(res2->status, 201);
 
     http.stop();
     t.join();
@@ -1600,31 +1599,22 @@ TEST_F(NXEndpointTest, SessionLifecycle_RenewRefreshesToken) {
     EXPECT_NE(expires.find('Z'), std::string::npos);
 }
 
-TEST_F(NXEndpointTest, SessionLifecycle_MaxPlayersEnforced) {
+// max_players is a legacy UI hint — not enforced. Verify sessions are always admitted.
+TEST_F(NXEndpointTest, SessionLifecycle_MaxPlayersNotEnforced) {
     room_.max_players = 2;
     auto cli = client();
 
-    // Fill up
-    auto first_token = create_session();
+    create_session();
     create_session();
     EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server")->body)["online"], 2);
     EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server")->body)["max"], 2);
 
-    // Third session should be rejected
+    // Third session should still succeed — max_players is cosmetic
     auto res = cli.Post("/aonx/v1/session", R"({"client_name":"overflow","client_version":"1.0","hdid":"x"})",
                         "application/json");
     ASSERT_TRUE(res);
-    EXPECT_EQ(res->status, 503);
-    EXPECT_EQ(nlohmann::json::parse(res->body)["reason"], "Server is full");
-
-    // Delete one, then retry
-    http::Headers h1 = {{"Authorization", "Bearer " + first_token}};
-    cli.Delete("/aonx/v1/session", h1);
-
-    auto res2 = cli.Post("/aonx/v1/session", R"({"client_name":"latecomer","client_version":"1.0","hdid":"y"})",
-                         "application/json");
-    ASSERT_TRUE(res2);
-    EXPECT_EQ(res2->status, 201);
+    EXPECT_EQ(res->status, 201);
+    EXPECT_EQ(nlohmann::json::parse(cli.Get("/aonx/v1/server")->body)["online"], 3);
 }
 
 TEST_F(NXEndpointTest, SessionLifecycle_MultipleSessionsIndependent) {
