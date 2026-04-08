@@ -34,4 +34,5 @@ class LogoutCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<LogoutCommand>());
-void ao_cmd_logout() {}
+void ao_cmd_logout() {
+}

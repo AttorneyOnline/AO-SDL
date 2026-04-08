@@ -33,12 +33,12 @@ class ChangeAuthCommand : public CommandHandler {
         }
 
         ctx.session.change_auth_started = true;
-        ctx.send_system_message(
-            "WARNING: You are about to change the authentication system.\n"
-            "This will switch from a single shared password to per-user database auth.\n"
-            "Use /rootpass <password> to set the root account password and complete the switch.");
+        ctx.send_system_message("WARNING: You are about to change the authentication system.\n"
+                                "This will switch from a single shared password to per-user database auth.\n"
+                                "Use /rootpass <password> to set the root account password and complete the switch.");
     }
 };
 
 static CommandRegistrar reg(std::make_unique<ChangeAuthCommand>());
-void ao_cmd_changeauth() {}
+void ao_cmd_changeauth() {
+}

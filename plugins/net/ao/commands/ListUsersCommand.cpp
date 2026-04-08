@@ -42,4 +42,5 @@ class ListUsersCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<ListUsersCommand>());
-void ao_cmd_listusers() {}
+void ao_cmd_listusers() {
+}

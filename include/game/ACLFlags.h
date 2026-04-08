@@ -82,26 +82,47 @@ inline ACLPermission acl_permissions_for_role(const std::string& role_id) {
 /// Return a human-readable name for a permission flag.
 inline const char* permission_name(ACLPermission p) {
     switch (p) {
-    case ACLPermission::NONE: return "NONE";
-    case ACLPermission::KICK: return "KICK";
-    case ACLPermission::BAN: return "BAN";
-    case ACLPermission::BGLOCK: return "BGLOCK";
-    case ACLPermission::MODIFY_USERS: return "MODIFY_USERS";
-    case ACLPermission::CM: return "CM";
-    case ACLPermission::GLOBAL_TIMER: return "GLOBAL_TIMER";
-    case ACLPermission::EVI_MOD: return "EVI_MOD";
-    case ACLPermission::MOTD: return "MOTD";
-    case ACLPermission::ANNOUNCE: return "ANNOUNCE";
-    case ACLPermission::MODCHAT: return "MODCHAT";
-    case ACLPermission::MUTE: return "MUTE";
-    case ACLPermission::UNCM: return "UNCM";
-    case ACLPermission::SAVETEST: return "SAVETEST";
-    case ACLPermission::FORCE_CHARSELECT: return "FORCE_CHARSELECT";
-    case ACLPermission::BYPASS_LOCKS: return "BYPASS_LOCKS";
-    case ACLPermission::IGNORE_BGLIST: return "IGNORE_BGLIST";
-    case ACLPermission::SEND_NOTICE: return "SEND_NOTICE";
-    case ACLPermission::JUKEBOX: return "JUKEBOX";
-    case ACLPermission::SUPER: return "SUPER";
-    default: return "UNKNOWN";
+    case ACLPermission::NONE:
+        return "NONE";
+    case ACLPermission::KICK:
+        return "KICK";
+    case ACLPermission::BAN:
+        return "BAN";
+    case ACLPermission::BGLOCK:
+        return "BGLOCK";
+    case ACLPermission::MODIFY_USERS:
+        return "MODIFY_USERS";
+    case ACLPermission::CM:
+        return "CM";
+    case ACLPermission::GLOBAL_TIMER:
+        return "GLOBAL_TIMER";
+    case ACLPermission::EVI_MOD:
+        return "EVI_MOD";
+    case ACLPermission::MOTD:
+        return "MOTD";
+    case ACLPermission::ANNOUNCE:
+        return "ANNOUNCE";
+    case ACLPermission::MODCHAT:
+        return "MODCHAT";
+    case ACLPermission::MUTE:
+        return "MUTE";
+    case ACLPermission::UNCM:
+        return "UNCM";
+    case ACLPermission::SAVETEST:
+        return "SAVETEST";
+    case ACLPermission::FORCE_CHARSELECT:
+        return "FORCE_CHARSELECT";
+    case ACLPermission::BYPASS_LOCKS:
+        return "BYPASS_LOCKS";
+    case ACLPermission::IGNORE_BGLIST:
+        return "IGNORE_BGLIST";
+    case ACLPermission::SEND_NOTICE:
+        return "SEND_NOTICE";
+    case ACLPermission::JUKEBOX:
+        return "JUKEBOX";
+    case ACLPermission::SUPER:
+        return "SUPER";
+    default:
+        return "UNKNOWN";
     }
 }

@@ -48,11 +48,11 @@ class RemoveUserCommand : public CommandHandler {
             return;
         }
 
-        Log::log_print(INFO, "Auth: user '%s' deleted by %s", username.c_str(),
-                       ctx.session.moderator_name.c_str());
+        Log::log_print(INFO, "Auth: user '%s' deleted by %s", username.c_str(), ctx.session.moderator_name.c_str());
         ctx.send_system_message("User '" + username + "' deleted.");
     }
 };
 
 static CommandRegistrar reg(std::make_unique<RemoveUserCommand>());
-void ao_cmd_removeuser() {}
+void ao_cmd_removeuser() {
+}
