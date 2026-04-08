@@ -1,0 +1,12 @@
+[Unit]
+Description=Kagami kernel-level rate limiting (ip6tables/iptables)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kagami-firewall.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
