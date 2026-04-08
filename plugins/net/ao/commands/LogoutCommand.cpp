@@ -23,6 +23,9 @@ class LogoutCommand : public CommandHandler {
 
     void execute(CommandContext& ctx) override {
         ctx.session.moderator = false;
+        ctx.session.acl_role.clear();
+        ctx.session.moderator_name.clear();
+        ctx.session.change_auth_started = false;
         ctx.room.stats.moderators.fetch_sub(1, std::memory_order_relaxed);
 
         Log::log_print(INFO, "Auth: %s [%s] logged out", ctx.session.display_name.c_str(), ctx.session.ipid.c_str());

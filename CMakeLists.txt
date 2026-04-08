@@ -303,6 +303,21 @@ if(AOSDL_GENERATE_SCHEMAS AND NOT AO_BUILD_FLUTTER)
     endif()
 endif()
 
+# --- sqlite3 — embedded SQL database (amalgamation build) -------------------
+add_library(sqlite3 STATIC third-party/sqlite3/sqlite3.c)
+set_property(TARGET sqlite3 PROPERTY C_STANDARD 11)
+target_include_directories(sqlite3 PUBLIC third-party/sqlite3)
+target_compile_definitions(sqlite3 PRIVATE
+    SQLITE_THREADSAFE=2          # multi-thread mode (no shared connections)
+    SQLITE_DEFAULT_WAL_SYNCHRONOUS=1  # NORMAL sync in WAL mode (safe + fast)
+    SQLITE_DQS=0                 # disable double-quoted strings as values
+    SQLITE_OMIT_DECLTYPE         # trim unused API surface
+    SQLITE_OMIT_DEPRECATED       # trim deprecated APIs
+    SQLITE_OMIT_PROGRESS_CALLBACK
+    SQLITE_OMIT_SHARED_CACHE     # shared cache is deprecated
+    SQLITE_DEFAULT_MEMSTATUS=0   # skip per-malloc bookkeeping
+)
+
 # =============================================================================
 # aoengine — core engine library (no GL, no SDL)
 #
@@ -364,6 +379,7 @@ add_library(aoengine STATIC
     engine/game/ASNReputationManager.cpp
     engine/game/BanManager.cpp
     engine/game/CommandRegistry.cpp
+    engine/game/DatabaseManager.cpp
     engine/game/FirewallManager.cpp
     engine/game/GameRoom.cpp
     engine/game/IPReputationService.cpp
@@ -489,12 +505,12 @@ target_include_directories(aoengine
 
 # TLS support: Secure Transport on Apple, OpenSSL on Linux/Windows
 if(APPLE)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile nghttp2)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile nghttp2 sqlite3)
     set_source_files_properties(platform/macos/Socket.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 else()
     set(OPENSSL_USE_STATIC_LIBS ON)
     find_package(OpenSSL REQUIRED)
-    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile nghttp2 OpenSSL::SSL OpenSSL::Crypto)
+    target_link_libraries(aoengine PUBLIC bit7z freetype webpdemux webp opusfile nghttp2 sqlite3 OpenSSL::SSL OpenSSL::Crypto)
 endif()
 target_include_directories(aoengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third-party/libwebp/src)
 
@@ -586,6 +602,15 @@ add_library(ao_net STATIC
     plugins/net/ao/commands/FirewallCommand.cpp
     plugins/net/ao/commands/ReputationCommand.cpp
     plugins/net/ao/commands/UnbanCommand.cpp
+    plugins/net/ao/commands/ChangeAuthCommand.cpp
+    plugins/net/ao/commands/RootPassCommand.cpp
+    plugins/net/ao/commands/AddUserCommand.cpp
+    plugins/net/ao/commands/RemoveUserCommand.cpp
+    plugins/net/ao/commands/ListUsersCommand.cpp
+    plugins/net/ao/commands/SetPermsCommand.cpp
+    plugins/net/ao/commands/RemovePermsCommand.cpp
+    plugins/net/ao/commands/ListPermsCommand.cpp
+    plugins/net/ao/commands/ChangePassCommand.cpp
     plugins/net/ao/commands/AreaCommand.cpp
     plugins/net/ao/commands/GetAreaCommand.cpp
     plugins/net/ao/commands/BackgroundCommand.cpp

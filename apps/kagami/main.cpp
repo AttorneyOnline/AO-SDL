@@ -9,6 +9,7 @@
 
 #include "game/ASNReputationManager.h"
 #include "game/BanManager.h"
+#include "game/DatabaseManager.h"
 #include "game/FirewallManager.h"
 #include "game/GameRoom.h"
 #include "game/IPReputationService.h"
@@ -78,6 +79,21 @@ int main(int /*argc*/, char* argv[]) {
     room.reset_taken();
     room.build_char_id_index();
     room.build_area_index();
+
+    // --- Database ---
+    DatabaseManager db;
+    if (!db.open(DEFAULT_DB_FILE))
+        Log::log_print(WARNING, "Database unavailable — running without persistent storage");
+    room.set_db_manager(&db);
+
+    // Auto-detect ADVANCED auth mode if the users table has entries.
+    if (db.is_open()) {
+        auto users = db.list_users().get();
+        if (!users.empty()) {
+            room.auth_type = AuthType::ADVANCED;
+            Log::log_print(INFO, "Auth: ADVANCED mode (%zu users in database)", users.size());
+        }
+    }
 
     // --- Ban manager ---
     BanManager ban_manager;
@@ -271,7 +287,7 @@ int main(int /*argc*/, char* argv[]) {
     ReplCommandRegistry repl;
     ReplCommandFactory::instance().populate(repl);
 
-    ServerContext ctx{stop_src, cfg, ui, room, ao_backend, nx_backend, http, rest_router, &ws, &repl};
+    ServerContext ctx{stop_src, db, cfg, ui, room, ao_backend, nx_backend, http, rest_router, &ws, &repl};
 
     if (interactive) {
         std::string line;

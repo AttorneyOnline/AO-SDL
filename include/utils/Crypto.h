@@ -16,6 +16,13 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
+#else
+#include <stdlib.h> // arc4random_buf
+#endif
+
 namespace crypto {
 
 // -- Shared helpers ----------------------------------------------------------
@@ -416,6 +423,97 @@ inline std::string hmac_sha256_hex(const std::string& key, const std::string& me
 inline std::vector<uint8_t> hmac_sha256(const std::vector<uint8_t>& key, const std::string& message) {
     std::vector<uint8_t> m(message.begin(), message.end());
     return hmac_sha256(key, m);
+}
+
+// -- PBKDF2-SHA256 ------------------------------------------------------------
+
+/// Derive a key from password and salt using PBKDF2-HMAC-SHA256.
+/// Compatible with akashi's CryptoHelper::pbkdf2() (100,000 iterations, 32-byte output).
+inline std::vector<uint8_t> pbkdf2_sha256(const std::vector<uint8_t>& password, const std::vector<uint8_t>& salt,
+                                          int iterations, size_t output_len = 32) {
+    const size_t hash_len = 32; // SHA-256 output
+    size_t blocks_needed = (output_len + hash_len - 1) / hash_len;
+    std::vector<uint8_t> output;
+    output.reserve(blocks_needed * hash_len);
+
+    for (size_t block = 1; block <= blocks_needed; block++) {
+        // U_1 = HMAC(password, salt || BE32(block))
+        std::vector<uint8_t> salt_block(salt);
+        uint8_t be[4];
+        detail::write_be32(be, static_cast<uint32_t>(block));
+        salt_block.insert(salt_block.end(), be, be + 4);
+
+        auto u = hmac_sha256(password, salt_block);
+        auto result = u;
+
+        // U_2 .. U_c
+        for (int i = 1; i < iterations; i++) {
+            u = hmac_sha256(password, u);
+            for (size_t j = 0; j < hash_len; j++)
+                result[j] ^= u[j];
+        }
+
+        output.insert(output.end(), result.begin(), result.end());
+    }
+
+    output.resize(output_len);
+    return output;
+}
+
+/// Convenience: PBKDF2 with string password and hex-encoded salt, returns hex string.
+/// Matches akashi's hash_password() for salt >= 16 bytes.
+inline std::string pbkdf2_sha256_hex(const std::string& password, const std::string& hex_salt,
+                                     int iterations = 100000) {
+    // Decode hex salt to bytes
+    std::vector<uint8_t> salt_bytes;
+    salt_bytes.reserve(hex_salt.size() / 2);
+    for (size_t i = 0; i + 1 < hex_salt.size(); i += 2) {
+        unsigned byte = 0;
+        for (int j = 0; j < 2; j++) {
+            byte <<= 4;
+            char c = hex_salt[i + j];
+            if (c >= '0' && c <= '9')
+                byte |= (c - '0');
+            else if (c >= 'a' && c <= 'f')
+                byte |= (c - 'a' + 10);
+            else if (c >= 'A' && c <= 'F')
+                byte |= (c - 'A' + 10);
+        }
+        salt_bytes.push_back(static_cast<uint8_t>(byte));
+    }
+
+    std::vector<uint8_t> pw_bytes(password.begin(), password.end());
+    auto derived = pbkdf2_sha256(pw_bytes, salt_bytes, iterations);
+
+    // Convert to hex
+    std::ostringstream ss;
+    for (auto b : derived)
+        ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned>(b);
+    return ss.str();
+}
+
+// -- Secure random bytes ------------------------------------------------------
+
+/// Generate cryptographically secure random bytes.
+inline std::vector<uint8_t> randbytes(size_t count) {
+    std::vector<uint8_t> buf(count);
+#ifdef _WIN32
+    // BCryptGenRandom is available on Vista+
+    BCryptGenRandom(nullptr, buf.data(), static_cast<unsigned long>(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+#else
+    // arc4random_buf is available on macOS and modern Linux (glibc 2.36+)
+    arc4random_buf(buf.data(), count);
+#endif
+    return buf;
+}
+
+/// Generate random bytes and return as hex string.
+inline std::string randbytes_hex(size_t count) {
+    auto bytes = randbytes(count);
+    std::ostringstream ss;
+    for (auto b : bytes)
+        ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned>(b);
+    return ss.str();
 }
 
 } // namespace crypto

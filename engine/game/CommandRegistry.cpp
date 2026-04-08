@@ -1,5 +1,6 @@
 #include "game/CommandRegistry.h"
 
+#include "game/ACLFlags.h"
 #include "game/ServerSession.h"
 #include "utils/Log.h"
 
@@ -30,7 +31,23 @@ bool CommandRegistry::try_dispatch(CommandContext& ctx, const std::string& messa
         return true; // consumed (don't broadcast the failed command)
     }
 
-    if (handler->requires_moderator() && !ctx.session.moderator) {
+    // Permission check: ACL-based if the command declares a required_permission(),
+    // otherwise falls back to the legacy requires_moderator() boolean.
+    auto required = handler->required_permission();
+    if (required != ACLPermission::NONE) {
+        // Fine-grained ACL check
+        if (!ctx.session.moderator) {
+            ctx.send_system_message("Permission denied. You must be logged in.");
+            return true;
+        }
+        auto session_perms = acl_permissions_for_role(ctx.session.acl_role);
+        if (!has_permission(session_perms, required)) {
+            ctx.send_system_message("Permission denied. You need the " + std::string(permission_name(required)) +
+                                    " permission.");
+            return true;
+        }
+    }
+    else if (handler->requires_moderator() && !ctx.session.moderator) {
         ctx.send_system_message("Permission denied. You must be logged in as a moderator.");
         return true;
     }

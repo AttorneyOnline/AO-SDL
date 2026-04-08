@@ -22,6 +22,8 @@ struct ServerSession {
           character_id(o.character_id), area(std::move(o.area)), ipid(std::move(o.ipid)),
           hardware_id(std::move(o.hardware_id)), password(std::move(o.password)),
           casing_preferences(std::move(o.casing_preferences)), joined(o.joined), moderator(o.moderator),
+          acl_role(std::move(o.acl_role)), moderator_name(std::move(o.moderator_name)),
+          change_auth_started(o.change_auth_started),
           protocol(std::move(o.protocol)), last_activity_ns(o.last_activity_ns.load(std::memory_order_relaxed)),
           bytes_sent(o.bytes_sent.load(std::memory_order_relaxed)),
           bytes_received(o.bytes_received.load(std::memory_order_relaxed)),
@@ -56,7 +58,17 @@ struct ServerSession {
     bool joined = false;
 
     /// True if the session has moderator privileges (e.g. all-areas broadcast).
+    /// In ADVANCED auth mode, this is set when the user has any non-NONE ACL role.
     bool moderator = false;
+
+    /// ACL role identifier (e.g. "SUPER", "MOD", "NONE"). Empty if not authenticated.
+    std::string acl_role;
+
+    /// Username from database auth (ADVANCED mode only). Empty in SIMPLE mode.
+    std::string moderator_name;
+
+    /// Transient flag: true while the /changeauth flow is in progress.
+    bool change_auth_started = false;
 
     /// Failed login attempt count (for rate-limiting brute force).
     int login_failures = 0;

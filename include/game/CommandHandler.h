@@ -8,6 +8,8 @@
  */
 #pragma once
 
+#include "game/ACLFlags.h"
+
 #include <string>
 
 struct CommandContext;
@@ -20,8 +22,17 @@ class CommandHandler {
     virtual const std::string& name() const = 0;
 
     /// Whether this command requires moderator privileges.
+    /// Default: derived from required_permission() — true if non-NONE.
+    /// Existing commands may override this directly for backwards compat.
     virtual bool requires_moderator() const {
-        return false;
+        return required_permission() != ACLPermission::NONE;
+    }
+
+    /// ACL permission required to execute this command.
+    /// Default: NONE (anyone can run it). Override in auth-aware commands
+    /// for fine-grained permission checks against the session's ACL role.
+    virtual ACLPermission required_permission() const {
+        return ACLPermission::NONE;
     }
 
     /// Minimum number of arguments (not counting the command name itself).
