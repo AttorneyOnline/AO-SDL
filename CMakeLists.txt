@@ -755,7 +755,7 @@ if(AO_BUILD_FLUTTER)
     # flutter-build: build the native bridge and all libraries that the
     # xcconfig links against (some are not transitive deps of ao_bridge).
     add_custom_target(flutter-build
-        DEPENDS ao_bridge webpdecoder sharpyuv
+        DEPENDS ao_bridge webpdecoder sharpyuv sqlite3
         COMMENT "Building native bridge for Flutter"
     )
 endif()
