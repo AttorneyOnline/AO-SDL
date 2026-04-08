@@ -37,17 +37,17 @@
 
 	# Grafana (served from /grafana/, handles its own sub-path via GF_SERVER_SERVE_FROM_SUB_PATH)
 	handle /grafana* {
-		reverse_proxy grafana:3000
+		reverse_proxy 127.0.0.1:3000
 	}
 
 	# Prometheus (served from /prometheus/, configured via --web.external-url)
 	handle /prometheus* {
-		reverse_proxy prometheus:9090
+		reverse_proxy 127.0.0.1:9090
 	}
 
 	# Everything else goes to kagami (game server API, /metrics, root)
 	handle {
-		reverse_proxy kagami:80 {
+		reverse_proxy 127.0.0.1:8080 {
 			transport http {
 				keepalive 60s
 				keepalive_idle_conns 64
@@ -63,7 +63,7 @@
 {$KAGAMI_DOMAIN}:27015 {
 	import tls_dns
 
-	reverse_proxy kagami:27016 {
+	reverse_proxy 127.0.0.1:27016 {
 		transport http {
 			keepalive     off
 			read_timeout  120s
