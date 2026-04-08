@@ -173,6 +173,7 @@ class WebSocketServer {
         std::unique_ptr<ITcpSocket> socket;
         std::string remote_addr;                            ///< Client IP (may be overridden by proxy headers).
         bool proxy_protocol_parsed = false;                 ///< PROXY protocol header already processed.
+        bool proxy_protocol_resolved = false;               ///< PROXY protocol provided a client address.
         std::chrono::steady_clock::time_point connected_at; ///< When TCP was accepted.
         std::chrono::steady_clock::time_point last_data_at; ///< Last time data was received.
         bool handshake_complete = false;

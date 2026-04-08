@@ -185,21 +185,66 @@ size_t TrustedProxyList::size() const {
 
 // -- Header extraction --------------------------------------------------------
 
-std::string extract_forwarded_ip(const std::string& header_value) {
+/// Trim whitespace from both ends of a string.
+static std::string trim(const std::string& s) {
+    auto start = s.find_first_not_of(" \t");
+    if (start == std::string::npos)
+        return "";
+    auto end = s.find_last_not_of(" \t");
+    return s.substr(start, end - start + 1);
+}
+
+/// Validate that a string is a valid IPv4 or IPv6 address via inet_pton.
+static bool is_valid_ip(const std::string& ip) {
+    struct in_addr v4{};
+    struct in6_addr v6{};
+    return inet_pton(AF_INET, ip.c_str(), &v4) == 1 || inet_pton(AF_INET6, ip.c_str(), &v6) == 1;
+}
+
+std::string extract_forwarded_ip(const std::string& header_value, const TrustedProxyList* trusted) {
     if (header_value.empty())
         return "";
 
-    // For X-Forwarded-For: take the leftmost (first) IP
-    // Format: "client, proxy1, proxy2"
-    auto comma = header_value.find(',');
-    std::string ip = (comma != std::string::npos) ? header_value.substr(0, comma) : header_value;
+    // Split on commas into a list of IPs
+    std::vector<std::string> ips;
+    size_t pos = 0;
+    while (pos < header_value.size()) {
+        auto comma = header_value.find(',', pos);
+        if (comma == std::string::npos) {
+            ips.push_back(trim(header_value.substr(pos)));
+            break;
+        }
+        ips.push_back(trim(header_value.substr(pos, comma - pos)));
+        pos = comma + 1;
+    }
 
-    // Trim whitespace
-    auto start = ip.find_first_not_of(" \t");
-    if (start == std::string::npos)
+    if (ips.empty())
         return "";
-    auto end = ip.find_last_not_of(" \t");
-    return ip.substr(start, end - start + 1);
+
+    // Single IP (e.g. X-Real-IP): validate and return directly
+    if (ips.size() == 1) {
+        auto& ip = ips[0];
+        return is_valid_ip(ip) ? ip : "";
+    }
+
+    // Multiple IPs (X-Forwarded-For chain):
+    // Walk right-to-left, skip trusted proxies, return first untrusted IP.
+    // This prevents spoofing when proxies append to XFF.
+    if (trusted) {
+        for (int i = static_cast<int>(ips.size()) - 1; i >= 0; --i) {
+            auto& ip = ips[i];
+            if (ip.empty() || !is_valid_ip(ip))
+                continue;
+            if (!trusted->is_trusted(ip))
+                return ip;
+        }
+        // All IPs in the chain are trusted — shouldn't happen in practice.
+        // Return the leftmost as fallback.
+    }
+
+    // No trusted list or fallback: return leftmost (only safe if proxy overwrites XFF)
+    auto& first = ips[0];
+    return is_valid_ip(first) ? first : "";
 }
 
 } // namespace net

@@ -186,6 +186,7 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                             Log::log_print(DEBUG, "WS: PROXY protocol from %s: client is %s:%u",
                                            client.remote_addr.c_str(), pp.client_addr.c_str(), pp.client_port);
                             client.remote_addr = pp.client_addr;
+                            client.proxy_protocol_resolved = true;
                         }
                         if (pp.header_length > 0) {
                             // Remove PROXY header from buffer so HTTP parsing sees clean data
@@ -504,12 +505,16 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
         headers.emplace(kv);
     }
 
-    // Extract real client IP from proxy headers (X-Forwarded-For, X-Real-IP)
-    if (reverse_proxy_config_.enabled && trusted_proxies_.is_trusted(client.remote_addr)) {
+    // Extract real client IP from proxy headers (X-Forwarded-For, X-Real-IP).
+    // Skip if PROXY protocol already resolved the address — avoids a client
+    // spoofing XFF to override the PROXY protocol result in proxy-to-proxy
+    // setups where the resolved IP might also be in trusted_proxies.
+    if (reverse_proxy_config_.enabled && !client.proxy_protocol_resolved &&
+        trusted_proxies_.is_trusted(client.remote_addr)) {
         for (auto& header_name : reverse_proxy_config_.header_priority) {
             auto it = headers.find(header_name);
             if (it != headers.end() && !it->second.empty()) {
-                std::string real_ip = net::extract_forwarded_ip(it->second);
+                std::string real_ip = net::extract_forwarded_ip(it->second, &trusted_proxies_);
                 if (!real_ip.empty()) {
                     Log::log_print(DEBUG, "WS: %s header from trusted proxy %s: client is %s", header_name.c_str(),
                                    client.remote_addr.c_str(), real_ip.c_str());
