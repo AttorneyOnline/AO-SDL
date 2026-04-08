@@ -27,6 +27,9 @@ class SessionRenewEndpoint : public NXEndpoint {
     }
 
     RestResponse handle(const RestRequest& req) override {
+        if (rate_limiter() && !rate_limiter()->allow("nx:session_renew", req.session->ipid))
+            return RestResponse::error(429, "Too many session renew requests");
+
         // touch() is already called by RestRouter for authenticated requests,
         // but call it explicitly to make the intent clear.
         req.session->touch();

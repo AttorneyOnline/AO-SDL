@@ -336,12 +336,33 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
              }},
             {"rate_limits",
              nlohmann::json{
+                 // Transport-level
                  {"session_create", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
                  {"ws_frame", nlohmann::json{{"rate", 30.0}, {"burst", 60.0}}},
                  {"ws_bytes", nlohmann::json{{"rate", 32768.0}, {"burst", 65536.0}}},
+                 // AO protocol: high-frequency gameplay
                  {"ao:MS", nlohmann::json{{"rate", 5.0}, {"burst", 10.0}}},
                  {"ao:CT", nlohmann::json{{"rate", 3.0}, {"burst", 6.0}}},
                  {"ao:CC", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
+                 {"ao:MC", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 {"ao:CH", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 // AO protocol: area/evidence mutations
+                 {"ao:HP", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
+                 {"ao:BN", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
+                 {"ao:RT", nlohmann::json{{"rate", 3.0}, {"burst", 6.0}}},
+                 {"ao:PE", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 {"ao:EE", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 {"ao:DE", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 // AO protocol: moderation/announcements
+                 {"ao:ZZ", nlohmann::json{{"rate", 1.0}, {"burst", 3.0}}},
+                 {"ao:CASEA", nlohmann::json{{"rate", 0.5}, {"burst", 2.0}}},
+                 {"ao:SETCASE", nlohmann::json{{"rate", 1.0}, {"burst", 3.0}}},
+                 // AONX REST endpoints
+                 {"nx:ooc", nlohmann::json{{"rate", 3.0}, {"burst", 6.0}}},
+                 {"nx:area_join", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 {"nx:char_select", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
+                 {"nx:session_renew", nlohmann::json{{"rate", 1.0}, {"burst", 3.0}}},
+                 // Timeouts
                  {"ws_handshake_deadline_sec", 10},
                  {"ws_idle_timeout_sec", 120},
                  {"ws_partial_frame_timeout_sec", 30},
