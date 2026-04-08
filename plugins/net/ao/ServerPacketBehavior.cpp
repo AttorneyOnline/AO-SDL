@@ -48,11 +48,10 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
 
     // Ban enforcement: check IPID and HDID before allowing connection
     if (auto* bm = server.room().ban_manager()) {
-        if (bm->is_banned(session.ipid, session.hardware_id)) {
-            std::string reason = bm->get_ban_reason(session.ipid, session.hardware_id);
+        if (auto ban = bm->check_ban(session.ipid, session.hardware_id)) {
             Log::log_print(INFO, "AO: %s rejected (banned): %s", format_client_id(session.client_id).c_str(),
-                           reason.c_str());
-            server.send(session.client_id, AOPacket("KB", {reason}));
+                           ban->reason.c_str());
+            server.send(session.client_id, AOPacket("KB", {ban->reason}));
             if (server.ws())
                 server.ws()->close_client(session.client_id);
             return;
@@ -276,8 +275,19 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
             ctx.deferred_closes.push_back(client_id);
         };
 
-        if (CommandRegistry::instance().try_dispatch(ctx, message))
-            return; // command consumed; AO clients self-disconnect on KK/KB
+        if (CommandRegistry::instance().try_dispatch(ctx, message)) {
+            // Schedule deferred disconnects. We can't call close_client
+            // here because we're inside the dispatch lock (with_lock),
+            // and close_client fires on_disconnected which also acquires
+            // the dispatch lock, causing deadlock. Instead, queue close
+            // frames via the thread-safe queue_send — the WS poll thread
+            // will process them and fire on_disconnected outside our lock.
+            if (server.ws() && !ctx.deferred_closes.empty()) {
+                for (auto id : ctx.deferred_closes)
+                    server.ws()->close_client_deferred(id);
+            }
+            return;
+        }
     }
 
     OOCAction action;
@@ -386,19 +396,19 @@ void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
 
     auto& room = server.room();
 
+    // Collect client IDs to disconnect (deferred to avoid deadlock)
+    std::vector<uint64_t> to_close;
+
     if (duration == 0) {
         // Kick
-        int kicked = 0;
         room.for_each_session([&](ServerSession& s) {
             if (s.ipid == target_ipid) {
                 server.send(s.client_id, AOPacket("KK", {reason}));
-                if (server.ws())
-                    server.ws()->close_client(s.client_id);
-                ++kicked;
+                to_close.push_back(s.client_id);
             }
         });
         Log::log_print(INFO, "MA kick: %s [%s] kicked IPID %s (%d): %s", session.display_name.c_str(),
-                       session.ipid.c_str(), target_ipid.c_str(), kicked, reason.c_str());
+                       session.ipid.c_str(), target_ipid.c_str(), static_cast<int>(to_close.size()), reason.c_str());
     }
     else {
         // Ban
@@ -426,14 +436,19 @@ void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
         room.for_each_session([&](ServerSession& s) {
             if (s.ipid == target_ipid) {
                 server.send(s.client_id, AOPacket("KB", {reason}));
-                if (server.ws())
-                    server.ws()->close_client(s.client_id);
+                to_close.push_back(s.client_id);
             }
         });
 
         bm->save_async(DEFAULT_BAN_FILE);
         Log::log_print(INFO, "MA ban: %s [%s] banned IPID %s (dur=%d): %s", session.display_name.c_str(),
                        session.ipid.c_str(), target_ipid.c_str(), duration, reason.c_str());
+    }
+
+    // Defer disconnects to the WS poll thread (outside dispatch lock)
+    if (server.ws()) {
+        for (auto id : to_close)
+            server.ws()->close_client_deferred(id);
     }
 }
 

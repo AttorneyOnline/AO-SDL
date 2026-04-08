@@ -58,19 +58,20 @@ class LoginCommand : public CommandHandler {
             }
         }
 
-        // Compare SHA-256 hash of the attempt against the configured value.
-        // The config stores the password as a SHA-256 hex hash.
-        // If the configured value is 64 hex chars, it's already hashed.
-        // Otherwise, treat it as plaintext (for backwards compatibility)
-        // and compare directly.
-        std::string attempt_hash = crypto::sha256(ctx.args[1]);
+        // Compare the attempt against the configured password.
+        // Config format:
+        //   "sha256:abcdef..."  → stored as SHA-256 hex hash
+        //   "mypassword"        → stored as plaintext (legacy)
         bool match = false;
-        if (configured.size() == 64) {
-            // Configured value is a hash — compare hash-to-hash
-            match = (attempt_hash == configured);
+        static const std::string hash_prefix = "sha256:";
+        if (configured.size() > hash_prefix.size() &&
+            configured.compare(0, hash_prefix.size(), hash_prefix) == 0) {
+            // Config has a hash — compare hash-to-hash
+            std::string stored_hash = configured.substr(hash_prefix.size());
+            match = (crypto::sha256(ctx.args[1]) == stored_hash);
         }
         else {
-            // Configured value is plaintext — compare directly
+            // Config has plaintext — compare directly
             match = (ctx.args[1] == configured);
         }
 

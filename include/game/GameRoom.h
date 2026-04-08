@@ -136,6 +136,9 @@ class GameRoom {
     std::vector<std::string> areas;
     std::string server_name;
     std::string server_description;
+    /// Advertised player limit. This is a legacy UI hint only — not enforced.
+    /// AO clients display it in the server browser, but the server silently
+    /// admits players beyond this count. Kept for backwards compatibility.
     int max_players = 100;
 
     /// Moderator password for simple auth. Empty = auth disabled.

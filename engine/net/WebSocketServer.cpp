@@ -708,13 +708,24 @@ void WebSocketServer::queue_send(ClientId client_id, std::vector<uint8_t> data) 
     global_send_queue_.push_back({client_id, std::move(data)});
 }
 
+void WebSocketServer::close_client_deferred(ClientId client_id, uint16_t code, const std::string& reason) {
+    std::lock_guard lock(send_queue_mutex_);
+    deferred_close_queue_.push_back({client_id, code, reason});
+}
+
 void WebSocketServer::flush_sends() {
-    // Move the queue out under lock, then process without holding it
+    // Move both queues out under lock, then process without holding it
     std::vector<PendingSend> to_send;
+    std::vector<PendingClose> to_close;
     {
         std::lock_guard lock(send_queue_mutex_);
         to_send.swap(global_send_queue_);
+        to_close.swap(deferred_close_queue_);
     }
+
+    // Process deferred closes (fires on_disconnected outside any dispatch lock)
+    for (auto& item : to_close)
+        close_client(item.client_id, item.code, item.reason);
 
     if (to_send.empty())
         return;

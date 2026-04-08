@@ -66,15 +66,16 @@ class BanManager {
     /// Check if an IPID or HDID is banned (skipping expired entries).
     bool is_banned(const std::string& ipid, const std::string& hdid) const;
 
+    /// Check if banned and return the ban entry in a single lock acquisition.
+    /// Returns std::nullopt if not banned. Avoids TOCTOU between separate
+    /// is_banned() and find_ban() calls.
+    std::optional<BanEntry> check_ban(const std::string& ipid, const std::string& hdid) const;
+
     /// Find a ban by IPID. Returns a copy (safe to use outside the lock).
     std::optional<BanEntry> find_ban(const std::string& ipid) const;
 
     /// Find a ban by HDID across all entries. Returns a copy.
     std::optional<BanEntry> find_ban_by_hdid(const std::string& hdid) const;
-
-    /// Get the ban reason for a given IPID/HDID, or "Banned" if not found.
-    /// Convenience method that does the lookup and copies the reason under the lock.
-    std::string get_ban_reason(const std::string& ipid, const std::string& hdid) const;
 
     /// Load bans from a JSON file. Skips expired entries.
     void load(const std::string& path);
