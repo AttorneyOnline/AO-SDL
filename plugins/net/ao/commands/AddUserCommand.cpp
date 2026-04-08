@@ -59,3 +59,4 @@ class AddUserCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<AddUserCommand>());
+void ao_cmd_adduser() {}

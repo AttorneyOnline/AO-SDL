@@ -65,3 +65,4 @@ class SetPermsCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<SetPermsCommand>());
+void ao_cmd_setperms() {}

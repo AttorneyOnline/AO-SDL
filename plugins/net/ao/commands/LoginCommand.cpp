@@ -162,3 +162,4 @@ class LoginCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<LoginCommand>());
+void ao_cmd_login() {}

@@ -24,3 +24,4 @@ class MotdCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<MotdCommand>());
+void ao_cmd_motd() {}

@@ -94,3 +94,4 @@ class AreaCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<AreaCommand>());
+void ao_cmd_area() {}
