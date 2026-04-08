@@ -291,8 +291,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /* Refuse to run as actual root (setcap is the intended privilege path) */
-    if (getuid() == 0 && geteuid() == 0) {
+    /* Refuse to run as actual root on bare metal (setcap is the intended
+     * privilege path). Skip the check inside containers where root is the
+     * default user and CAP_NET_ADMIN is granted via Docker cap_add. */
+    if (getuid() == 0 && geteuid() == 0 && access("/.dockerenv", F_OK) != 0) {
         fprintf(stderr, "kagami-fw-helper: refusing to run as root; use setcap instead\n");
         return 1;
     }
