@@ -100,7 +100,7 @@ TEST_F(ASNReputationTest, UnblockNonexistentReturnsFalse) {
 TEST_F(ASNReputationTest, ListFlaggedReturnsOnlyNonNormal) {
     mgr_.report_abuse(100, "1.1.1.1", "Org1", "spam");
     mgr_.report_abuse(100, "2.2.2.2", "Org1", "spam"); // → WATCHED
-    mgr_.report_abuse(200, "3.3.3.3", "Org2", "spam");  // NORMAL (only 1 IP)
+    mgr_.report_abuse(200, "3.3.3.3", "Org2", "spam"); // NORMAL (only 1 IP)
 
     auto flagged = mgr_.list_flagged();
     EXPECT_EQ(flagged.size(), 1u);

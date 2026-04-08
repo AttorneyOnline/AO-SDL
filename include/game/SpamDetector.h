@@ -28,8 +28,8 @@
 /// Result of a spam detection check.
 struct SpamVerdict {
     bool is_spam = false;
-    std::string heuristic;  ///< Which heuristic triggered (e.g. "echo", "burst")
-    std::string detail;     ///< Human-readable description
+    std::string heuristic; ///< Which heuristic triggered (e.g. "echo", "burst")
+    std::string detail;    ///< Human-readable description
 };
 
 /// Configuration for the spam detector.
@@ -52,8 +52,8 @@ struct SpamDetectorConfig {
     int join_spam_max_seconds = 5; ///< Max time from join to first message
 
     // H5: Name pattern
-    int name_pattern_threshold = 3; ///< Unique IPIDs with same prefix
-    int name_pattern_min_prefix = 4; ///< Minimum prefix length
+    int name_pattern_threshold = 3;        ///< Unique IPIDs with same prefix
+    int name_pattern_min_prefix = 4;       ///< Minimum prefix length
     int name_pattern_window_seconds = 300; ///< 5 minutes
 
     // H6: Ghost connections
@@ -91,7 +91,7 @@ class SpamDetector {
     /// H2/H5/H7: Register a new connection.
     /// Called from HI packet handler.
     SpamVerdict on_connection(const std::string& ipid, uint32_t asn, const std::string& hwid,
-                               const std::string& username);
+                              const std::string& username);
 
     /// H6: Register a disconnection. If the client never sent HI, counts as ghost.
     /// Called from the disconnect callback.

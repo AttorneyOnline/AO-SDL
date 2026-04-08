@@ -34,7 +34,7 @@ struct FirewallRule {
 
 /// Configuration for the firewall manager.
 struct FirewallConfig {
-    bool enabled = false; ///< Disabled by default (requires setup)
+    bool enabled = false;    ///< Disabled by default (requires setup)
     std::string helper_path; ///< Path to kagami-fw-helper binary
     bool cleanup_on_shutdown = true;
 };

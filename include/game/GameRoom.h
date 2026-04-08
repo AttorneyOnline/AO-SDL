@@ -18,8 +18,8 @@
 #include "game/FirewallManager.h"
 #include "game/GameAction.h"
 #include "game/IPReputationService.h"
-#include "game/SpamDetector.h"
 #include "game/ServerSession.h"
+#include "game/SpamDetector.h"
 #include "utils/PersistentMap.h"
 
 #include <atomic>

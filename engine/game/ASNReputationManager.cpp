@@ -26,7 +26,8 @@ const char* asn_status_to_string(ASNReputationEntry::Status s) {
 // -- Helpers ------------------------------------------------------------------
 
 int64_t ASNReputationManager::now_unix() const {
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
 }
 
 bool ASNReputationManager::is_whitelisted(uint32_t asn) const {
@@ -65,7 +66,7 @@ void ASNReputationManager::set_status_callback(ASNStatusCallback callback) {
 // -- Core operations ----------------------------------------------------------
 
 void ASNReputationManager::report_abuse(uint32_t asn, const std::string& ip, const std::string& as_org,
-                                         const std::string& reason) {
+                                        const std::string& reason) {
     if (!config_.enabled || asn == 0)
         return;
 
@@ -208,7 +209,7 @@ std::optional<ASNReputationEntry> ASNReputationManager::get_status(uint32_t asn)
 }
 
 void ASNReputationManager::block_asn(uint32_t asn, const std::string& as_org, const std::string& reason,
-                                      int64_t duration_sec) {
+                                     int64_t duration_sec) {
     std::lock_guard lock(mutex_);
     auto& entry = asns_[asn];
     entry.asn = asn;
@@ -360,7 +361,7 @@ std::unordered_map<uint32_t, ASNReputationEntry> ASNReputationManager::snapshot(
 }
 
 void ASNReputationManager::write_to_disk(const std::unordered_map<uint32_t, ASNReputationEntry>& asns,
-                                          const std::string& path) {
+                                         const std::string& path) {
     try {
         nlohmann::json j = nlohmann::json::array();
         for (auto& [_, entry] : asns) {

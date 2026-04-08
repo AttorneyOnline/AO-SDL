@@ -73,14 +73,15 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
         // this callback runs on the reputation worker thread, not the dispatch thread.
         auto* ws = server.ws();
         auto* asn_mgr_ptr = server.room().asn_reputation();
-        auto cached = rep->lookup(client_ip, [ws, asn_mgr_ptr, client_id = session.client_id](const IPReputationEntry& entry) {
-            if (asn_mgr_ptr && asn_mgr_ptr->check_blocked(entry.asn)) {
-                Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u", format_client_id(client_id).c_str(),
-                               entry.asn);
-                if (ws)
-                    ws->close_client_deferred(client_id);
-            }
-        });
+        auto cached =
+            rep->lookup(client_ip, [ws, asn_mgr_ptr, client_id = session.client_id](const IPReputationEntry& entry) {
+                if (asn_mgr_ptr && asn_mgr_ptr->check_blocked(entry.asn)) {
+                    Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u", format_client_id(client_id).c_str(),
+                                   entry.asn);
+                    if (ws)
+                        ws->close_client_deferred(client_id);
+                }
+            });
 
         if (cached) {
             client_asn = cached->asn;
@@ -89,8 +90,7 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
             if (auto* asn_mgr = server.room().asn_reputation()) {
                 if (asn_mgr->check_blocked(client_asn)) {
                     Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u (%s)",
-                                   format_client_id(session.client_id).c_str(), client_asn,
-                                   cached->as_org.c_str());
+                                   format_client_id(session.client_id).c_str(), client_asn, cached->as_org.c_str());
                     server.send(session.client_id, AOPacket("KB", {"Connection blocked (network reputation)"}));
                     if (server.ws())
                         server.ws()->close_client(session.client_id);

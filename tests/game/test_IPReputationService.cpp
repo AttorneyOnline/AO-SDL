@@ -29,9 +29,8 @@ IPReputationEntry make_entry(const std::string& ip, uint32_t asn = 12345, bool p
     e.country_code = "US";
     e.isp = "TestISP";
     e.is_proxy = proxy;
-    e.fetched_at = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
+    e.fetched_at =
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     e.expires_at = e.fetched_at + 3600; // 1 hour
     return e;
 }
