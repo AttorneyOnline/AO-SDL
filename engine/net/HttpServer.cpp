@@ -12,6 +12,7 @@
  * global EventManager singleton) to avoid contention.
  */
 #include "net/Http.h"
+#include "net/ProxyProtocol.h"
 #include "net/SSEEvent.h"
 #include "net/TrustedProxyList.h"
 
@@ -62,7 +63,8 @@ struct HttpConnection {
     uint64_t id;
     platform::Socket socket;
     std::string recv_buf;
-    std::string remote_addr; ///< Client IP address (may be overridden by proxy headers).
+    std::string remote_addr;            ///< Client IP address (may be overridden by proxy headers).
+    bool proxy_protocol_parsed = false; ///< PROXY protocol header already processed on this connection.
     bool headers_complete = false;
     bool dispatched = false;   ///< Request has been dispatched to a worker thread.
     size_t header_end_pos = 0; ///< Byte offset of "\r\n\r\n" in recv_buf.
@@ -881,6 +883,23 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     continue;
                 }
 
+                // PROXY protocol: parse before HTTP (once per connection)
+                if (state.reverse_proxy_config.proxy_protocol && !conn->proxy_protocol_parsed &&
+                    state.trusted_proxies.is_trusted(conn->remote_addr) && !conn->recv_buf.empty()) {
+                    auto pp = net::parse_proxy_protocol(reinterpret_cast<const uint8_t*>(conn->recv_buf.data()),
+                                                        conn->recv_buf.size());
+                    if (pp.need_more_data)
+                        continue; // Wait for more bytes
+                    if (pp.valid && !pp.client_addr.empty())
+                        conn->remote_addr = pp.client_addr;
+                    if (pp.header_length > 0)
+                        conn->recv_buf.erase(0, pp.header_length);
+                    conn->proxy_protocol_parsed = true;
+                }
+                else if (!conn->proxy_protocol_parsed) {
+                    conn->proxy_protocol_parsed = true;
+                }
+
                 // RFC 9112 §3: URI length check — early reject before headers complete
                 if (!conn->headers_complete) {
                     auto first_line_end = conn->recv_buf.find("\r\n");
@@ -1182,7 +1201,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                         for (auto& hdr : state.reverse_proxy_config.header_priority) {
                             auto val = req.get_header_value(hdr);
                             if (!val.empty()) {
-                                auto real_ip = net::extract_forwarded_ip(val);
+                                auto real_ip = net::extract_forwarded_ip(val, &state.trusted_proxies);
                                 if (!real_ip.empty()) {
                                     req.remote_addr = real_ip;
                                     break;

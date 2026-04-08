@@ -62,8 +62,15 @@ class TrustedProxyList {
 };
 
 /// Extract the real client IP from an X-Forwarded-For or X-Real-IP header value.
-/// For XFF, returns the leftmost (first) IP. For X-Real-IP, returns the value directly.
+///
+/// For XFF with a TrustedProxyList: walks right-to-left, skipping entries that
+/// match the trusted list, and returns the first untrusted IP. This is the
+/// correct approach when proxies append to XFF (nginx default behavior).
+/// Without a trusted list, returns the leftmost IP (only safe when the proxy
+/// overwrites XFF entirely).
+///
+/// Validates the result through inet_pton to reject non-IP garbage.
 /// Returns empty string if the header value is empty or unparseable.
-std::string extract_forwarded_ip(const std::string& header_value);
+std::string extract_forwarded_ip(const std::string& header_value, const TrustedProxyList* trusted = nullptr);
 
 } // namespace net
