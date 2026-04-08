@@ -1,6 +1,5 @@
 #pragma once
 
-#include "net/RateLimiter.h"
 #include "net/RestEndpoint.h"
 
 #include <atomic>
@@ -16,6 +15,10 @@ class Server;
 struct Request;
 struct Response;
 } // namespace http
+
+namespace net {
+class RateLimiter;
+} // namespace net
 
 struct ServerSession;
 

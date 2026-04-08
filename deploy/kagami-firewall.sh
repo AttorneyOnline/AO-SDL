@@ -81,6 +81,17 @@ apply_rules() {
         --hashlimit-htable-expire 30000 \
         -j DROP
 
+    # --- ICMPv6 flood protection ---
+    local icmp_proto="icmp"
+    [ "$cmd" = "ip6tables" ] && icmp_proto="icmpv6"
+    $cmd -A KAGAMI -p "$icmp_proto" -m hashlimit \
+        --hashlimit-name kagami-icmp \
+        --hashlimit-above "$ICMP_RATE" \
+        --hashlimit-burst "$ICMP_BURST" \
+        --hashlimit-mode srcip \
+        --hashlimit-htable-expire 30000 \
+        -j DROP
+
     # Insert into INPUT chain
     $cmd -I INPUT -j KAGAMI
 

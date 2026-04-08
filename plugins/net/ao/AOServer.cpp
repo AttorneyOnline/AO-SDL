@@ -1,5 +1,6 @@
 #include "AOServer.h"
 
+#include "PacketFactory.h"
 #include "PacketTypes.h"
 #include "game/ClientId.h"
 #include "metrics/MetricsRegistry.h"
@@ -119,6 +120,16 @@ void AOServer::dispatch(uint64_t client_id, AOPacket& packet) {
     auto* session = room_.get_session(client_id);
     if (!session)
         return;
+
+    if (!PacketFactory::instance().has_packet(packet.get_header())) {
+        ao_errors_.labels({"unknown_packet"}).inc();
+        Log::log_print(WARNING, "AO: unknown packet \"%s\" from %s", packet.get_header().c_str(),
+                       format_client_id(client_id).c_str());
+        send(client_id,
+             AOPacket("CT", {"Server", "[ERROR] Unknown packet \"" + packet.get_header() + "\"", "1"}));
+        return;
+    }
+
     packet.handle_server(*this, *session);
 }
 

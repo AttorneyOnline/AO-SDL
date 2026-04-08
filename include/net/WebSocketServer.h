@@ -50,9 +50,17 @@ class WebSocketServer {
      * @brief Construct a WebSocket server.
      * @param listener An IServerSocket implementation for accepting connections.
      */
+    struct TimeoutConfig {
+        int handshake_sec = 10;
+        int idle_sec = 120;
+        int partial_frame_sec = 30;
+    };
+
     explicit WebSocketServer(std::unique_ptr<IServerSocket> listener);
 
     ~WebSocketServer();
+
+    void set_timeouts(const TimeoutConfig& t) { timeouts_ = t; }
 
     WebSocketServer(const WebSocketServer&) = delete;
     WebSocketServer& operator=(const WebSocketServer&) = delete;
@@ -196,4 +204,6 @@ class WebSocketServer {
 
     std::function<void(ClientId)> on_connected_;
     std::function<void(ClientId)> on_disconnected_;
+
+    TimeoutConfig timeouts_;
 };

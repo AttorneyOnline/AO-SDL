@@ -1,12 +1,13 @@
 services:
   # --- Reverse proxy + TLS ---
   caddy:
-    image: caddy:2-alpine
+    image: ${CADDY_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/caddy-dns:latest}
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"       # HTTPS (TCP) — HTTP/1.1 + HTTP/2
-      - "443:443/udp"  # QUIC — HTTP/3
+      - "443:443/udp"   # QUIC — HTTP/3
+      - "27015:27015"   # WSS (AO2) — TLS terminated by Caddy
     environment:
       - KAGAMI_DOMAIN=${KAGAMI_DOMAIN:-canary.yuurei.network}
     volumes:
@@ -19,10 +20,9 @@ services:
 
   # --- Game server ---
   kagami:
-    image: ghcr.io/attorneyonline/kagami:latest
+    image: ${KAGAMI_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/kagami:latest}
     restart: unless-stopped
-    ports:
-      - "27015:27015"  # WebSocket (AO2) — direct, no proxy
+    # HTTP (80) and WS (27016) are internal only — Caddy proxies to both
     volumes:
       - ./kagami.json:/app/kagami.json
       - kagami_logs:/logs

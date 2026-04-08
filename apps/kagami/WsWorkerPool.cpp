@@ -67,7 +67,10 @@ void WsWorkerPool::start() {
                 worker_stats_.active.fetch_add(1, std::memory_order_relaxed);
                 auto busy_start = std::chrono::steady_clock::now();
 
-                // Layer 4: per-message-type rate limit (before dispatch lock)
+                // Layer 4: per-message-type rate limit (before dispatch lock).
+                // Silently drops frames rather than sending CT# errors — during a
+                // flood, replying to every rejected frame would amplify the attack.
+                // The Prometheus counter kagami_ratelimit_rejected_total tracks drops.
                 if (rate_limiter_) {
                     // Extract AO packet header from raw data for rate limiting.
                     // Format: "HEADER#field1#field2#...#%"

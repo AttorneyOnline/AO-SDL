@@ -24,9 +24,9 @@ COPY . .
 # and pre-populated source trees from CI).
 RUN git submodule update --init --recursive 2>/dev/null || true
 
-# Reset any dirtiness from submodule init so the version string
-# (derived from git status --porcelain) doesn't get a -dirty suffix.
-RUN git checkout -- . 2>/dev/null || true
+# Reset submodule dirtiness from init so the version string
+# doesn't get a -dirty suffix. Only touch third-party directories.
+RUN git checkout -- third-party/ 2>/dev/null || true
 
 RUN cmake -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
