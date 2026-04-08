@@ -37,8 +37,12 @@ set(TEST_SOURCES
     event/test_EventManager.cpp
     event/test_BackgroundEvent.cpp
     event/test_EventTypes.cpp
+    game/test_ASNReputationManager.cpp
+    game/test_FirewallManager.cpp
+    game/test_IPReputationService.cpp
     game/test_ServerList.cpp
     game/test_Session.cpp
+    game/test_SpamDetector.cpp
     game/test_TickProfiler.cpp
     game/test_GameThread.cpp
     render/test_AnimationPlayer.cpp

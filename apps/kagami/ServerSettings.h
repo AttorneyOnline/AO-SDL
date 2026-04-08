@@ -1,6 +1,10 @@
 #pragma once
 
 #include "configuration/JsonConfiguration.h"
+#include "game/ASNReputationManager.h"
+#include "game/FirewallManager.h"
+#include "game/IPReputationService.h"
+#include "game/SpamDetector.h"
 #include "utils/Log.h"
 
 #include <algorithm>
@@ -159,6 +163,70 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return {};
     }
 
+    // -- IP Reputation --
+
+    ReputationConfig reputation_config() const {
+        ReputationConfig cfg;
+        cfg.enabled = value<bool>("reputation/enabled");
+        cfg.cache_ttl_hours = value<int>("reputation/cache_ttl_hours");
+        cfg.cache_failure_ttl_minutes = value<int>("reputation/cache_failure_ttl_minutes");
+        cfg.ip_api_enabled = value<bool>("reputation/ip_api_enabled");
+        cfg.abuseipdb_api_key = value<std::string>("reputation/abuseipdb_api_key");
+        cfg.abuseipdb_daily_budget = value<int>("reputation/abuseipdb_daily_budget");
+        cfg.auto_block_proxy = value<bool>("reputation/auto_block_proxy");
+        cfg.auto_block_datacenter = value<bool>("reputation/auto_block_datacenter");
+        return cfg;
+    }
+
+    // -- ASN Reputation --
+
+    ASNReputationConfig asn_reputation_config() const {
+        ASNReputationConfig cfg;
+        cfg.enabled = value<bool>("asn_reputation/enabled");
+        cfg.watch_threshold = value<int>("asn_reputation/watch_threshold");
+        cfg.rate_limit_threshold = value<int>("asn_reputation/rate_limit_threshold");
+        cfg.block_threshold = value<int>("asn_reputation/block_threshold");
+        cfg.window_minutes = value<int>("asn_reputation/window_minutes");
+        cfg.auto_block_duration = value<std::string>("asn_reputation/auto_block_duration");
+        auto whitelist = value<nlohmann::json>("asn_reputation/whitelist_asns");
+        if (whitelist.is_array()) {
+            for (auto& item : whitelist) {
+                if (item.is_number_unsigned())
+                    cfg.whitelist_asns.push_back(item.get<uint32_t>());
+            }
+        }
+        cfg.whitelist_multiplier = value<int>("asn_reputation/whitelist_multiplier");
+        return cfg;
+    }
+
+    // -- Spam Detection --
+
+    SpamDetectorConfig spam_detection_config() const {
+        SpamDetectorConfig cfg;
+        cfg.enabled = value<bool>("spam_detection/enabled");
+        cfg.echo_threshold = value<int>("spam_detection/echo_threshold");
+        cfg.echo_window_seconds = value<int>("spam_detection/echo_window_seconds");
+        cfg.burst_threshold = value<int>("spam_detection/burst_threshold");
+        cfg.burst_window_seconds = value<int>("spam_detection/burst_window_seconds");
+        cfg.join_spam_max_seconds = value<int>("spam_detection/join_spam_max_seconds");
+        cfg.name_pattern_threshold = value<int>("spam_detection/name_pattern_threshold");
+        cfg.name_pattern_min_prefix = value<int>("spam_detection/name_pattern_min_prefix");
+        cfg.name_pattern_window_seconds = value<int>("spam_detection/name_pattern_window_seconds");
+        cfg.ghost_threshold = value<int>("spam_detection/ghost_threshold");
+        cfg.hwid_reuse_threshold = value<int>("spam_detection/hwid_reuse_threshold");
+        return cfg;
+    }
+
+    // -- Firewall --
+
+    FirewallConfig firewall_config() const {
+        FirewallConfig cfg;
+        cfg.enabled = value<bool>("firewall/enabled");
+        cfg.helper_path = value<std::string>("firewall/helper_path");
+        cfg.cleanup_on_shutdown = value<bool>("firewall/cleanup_on_shutdown");
+        return cfg;
+    }
+
     static bool load_from_disk(const std::string& path);
     static bool save_to_disk(const std::string& path);
 
@@ -191,6 +259,48 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"secret_access_key", ""},
                  {"flush_interval", 5},
                  {"log_level", "info"},
+             }},
+            {"reputation",
+             nlohmann::json{
+                 {"enabled", true},
+                 {"cache_ttl_hours", 24},
+                 {"cache_failure_ttl_minutes", 5},
+                 {"ip_api_enabled", true},
+                 {"abuseipdb_api_key", ""},
+                 {"abuseipdb_daily_budget", 1000},
+                 {"auto_block_proxy", false},
+                 {"auto_block_datacenter", false},
+             }},
+            {"asn_reputation",
+             nlohmann::json{
+                 {"enabled", true},
+                 {"watch_threshold", 2},
+                 {"rate_limit_threshold", 3},
+                 {"block_threshold", 5},
+                 {"window_minutes", 60},
+                 {"auto_block_duration", "24h"},
+                 {"whitelist_asns", nlohmann::json::array()},
+                 {"whitelist_multiplier", 5},
+             }},
+            {"spam_detection",
+             nlohmann::json{
+                 {"enabled", true},
+                 {"echo_threshold", 3},
+                 {"echo_window_seconds", 60},
+                 {"burst_threshold", 20},
+                 {"burst_window_seconds", 30},
+                 {"join_spam_max_seconds", 5},
+                 {"name_pattern_threshold", 3},
+                 {"name_pattern_min_prefix", 4},
+                 {"name_pattern_window_seconds", 300},
+                 {"ghost_threshold", 5},
+                 {"hwid_reuse_threshold", 3},
+             }},
+            {"firewall",
+             nlohmann::json{
+                 {"enabled", false},
+                 {"helper_path", ""},
+                 {"cleanup_on_shutdown", true},
              }},
             {"rate_limits",
              nlohmann::json{
