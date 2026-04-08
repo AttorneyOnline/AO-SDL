@@ -19,6 +19,9 @@ class CharacterSelectEndpoint : public NXEndpoint {
     }
 
     RestResponse handle(const RestRequest& req) override {
+        if (rate_limiter() && !rate_limiter()->allow("nx:char_select", req.session->ipid))
+            return RestResponse::error(429, "Too many character select requests");
+
         if (!req.body)
             return RestResponse::error(400, "Request body is required");
 

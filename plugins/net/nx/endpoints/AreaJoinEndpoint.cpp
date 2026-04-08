@@ -19,6 +19,9 @@ class AreaJoinEndpoint : public NXEndpoint {
     }
 
     RestResponse handle(const RestRequest& req) override {
+        if (rate_limiter() && !rate_limiter()->allow("nx:area_join", req.session->ipid))
+            return RestResponse::error(429, "Too many area join requests");
+
         auto it = req.path_params.find("area_id");
         if (it == req.path_params.end())
             return RestResponse::error(400, "Missing area_id");
