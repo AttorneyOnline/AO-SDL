@@ -107,7 +107,7 @@ class HttpPool {
     // Avoids O(N) sorted insertion; enqueue is O(1), dequeue scans 4 buckets.
     std::deque<Request> work_queues_[NUM_PRIORITIES];
     std::mutex work_mutex_;
-    std::condition_variable work_cv_;
+    std::condition_variable_any work_cv_;
 
     // Result queue (completed, awaiting poll)
     std::deque<CompletedRequest> result_queue_;

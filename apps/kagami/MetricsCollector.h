@@ -49,7 +49,7 @@ class MetricsCollector {
   private:
     struct MetricsTextCache {
         std::mutex mutex;
-        std::condition_variable cv;
+        std::condition_variable_any cv;
         std::shared_ptr<const std::string> text = std::make_shared<const std::string>();
         bool requested = false;
 
@@ -70,7 +70,7 @@ class MetricsCollector {
         }
         bool wait_for_request(std::stop_token& st, std::chrono::steady_clock::duration timeout) {
             std::unique_lock lock(mutex);
-            cv.wait_for(lock, timeout, [&] { return requested || st.stop_requested(); });
+            cv.wait_for(lock, st, timeout, [&] { return requested; });
             bool was_requested = requested;
             requested = false;
             return was_requested;

@@ -33,10 +33,8 @@ IPReputationService::IPReputationService()
 }
 
 IPReputationService::~IPReputationService() {
-    worker_thread_.request_stop();
-    queue_cv_.notify_one();
-    writer_thread_.request_stop();
-    writer_cv_.notify_one();
+    // jthread destructor calls request_stop() which wakes condition_variable_any
+    // via its registered stop callback — no manual notify needed.
 }
 
 void IPReputationService::configure(const ReputationConfig& config) {
@@ -113,8 +111,9 @@ void IPReputationService::worker_loop(std::stop_token stop) {
 
         {
             std::unique_lock lock(queue_mutex_);
-            // Wait for work or a 2-second batch accumulation window
-            queue_cv_.wait_for(lock, std::chrono::seconds(2), [&] { return !queue_.empty() || stop.stop_requested(); });
+            // Wait for work or a 2-second batch accumulation window.
+            // The stop_token overload ensures we wake on request_stop() with no race.
+            queue_cv_.wait_for(lock, stop, std::chrono::seconds(2), [&] { return !queue_.empty(); });
 
             if (stop.stop_requested())
                 break;
@@ -445,7 +444,10 @@ void IPReputationService::save_sync(const std::string& path) const {
 void IPReputationService::writer_loop(std::stop_token stop) {
     while (!stop.stop_requested()) {
         std::unique_lock lock(writer_mutex_);
-        writer_cv_.wait(lock, [&] { return writer_pending_ || stop.stop_requested(); });
+        writer_cv_.wait(lock, stop, [&] { return writer_pending_; });
+
+        if (stop.stop_requested())
+            break;
 
         if (writer_pending_) {
             auto snap = std::move(writer_snapshot_);

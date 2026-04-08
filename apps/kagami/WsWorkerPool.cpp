@@ -52,7 +52,7 @@ void WsWorkerPool::start() {
                 WsWorkItem item;
                 {
                     std::unique_lock lock(slot.mutex);
-                    slot.cv.wait(lock, [&] { return !slot.queue.empty() || st.stop_requested(); });
+                    slot.cv.wait(lock, st, [&] { return !slot.queue.empty(); });
                     if (st.stop_requested())
                         break;
                     item = std::move(slot.queue.front());

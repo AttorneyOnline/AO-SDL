@@ -222,9 +222,7 @@ void HttpPool::worker_loop(std::stop_token st) {
         Request req;
         {
             std::unique_lock lock(work_mutex_);
-            work_cv_.wait(lock, [this, &st] {
-                if (st.stop_requested())
-                    return true;
+            work_cv_.wait(lock, st, [this] {
                 for (auto& q : work_queues_)
                     if (!q.empty())
                         return true;

@@ -100,7 +100,7 @@ class BanManager {
     // Background writer thread
     std::jthread writer_thread_;
     std::mutex writer_mutex_;
-    std::condition_variable writer_cv_;
+    std::condition_variable_any writer_cv_;
     bool writer_pending_ = false;
     std::string writer_path_;
     std::unordered_map<std::string, BanEntry> writer_snapshot_;

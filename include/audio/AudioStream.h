@@ -144,7 +144,7 @@ class AudioStream : public std::enable_shared_from_this<AudioStream> {
     size_t raw_read_pos_ = 0;
     bool raw_complete_ = false;
     mutable std::mutex raw_mutex_;
-    std::condition_variable raw_cv_;
+    std::condition_variable_any raw_cv_;
 
     // --- PCM output ring buffer ---
     PcmRingBuffer pcm_ring_;
