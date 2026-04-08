@@ -1791,12 +1791,197 @@
     },
     {
       "type": "row",
-      "title": "Health & Errors",
+      "title": "Reputation & Anti-Spam",
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 145
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "ASN Abuse Events / sec",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 146
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_asn_abuse_events_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "abuse events/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(kagami_asn_blocked_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "ASNs blocked/s",
+          "refId": "B"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Spam Detected / sec",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 146
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_spam_detected_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "IP Reputation Lookups / sec",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 146
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_reputation_lookups_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{source}} ({{status}})",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Subsystem Gauges",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 146
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "kagami_reputation_cache_size{instance=~\"$instance\"}",
+          "legendFormat": "IP cache entries",
+          "refId": "A"
+        },
+        {
+          "expr": "kagami_asn_tracked{instance=~\"$instance\"}",
+          "legendFormat": "ASNs tracked",
+          "refId": "B"
+        },
+        {
+          "expr": "kagami_firewall_rules_active{instance=~\"$instance\"}",
+          "legendFormat": "Firewall rules",
+          "refId": "C"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Health & Errors",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 163
       },
       "collapsed": false
     },
@@ -1807,7 +1992,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 146
+        "y": 164
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1836,7 +2021,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 146
+        "y": 164
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1860,12 +2045,12 @@
     },
     {
       "type": "timeseries",
-      "title": "WS Handshake Failures / sec",
+      "title": "WS Failures / sec",
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 146
+        "y": 164
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1884,6 +2069,11 @@
           "expr": "irate(kagami_ws_handshake_failures_total{instance=~\"$instance\"}[2s])",
           "legendFormat": "failures/s",
           "refId": "A"
+        },
+        {
+          "expr": "rate(kagami_ws_send_failures_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "send failures/s",
+          "refId": "B"
         }
       ]
     },
@@ -1894,7 +2084,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 146
+        "y": 164
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1928,7 +2118,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 154
+        "y": 172
       },
       "fieldConfig": {
         "defaults": {
@@ -1951,7 +2141,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 154
+        "y": 172
       },
       "fieldConfig": {
         "defaults": {
@@ -1974,7 +2164,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 154
+        "y": 172
       },
       "fieldConfig": {
         "defaults": {
@@ -1997,7 +2187,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 154
+        "y": 172
       },
       "fieldConfig": {
         "defaults": {
@@ -2020,7 +2210,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 158
+        "y": 176
       },
       "collapsed": false
     },
@@ -2031,7 +2221,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 159
+        "y": 177
       },
       "datasource": {
         "type": "loki",
