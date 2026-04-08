@@ -1,0 +1,44 @@
+# Caddy configuration for kagami game servers.
+# Layer 1: Transport-level protection.
+#
+# For IPv6-only instances with DNS-01 TLS:
+#   - Replace {$KAGAMI_DOMAIN} with your domain
+#   - Requires caddy-dns/route53 plugin image
+#   - Set AWS_REGION=us-east-1 and AWS_ENDPOINT_URL_ROUTE_53 env vars
+#
+# For standard instances with HTTP-01 TLS:
+#   - Remove the tls block
+
+{$KAGAMI_DOMAIN} {
+	# DNS-01 TLS for IPv6-only instances (remove for HTTP-01)
+	tls {
+		dns route53
+	}
+
+	# --- Layer 1: Transport protections ---
+
+	# Max request body: 64KB (largest valid IC message is ~4KB)
+	request_body {
+		max_size 64KB
+	}
+
+	# Read timeout: slow clients sending partial headers/bodies
+	servers {
+		timeouts {
+			read_header 10s
+			read_body   30s
+			idle        120s
+		}
+	}
+
+	# --- Reverse proxy to kagami ---
+	reverse_proxy localhost:8080 {
+		transport http {
+			keepalive 60s
+			keepalive_idle_conns 64
+			max_conns_per_host 256
+			read_timeout  30s
+			write_timeout 30s
+		}
+	}
+}
