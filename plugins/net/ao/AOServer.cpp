@@ -123,10 +123,10 @@ void AOServer::dispatch(uint64_t client_id, AOPacket& packet) {
 
     if (!PacketFactory::instance().has_packet(packet.get_header())) {
         ao_errors_.labels({"unknown_packet"}).inc();
-        Log::log_print(WARNING, "AO: unknown packet \"%s\" from %s", packet.get_header().c_str(),
+        auto truncated = packet.get_header().substr(0, 16);
+        Log::log_print(WARNING, "AO: unknown packet \"%s\" from %s", truncated.c_str(),
                        format_client_id(client_id).c_str());
-        send(client_id,
-             AOPacket("CT", {"Server", "[ERROR] Unknown packet \"" + packet.get_header() + "\"", "1"}));
+        send(client_id, AOPacket("CT", {"Server", "[ERROR] Unknown packet \"" + truncated + "\"", "1"}));
         return;
     }
 
