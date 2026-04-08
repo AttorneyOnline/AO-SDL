@@ -361,9 +361,13 @@ add_library(aoengine STATIC
     engine/utils/JsonValidation.cpp
     engine/utils/StringHelpers.cpp
 
+    engine/game/ASNReputationManager.cpp
     engine/game/BanManager.cpp
     engine/game/CommandRegistry.cpp
+    engine/game/FirewallManager.cpp
     engine/game/GameRoom.cpp
+    engine/game/IPReputationService.cpp
+    engine/game/SpamDetector.cpp
     engine/game/GameThread.cpp
     engine/game/ServerList.cpp
     engine/game/Session.cpp
@@ -575,7 +579,10 @@ add_library(ao_net STATIC
     plugins/net/ao/commands/LoginCommand.cpp
     plugins/net/ao/commands/LogoutCommand.cpp
     plugins/net/ao/commands/KickCommand.cpp
+    plugins/net/ao/commands/AsnCommand.cpp
     plugins/net/ao/commands/BanCommand.cpp
+    plugins/net/ao/commands/FirewallCommand.cpp
+    plugins/net/ao/commands/ReputationCommand.cpp
     plugins/net/ao/commands/UnbanCommand.cpp
     plugins/net/ao/commands/AreaCommand.cpp
     plugins/net/ao/commands/GetAreaCommand.cpp

@@ -1,10 +1,13 @@
 #include "PacketTypes.h"
 
 #include "AOServer.h"
+#include "game/ASNReputationManager.h"
 #include "game/AreaState.h"
 #include "game/BanManager.h"
 #include "game/ClientId.h"
 #include "game/CommandRegistry.h"
+#include "game/IPReputationService.h"
+#include "game/SpamDetector.h"
 #include "net/WebSocketServer.h"
 #include "utils/Crypto.h"
 #include "utils/Log.h"
@@ -56,6 +59,50 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
                 server.ws()->close_client(session.client_id);
             return;
         }
+    }
+
+    // IP reputation lookup (async — cache hit is synchronous fast path)
+    std::string client_ip;
+    if (server.ws())
+        client_ip = server.ws()->get_client_addr(session.client_id);
+
+    uint32_t client_asn = 0;
+    if (auto* rep = server.room().reputation_service()) {
+        auto cached = rep->lookup(client_ip, [&server, client_id = session.client_id](const IPReputationEntry& entry) {
+            // Async callback — runs on the reputation worker thread.
+            // If the IP is from a blocked ASN, force disconnect.
+            if (auto* asn_mgr = server.room().asn_reputation()) {
+                if (asn_mgr->check_blocked(entry.asn)) {
+                    Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u", format_client_id(client_id).c_str(),
+                                   entry.asn);
+                    if (server.ws())
+                        server.ws()->close_client(client_id);
+                }
+            }
+        });
+
+        if (cached) {
+            client_asn = cached->asn;
+
+            // Check ASN reputation (synchronous — cache hit)
+            if (auto* asn_mgr = server.room().asn_reputation()) {
+                if (asn_mgr->check_blocked(client_asn)) {
+                    Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u (%s)",
+                                   format_client_id(session.client_id).c_str(), client_asn,
+                                   cached->as_org.c_str());
+                    server.send(session.client_id, AOPacket("KB", {"Connection blocked (network reputation)"}));
+                    if (server.ws())
+                        server.ws()->close_client(session.client_id);
+                    return;
+                }
+            }
+        }
+    }
+
+    // Spam detector: register connection (H2 burst, H5 name pattern, H7 HWID reuse)
+    if (auto* sd = server.room().spam_detector()) {
+        sd->on_connection(session.ipid, client_asn, session.hardware_id, "" /* username not known yet */);
+        sd->record_join_time(session.ipid);
     }
 
     server.send(session.client_id, AOPacket("ID", {std::to_string(session.session_id), "kagami", ao_sdl_version()}));
@@ -284,6 +331,27 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
                 for (auto id : ctx.deferred_closes)
                     server.ws()->close_client_deferred(id);
             }
+            return;
+        }
+    }
+
+    // Spam detection: check OOC message (H1 echo, H3 join-and-spam)
+    if (auto* sd = server.room().spam_detector()) {
+        // Look up ASN from reputation cache for this session
+        uint32_t asn = 0;
+        if (auto* rep = server.room().reputation_service()) {
+            if (server.ws()) {
+                std::string ip = server.ws()->get_client_addr(session.client_id);
+                if (auto cached = rep->find_cached(ip))
+                    asn = cached->asn;
+            }
+        }
+
+        auto verdict = sd->check_message(session.ipid, asn, message);
+        if (verdict.is_spam) {
+            // Suppress the spam message — don't broadcast it
+            Log::log_print(INFO, "AO: OOC from %s suppressed [%s]: %s", format_client_id(session.client_id).c_str(),
+                           verdict.heuristic.c_str(), verdict.detail.c_str());
             return;
         }
     }

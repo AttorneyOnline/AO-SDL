@@ -12,9 +12,13 @@
  */
 #pragma once
 
+#include "game/ASNReputationManager.h"
 #include "game/AreaState.h"
 #include "game/BanManager.h"
+#include "game/FirewallManager.h"
 #include "game/GameAction.h"
+#include "game/IPReputationService.h"
+#include "game/SpamDetector.h"
 #include "game/ServerSession.h"
 #include "utils/PersistentMap.h"
 
@@ -152,6 +156,38 @@ class GameRoom {
         ban_manager_ = bm;
     }
 
+    /// IP reputation service (non-owning).
+    IPReputationService* reputation_service() const {
+        return reputation_service_;
+    }
+    void set_reputation_service(IPReputationService* svc) {
+        reputation_service_ = svc;
+    }
+
+    /// ASN reputation manager (non-owning).
+    ASNReputationManager* asn_reputation() const {
+        return asn_reputation_;
+    }
+    void set_asn_reputation(ASNReputationManager* mgr) {
+        asn_reputation_ = mgr;
+    }
+
+    /// Spam detector (non-owning).
+    SpamDetector* spam_detector() const {
+        return spam_detector_;
+    }
+    void set_spam_detector(SpamDetector* sd) {
+        spam_detector_ = sd;
+    }
+
+    /// Firewall manager (non-owning).
+    FirewallManager* firewall() const {
+        return firewall_;
+    }
+    void set_firewall(FirewallManager* fw) {
+        firewall_ = fw;
+    }
+
     /// Per-character taken state. 0 = available, nonzero = taken.
     std::vector<int> char_taken;
     void reset_taken() {
@@ -229,6 +265,10 @@ class GameRoom {
 
   private:
     BanManager* ban_manager_ = nullptr;
+    IPReputationService* reputation_service_ = nullptr;
+    ASNReputationManager* asn_reputation_ = nullptr;
+    SpamDetector* spam_detector_ = nullptr;
+    FirewallManager* firewall_ = nullptr;
 
     // Character ID index (Phase 3)
     std::vector<std::string> char_ids_;                     ///< Parallel to `characters`.

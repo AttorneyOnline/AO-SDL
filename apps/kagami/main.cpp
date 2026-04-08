@@ -7,8 +7,12 @@
 #include "TerminalUI.h"
 #include "WsWorkerPool.h"
 
+#include "game/ASNReputationManager.h"
 #include "game/BanManager.h"
+#include "game/FirewallManager.h"
 #include "game/GameRoom.h"
+#include "game/IPReputationService.h"
+#include "game/SpamDetector.h"
 #include "metrics/MetricsRegistry.h"
 #include "net/EndpointFactory.h"
 #include "net/Http.h"
@@ -79,6 +83,51 @@ int main(int /*argc*/, char* argv[]) {
     BanManager ban_manager;
     ban_manager.load(DEFAULT_BAN_FILE);
     room.set_ban_manager(&ban_manager);
+
+    // --- IP Reputation ---
+    IPReputationService reputation;
+    reputation.configure(cfg.reputation_config());
+    reputation.load("ip_reputation_cache.json");
+    room.set_reputation_service(&reputation);
+
+    // --- ASN Reputation ---
+    ASNReputationManager asn_reputation;
+    asn_reputation.configure(cfg.asn_reputation_config());
+    asn_reputation.load("asn_reputation.json");
+    room.set_asn_reputation(&asn_reputation);
+
+    // --- Spam Detector ---
+    SpamDetector spam_detector;
+    spam_detector.configure(cfg.spam_detection_config());
+    room.set_spam_detector(&spam_detector);
+
+    // Wire spam detector → ASN reputation reporting
+    spam_detector.set_callback([&asn_reputation, &reputation](const std::string& /*ipid*/, uint32_t asn,
+                                                               const SpamVerdict& verdict) {
+        if (asn == 0)
+            return;
+        // Look up AS org from reputation cache if available
+        std::string as_org;
+        // Report the abuse event to ASN reputation
+        asn_reputation.report_abuse(asn, verdict.detail, as_org, verdict.heuristic + ": " + verdict.detail);
+    });
+
+    // --- Firewall Manager ---
+    FirewallManager firewall;
+    firewall.configure(cfg.firewall_config());
+    firewall.load("firewall_rules.json");
+    room.set_firewall(&firewall);
+
+    // Wire ASN reputation escalation → firewall blocking
+    asn_reputation.set_status_callback(
+        [&firewall](uint32_t asn, ASNReputationEntry::Status /*old_status*/, ASNReputationEntry::Status new_status,
+                    const std::string& reason) {
+            if (new_status == ASNReputationEntry::Status::BLOCKED && firewall.is_enabled()) {
+                Log::log_print(WARNING, "ASN %u blocked — firewall integration would block CIDR ranges here", asn);
+                // TODO: resolve ASN → CIDR ranges and call firewall.block_range()
+                // This requires additional ASN-to-prefix mapping data
+            }
+        });
 
     // --- Protocol backends ---
     AOServer ao_backend(room);

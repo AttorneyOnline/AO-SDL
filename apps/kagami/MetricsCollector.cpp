@@ -76,6 +76,9 @@ void MetricsCollector::start(http::Server& http) {
     auto& ws_worker_active = reg.gauge("kagami_ws_active_workers", "WS workers currently executing handlers");
     auto& ws_work_queue_depth = reg.gauge("kagami_ws_work_queue_depth", "Pending WS frames awaiting worker dispatch");
     auto& lock_util = reg.gauge("kagami_dispatch_lock", "Dispatch mutex stats", {"type"});
+    auto& reputation_cache_size = reg.gauge("kagami_reputation_cache_size", "IP reputation cache entries");
+    auto& firewall_rules_active = reg.gauge("kagami_firewall_rules_active", "Active firewall rules");
+    auto& asn_tracked = reg.gauge("kagami_asn_tracked", "Tracked ASNs with reputation data");
 
     auto cors = cfg_.cors_origins();
     server_info
@@ -93,6 +96,7 @@ void MetricsCollector::start(http::Server& http) {
                             &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util, &poll_events,
                             &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util, &ws_dispatch_rate,
                             &ws_worker_util, &ws_worker_active, &ws_work_queue_depth, &lock_util,
+                            &reputation_cache_size, &firewall_rules_active, &asn_tracked,
                             &reg](std::stop_token st) {
         uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
         uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
@@ -313,6 +317,14 @@ void MetricsCollector::start(http::Server& http) {
 
             for (auto& cs : EventManager::instance().snapshot_channel_stats())
                 event_publishes.labels({cs.raw_name}).set(static_cast<double>(cs.count));
+
+            // Reputation / firewall subsystem gauges
+            if (auto* rep = room_.reputation_service())
+                reputation_cache_size.get().set(static_cast<double>(rep->cache_size()));
+            if (auto* fw = room_.firewall())
+                firewall_rules_active.get().set(static_cast<double>(fw->list_rules().size()));
+            if (auto* asn = room_.asn_reputation())
+                asn_tracked.get().set(static_cast<double>(asn->count()));
 
             // Serialize and cache
             auto text = std::make_shared<const std::string>(reg.collect());

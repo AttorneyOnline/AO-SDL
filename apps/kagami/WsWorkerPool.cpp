@@ -168,6 +168,16 @@ void WsWorkerPool::start() {
                 // Sweep idle rate-limiter buckets (piggyback on the 30s timer)
                 if (rate_limiter_)
                     rate_limiter_->sweep(std::chrono::minutes(5));
+
+                // Sweep reputation, spam detection, and firewall subsystems
+                if (auto* rep = room_.reputation_service())
+                    rep->sweep_expired();
+                if (auto* asn = room_.asn_reputation())
+                    asn->sweep();
+                if (auto* sd = room_.spam_detector())
+                    sd->sweep();
+                if (auto* fw = room_.firewall())
+                    fw->sweep_expired();
             }
 
             poll_stats_.busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
