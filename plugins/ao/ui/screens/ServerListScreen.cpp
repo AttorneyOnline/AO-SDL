@@ -43,8 +43,7 @@ void ServerListScreen::select_server(int index) {
     if (s.ws_port.has_value()) {
         selected = index;
         pending_connect = true;
-        EventManager::instance().get_channel<ServerConnectEvent>().publish(
-            ServerConnectEvent(s.hostname, *s.ws_port));
+        EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(s.hostname, *s.ws_port));
         return;
     }
 }
