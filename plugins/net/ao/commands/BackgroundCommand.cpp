@@ -42,7 +42,9 @@ class BackgroundCommand : public CommandHandler {
 
         area->background.name = bg;
 
-        // Broadcast BN to area
+        // Broadcast BN to all clients in the area
+        if (ctx.broadcast_background)
+            ctx.broadcast_background(ctx.session.area, bg);
         ctx.send_system_message("Background changed to " + bg + ".");
     }
 };

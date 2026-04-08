@@ -83,6 +83,10 @@ class AreaCommand : public CommandHandler {
         std::string old_area = ctx.session.area;
         ctx.session.area = matched;
 
+        // Send area-join info (BN, HP, LE) to the client
+        if (ctx.send_area_join_info)
+            ctx.send_area_join_info(ctx.session.client_id, matched);
+
         Log::log_print(INFO, "Command: %s moved from %s to %s", ctx.session.display_name.c_str(), old_area.c_str(),
                        matched.c_str());
         ctx.send_system_message("Moved to " + matched + ".");

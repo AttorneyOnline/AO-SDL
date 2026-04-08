@@ -20,6 +20,9 @@
 #include <thread>
 #include <unordered_map>
 
+/// Default ban file path. Used by commands and main.cpp.
+inline constexpr const char* DEFAULT_BAN_FILE = "bans.json";
+
 struct BanEntry {
     std::string ipid;
     std::string hdid;

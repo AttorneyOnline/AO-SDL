@@ -77,7 +77,7 @@ int main(int /*argc*/, char* argv[]) {
 
     // --- Ban manager ---
     BanManager ban_manager;
-    ban_manager.load("bans.json");
+    ban_manager.load(DEFAULT_BAN_FILE);
     room.set_ban_manager(&ban_manager);
 
     // --- Protocol backends ---

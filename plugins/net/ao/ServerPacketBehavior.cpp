@@ -243,38 +243,41 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     // Check for OOC commands (messages starting with '/')
     if (!message.empty() && message[0] == '/') {
         CommandContext ctx{
-            server.room(),
-            session,
-            {},
-            // send_system_message: OOC system message to invoking client
-            [&server, &session](const std::string& msg) {
-                server.send(session.client_id, AOPacket("CT", {"Server", msg, "1"}));
-            },
-            // send_system_message_to: OOC system message to a specific client
-            [&server](uint64_t client_id, const std::string& msg) {
-                server.send(client_id, AOPacket("CT", {"Server", msg, "1"}));
-            },
-            // disconnect_client
-            [&server](uint64_t client_id) {
-                if (server.ws())
-                    server.ws()->close_client(client_id);
-            },
-            // send_kick_message: KK packet + disconnect
-            [&server](uint64_t client_id, const std::string& reason) {
-                server.send(client_id, AOPacket("KK", {reason}));
-                if (server.ws())
-                    server.ws()->close_client(client_id);
-            },
-            // send_ban_message: KB packet + disconnect
-            [&server](uint64_t client_id, const std::string& reason) {
-                server.send(client_id, AOPacket("KB", {reason}));
-                if (server.ws())
-                    server.ws()->close_client(client_id);
-            },
+            .room = server.room(),
+            .session = session,
+            .args = {},
+            .send_system_message =
+                [&server, &session](const std::string& msg) {
+                    server.send(session.client_id, AOPacket("CT", {"Server", msg, "1"}));
+                },
+            .send_system_message_to =
+                [&server](uint64_t client_id, const std::string& msg) {
+                    server.send(client_id, AOPacket("CT", {"Server", msg, "1"}));
+                },
+            .send_area_join_info =
+                [&server](uint64_t client_id, const std::string& area) {
+                    server.send_area_join_info(client_id, area);
+                },
+            .broadcast_background =
+                [&server](const std::string& area, const std::string& bg) {
+                    server.send_to_area(area, AOPacket("BN", {bg, "def"}));
+                },
+        };
+
+        // Set callbacks that reference ctx (must be done after construction
+        // to avoid capturing a not-yet-constructed object).
+        ctx.disconnect_client = [&ctx](uint64_t client_id) { ctx.deferred_closes.push_back(client_id); };
+        ctx.send_kick_message = [&server, &ctx](uint64_t client_id, const std::string& reason) {
+            server.send(client_id, AOPacket("KK", {reason}));
+            ctx.deferred_closes.push_back(client_id);
+        };
+        ctx.send_ban_message = [&server, &ctx](uint64_t client_id, const std::string& reason) {
+            server.send(client_id, AOPacket("KB", {reason}));
+            ctx.deferred_closes.push_back(client_id);
         };
 
         if (CommandRegistry::instance().try_dispatch(ctx, message))
-            return; // command consumed the message
+            return; // command consumed; AO clients self-disconnect on KK/KB
     }
 
     OOCAction action;
@@ -319,20 +322,21 @@ void AOPacketMC::handle_server(AOServer& server, ServerSession& session) {
     // Check if the name matches an area (area switch)
     for (auto& area_name : room.areas) {
         if (name == area_name) {
+            // Check if the area allows entry
+            auto* area = room.find_area_by_name(area_name);
+            if (area && !area->can_enter(session.client_id)) {
+                server.send(session.client_id,
+                            AOPacket("CT", {"Server", "Area " + area_name + " is locked.", "1"}));
+                return;
+            }
+
             std::string old_area = session.area;
             session.area = area_name;
             Log::log_print(INFO, "AO: %s moved from %s to %s", format_client_id(session.client_id).c_str(),
                            old_area.c_str(), area_name.c_str());
 
-            // Send area-join info to the client
-            auto* area = room.find_area_by_name(area_name);
-            if (area) {
-                server.send(session.client_id,
-                            AOPacket("BN", {area->background.name.empty() ? "gs4" : area->background.name,
-                                            area->background.position.empty() ? "def" : area->background.position}));
-                server.send(session.client_id, AOPacket("HP", {"1", std::to_string(area->hp.defense)}));
-                server.send(session.client_id, AOPacket("HP", {"2", std::to_string(area->hp.prosecution)}));
-            }
+            // Send area-join info (BN, HP, LE) to the client
+            server.send_area_join_info(session.client_id, area_name);
             return;
         }
     }
@@ -427,7 +431,7 @@ void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
             }
         });
 
-        bm->save_async("bans.json");
+        bm->save_async(DEFAULT_BAN_FILE);
         Log::log_print(INFO, "MA ban: %s [%s] banned IPID %s (dur=%d): %s", session.display_name.c_str(),
                        session.ipid.c_str(), target_ipid.c_str(), duration, reason.c_str());
     }

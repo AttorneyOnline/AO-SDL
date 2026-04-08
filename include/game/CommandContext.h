@@ -40,4 +40,16 @@ struct CommandContext {
 
     /// Send a ban notification to a client, then disconnect.
     std::function<void(uint64_t client_id, const std::string& reason)> send_ban_message;
+
+    /// Send area join info (background, HP, evidence) to a specific client.
+    std::function<void(uint64_t client_id, const std::string& area)> send_area_join_info;
+
+    /// Broadcast a background change to all clients in an area.
+    std::function<void(const std::string& area, const std::string& bg)> broadcast_background;
+
+    /// Client IDs to disconnect after the command finishes.
+    /// Commands push IDs here; the protocol backend closes them after
+    /// try_dispatch returns, outside any locks that would deadlock
+    /// with the on_disconnected callback.
+    std::vector<uint64_t> deferred_closes;
 };

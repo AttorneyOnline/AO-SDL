@@ -9,8 +9,6 @@
 
 #include <chrono>
 
-/// Path for ban persistence. Relative to working directory.
-static const std::string BAN_FILE = "bans.json";
 
 class BanCommand : public CommandHandler {
   public:
@@ -96,7 +94,7 @@ class BanCommand : public CommandHandler {
             }
         });
 
-        bm->save_async(BAN_FILE);
+        bm->save_async(DEFAULT_BAN_FILE);
 
         Log::log_print(INFO, "Ban: %s [%s] banned IPID %s (duration: %s, kicked %d): %s",
                        ctx.session.display_name.c_str(), ctx.session.ipid.c_str(), target_ipid.c_str(),

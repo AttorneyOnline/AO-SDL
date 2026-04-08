@@ -54,6 +54,9 @@ class AOServer {
     void broadcast_char_select(const CharSelectEvent& evt);
     void broadcast_chars_taken(const std::vector<int>& taken);
 
+    /// Send area-join state (BN, HP, LE) to a specific client.
+    void send_area_join_info(uint64_t client_id, const std::string& area_name);
+
   private:
     void dispatch(uint64_t client_id, AOPacket& packet);
 

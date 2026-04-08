@@ -212,6 +212,29 @@ void AOServer::broadcast_char_select(const CharSelectEvent& evt) {
     send(evt.client_id, AOPacket("PV", {std::to_string(session->session_id), "CID", std::to_string(evt.character_id)}));
 }
 
+void AOServer::send_area_join_info(uint64_t client_id, const std::string& area_name) {
+    auto* area = room_.find_area_by_name(area_name);
+    if (!area)
+        return;
+
+    // Background
+    send(client_id, AOPacket("BN", {area->background.name.empty() ? "gs4" : area->background.name,
+                                    area->background.position.empty() ? "def" : area->background.position}));
+
+    // HP bars
+    send(client_id, AOPacket("HP", {"1", std::to_string(area->hp.defense)}));
+    send(client_id, AOPacket("HP", {"2", std::to_string(area->hp.prosecution)}));
+
+    // Evidence list
+    if (!area->evidence.empty()) {
+        std::vector<std::string> items;
+        items.reserve(area->evidence.size());
+        for (auto& ev : area->evidence)
+            items.push_back(ev.name + "&" + ev.description + "&" + ev.image);
+        send(client_id, AOPacket("LE", items));
+    }
+}
+
 void AOServer::broadcast_chars_taken(const std::vector<int>& taken) {
     std::vector<std::string> fields;
     fields.reserve(taken.size());
