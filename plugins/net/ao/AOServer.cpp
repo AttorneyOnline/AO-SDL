@@ -4,6 +4,7 @@
 #include "PacketTypes.h"
 #include "game/ClientId.h"
 #include "metrics/MetricsRegistry.h"
+#include "net/WebSocketServer.h"
 #include "utils/Log.h"
 
 /// Linker anchor for OOC command registrars.
@@ -30,14 +31,16 @@ void AOServer::set_send_func(SendFunc func) {
 void AOServer::on_client_connected(uint64_t client_id) {
     room_.create_session(client_id, "ao2");
     proto_state_.emplace(client_id, AOProtocolState{});
-    Log::log_print(INFO, "AO: %s connected", format_client_id(client_id).c_str());
+    auto addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
+    Log::log_print(INFO, "AO: %s connected (%s)", format_client_id(client_id).c_str(), addr.c_str());
     send(client_id, AOPacket("decryptor", {"NOENCRYPT"}));
 }
 
 void AOServer::on_client_disconnected(uint64_t client_id) {
+    auto addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
     room_.destroy_session(client_id);
     proto_state_.erase(client_id);
-    Log::log_print(INFO, "AO: %s disconnected", format_client_id(client_id).c_str());
+    Log::log_print(INFO, "AO: %s disconnected (%s)", format_client_id(client_id).c_str(), addr.c_str());
 }
 
 void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
@@ -73,7 +76,9 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
         std::string packet_str = buf.substr(0, pos + delim.size());
         buf.erase(0, pos + delim.size());
 
-        Log::log_print(VERBOSE, "AO [%s] <<< %s", format_client_id(client_id).c_str(), packet_str.c_str());
+        auto client_addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
+        Log::log_print(VERBOSE, "AO [%s %s] <<< %s", format_client_id(client_id).c_str(), client_addr.c_str(),
+                       packet_str.c_str());
 
         auto packet = AOPacket::deserialize(packet_str);
         if (packet) {
@@ -105,7 +110,9 @@ void AOServer::send(uint64_t client_id, const AOPacket& packet) {
     if (!send_func_)
         return;
     auto serialized = packet.serialize();
-    Log::log_print(VERBOSE, "AO [%s] >>> %s", format_client_id(client_id).c_str(), serialized.c_str());
+    auto client_addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
+    Log::log_print(VERBOSE, "AO [%s %s] >>> %s", format_client_id(client_id).c_str(), client_addr.c_str(),
+                   serialized.c_str());
     if (auto* s = room_.get_session(client_id)) {
         s->bytes_sent.fetch_add(serialized.size(), std::memory_order_relaxed);
         s->packets_sent.fetch_add(1, std::memory_order_relaxed);
