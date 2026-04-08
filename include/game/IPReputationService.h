@@ -33,12 +33,12 @@ struct IPReputationEntry {
     std::string as_org;
     std::string country_code; ///< ISO 3166-1 alpha-2
     std::string isp;
-    bool is_proxy = false;      ///< VPN, proxy, or Tor exit
-    bool is_datacenter = false; ///< Hosting / datacenter IP
+    bool is_proxy = false;         ///< VPN, proxy, or Tor exit
+    bool is_datacenter = false;    ///< Hosting / datacenter IP
     double abuse_confidence = 0.0; ///< 0.0–1.0 from AbuseIPDB
-    int64_t fetched_at = 0;     ///< Unix seconds when fetched
-    int64_t expires_at = 0;     ///< Unix seconds when cache entry expires
-    bool lookup_failed = false; ///< True if external query failed
+    int64_t fetched_at = 0;        ///< Unix seconds when fetched
+    int64_t expires_at = 0;        ///< Unix seconds when cache entry expires
+    bool lookup_failed = false;    ///< True if external query failed
 };
 
 /// Configuration for the reputation service.

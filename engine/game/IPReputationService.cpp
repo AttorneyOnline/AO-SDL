@@ -5,8 +5,8 @@
 
 #include <algorithm>
 #include <fstream>
-#include <ranges>
 #include <json.hpp>
+#include <ranges>
 
 // Lightweight HTTP for outbound queries. We use the existing http::Client
 // which provides a blocking API — fine for our dedicated worker thread.
@@ -15,7 +15,8 @@
 // -- Helpers ------------------------------------------------------------------
 
 int64_t IPReputationService::now_unix() const {
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
 }
 
 int64_t IPReputationService::make_expiry(bool failed) const {
@@ -214,8 +215,7 @@ std::vector<IPReputationEntry> IPReputationService::query_ip_api_batch(const std
         auto res = client.Post("/batch", body, "application/json");
 
         if (!res || res->status != 200) {
-            Log::log_print(WARNING, "IPReputation: ip-api.com batch query failed (status=%d)",
-                           res ? res->status : -1);
+            Log::log_print(WARNING, "IPReputation: ip-api.com batch query failed (status=%d)", res ? res->status : -1);
             return results;
         }
 
@@ -259,9 +259,8 @@ std::vector<IPReputationEntry> IPReputationService::query_ip_api_batch(const std
 
         Log::log_print(DEBUG, "IPReputation: ip-api.com batch returned %zu/%zu results", results.size(), ips.size());
 
-        static auto& lookup_counter =
-            metrics::MetricsRegistry::instance().counter("kagami_reputation_lookups_total", "IP reputation lookups",
-                                                         {"source", "status"});
+        static auto& lookup_counter = metrics::MetricsRegistry::instance().counter(
+            "kagami_reputation_lookups_total", "IP reputation lookups", {"source", "status"});
         lookup_counter.labels({"ip_api", "success"}).inc(results.size());
         if (results.size() < ips.size())
             lookup_counter.labels({"ip_api", "error"}).inc(ips.size() - results.size());
@@ -391,10 +390,9 @@ std::unordered_map<std::string, IPReputationEntry> IPReputationService::snapshot
 }
 
 void IPReputationService::write_to_disk(const std::unordered_map<std::string, IPReputationEntry>& cache,
-                                         const std::string& path) {
+                                        const std::string& path) {
     try {
-        auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                        .count();
 
         nlohmann::json j = nlohmann::json::array();

@@ -10,8 +10,7 @@
 // -- Helpers ------------------------------------------------------------------
 
 int64_t SpamDetector::now_ms() const {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
 
@@ -117,8 +116,8 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
             verdict.detail = "Same message from " + std::to_string(unique_count) + " distinct IPs within " +
                              std::to_string(config_.echo_window_seconds) + "s";
 
-            Log::log_print(WARNING, "SpamDetector [H1 echo]: %s — %d unique IPs, fingerprint=%zu", verdict.detail.c_str(),
-                           unique_count, fp);
+            Log::log_print(WARNING, "SpamDetector [H1 echo]: %s — %d unique IPs, fingerprint=%zu",
+                           verdict.detail.c_str(), unique_count, fp);
             cb = callback_;
         }
 
@@ -144,8 +143,7 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
                         cluster.alerted = true;
                         verdict.is_spam = true;
                         verdict.heuristic = "join_spam";
-                        verdict.detail = std::to_string(fast_joiners) +
-                                         " IPs sent same message within " +
+                        verdict.detail = std::to_string(fast_joiners) + " IPs sent same message within " +
                                          std::to_string(config_.join_spam_max_seconds) + "s of joining";
 
                         Log::log_print(WARNING, "SpamDetector [H3 join-spam]: %s", verdict.detail.c_str());
@@ -165,7 +163,7 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
 // -- H2/H5/H7: Connection registration ---------------------------------------
 
 SpamVerdict SpamDetector::on_connection(const std::string& ipid, uint32_t asn, const std::string& hwid,
-                                         const std::string& username) {
+                                        const std::string& username) {
     if (!config_.enabled)
         return {};
 
@@ -217,8 +215,8 @@ SpamVerdict SpamDetector::on_connection(const std::string& ipid, uint32_t asn, c
                     if (!verdict.is_spam) {
                         verdict.is_spam = true;
                         verdict.heuristic = "name_pattern";
-                        verdict.detail = "Username prefix \"" + prefix + "\" from " + std::to_string(unique_count) +
-                                         " distinct IPs";
+                        verdict.detail =
+                            "Username prefix \"" + prefix + "\" from " + std::to_string(unique_count) + " distinct IPs";
 
                         Log::log_print(WARNING, "SpamDetector [H5 name-pattern]: %s", verdict.detail.c_str());
                         cb = callback_;
@@ -266,8 +264,8 @@ void SpamDetector::on_disconnect(const std::string& ip, bool completed_handshake
     ++count;
 
     if (count >= config_.ghost_threshold) {
-        Log::log_print(WARNING, "SpamDetector [H6 ghost]: IP %s has %d ghost connections (never identified)", ip.c_str(),
-                       count);
+        Log::log_print(WARNING, "SpamDetector [H6 ghost]: IP %s has %d ghost connections (never identified)",
+                       ip.c_str(), count);
         // Ghost connections don't produce a SpamVerdict return since they're
         // detected at disconnect time. The log + callback is the action.
         if (callback_) {

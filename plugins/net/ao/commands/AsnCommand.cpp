@@ -202,8 +202,8 @@ class AsnCommand : public CommandHandler {
 
         std::string msg = std::to_string(flagged.size()) + " flagged ASN(s):\n";
         for (auto& entry : flagged) {
-            msg += "  AS" + std::to_string(entry.asn) + " (" + entry.as_org + ") — " +
-                   asn_status_to_string(entry.status);
+            msg +=
+                "  AS" + std::to_string(entry.asn) + " (" + entry.as_org + ") — " + asn_status_to_string(entry.status);
             if (!entry.block_reason.empty())
                 msg += " [" + entry.block_reason + "]";
             msg += "\n";

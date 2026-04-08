@@ -16,7 +16,8 @@
 // -- Helpers ------------------------------------------------------------------
 
 int64_t FirewallManager::now_unix() const {
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
 }
 
 bool FirewallManager::is_valid_ip(const std::string& ip) {
@@ -321,8 +322,7 @@ bool FirewallManager::exec_helper(const std::string& action, const std::string& 
     if (config_.helper_path.empty())
         return false;
 
-    Log::log_print(INFO, "FirewallManager: exec %s %s %s", config_.helper_path.c_str(), action.c_str(),
-                   target.c_str());
+    Log::log_print(INFO, "FirewallManager: exec %s %s %s", config_.helper_path.c_str(), action.c_str(), target.c_str());
 
     pid_t pid = fork();
     if (pid < 0) {

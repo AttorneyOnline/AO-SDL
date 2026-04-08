@@ -54,18 +54,18 @@ struct ASNReputationEntry {
 /// Configuration for ASN reputation.
 struct ASNReputationConfig {
     bool enabled = true;
-    int watch_threshold = 2;       ///< Unique abusive IPs → WATCHED
-    int rate_limit_threshold = 3;  ///< Unique abusive IPs → RATE_LIMITED
-    int block_threshold = 5;       ///< Unique abusive IPs → BLOCKED
-    int window_minutes = 60;       ///< Sliding window for threshold counting
+    int watch_threshold = 2;                 ///< Unique abusive IPs → WATCHED
+    int rate_limit_threshold = 3;            ///< Unique abusive IPs → RATE_LIMITED
+    int block_threshold = 5;                 ///< Unique abusive IPs → BLOCKED
+    int window_minutes = 60;                 ///< Sliding window for threshold counting
     std::string auto_block_duration = "24h"; ///< Duration string for auto-blocks
-    std::vector<uint32_t> whitelist_asns;     ///< ASNs with higher thresholds
-    int whitelist_multiplier = 5;  ///< Threshold multiplier for whitelisted ASNs
+    std::vector<uint32_t> whitelist_asns;    ///< ASNs with higher thresholds
+    int whitelist_multiplier = 5;            ///< Threshold multiplier for whitelisted ASNs
 };
 
 /// Callback invoked when an ASN's status changes.
 using ASNStatusCallback = std::function<void(uint32_t asn, ASNReputationEntry::Status old_status,
-                                              ASNReputationEntry::Status new_status, const std::string& reason)>;
+                                             ASNReputationEntry::Status new_status, const std::string& reason)>;
 
 class ASNReputationManager {
   public:

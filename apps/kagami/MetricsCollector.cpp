@@ -96,8 +96,7 @@ void MetricsCollector::start(http::Server& http) {
                             &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util, &poll_events,
                             &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util, &ws_dispatch_rate,
                             &ws_worker_util, &ws_worker_active, &ws_work_queue_depth, &lock_util,
-                            &reputation_cache_size, &firewall_rules_active, &asn_tracked,
-                            &reg](std::stop_token st) {
+                            &reputation_cache_size, &firewall_rules_active, &asn_tracked, &reg](std::stop_token st) {
         uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
         uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
         size_t worker_count = 0;
