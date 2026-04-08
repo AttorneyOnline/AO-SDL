@@ -3,17 +3,19 @@ global:
   evaluation_interval: 1s
 
 scrape_configs:
+  # Local kagami instance (host networking — same host as Prometheus)
   - job_name: kagami
     metrics_path: /metrics
     static_configs:
-      - targets: ['kagami:80']
+      - targets: ['127.0.0.1:8080']
         labels:
           instance: canary
 
-  - job_name: kagami-ecs
+  # Remote kagami instance (staging, scraped via HTTPS through Caddy)
+  - job_name: kagami-staging
     metrics_path: /metrics
-    scheme: https  # ALB terminates TLS; Prometheus scrapes via public HTTPS
+    scheme: https
     static_configs:
       - targets: ['kagami.yuurei.network:443']
         labels:
-          instance: staging-ecs
+          instance: staging

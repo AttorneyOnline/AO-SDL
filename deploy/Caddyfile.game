@@ -1,8 +1,8 @@
-# Caddy configuration for kagami game servers.
+# Caddy configuration for kagami game servers (standalone, no observability).
 # Layer 1: Transport-level protection + TLS termination.
 #
-# Architecture:
-#   Client :443  (HTTPS) → Caddy → kagami :80  (HTTP REST/AONX)
+# Architecture (host networking):
+#   Client :443  (HTTPS) → Caddy → kagami :8080  (HTTP REST/AONX)
 #   Client :27015 (WSS)  → Caddy → kagami :27016 (WS AO2)
 #
 # For IPv6-only instances with DNS-01 TLS:
@@ -47,7 +47,7 @@
 	}
 
 	# --- Reverse proxy to kagami ---
-	reverse_proxy localhost:80 {
+	reverse_proxy 127.0.0.1:8080 {
 		transport http {
 			keepalive 60s
 			keepalive_idle_conns 64
@@ -62,7 +62,7 @@
 {$KAGAMI_DOMAIN}:27015 {
 	import tls_dns
 
-	reverse_proxy localhost:27016 {
+	reverse_proxy 127.0.0.1:27016 {
 		transport http {
 			keepalive     off
 			read_timeout  120s

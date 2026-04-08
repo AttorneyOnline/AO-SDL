@@ -1,6 +1,6 @@
 {
     "bind_address": "0.0.0.0",
-    "http_port": 80,
+    "http_port": 8080,
     "ws_port": 27016,
     "cors_origin": "*",
     "server_name": "Kagami Staging (ECS)",
