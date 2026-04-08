@@ -1722,7 +1722,7 @@
     },
     {
       "type": "row",
-      "title": "Health & Errors",
+      "title": "Rate Limiting",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1733,12 +1733,81 @@
     },
     {
       "type": "timeseries",
+      "title": "Rate Limit Rejections / sec",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 137
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_ratelimit_rejected_total{instance=~\"$instance\"}[5s])",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate Limit Rejections (cumulative)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 137
+      },
+      "maxDataPoints": 10000,
+      "interval": "1s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "connectNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "kagami_ratelimit_rejected_total{instance=~\"$instance\"}",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Health & Errors",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 145
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
       "title": "Session Expiries / sec",
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 137
+        "y": 146
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1767,7 +1836,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 137
+        "y": 146
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1796,7 +1865,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 137
+        "y": 146
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1825,7 +1894,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 137
+        "y": 146
       },
       "maxDataPoints": 10000,
       "interval": "1s",
@@ -1859,7 +1928,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 145
+        "y": 154
       },
       "fieldConfig": {
         "defaults": {
@@ -1882,7 +1951,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 145
+        "y": 154
       },
       "fieldConfig": {
         "defaults": {
@@ -1905,7 +1974,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 145
+        "y": 154
       },
       "fieldConfig": {
         "defaults": {
@@ -1928,7 +1997,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 145
+        "y": 154
       },
       "fieldConfig": {
         "defaults": {
@@ -1951,7 +2020,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 149
+        "y": 158
       },
       "collapsed": false
     },
@@ -1962,7 +2031,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 150
+        "y": 159
       },
       "datasource": {
         "type": "loki",
