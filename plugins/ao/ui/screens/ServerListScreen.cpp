@@ -30,13 +30,23 @@ void ServerListScreen::select_server(int index) {
         return;
 
     const auto& s = servers[index];
-    std::optional<uint16_t> port = s.ws_port.has_value() ? s.ws_port : s.wss_port;
-    if (!port.has_value())
-        return;
 
-    selected = index;
-    pending_connect = true;
-    EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(s.hostname, *port));
+    // Prefer WSS (encrypted) over plain WS when available.
+    if (s.wss_port.has_value()) {
+        selected = index;
+        pending_connect = true;
+        EventManager::instance().get_channel<ServerConnectEvent>().publish(
+            ServerConnectEvent("wss://" + s.hostname, *s.wss_port));
+        return;
+    }
+
+    if (s.ws_port.has_value()) {
+        selected = index;
+        pending_connect = true;
+        EventManager::instance().get_channel<ServerConnectEvent>().publish(
+            ServerConnectEvent(s.hostname, *s.ws_port));
+        return;
+    }
 }
 
 void ServerListScreen::direct_connect(const std::string& host, uint16_t port) {
