@@ -75,11 +75,11 @@ class RootPassCommand : public CommandHandler {
 
         Log::log_print(INFO, "Auth: %s [%s] switched to ADVANCED auth, root account created",
                        ctx.session.display_name.c_str(), ctx.session.ipid.c_str());
-        ctx.send_system_message(
-            "Root account created. Authentication switched to ADVANCED mode.\n"
-            "You have been logged out. Use /login root <password> to log back in.");
+        ctx.send_system_message("Root account created. Authentication switched to ADVANCED mode.\n"
+                                "You have been logged out. Use /login root <password> to log back in.");
     }
 };
 
 static CommandRegistrar reg(std::make_unique<RootPassCommand>());
-void ao_cmd_rootpass() {}
+void ao_cmd_rootpass() {
+}

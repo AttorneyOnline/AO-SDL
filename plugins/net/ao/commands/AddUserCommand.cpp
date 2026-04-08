@@ -52,11 +52,11 @@ class AddUserCommand : public CommandHandler {
             return;
         }
 
-        Log::log_print(INFO, "Auth: user '%s' created by %s", username.c_str(),
-                       ctx.session.moderator_name.c_str());
+        Log::log_print(INFO, "Auth: user '%s' created by %s", username.c_str(), ctx.session.moderator_name.c_str());
         ctx.send_system_message("User '" + username + "' created.");
     }
 };
 
 static CommandRegistrar reg(std::make_unique<AddUserCommand>());
-void ao_cmd_adduser() {}
+void ao_cmd_adduser() {
+}

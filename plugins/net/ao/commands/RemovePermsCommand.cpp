@@ -54,4 +54,5 @@ class RemovePermsCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<RemovePermsCommand>());
-void ao_cmd_removeperms() {}
+void ao_cmd_removeperms() {
+}

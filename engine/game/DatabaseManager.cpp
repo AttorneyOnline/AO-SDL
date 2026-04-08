@@ -143,28 +143,26 @@ bool DatabaseManager::is_open() const {
 // -- Schema (worker thread only) ----------------------------------------------
 
 bool DatabaseManager::create_tables() {
-    bool ok = exec(
-        "CREATE TABLE IF NOT EXISTS bans ("
-        "  ID       INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  IPID     TEXT,"
-        "  HDID     TEXT,"
-        "  IP       TEXT,"
-        "  TIME     INTEGER,"
-        "  REASON   TEXT,"
-        "  DURATION INTEGER,"
-        "  MODERATOR TEXT"
-        ")");
+    bool ok = exec("CREATE TABLE IF NOT EXISTS bans ("
+                   "  ID       INTEGER PRIMARY KEY AUTOINCREMENT,"
+                   "  IPID     TEXT,"
+                   "  HDID     TEXT,"
+                   "  IP       TEXT,"
+                   "  TIME     INTEGER,"
+                   "  REASON   TEXT,"
+                   "  DURATION INTEGER,"
+                   "  MODERATOR TEXT"
+                   ")");
     if (!ok)
         return false;
 
-    ok = exec(
-        "CREATE TABLE IF NOT EXISTS users ("
-        "  ID       INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  USERNAME TEXT UNIQUE,"
-        "  SALT     TEXT,"
-        "  PASSWORD TEXT,"
-        "  ACL      TEXT"
-        ")");
+    ok = exec("CREATE TABLE IF NOT EXISTS users ("
+              "  ID       INTEGER PRIMARY KEY AUTOINCREMENT,"
+              "  USERNAME TEXT UNIQUE,"
+              "  SALT     TEXT,"
+              "  PASSWORD TEXT,"
+              "  ACL      TEXT"
+              ")");
     return ok;
 }
 
@@ -206,9 +204,8 @@ std::future<int64_t> DatabaseManager::add_ban(BanEntry entry) {
                            ? entry.timestamp
                            : std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
 
-        auto stmt = prepare(
-            "INSERT INTO bans (IPID, HDID, IP, TIME, REASON, DURATION, MODERATOR) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)");
+        auto stmt = prepare("INSERT INTO bans (IPID, HDID, IP, TIME, REASON, DURATION, MODERATOR) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)");
         if (!stmt)
             return -1;
 
@@ -357,37 +354,36 @@ std::future<std::vector<BanEntry>> DatabaseManager::recent_bans(int limit) {
 
 // -- User operations ----------------------------------------------------------
 
-std::future<bool> DatabaseManager::create_user(std::string username, std::string salt,
-                                               std::string password_hash, std::string acl) {
-    return dispatch(
-        [this, username = std::move(username), salt = std::move(salt), password_hash = std::move(password_hash),
-         acl = std::move(acl)]() -> bool {
-            if (!db_)
-                return false;
+std::future<bool> DatabaseManager::create_user(std::string username, std::string salt, std::string password_hash,
+                                               std::string acl) {
+    return dispatch([this, username = std::move(username), salt = std::move(salt),
+                     password_hash = std::move(password_hash), acl = std::move(acl)]() -> bool {
+        if (!db_)
+            return false;
 
-            auto check = prepare("SELECT 1 FROM users WHERE USERNAME = ?");
-            if (!check)
-                return false;
-            sqlite3_bind_text(check.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
-            if (sqlite3_step(check.get()) == SQLITE_ROW)
-                return false;
+        auto check = prepare("SELECT 1 FROM users WHERE USERNAME = ?");
+        if (!check)
+            return false;
+        sqlite3_bind_text(check.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(check.get()) == SQLITE_ROW)
+            return false;
 
-            auto stmt = prepare("INSERT INTO users (USERNAME, SALT, PASSWORD, ACL) VALUES (?, ?, ?, ?)");
-            if (!stmt)
-                return false;
+        auto stmt = prepare("INSERT INTO users (USERNAME, SALT, PASSWORD, ACL) VALUES (?, ?, ?, ?)");
+        if (!stmt)
+            return false;
 
-            sqlite3_bind_text(stmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt.get(), 2, salt.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt.get(), 3, password_hash.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt.get(), 4, acl.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 2, salt.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 3, password_hash.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 4, acl.c_str(), -1, SQLITE_TRANSIENT);
 
-            if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
-                Log::log_print(WARNING, "DatabaseManager: create_user failed: %s", sqlite3_errmsg(db_));
-                return false;
-            }
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
+            Log::log_print(WARNING, "DatabaseManager: create_user failed: %s", sqlite3_errmsg(db_));
+            return false;
+        }
 
-            return true;
-        });
+        return true;
+    });
 }
 
 std::future<bool> DatabaseManager::delete_user(std::string username) {
@@ -472,23 +468,22 @@ std::future<bool> DatabaseManager::update_acl(std::string username, std::string 
     });
 }
 
-std::future<bool> DatabaseManager::update_password(std::string username, std::string salt,
-                                                   std::string password_hash) {
-    return dispatch(
-        [this, username = std::move(username), salt = std::move(salt), password_hash = std::move(password_hash)]() -> bool {
-            if (!db_)
-                return false;
+std::future<bool> DatabaseManager::update_password(std::string username, std::string salt, std::string password_hash) {
+    return dispatch([this, username = std::move(username), salt = std::move(salt),
+                     password_hash = std::move(password_hash)]() -> bool {
+        if (!db_)
+            return false;
 
-            auto stmt = prepare("UPDATE users SET SALT = ?, PASSWORD = ? WHERE USERNAME = ?");
-            if (!stmt)
-                return false;
+        auto stmt = prepare("UPDATE users SET SALT = ?, PASSWORD = ? WHERE USERNAME = ?");
+        if (!stmt)
+            return false;
 
-            sqlite3_bind_text(stmt.get(), 1, salt.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt.get(), 2, password_hash.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_text(stmt.get(), 3, username.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 1, salt.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 2, password_hash.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 3, username.c_str(), -1, SQLITE_TRANSIENT);
 
-            return sqlite3_step(stmt.get()) == SQLITE_DONE;
-        });
+        return sqlite3_step(stmt.get()) == SQLITE_DONE;
+    });
 }
 
 // -- Internal helpers (worker thread only) ------------------------------------
