@@ -97,3 +97,4 @@ class ListPermsCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<ListPermsCommand>());
+void ao_cmd_listperms() {}

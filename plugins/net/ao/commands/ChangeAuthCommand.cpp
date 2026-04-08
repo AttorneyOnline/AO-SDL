@@ -41,3 +41,4 @@ class ChangeAuthCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<ChangeAuthCommand>());
+void ao_cmd_changeauth() {}

@@ -62,3 +62,4 @@ class ReputationCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<ReputationCommand>());
+void ao_cmd_reputation() {}

@@ -100,3 +100,4 @@ class FirewallCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<FirewallCommand>());
+void ao_cmd_firewall() {}

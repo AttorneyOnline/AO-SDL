@@ -86,3 +86,4 @@ class ChangePassCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<ChangePassCommand>());
+void ao_cmd_changepass() {}

@@ -82,3 +82,4 @@ class RootPassCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<RootPassCommand>());
+void ao_cmd_rootpass() {}

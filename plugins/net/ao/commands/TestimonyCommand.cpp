@@ -234,3 +234,4 @@ static CommandRegistrar reg4(std::make_unique<PauseCommand>());
 static CommandRegistrar reg5(std::make_unique<DeleteStatementCommand>());
 static CommandRegistrar reg6(std::make_unique<UpdateStatementCommand>());
 static CommandRegistrar reg7(std::make_unique<AddStatementCommand>());
+void ao_cmd_testimony() {}
