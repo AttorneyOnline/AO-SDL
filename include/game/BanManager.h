@@ -63,12 +63,8 @@ class BanManager {
     /// Remove a ban by IPID. Returns true if a ban was removed.
     bool remove_ban(const std::string& ipid);
 
-    /// Check if an IPID or HDID is banned (skipping expired entries).
-    bool is_banned(const std::string& ipid, const std::string& hdid) const;
-
     /// Check if banned and return the ban entry in a single lock acquisition.
-    /// Returns std::nullopt if not banned. Avoids TOCTOU between separate
-    /// is_banned() and find_ban() calls.
+    /// Returns std::nullopt if not banned.
     std::optional<BanEntry> check_ban(const std::string& ipid, const std::string& hdid) const;
 
     /// Find a ban by IPID. Returns a copy (safe to use outside the lock).

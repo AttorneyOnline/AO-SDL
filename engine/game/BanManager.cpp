@@ -81,25 +81,6 @@ bool BanManager::remove_ban(const std::string& ipid) {
     return bans_.erase(ipid) > 0;
 }
 
-bool BanManager::is_banned(const std::string& ipid, const std::string& hdid) const {
-    std::lock_guard lock(mutex_);
-
-    // Check by IPID
-    auto it = bans_.find(ipid);
-    if (it != bans_.end() && !it->second.is_expired())
-        return true;
-
-    // Check by HDID across all bans
-    if (!hdid.empty()) {
-        for (auto& [_, entry] : bans_) {
-            if (!entry.hdid.empty() && entry.hdid == hdid && !entry.is_expired())
-                return true;
-        }
-    }
-
-    return false;
-}
-
 std::optional<BanEntry> BanManager::find_ban(const std::string& ipid) const {
     std::lock_guard lock(mutex_);
     auto it = bans_.find(ipid);
