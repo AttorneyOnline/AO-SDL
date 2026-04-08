@@ -58,6 +58,12 @@ struct ServerSession {
     /// True if the session has moderator privileges (e.g. all-areas broadcast).
     bool moderator = false;
 
+    /// Failed login attempt count (for rate-limiting brute force).
+    int login_failures = 0;
+
+    /// Steady clock time of last failed login (for cooldown).
+    std::chrono::steady_clock::time_point last_login_failure{};
+
     /// True if the client is a spectator (character_id == -1 after joining).
     bool is_spectator() const {
         return character_id < 0;
