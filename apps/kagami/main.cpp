@@ -12,6 +12,7 @@
 #include "net/EndpointFactory.h"
 #include "net/Http.h"
 #include "net/PlatformServerSocket.h"
+#include "net/RateLimiter.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketServer.h"
 #include "net/ao/AOServer.h"
@@ -166,8 +167,22 @@ int main(int /*argc*/, char* argv[]) {
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
 
+    // --- Rate limiter ---
+    net::RateLimiter rate_limiter;
+    {
+        auto rl_cfg = cfg.rate_limit_config();
+        for (auto& [action, params] : rl_cfg.items()) {
+            if (!params.is_object() || !params.contains("rate"))
+                continue; // skip non-rule entries like ws_handshake_deadline_sec
+            rate_limiter.configure(action, {params.value("rate", 10.0), params.value("burst", 20.0)});
+        }
+        rest_router.set_rate_limiter(&rate_limiter);
+        NXEndpoint::set_rate_limiter(&rate_limiter);
+        Log::log_print(INFO, "Rate limiter: %zu actions configured", rate_limiter.action_count());
+    }
+
     // --- WS worker pool ---
-    WsWorkerPool ws_pool(ws, ao_backend, rest_router, room, cfg);
+    WsWorkerPool ws_pool(ws, ao_backend, rest_router, room, cfg, &rate_limiter);
     ws_pool.start();
     metrics.set_ws_pool(&ws_pool);
     metrics.start(http);

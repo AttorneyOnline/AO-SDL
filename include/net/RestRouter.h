@@ -1,5 +1,6 @@
 #pragma once
 
+#include "net/RateLimiter.h"
 #include "net/RestEndpoint.h"
 
 #include <atomic>
@@ -28,6 +29,9 @@ class RestRouter {
 
     void set_auth_func(AuthFunc func);
     void set_cors_origins(std::vector<std::string> origins);
+    void set_rate_limiter(net::RateLimiter* limiter) {
+        rate_limiter_ = limiter;
+    }
 
     /// Takes ownership of an endpoint.
     void register_endpoint(std::unique_ptr<RestEndpoint> endpoint);
@@ -96,4 +100,5 @@ class RestRouter {
     bool cors_wildcard_ = false;
     std::vector<std::unique_ptr<RestEndpoint>> endpoints_;
     std::shared_mutex dispatch_mutex_;
+    net::RateLimiter* rate_limiter_ = nullptr;
 };

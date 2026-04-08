@@ -4,8 +4,8 @@
 
 #include <algorithm>
 
-static auto& ratelimit_rejected_ = metrics::MetricsRegistry::instance().counter(
-    "kagami_ratelimit_rejected_total", "Rate-limited rejections", {"action"});
+static auto& ratelimit_rejected_ = metrics::MetricsRegistry::instance().counter("kagami_ratelimit_rejected_total",
+                                                                                "Rate-limited rejections", {"action"});
 
 namespace net {
 
@@ -16,7 +16,8 @@ void RateLimiter::configure(const std::string& action, RateLimitRule rule) {
         auto shard = std::make_unique<ActionShard>();
         shard->rule = rule;
         shards_.emplace(action, std::move(shard));
-    } else {
+    }
+    else {
         std::lock_guard shard_lock(it->second->mutex);
         it->second->rule = rule;
     }
@@ -65,7 +66,8 @@ size_t RateLimiter::sweep(std::chrono::steady_clock::duration max_idle) {
             if (now - it->second.last_refill > max_idle) {
                 it = shard->buckets.erase(it);
                 ++evicted;
-            } else {
+            }
+            else {
                 ++it;
             }
         }

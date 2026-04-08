@@ -3,9 +3,11 @@
 #include "ServerSettings.h"
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
+#include "net/RateLimiter.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketFrame.h"
 #include "net/WebSocketServer.h"
+#include "net/ao/AOPacket.h"
 #include "net/ao/AOServer.h"
 #include "utils/Log.h"
 
@@ -13,9 +15,9 @@
 #include <chrono>
 
 WsWorkerPool::WsWorkerPool(WebSocketServer& ws, AOServer& ao_backend, RestRouter& router, GameRoom& room,
-                           const ServerSettings& cfg)
+                           const ServerSettings& cfg, net::RateLimiter* rate_limiter)
     : slot_count_(std::max(1u, std::thread::hardware_concurrency())), ws_(ws), ao_(ao_backend), router_(router),
-      room_(room), cfg_(cfg) {
+      room_(room), cfg_(cfg), rate_limiter_(rate_limiter) {
     slots_.resize(slot_count_);
     for (auto& s : slots_)
         s = std::make_unique<WsSlot>();
@@ -65,6 +67,27 @@ void WsWorkerPool::start() {
                 worker_stats_.active.fetch_add(1, std::memory_order_relaxed);
                 auto busy_start = std::chrono::steady_clock::now();
 
+                // Layer 4: per-message-type rate limit (before dispatch lock)
+                if (rate_limiter_) {
+                    // Extract AO packet header from raw data for rate limiting.
+                    // Format: "HEADER#field1#field2#...#%"
+                    auto delim_pos = item.data.find('#');
+                    if (delim_pos != std::string::npos) {
+                        std::string pkt_type = item.data.substr(0, delim_pos);
+                        std::string key = std::to_string(item.client_id);
+                        if (!rate_limiter_->allow("ao:" + pkt_type, key)) {
+                            // Skip dispatch — frame is rate-limited
+                            worker_stats_.active.fetch_sub(1, std::memory_order_relaxed);
+                            worker_stats_.busy_ns.fetch_add(
+                                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                          std::chrono::steady_clock::now() - busy_start)
+                                                          .count()),
+                                std::memory_order_relaxed);
+                            continue;
+                        }
+                    }
+                }
+
                 router_.with_lock([&] { ao_.on_client_message(item.client_id, item.data); });
                 worker_stats_.frames_processed.fetch_add(1, std::memory_order_relaxed);
 
@@ -95,6 +118,15 @@ void WsWorkerPool::start() {
             // Enqueue frames to per-client worker slots
             if (!frames.empty()) {
                 for (auto& [client_id, frame] : frames) {
+                    // Layer 3: per-connection frame + byte rate limiting
+                    if (rate_limiter_) {
+                        std::string key = std::to_string(client_id);
+                        if (!rate_limiter_->allow("ws_frame", key))
+                            continue; // drop frame
+                        if (!rate_limiter_->allow("ws_bytes", key, static_cast<double>(frame.data.size())))
+                            continue; // drop frame
+                    }
+
                     int slot_idx = static_cast<int>(client_id % static_cast<uint64_t>(slot_count_));
                     auto& slot = *slots_[slot_idx];
                     {
@@ -129,6 +161,10 @@ void WsWorkerPool::start() {
                         .inc(to_expire.size());
                 }
                 last_sweep = now;
+
+                // Sweep idle rate-limiter buckets (piggyback on the 30s timer)
+                if (rate_limiter_)
+                    rate_limiter_->sweep(std::chrono::minutes(5));
             }
 
             poll_stats_.busy_ns.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(

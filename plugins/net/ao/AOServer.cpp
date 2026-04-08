@@ -66,10 +66,14 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
                 ao_errors_.labels({"dispatch"}).inc();
                 Log::log_print(WARNING, "AO: error handling packet from %s: %s", format_client_id(client_id).c_str(),
                                e.what());
+                // Send error to client before disconnect
+                send(client_id, AOPacket("CT", {"Server", "[ERROR] " + std::string(e.what()), "1"}));
             }
         }
         else {
             ao_errors_.labels({"parse"}).inc();
+            Log::log_print(WARNING, "AO: malformed packet from %s", format_client_id(client_id).c_str());
+            send(client_id, AOPacket("CT", {"Server", "[ERROR] Malformed packet — could not parse", "1"}));
         }
     }
 }

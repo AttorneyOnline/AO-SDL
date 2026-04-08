@@ -139,8 +139,29 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
         // Process all clients that have data or need handshake/read
         std::vector<ClientId> dead_clients;
 
+        auto now = std::chrono::steady_clock::now();
         for (auto& [id, client] : clients_) {
             if (client.closed) {
+                dead_clients.push_back(id);
+                continue;
+            }
+
+            // Layer 1.5: Slow loris defense
+            if (!client.handshake_complete && now - client.connected_at > std::chrono::seconds(10)) {
+                Log::log_print(WARNING, "WS: handshake timeout for %s (client %llu)", client.remote_addr.c_str(),
+                               (unsigned long long)id);
+                dead_clients.push_back(id);
+                continue;
+            }
+            if (client.handshake_complete && now - client.last_data_at > std::chrono::seconds(120)) {
+                Log::log_print(INFO, "WS: idle timeout for %s (client %llu)", client.remote_addr.c_str(),
+                               (unsigned long long)id);
+                dead_clients.push_back(id);
+                continue;
+            }
+            if (!client.extra_data.empty() && now - client.last_data_at > std::chrono::seconds(10)) {
+                Log::log_print(WARNING, "WS: partial frame timeout for %s (client %llu)", client.remote_addr.c_str(),
+                               (unsigned long long)id);
                 dead_clients.push_back(id);
                 continue;
             }

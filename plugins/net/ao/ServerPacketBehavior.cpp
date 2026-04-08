@@ -11,6 +11,8 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
     auto* proto = server.get_protocol_state(session.client_id);
     if (!proto || proto->state != AOProtocolState::CONNECTED) {
         Log::log_print(WARNING, "AO: unexpected HI from %s", format_client_id(session.client_id).c_str());
+        server.send(session.client_id,
+                    AOPacket("CT", {"Server", "[ERROR] Unexpected packet \"HI\" in current state", "1"}));
         return;
     }
 
@@ -26,6 +28,8 @@ void AOPacketIDClient::handle_server(AOServer& server, ServerSession& session) {
     auto* proto = server.get_protocol_state(session.client_id);
     if (!proto || proto->state != AOProtocolState::IDENTIFIED) {
         Log::log_print(WARNING, "AO: unexpected ID from %s", format_client_id(session.client_id).c_str());
+        server.send(session.client_id,
+                    AOPacket("CT", {"Server", "[ERROR] Unexpected packet \"ID\" in current state", "1"}));
         return;
     }
 
