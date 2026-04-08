@@ -159,6 +159,20 @@ bool TrustedProxyList::is_trusted(const std::string& ip) const {
             if (ipv6_matches(addr, entry.addr, entry.prefix_len))
                 return true;
         }
+
+        // Check for IPv4-mapped IPv6 (::ffff:a.b.c.d) — extract the IPv4 part
+        // and try against IPv4 rules. Dual-stack sockets report IPv4 peers this way.
+        static const std::string v4mapped_prefix = "::ffff:";
+        if (ip.starts_with(v4mapped_prefix)) {
+            std::string v4_part = ip.substr(v4mapped_prefix.size());
+            uint32_t v4_addr = 0;
+            if (parse_ipv4(v4_part, v4_addr)) {
+                for (auto& entry : ipv4_) {
+                    if ((v4_addr & entry.mask) == entry.addr)
+                        return true;
+                }
+            }
+        }
     }
     else {
         // IPv4

@@ -3,11 +3,7 @@ services:
   caddy:
     image: ${CADDY_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/caddy-dns:latest}
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"       # HTTPS (TCP) — HTTP/1.1 + HTTP/2
-      - "443:443/udp"   # QUIC — HTTP/3
-      - "27015:27015"   # WSS (AO2) — TLS terminated by Caddy
+    network_mode: host
     environment:
       - KAGAMI_DOMAIN=${KAGAMI_DOMAIN:-canary.yuurei.network}
     volumes:
@@ -16,22 +12,21 @@ services:
       - caddy_config:/config
     depends_on:
       - kagami
-      - grafana
 
   # --- Game server ---
   kagami:
     image: ${KAGAMI_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/kagami:latest}
     restart: unless-stopped
-    # HTTP (80) and WS (27016) are internal only — Caddy proxies to both
+    network_mode: host
     volumes:
-      - ./kagami.json:/app/kagami.json
+      - ./kagami.json:/app/kagami.json:ro
       - kagami_logs:/logs
-    # HTTP on port 80 is internal only (Caddy proxies to it)
 
   # --- Metrics ---
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -43,6 +38,7 @@ services:
       - '--storage.tsdb.max-block-duration=1h'
       - '--web.external-url=/prometheus/'
       - '--web.route-prefix=/prometheus/'
+      - '--web.listen-address=127.0.0.1:9090'
     depends_on:
       - kagami
 
@@ -50,6 +46,7 @@ services:
   loki:
     image: grafana/loki:latest
     restart: unless-stopped
+    network_mode: host
     volumes:
       - loki_data:/loki
     command:
@@ -60,6 +57,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
+    network_mode: host
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-kagami}
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -70,6 +68,8 @@ services:
       - GF_AUTH_BASIC_ENABLED=true
       - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN:-canary.yuurei.network}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_HTTP_ADDR=127.0.0.1
+      - GF_SERVER_HTTP_PORT=3000
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

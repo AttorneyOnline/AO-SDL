@@ -72,6 +72,17 @@ TEST(TrustedProxyList, InvalidEntriesSkipped) {
     EXPECT_EQ(list.size(), 2u);
 }
 
+TEST(TrustedProxyList, IPv4MappedIPv6MatchesIPv4Rules) {
+    net::TrustedProxyList list;
+    list.configure({"172.16.0.0/12"});
+    // Dual-stack sockets report IPv4 peers as ::ffff:a.b.c.d
+    EXPECT_TRUE(list.is_trusted("::ffff:172.18.0.6"));
+    EXPECT_TRUE(list.is_trusted("::ffff:172.31.255.255"));
+    EXPECT_FALSE(list.is_trusted("::ffff:192.168.1.1"));
+    // Plain IPv4 should still work
+    EXPECT_TRUE(list.is_trusted("172.18.0.6"));
+}
+
 TEST(TrustedProxyList, EmptyStringIgnored) {
     net::TrustedProxyList list;
     list.configure({""});
