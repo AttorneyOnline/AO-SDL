@@ -2,6 +2,7 @@
 
 #include <stop_token>
 
+class DatabaseManager;
 class ServerSettings;
 class TerminalUI;
 class GameRoom;
@@ -19,6 +20,7 @@ class Server;
 /// Passed to REPL commands and other subsystems that need cross-cutting access.
 struct ServerContext {
     std::stop_source& stop_src;
+    DatabaseManager& db;
     ServerSettings& cfg;
     TerminalUI& ui;
     GameRoom& room;

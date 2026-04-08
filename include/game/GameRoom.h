@@ -12,6 +12,7 @@
  */
 #pragma once
 
+#include "game/ACLFlags.h"
 #include "game/ASNReputationManager.h"
 #include "game/AreaState.h"
 #include "game/BanManager.h"
@@ -30,6 +31,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+class DatabaseManager;
 
 class GameRoom {
   public:
@@ -148,6 +151,17 @@ class GameRoom {
     /// Moderator password for simple auth. Empty = auth disabled.
     std::string mod_password;
 
+    /// Authentication mode: SIMPLE (shared password) or ADVANCED (per-user DB auth).
+    AuthType auth_type = AuthType::SIMPLE;
+
+    /// Database manager (non-owning). Used by auth commands for user/ban persistence.
+    DatabaseManager* db_manager() const {
+        return db_manager_;
+    }
+    void set_db_manager(DatabaseManager* dm) {
+        db_manager_ = dm;
+    }
+
     /// Ban manager (non-owning). Set from main before starting backends.
     BanManager* ban_manager() const {
         return ban_manager_;
@@ -264,6 +278,7 @@ class GameRoom {
     }
 
   private:
+    DatabaseManager* db_manager_ = nullptr;
     BanManager* ban_manager_ = nullptr;
     IPReputationService* reputation_service_ = nullptr;
     ASNReputationManager* asn_reputation_ = nullptr;
