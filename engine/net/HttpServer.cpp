@@ -13,6 +13,7 @@
  */
 #include "net/Http.h"
 #include "net/SSEEvent.h"
+#include "net/TrustedProxyList.h"
 
 #include "event/EventChannel.h"
 #include "event/EventManager.h"
@@ -61,6 +62,7 @@ struct HttpConnection {
     uint64_t id;
     platform::Socket socket;
     std::string recv_buf;
+    std::string remote_addr; ///< Client IP address (may be overridden by proxy headers).
     bool headers_complete = false;
     bool dispatched = false;   ///< Request has been dispatched to a worker thread.
     size_t header_end_pos = 0; ///< Byte offset of "\r\n\r\n" in recv_buf.
@@ -168,6 +170,10 @@ struct Server::ServerState {
     std::vector<HandlerEntry> options_handlers;
 
     Headers default_headers;
+
+    // Reverse proxy support
+    ReverseProxyConfig reverse_proxy_config;
+    net::TrustedProxyList trusted_proxies;
 
     // SSE
     using SSEHandlerEntry = std::pair<std::string, Server::SSEHandler>;
@@ -687,6 +693,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
 
                     HttpConnection conn;
                     conn.id = state.next_conn_id++;
+                    conn.remote_addr = remote_addr;
                     conn.socket = std::move(client);
 
                     state.poller.add(cfd, platform::Poller::Readable);
@@ -1167,6 +1174,23 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                     else if (req.method == "OPTIONS")
                         handler = find_handler(state.options_handlers, req.path, req);
 
+                    // Populate request remote_addr from connection
+                    req.remote_addr = conn->remote_addr;
+
+                    // Extract real client IP from proxy headers if configured
+                    if (state.reverse_proxy_config.enabled && state.trusted_proxies.is_trusted(conn->remote_addr)) {
+                        for (auto& hdr : state.reverse_proxy_config.header_priority) {
+                            auto val = req.get_header_value(hdr);
+                            if (!val.empty()) {
+                                auto real_ip = net::extract_forwarded_ip(val);
+                                if (!real_ip.empty()) {
+                                    req.remote_addr = real_ip;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     WorkItem item;
                     item.connection_id = conn->id;
                     item.request = std::move(req);
@@ -1447,6 +1471,13 @@ Server& Server::set_expect_100_continue_handler(Expect100ContinueHandler) {
     return *this;
 }
 Server& Server::set_logger(Logger) {
+    return *this;
+}
+Server& Server::set_reverse_proxy_config(const ReverseProxyConfig& config) {
+    if (state_) {
+        state_->reverse_proxy_config = config;
+        state_->trusted_proxies.configure(config.trusted_proxies);
+    }
     return *this;
 }
 Server& Server::set_address_family(int) {

@@ -8,6 +8,7 @@
  */
 #pragma once
 
+#include "net/ReverseProxyConfig.h"
 #include "platform/Poll.h"
 
 #include <algorithm>
@@ -736,6 +737,9 @@ class Server {
     Server& set_post_routing_handler(Handler handler);
     Server& set_expect_100_continue_handler(Expect100ContinueHandler handler);
     Server& set_logger(Logger logger);
+
+    /// Configure reverse proxy support for IP extraction from headers.
+    Server& set_reverse_proxy_config(const ReverseProxyConfig& config);
 
     Server& set_address_family(int family);
     Server& set_tcp_nodelay(bool on);

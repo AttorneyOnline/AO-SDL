@@ -5,6 +5,7 @@
 #include "game/FirewallManager.h"
 #include "game/IPReputationService.h"
 #include "game/SpamDetector.h"
+#include "net/ReverseProxyConfig.h"
 #include "utils/Log.h"
 
 #include <algorithm>
@@ -227,6 +228,30 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return cfg;
     }
 
+    // -- Reverse proxy --
+
+    ReverseProxyConfig reverse_proxy_config() const {
+        ReverseProxyConfig cfg;
+        cfg.enabled = value<bool>("reverse_proxy/enabled");
+        cfg.proxy_protocol = value<bool>("reverse_proxy/proxy_protocol");
+        auto proxies = value<nlohmann::json>("reverse_proxy/trusted_proxies");
+        if (proxies.is_array()) {
+            for (auto& item : proxies) {
+                if (item.is_string())
+                    cfg.trusted_proxies.push_back(item.get<std::string>());
+            }
+        }
+        auto headers = value<nlohmann::json>("reverse_proxy/header_priority");
+        if (headers.is_array()) {
+            cfg.header_priority.clear();
+            for (auto& item : headers) {
+                if (item.is_string())
+                    cfg.header_priority.push_back(item.get<std::string>());
+            }
+        }
+        return cfg;
+    }
+
     static bool load_from_disk(const std::string& path);
     static bool save_to_disk(const std::string& path);
 
@@ -259,6 +284,13 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"secret_access_key", ""},
                  {"flush_interval", 5},
                  {"log_level", "info"},
+             }},
+            {"reverse_proxy",
+             nlohmann::json{
+                 {"enabled", false},
+                 {"trusted_proxies", nlohmann::json::array()},
+                 {"header_priority", nlohmann::json::array({"X-Forwarded-For", "X-Real-IP"})},
+                 {"proxy_protocol", false},
              }},
             {"reputation",
              nlohmann::json{

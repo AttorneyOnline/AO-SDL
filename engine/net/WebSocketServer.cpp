@@ -1,6 +1,7 @@
 #include "net/WebSocketServer.h"
 
 #include "metrics/MetricsRegistry.h"
+#include "net/ProxyProtocol.h"
 #include "net/WebSocketCommon.h"
 #include "utils/Log.h"
 
@@ -172,6 +173,31 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
             }
 
             if (!client.handshake_complete) {
+                // PROXY protocol: parse before HTTP handshake (only once per connection)
+                if (reverse_proxy_config_.proxy_protocol && !client.proxy_protocol_parsed &&
+                    trusted_proxies_.is_trusted(client.remote_addr)) {
+                    // Peek at data to check for PROXY protocol header
+                    auto& buf = client.extra_data.empty() ? client.recv_buf : client.extra_data;
+                    if (!buf.empty()) {
+                        auto pp = net::parse_proxy_protocol(buf.data(), buf.size());
+                        if (pp.need_more_data)
+                            continue; // Wait for more bytes
+                        if (pp.valid && !pp.client_addr.empty()) {
+                            Log::log_print(DEBUG, "WS: PROXY protocol from %s: client is %s:%u",
+                                           client.remote_addr.c_str(), pp.client_addr.c_str(), pp.client_port);
+                            client.remote_addr = pp.client_addr;
+                        }
+                        if (pp.header_length > 0) {
+                            // Remove PROXY header from buffer so HTTP parsing sees clean data
+                            buf.erase(buf.begin(), buf.begin() + static_cast<long>(pp.header_length));
+                        }
+                        client.proxy_protocol_parsed = true;
+                    }
+                }
+                else if (!client.proxy_protocol_parsed) {
+                    client.proxy_protocol_parsed = true; // Not using PP or not trusted — skip
+                }
+
                 try {
                     if (!perform_server_handshake(client))
                         continue;
@@ -388,6 +414,12 @@ void WebSocketServer::on_client_disconnected(std::function<void(ClientId)> callb
     on_disconnected_ = std::move(callback);
 }
 
+void WebSocketServer::set_reverse_proxy_config(const ReverseProxyConfig& config) {
+    std::lock_guard lock(mutex_);
+    reverse_proxy_config_ = config;
+    trusted_proxies_.configure(config.trusted_proxies);
+}
+
 // --- Private ---
 
 std::vector<uint8_t> WebSocketServer::drain_client(ClientConnection& client) {
@@ -470,6 +502,22 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
             break;
         auto kv = ws::parse_http_header(lines[i]);
         headers.emplace(kv);
+    }
+
+    // Extract real client IP from proxy headers (X-Forwarded-For, X-Real-IP)
+    if (reverse_proxy_config_.enabled && trusted_proxies_.is_trusted(client.remote_addr)) {
+        for (auto& header_name : reverse_proxy_config_.header_priority) {
+            auto it = headers.find(header_name);
+            if (it != headers.end() && !it->second.empty()) {
+                std::string real_ip = net::extract_forwarded_ip(it->second);
+                if (!real_ip.empty()) {
+                    Log::log_print(DEBUG, "WS: %s header from trusted proxy %s: client is %s", header_name.c_str(),
+                                   client.remote_addr.c_str(), real_ip.c_str());
+                    client.remote_addr = real_ip;
+                    break;
+                }
+            }
+        }
     }
 
     // Validate WebSocket upgrade request.

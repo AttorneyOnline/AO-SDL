@@ -79,7 +79,9 @@ set(TEST_SOURCES
     net/test_WebSocketServer.cpp
     net/test_NXMessage.cpp
     net/test_NXBroadcast.cpp
+    net/test_ProxyProtocol.cpp
     net/test_RateLimiter.cpp
+    net/test_TrustedProxyList.cpp
     net/test_RestRouter.cpp
     net/test_RFC9112.cpp
     net/test_RFC9110.cpp

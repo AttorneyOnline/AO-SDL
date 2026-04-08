@@ -10,6 +10,8 @@
 
 #include "net/IServerSocket.h"
 #include "net/ITcpSocket.h"
+#include "net/ReverseProxyConfig.h"
+#include "net/TrustedProxyList.h"
 #include "net/WebSocketFrame.h"
 #include "platform/Poll.h"
 
@@ -145,6 +147,9 @@ class WebSocketServer {
         return poller_.io_stats();
     }
 
+    /// Configure reverse proxy support. Call before start().
+    void set_reverse_proxy_config(const ReverseProxyConfig& config);
+
     /// Get the remote address of a connected client. Returns empty string if unknown.
     std::string get_client_addr(ClientId client_id) const;
 
@@ -166,7 +171,8 @@ class WebSocketServer {
     struct ClientConnection {
         ClientId id = 0;
         std::unique_ptr<ITcpSocket> socket;
-        std::string remote_addr;                            ///< Peer IP address.
+        std::string remote_addr;                            ///< Client IP (may be overridden by proxy headers).
+        bool proxy_protocol_parsed = false;                 ///< PROXY protocol header already processed.
         std::chrono::steady_clock::time_point connected_at; ///< When TCP was accepted.
         std::chrono::steady_clock::time_point last_data_at; ///< Last time data was received.
         bool handshake_complete = false;
@@ -219,4 +225,8 @@ class WebSocketServer {
     std::function<void(ClientId)> on_disconnected_;
 
     TimeoutConfig timeouts_;
+
+    // Reverse proxy support
+    ReverseProxyConfig reverse_proxy_config_;
+    net::TrustedProxyList trusted_proxies_;
 };

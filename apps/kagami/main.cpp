@@ -140,6 +140,13 @@ int main(int /*argc*/, char* argv[]) {
         res.set_content("Hello from " + cfg.server_name() + "\n", "text/plain");
     });
 
+    // Wire reverse proxy config into HTTP server
+    {
+        auto rp = cfg.reverse_proxy_config();
+        if (rp.enabled)
+            http.set_reverse_proxy_config(rp);
+    }
+
     // --- REST API ---
     nx_register_endpoints();
     NXEndpoint::set_server(&nx_backend);
@@ -227,6 +234,14 @@ int main(int /*argc*/, char* argv[]) {
         wst.partial_frame_sec = rl_cfg.value("ws_partial_frame_timeout_sec", 30);
         ws.set_timeouts(wst);
     }
+    // --- Reverse proxy support ---
+    auto rp_cfg = cfg.reverse_proxy_config();
+    if (rp_cfg.enabled) {
+        ws.set_reverse_proxy_config(rp_cfg);
+        Log::log_print(INFO, "Reverse proxy enabled: %zu trusted proxies, PROXY protocol %s",
+                       rp_cfg.trusted_proxies.size(), rp_cfg.proxy_protocol ? "on" : "off");
+    }
+
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     ao_backend.set_ws(&ws);
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
