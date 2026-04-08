@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <filesystem>
+#include <thread>
 
 namespace {
 
@@ -57,14 +59,24 @@ TEST(FirewallValidation, ValidIPv4Addresses) {
 
 namespace {
 
+static std::string find_true_binary() {
+    for (const char* path : {"/usr/bin/true", "/bin/true"}) {
+        if (std::filesystem::exists(path))
+            return path;
+    }
+    return "";
+}
+
 class FirewallRuleTrackingTest : public ::testing::Test {
   protected:
     void SetUp() override {
-        // Configure with a real executable so is_enabled() = true
-        // /bin/true always succeeds and does nothing
+        auto true_path = find_true_binary();
+        if (true_path.empty())
+            GTEST_SKIP() << "Neither /usr/bin/true nor /bin/true found";
+
         FirewallConfig cfg;
         cfg.enabled = true;
-        cfg.helper_path = "/usr/bin/true";
+        cfg.helper_path = true_path;
         cfg.cleanup_on_shutdown = false; // Don't try to flush on teardown
         fw_.configure(cfg);
     }
@@ -145,7 +157,7 @@ TEST_F(FirewallRuleTrackingTest, SweepRemovesExpiredRules) {
 }
 
 TEST_F(FirewallRuleTrackingTest, PermanentRuleNotSwept) {
-    fw_.block_ip("1.2.3.4", "permanent", -2);
+    fw_.block_ip("1.2.3.4", "permanent", DURATION_PERMANENT);
     EXPECT_EQ(fw_.sweep_expired(), 0u);
     EXPECT_EQ(fw_.list_rules().size(), 1u);
 }
@@ -162,19 +174,42 @@ TEST_F(FirewallRuleTrackingTest, FlushClearsAllRules) {
 TEST_F(FirewallRuleTrackingTest, PersistenceRoundTrip) {
     std::string path = "test_fw_rules.json";
 
-    fw_.block_ip("1.2.3.4", "test1", -2);
+    fw_.block_ip("1.2.3.4", "test1", DURATION_PERMANENT);
     fw_.block_range("10.0.0.0/8", "test2", 3600);
     fw_.save_sync(path);
 
+    // Load into a second manager with the same helper configured
     FirewallManager fw2;
-    // Don't configure with a real helper — just test rule loading
-    // fw2 will be disabled, but load() should still populate rules_
+    auto true_path = find_true_binary();
+    FirewallConfig cfg;
+    cfg.enabled = true;
+    cfg.helper_path = true_path;
+    cfg.cleanup_on_shutdown = false;
+    fw2.configure(cfg);
     fw2.load(path);
 
-    // Rules are loaded but fw2 is disabled so list_rules works via the map
-    // Actually, load() enqueues commands which won't execute without a helper.
-    // The rules_ map is populated though.
-    // We can verify by saving again and checking the file.
+    // Give the exec thread time to process the re-install commands
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto rules = fw2.list_rules();
+    EXPECT_EQ(rules.size(), 2u);
+
+    // Verify we can find both rules
+    bool found_ip = false, found_cidr = false;
+    for (auto& r : rules) {
+        if (r.target == "1.2.3.4") {
+            found_ip = true;
+            EXPECT_EQ(r.reason, "test1");
+            EXPECT_EQ(r.expires_at, 0); // permanent
+        }
+        if (r.target == "10.0.0.0/8") {
+            found_cidr = true;
+            EXPECT_EQ(r.reason, "test2");
+            EXPECT_GT(r.expires_at, 0); // timed
+        }
+    }
+    EXPECT_TRUE(found_ip);
+    EXPECT_TRUE(found_cidr);
 
     std::remove(path.c_str());
 }

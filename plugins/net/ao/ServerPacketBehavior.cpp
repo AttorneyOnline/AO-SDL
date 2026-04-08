@@ -68,16 +68,17 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
 
     uint32_t client_asn = 0;
     if (auto* rep = server.room().reputation_service()) {
-        auto cached = rep->lookup(client_ip, [&server, client_id = session.client_id](const IPReputationEntry& entry) {
-            // Async callback — runs on the reputation worker thread.
-            // If the IP is from a blocked ASN, force disconnect.
-            if (auto* asn_mgr = server.room().asn_reputation()) {
-                if (asn_mgr->check_blocked(entry.asn)) {
-                    Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u", format_client_id(client_id).c_str(),
-                                   entry.asn);
-                    if (server.ws())
-                        server.ws()->close_client(client_id);
-                }
+        // Capture non-owning pointers to long-lived objects (outlive the reputation service).
+        // Use close_client_deferred (not close_client) to avoid lock ordering issues —
+        // this callback runs on the reputation worker thread, not the dispatch thread.
+        auto* ws = server.ws();
+        auto* asn_mgr_ptr = server.room().asn_reputation();
+        auto cached = rep->lookup(client_ip, [ws, asn_mgr_ptr, client_id = session.client_id](const IPReputationEntry& entry) {
+            if (asn_mgr_ptr && asn_mgr_ptr->check_blocked(entry.asn)) {
+                Log::log_print(INFO, "AO: %s rejected (ASN blocked): AS%u", format_client_id(client_id).c_str(),
+                               entry.asn);
+                if (ws)
+                    ws->close_client_deferred(client_id);
             }
         });
 

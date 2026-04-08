@@ -60,20 +60,10 @@ class AsnCommand : public CommandHandler {
         }
 
         auto& target = ctx.args[1];
-        // Try to find IP from IPID by checking connected sessions
-        std::string ip = target;
-        if (target.size() == 8) {
-            // Might be an IPID — look up the IP
-            ctx.room.for_each_session([&](ServerSession& session) {
-                if (session.ipid == target)
-                    ip = target; // We don't have raw IP from session, show IPID
-            });
-        }
-
-        auto cached = rep->find_cached(ip);
+        auto cached = rep->find_cached(target);
         if (!cached) {
             ctx.send_system_message("No cached reputation data for " + target + ". Triggering lookup...");
-            rep->lookup(ip);
+            rep->lookup(target);
             return;
         }
 

@@ -1,6 +1,7 @@
 #include "game/ASNReputationManager.h"
 
-#include "game/BanManager.h" // parse_ban_duration
+#include "game/BanManager.h"      // parse_ban_duration
+#include "game/FirewallManager.h" // DURATION_PERMANENT
 #include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
@@ -215,7 +216,7 @@ void ASNReputationManager::block_asn(uint32_t asn, const std::string& as_org, co
         entry.as_org = as_org;
     entry.status = ASNReputationEntry::Status::BLOCKED;
     entry.status_changed_at = now_unix();
-    entry.block_expires_at = (duration_sec == -2) ? 0 : (now_unix() + duration_sec);
+    entry.block_expires_at = (duration_sec == DURATION_PERMANENT) ? 0 : (now_unix() + duration_sec);
     entry.block_reason = reason;
 
     Log::log_print(INFO, "ASNReputation: AS%u (%s) manually blocked: %s", asn, entry.as_org.c_str(), reason.c_str());

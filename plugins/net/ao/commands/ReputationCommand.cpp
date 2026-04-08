@@ -39,18 +39,7 @@ class ReputationCommand : public CommandHandler {
             return;
         }
 
-        // Look up by IP or try to resolve IPID to IP via connected sessions
-        std::string target = subcmd;
-        std::string resolved_ip;
-
-        if (target.size() == 8) {
-            // Might be an IPID
-            ctx.room.for_each_session([&](ServerSession& session) {
-                if (session.ipid == target && resolved_ip.empty())
-                    resolved_ip = target; // Show IPID info
-            });
-        }
-
+        auto& target = subcmd;
         auto cached = rep->find_cached(target);
         if (!cached) {
             ctx.send_system_message("No cached data for " + target + ". Use '/reputation refresh <ip>' to query.");
