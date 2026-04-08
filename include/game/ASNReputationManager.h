@@ -31,6 +31,13 @@ struct ASNReputationEntry {
     int total_abuse_events = 0;
 
     /// Distinct IPs that have triggered abuse from this ASN (within window).
+    /// NOTE: This set grows monotonically within a window — individual IPs
+    /// are not removed when their events age out; only when the entire event
+    /// list is empty (after prune_window). This means "unique IPs in window"
+    /// is slightly overestimated: an IP that triggered once 55 min ago still
+    /// counts if any other event keeps the window alive. This is intentional —
+    /// for botnet detection, an IP that participated in an attack should count
+    /// for the full window even if it disconnected.
     std::unordered_set<std::string> abusive_ips_in_window;
 
     /// Timestamps of recent abuse events (for sliding window).

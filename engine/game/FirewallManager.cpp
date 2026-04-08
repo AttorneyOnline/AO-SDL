@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <fstream>
 #include <json.hpp>
-#include <regex>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -21,19 +20,58 @@ int64_t FirewallManager::now_unix() const {
 }
 
 bool FirewallManager::is_valid_ip(const std::string& ip) {
-    // Basic IPv4 validation
-    static const std::regex ipv4_re(R"(^(\d{1,3}\.){3}\d{1,3}$)");
-    // Basic IPv6 validation (simplified — accepts most valid forms)
-    static const std::regex ipv6_re(R"(^[0-9a-fA-F:]+$)");
-
-    if (std::regex_match(ip, ipv4_re)) {
-        // Verify octets are 0-255
-        int a, b, c, d;
-        if (sscanf(ip.c_str(), "%d.%d.%d.%d", &a, &b, &c, &d) == 4)
-            return a >= 0 && a <= 255 && b >= 0 && b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255;
+    if (ip.empty() || ip.size() > 45)
         return false;
+
+    // IPv4: exactly 4 dot-separated octets 0-255
+    if (ip.find('.') != std::string::npos) {
+        int a, b, c, d;
+        char dummy;
+        if (sscanf(ip.c_str(), "%d.%d.%d.%d%c", &a, &b, &c, &d, &dummy) != 4)
+            return false;
+        return a >= 0 && a <= 255 && b >= 0 && b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255;
     }
-    return std::regex_match(ip, ipv6_re) && ip.size() >= 2;
+
+    // IPv6: hex digits and colons, must contain at least one colon,
+    // at most one :: sequence, max 8 groups, max 39 chars
+    if (ip.size() > 39)
+        return false;
+
+    bool has_colon = false;
+    int double_colon_count = 0;
+    int consecutive_colons = 0;
+    int groups = 0;
+
+    for (size_t i = 0; i < ip.size(); ++i) {
+        char c = ip[i];
+        if (c == ':') {
+            has_colon = true;
+            consecutive_colons++;
+            if (consecutive_colons == 2)
+                double_colon_count++;
+            if (consecutive_colons > 2 || double_colon_count > 1)
+                return false;
+        }
+        else if (std::isxdigit(static_cast<unsigned char>(c))) {
+            if (consecutive_colons > 0)
+                groups++;
+            consecutive_colons = 0;
+        }
+        else {
+            return false;
+        }
+    }
+
+    if (!has_colon)
+        return false;
+    if (!ip.empty() && ip.back() != ':')
+        groups++;
+    if (double_colon_count == 0 && groups != 8)
+        return false;
+    if (groups > 8)
+        return false;
+
+    return true;
 }
 
 bool FirewallManager::is_valid_cidr(const std::string& cidr) {
@@ -103,6 +141,9 @@ void FirewallManager::configure(const FirewallConfig& config) {
 
         enabled_ = true;
         Log::log_print(INFO, "FirewallManager: enabled with helper at %s", config.helper_path.c_str());
+
+        // Initialize nftables table/sets/chain on first configure
+        enqueue({"init", ""});
     }
     catch (const std::exception& e) {
         Log::log_print(WARNING, "FirewallManager: error checking helper: %s", e.what());
@@ -130,7 +171,7 @@ bool FirewallManager::block_ip(const std::string& ip, const std::string& reason,
         rule.target = ip;
         rule.reason = reason;
         rule.installed_at = now_unix();
-        rule.expires_at = (duration_sec == -2) ? 0 : (now_unix() + duration_sec);
+        rule.expires_at = (duration_sec == DURATION_PERMANENT) ? 0 : (now_unix() + duration_sec);
         rules_[ip] = rule;
     }
 
@@ -168,7 +209,7 @@ bool FirewallManager::block_range(const std::string& cidr, const std::string& re
         rule.target = cidr;
         rule.reason = reason;
         rule.installed_at = now_unix();
-        rule.expires_at = (duration_sec == -2) ? 0 : (now_unix() + duration_sec);
+        rule.expires_at = (duration_sec == DURATION_PERMANENT) ? 0 : (now_unix() + duration_sec);
         rules_[cidr] = rule;
     }
 

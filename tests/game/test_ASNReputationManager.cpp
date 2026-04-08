@@ -1,4 +1,5 @@
 #include "game/ASNReputationManager.h"
+#include "game/FirewallManager.h" // DURATION_PERMANENT
 
 #include <gtest/gtest.h>
 
@@ -72,7 +73,7 @@ TEST_F(ASNReputationTest, DuplicateIPDoesNotCountTwice) {
 }
 
 TEST_F(ASNReputationTest, CheckBlockedReturnsTrueWhenBlocked) {
-    mgr_.block_asn(200, "BadOrg", "manual block", -2);
+    mgr_.block_asn(200, "BadOrg", "manual block", DURATION_PERMANENT);
     auto blocked = mgr_.check_blocked(200);
     ASSERT_TRUE(blocked.has_value());
     EXPECT_EQ(blocked->block_reason, "manual block");

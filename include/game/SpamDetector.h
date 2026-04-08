@@ -41,6 +41,10 @@ struct SpamDetectorConfig {
     int echo_window_seconds = 60; ///< Time window
 
     // H2: Connection burst
+    // NOTE: This is a global counter, not per-ASN. During high-traffic
+    // events (popular court sessions), legitimate users may trip this.
+    // Tune the threshold higher for busy servers or combine with a
+    // secondary signal (echo, ASN concentration) before auto-blocking.
     int burst_threshold = 20;      ///< Connections in window
     int burst_window_seconds = 30; ///< Time window
 

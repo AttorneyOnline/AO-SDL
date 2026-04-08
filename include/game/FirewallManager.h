@@ -22,6 +22,9 @@
 #include <unordered_map>
 #include <vector>
 
+/// Duration value meaning "permanent" (no expiry). Used by block_ip/block_range/block_asn.
+inline constexpr int64_t DURATION_PERMANENT = -2;
+
 struct FirewallRule {
     std::string target; ///< IP address or CIDR range
     std::string reason;
@@ -51,13 +54,13 @@ class FirewallManager {
     bool is_enabled() const;
 
     /// Block an individual IP address.
-    bool block_ip(const std::string& ip, const std::string& reason, int64_t duration_sec = -2);
+    bool block_ip(const std::string& ip, const std::string& reason, int64_t duration_sec = DURATION_PERMANENT);
 
     /// Unblock an individual IP address.
     bool unblock_ip(const std::string& ip);
 
     /// Block a CIDR range (e.g. "200.174.198.0/24").
-    bool block_range(const std::string& cidr, const std::string& reason, int64_t duration_sec = -2);
+    bool block_range(const std::string& cidr, const std::string& reason, int64_t duration_sec = DURATION_PERMANENT);
 
     /// Unblock a CIDR range.
     bool unblock_range(const std::string& cidr);
