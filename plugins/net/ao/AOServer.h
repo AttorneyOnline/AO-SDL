@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <vector>
 
+class WebSocketServer;
+
 struct AOProtocolState {
     std::string incomplete_buf;
     std::string hardware_id;
@@ -24,6 +26,13 @@ class AOServer {
 
     using SendFunc = std::function<void(uint64_t client_id, const std::string& data)>;
     void set_send_func(SendFunc func);
+
+    void set_ws(WebSocketServer* ws) {
+        ws_ = ws;
+    }
+    WebSocketServer* ws() const {
+        return ws_;
+    }
 
     GameRoom& room() {
         return room_;
@@ -41,6 +50,7 @@ class AOServer {
 
     void broadcast_ic(const std::string& area, const ICEvent& evt);
     void broadcast_ooc(const std::string& area, const OOCEvent& evt);
+    void broadcast_music(const std::string& area, const MusicEvent& evt);
     void broadcast_char_select(const CharSelectEvent& evt);
     void broadcast_chars_taken(const std::vector<int>& taken);
 
@@ -49,5 +59,6 @@ class AOServer {
 
     GameRoom& room_;
     SendFunc send_func_;
+    WebSocketServer* ws_ = nullptr;
     std::unordered_map<uint64_t, AOProtocolState> proto_state_;
 };

@@ -32,7 +32,7 @@ class AreaListEndpoint : public NXEndpoint {
                 {"players", static_cast<int>(room().sessions_in_area(state.name).size())},
                 {"status", state.status},
                 {"cm", state.cm},
-                {"locked", state.locked},
+                {"locked", state.lock_mode != AreaLockMode::FREE},
             });
         }
 

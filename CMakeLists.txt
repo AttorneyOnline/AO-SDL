@@ -361,6 +361,8 @@ add_library(aoengine STATIC
     engine/utils/JsonValidation.cpp
     engine/utils/StringHelpers.cpp
 
+    engine/game/BanManager.cpp
+    engine/game/CommandRegistry.cpp
     engine/game/GameRoom.cpp
     engine/game/GameThread.cpp
     engine/game/ServerList.cpp
@@ -566,6 +568,22 @@ add_library(ao_net STATIC
     plugins/net/ao/PacketTypes.cpp
     plugins/net/ao/PacketBehavior.cpp
     plugins/net/ao/ServerPacketBehavior.cpp
+    plugins/net/ao/commands/RegisterCommands.cpp
+    plugins/net/ao/commands/HelpCommand.cpp
+    plugins/net/ao/commands/MotdCommand.cpp
+    plugins/net/ao/commands/OnlineCommand.cpp
+    plugins/net/ao/commands/LoginCommand.cpp
+    plugins/net/ao/commands/LogoutCommand.cpp
+    plugins/net/ao/commands/KickCommand.cpp
+    plugins/net/ao/commands/BanCommand.cpp
+    plugins/net/ao/commands/UnbanCommand.cpp
+    plugins/net/ao/commands/AreaCommand.cpp
+    plugins/net/ao/commands/GetAreaCommand.cpp
+    plugins/net/ao/commands/BackgroundCommand.cpp
+    plugins/net/ao/commands/StatusCommand.cpp
+    plugins/net/ao/commands/AreaLockCommand.cpp
+    plugins/net/ao/commands/CmCommand.cpp
+    plugins/net/ao/commands/TestimonyCommand.cpp
 )
 set_property(TARGET ao_net PROPERTY CXX_STANDARD 20)
 target_include_directories(ao_net

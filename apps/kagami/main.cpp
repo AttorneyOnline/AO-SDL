@@ -7,6 +7,7 @@
 #include "TerminalUI.h"
 #include "WsWorkerPool.h"
 
+#include "game/BanManager.h"
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
 #include "net/EndpointFactory.h"
@@ -66,12 +67,18 @@ int main(int /*argc*/, char* argv[]) {
     room.server_name = cfg.server_name();
     room.server_description = cfg.server_description();
     room.max_players = cfg.max_players();
+    room.mod_password = cfg.mod_password();
     room.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
     room.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
     room.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
     room.reset_taken();
     room.build_char_id_index();
     room.build_area_index();
+
+    // --- Ban manager ---
+    BanManager ban_manager;
+    ban_manager.load("bans.json");
+    room.set_ban_manager(&ban_manager);
 
     // --- Protocol backends ---
     AOServer ao_backend(room);
@@ -173,6 +180,7 @@ int main(int /*argc*/, char* argv[]) {
         ws.set_timeouts(wst);
     }
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
+    ao_backend.set_ws(&ws);
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
 
     // --- Rate limiter ---

@@ -35,7 +35,7 @@ class AreaGetEndpoint : public NXEndpoint {
             {"id", state->id},         {"name", state->name},
             {"path", state->path},     {"players", static_cast<int>(room().sessions_in_area(state->name).size())},
             {"status", state->status}, {"cm", state->cm},
-            {"locked", state->locked},
+            {"locked", state->lock_mode != AreaLockMode::FREE},
         };
 
         // Background and music are nullable — return null if empty.

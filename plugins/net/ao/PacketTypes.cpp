@@ -265,7 +265,14 @@ AOPacketCharsCheck::AOPacketCharsCheck(const std::vector<std::string>& fields) :
 // AOPacketPW
 // ---------------------------------------------------------------------------
 
-AOPacketPW::AOPacketPW(const std::string& password) : AOPacket("PW", {password}) {
+PacketRegistrar AOPacketPW::registrar("PW", [](const auto& f) { return std::make_unique<AOPacketPW>(f); });
+
+AOPacketPW::AOPacketPW(const std::string& password) : AOPacket("PW", {password}), password_(password) {
+}
+
+AOPacketPW::AOPacketPW(const std::vector<std::string>& fields) : AOPacket("PW", fields) {
+    if (fields.size() >= MIN_FIELDS)
+        password_ = fields[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -522,6 +529,17 @@ AOPacketPU::AOPacketPU(const std::vector<std::string>& fields) : AOPacket("PU", 
 }
 
 // ---------------------------------------------------------------------------
+// AOPacketZZ
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketZZ::registrar("ZZ", [](const auto& f) { return std::make_unique<AOPacketZZ>(f); });
+
+AOPacketZZ::AOPacketZZ(const std::vector<std::string>& fields) : AOPacket("ZZ", fields) {
+    if (!fields.empty())
+        alert_reason = ao_decode(fields[0]);
+}
+
+// ---------------------------------------------------------------------------
 // AOPacketCT
 // ---------------------------------------------------------------------------
 
@@ -537,6 +555,124 @@ AOPacketCT::AOPacketCT(const std::vector<std::string>& fields) : AOPacket("CT", 
         sender_name = ao_decode(fields[0]);
         message = ao_decode(fields[1]);
         system_message = fields.size() > 2 && fields[2] == "1";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketMA
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketMA::registrar("MA", [](const auto& f) { return std::make_unique<AOPacketMA>(f); });
+
+AOPacketMA::AOPacketMA(const std::vector<std::string>& fields) : AOPacket("MA", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        target_ipid = fields[0];
+        try {
+            duration = std::stoi(fields[1]);
+        }
+        catch (...) {
+            duration = 0;
+        }
+        reason = fields.size() > 2 ? ao_decode(fields[2]) : "No reason given";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketRT
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketRT::registrar("RT", [](const auto& f) { return std::make_unique<AOPacketRT>(f); });
+
+AOPacketRT::AOPacketRT(const std::vector<std::string>& fields) : AOPacket("RT", fields) {
+    if (!fields.empty())
+        animation = fields[0];
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketPE
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketPE::registrar("PE", [](const auto& f) { return std::make_unique<AOPacketPE>(f); });
+
+AOPacketPE::AOPacketPE(const std::vector<std::string>& fields) : AOPacket("PE", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        ev_name = ao_decode(fields[0]);
+        ev_description = ao_decode(fields[1]);
+        ev_image = ao_decode(fields[2]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketEE
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketEE::registrar("EE", [](const auto& f) { return std::make_unique<AOPacketEE>(f); });
+
+AOPacketEE::AOPacketEE(const std::vector<std::string>& fields) : AOPacket("EE", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        try {
+            ev_id = std::stoi(fields[0]);
+        }
+        catch (...) {
+            ev_id = -1;
+        }
+        ev_name = ao_decode(fields[1]);
+        ev_description = ao_decode(fields[2]);
+        ev_image = ao_decode(fields[3]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketDE
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketDE::registrar("DE", [](const auto& f) { return std::make_unique<AOPacketDE>(f); });
+
+AOPacketDE::AOPacketDE(const std::vector<std::string>& fields) : AOPacket("DE", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        try {
+            ev_id = std::stoi(fields[0]);
+        }
+        catch (...) {
+            ev_id = -1;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketCASEA
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketCASEA::registrar("CASEA", [](const auto& f) { return std::make_unique<AOPacketCASEA>(f); });
+
+AOPacketCASEA::AOPacketCASEA(const std::vector<std::string>& fields) : AOPacket("CASEA", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        case_title = ao_decode(fields[0]);
+        need_def = fields[1] == "1";
+        need_pro = fields[2] == "1";
+        need_judge = fields[3] == "1";
+        need_juror = fields[4] == "1";
+        need_steno = fields[5] == "1";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AOPacketSETCASE
+// ---------------------------------------------------------------------------
+
+PacketRegistrar AOPacketSETCASE::registrar("SETCASE",
+                                           [](const auto& f) { return std::make_unique<AOPacketSETCASE>(f); });
+
+AOPacketSETCASE::AOPacketSETCASE(const std::vector<std::string>& fields) : AOPacket("SETCASE", fields) {
+    if (fields.size() >= MIN_FIELDS) {
+        showname = ao_decode(fields[0]);
+        // fields[1] is ignored (duplicate casename in akashi)
+        preferences.resize(5);
+        preferences[0] = fields[2] == "1"; // def
+        preferences[1] = fields[3] == "1"; // pro
+        preferences[2] = fields[4] == "1"; // judge
+        preferences[3] = fields[5] == "1"; // juror
+        preferences[4] = fields[6] == "1"; // steno
     }
 }
 

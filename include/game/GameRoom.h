@@ -13,6 +13,7 @@
 #pragma once
 
 #include "game/AreaState.h"
+#include "game/BanManager.h"
 #include "game/GameAction.h"
 #include "game/ServerSession.h"
 #include "utils/PersistentMap.h"
@@ -137,6 +138,17 @@ class GameRoom {
     std::string server_description;
     int max_players = 100;
 
+    /// Moderator password for simple auth. Empty = auth disabled.
+    std::string mod_password;
+
+    /// Ban manager (non-owning). Set from main before starting backends.
+    BanManager* ban_manager() const {
+        return ban_manager_;
+    }
+    void set_ban_manager(BanManager* bm) {
+        ban_manager_ = bm;
+    }
+
     /// Per-character taken state. 0 = available, nonzero = taken.
     std::vector<int> char_taken;
     void reset_taken() {
@@ -213,6 +225,8 @@ class GameRoom {
     }
 
   private:
+    BanManager* ban_manager_ = nullptr;
+
     // Character ID index (Phase 3)
     std::vector<std::string> char_ids_;                     ///< Parallel to `characters`.
     std::unordered_map<std::string, int> char_id_to_index_; ///< char_id hash → index.

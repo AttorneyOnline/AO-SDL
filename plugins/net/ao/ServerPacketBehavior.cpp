@@ -1,9 +1,25 @@
 #include "PacketTypes.h"
 
 #include "AOServer.h"
+#include "game/AreaState.h"
+#include "game/BanManager.h"
 #include "game/ClientId.h"
+#include "game/CommandRegistry.h"
+#include "net/WebSocketServer.h"
+#include "utils/Crypto.h"
 #include "utils/Log.h"
 #include "utils/Version.h"
+
+#include <chrono>
+
+/// Build an LE (evidence list) packet for an area.
+static AOPacket build_evidence_packet(const AreaState& area) {
+    std::vector<std::string> items;
+    items.reserve(area.evidence.size());
+    for (auto& ev : area.evidence)
+        items.push_back(ev.name + "&" + ev.description + "&" + ev.image);
+    return AOPacket("LE", items);
+}
 
 // Handshake
 
@@ -17,7 +33,34 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
     }
 
     proto->hardware_id = hardware_id;
-    Log::log_print(INFO, "AO: %s HWID: %s", format_client_id(session.client_id).c_str(), hardware_id.c_str());
+    session.hardware_id = hardware_id;
+
+    // Compute IPID from client IP address (SHA-256, first 8 hex chars).
+    if (server.ws()) {
+        std::string ip = server.ws()->get_client_addr(session.client_id);
+        if (!ip.empty()) {
+            session.ipid = crypto::sha256(ip).substr(0, 8);
+        }
+    }
+
+    Log::log_print(INFO, "AO: %s HWID: %s IPID: %s", format_client_id(session.client_id).c_str(),
+                   hardware_id.c_str(), session.ipid.c_str());
+
+    // Ban enforcement: check IPID and HDID before allowing connection
+    if (auto* bm = server.room().ban_manager()) {
+        if (bm->is_banned(session.ipid, session.hardware_id)) {
+            auto* entry = bm->find_ban(session.ipid);
+            if (!entry)
+                entry = bm->find_ban_by_hdid(session.hardware_id);
+            std::string reason = entry ? entry->reason : "Banned";
+            Log::log_print(INFO, "AO: %s rejected (banned): %s", format_client_id(session.client_id).c_str(),
+                           reason.c_str());
+            server.send(session.client_id, AOPacket("KB", {reason}));
+            if (server.ws())
+                server.ws()->close_client(session.client_id);
+            return;
+        }
+    }
 
     server.send(session.client_id, AOPacket("ID", {std::to_string(session.session_id), "kagami", ao_sdl_version()}));
 
@@ -200,12 +243,294 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     if (!session.joined)
         return;
 
+    // Check for OOC commands (messages starting with '/')
+    if (!message.empty() && message[0] == '/') {
+        CommandContext ctx{
+            server.room(),
+            session,
+            {},
+            // send_system_message: OOC system message to invoking client
+            [&server, &session](const std::string& msg) {
+                server.send(session.client_id, AOPacket("CT", {"Server", msg, "1"}));
+            },
+            // send_system_message_to: OOC system message to a specific client
+            [&server](uint64_t client_id, const std::string& msg) {
+                server.send(client_id, AOPacket("CT", {"Server", msg, "1"}));
+            },
+            // disconnect_client
+            [&server](uint64_t client_id) {
+                if (server.ws())
+                    server.ws()->close_client(client_id);
+            },
+            // send_kick_message: KK packet + disconnect
+            [&server](uint64_t client_id, const std::string& reason) {
+                server.send(client_id, AOPacket("KK", {reason}));
+                if (server.ws())
+                    server.ws()->close_client(client_id);
+            },
+            // send_ban_message: KB packet + disconnect
+            [&server](uint64_t client_id, const std::string& reason) {
+                server.send(client_id, AOPacket("KB", {reason}));
+                if (server.ws())
+                    server.ws()->close_client(client_id);
+            },
+        };
+
+        if (CommandRegistry::instance().try_dispatch(ctx, message))
+            return; // command consumed the message
+    }
+
     OOCAction action;
     action.sender_id = session.client_id;
     action.name = sender_name;
     action.message = message;
 
     server.room().handle_ooc(action);
+}
+
+// Health bars
+
+void AOPacketHP::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    // Validate side (1=defense, 2=prosecution) and value (0-10)
+    if (side < 1 || side > 2 || value < 0 || value > 10)
+        return;
+
+    // Update area state
+    auto* area = server.room().find_area_by_name(session.area);
+    if (area) {
+        if (side == 1)
+            area->hp.defense = value;
+        else
+            area->hp.prosecution = value;
+    }
+
+    // Broadcast to area
+    server.send_to_area(session.area, AOPacket("HP", {std::to_string(side), std::to_string(value)}));
+}
+
+// Music / area change
+
+void AOPacketMC::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    auto& room = server.room();
+
+    // Check if the name matches an area (area switch)
+    for (auto& area_name : room.areas) {
+        if (name == area_name) {
+            std::string old_area = session.area;
+            session.area = area_name;
+            Log::log_print(INFO, "AO: %s moved from %s to %s", format_client_id(session.client_id).c_str(),
+                           old_area.c_str(), area_name.c_str());
+
+            // Send area-join info to the client
+            auto* area = room.find_area_by_name(area_name);
+            if (area) {
+                server.send(session.client_id,
+                            AOPacket("BN", {area->background.name.empty() ? "gs4" : area->background.name,
+                                            area->background.position.empty() ? "def" : area->background.position}));
+                server.send(session.client_id, AOPacket("HP", {"1", std::to_string(area->hp.defense)}));
+                server.send(session.client_id, AOPacket("HP", {"2", std::to_string(area->hp.prosecution)}));
+            }
+            return;
+        }
+    }
+
+    // Otherwise it's a music change
+    MusicAction action;
+    action.sender_id = session.client_id;
+    action.track = name;
+    action.showname = showname;
+    action.channel = channel;
+    action.looping = looping == 1;
+    room.handle_music(action);
+}
+
+// Mod call
+
+void AOPacketZZ::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    std::string caller = session.display_name.empty() ? "(spectator)" : session.display_name;
+    std::string msg = "MOD CALL from " + caller + " [" + session.ipid + "]";
+    if (!alert_reason.empty())
+        msg += ": " + alert_reason;
+    msg += " (area: " + session.area + ")";
+
+    Log::log_print(INFO, "AO: %s", msg.c_str());
+
+    // Send alert to all moderators
+    server.room().for_each_session([&](ServerSession& s) {
+        if (s.moderator)
+            server.send(s.client_id, AOPacket("CT", {"Server", msg, "1"}));
+    });
+}
+
+// Password
+
+void AOPacketPW::handle_server(AOServer& server, ServerSession& session) {
+    session.password = password_;
+}
+
+// Moderator action (kick/ban via packet)
+
+void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined || !session.moderator)
+        return;
+
+    auto& room = server.room();
+
+    if (duration == 0) {
+        // Kick
+        int kicked = 0;
+        room.for_each_session([&](ServerSession& s) {
+            if (s.ipid == target_ipid) {
+                server.send(s.client_id, AOPacket("KK", {reason}));
+                if (server.ws())
+                    server.ws()->close_client(s.client_id);
+                ++kicked;
+            }
+        });
+        Log::log_print(INFO, "MA kick: %s [%s] kicked IPID %s (%d): %s", session.display_name.c_str(),
+                       session.ipid.c_str(), target_ipid.c_str(), kicked, reason.c_str());
+    }
+    else {
+        // Ban
+        auto* bm = room.ban_manager();
+        if (!bm)
+            return;
+
+        std::string target_hdid;
+        room.for_each_session([&](ServerSession& s) {
+            if (s.ipid == target_ipid && !s.hardware_id.empty())
+                target_hdid = s.hardware_id;
+        });
+
+        BanEntry entry;
+        entry.ipid = target_ipid;
+        entry.hdid = target_hdid;
+        entry.reason = reason;
+        entry.moderator = session.display_name;
+        entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+                              std::chrono::system_clock::now().time_since_epoch())
+                              .count();
+        entry.duration = (duration == -1) ? -2 : duration; // -1 from packet = permanent (-2 internal)
+        bm->add_ban(entry);
+
+        room.for_each_session([&](ServerSession& s) {
+            if (s.ipid == target_ipid) {
+                server.send(s.client_id, AOPacket("KB", {reason}));
+                if (server.ws())
+                    server.ws()->close_client(s.client_id);
+            }
+        });
+
+        bm->save_async("bans.json");
+        Log::log_print(INFO, "MA ban: %s [%s] banned IPID %s (dur=%d): %s", session.display_name.c_str(),
+                       session.ipid.c_str(), target_ipid.c_str(), duration, reason.c_str());
+    }
+}
+
+// Testimony animations (WT/CE)
+
+void AOPacketRT::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined || session.is_spectator())
+        return;
+
+    // Broadcast to area
+    server.send_to_area(session.area, AOPacket("RT", {animation}));
+    Log::log_print(INFO, "AO: RT %s from %s in %s", animation.c_str(), format_client_id(session.client_id).c_str(),
+                   session.area.c_str());
+}
+
+// Evidence: add
+
+void AOPacketPE::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    auto* area = server.room().find_area_by_name(session.area);
+    if (!area)
+        return;
+
+    area->evidence.push_back({ev_name, ev_description, ev_image});
+    server.send_to_area(session.area, build_evidence_packet(*area));
+    Log::log_print(INFO, "AO: evidence added by %s in %s: %s", format_client_id(session.client_id).c_str(),
+                   session.area.c_str(), ev_name.c_str());
+}
+
+// Evidence: edit
+
+void AOPacketEE::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    auto* area = server.room().find_area_by_name(session.area);
+    if (!area)
+        return;
+
+    if (ev_id < 0 || ev_id >= static_cast<int>(area->evidence.size()))
+        return;
+
+    area->evidence[ev_id] = {ev_name, ev_description, ev_image};
+    server.send_to_area(session.area, build_evidence_packet(*area));
+}
+
+// Evidence: delete
+
+void AOPacketDE::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    auto* area = server.room().find_area_by_name(session.area);
+    if (!area)
+        return;
+
+    if (ev_id < 0 || ev_id >= static_cast<int>(area->evidence.size()))
+        return;
+
+    area->evidence.erase(area->evidence.begin() + ev_id);
+    server.send_to_area(session.area, build_evidence_packet(*area));
+}
+
+// Case announcement
+
+void AOPacketCASEA::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined || session.is_spectator())
+        return;
+
+    // Build the CASEA broadcast packet
+    AOPacket pkt("CASEA", {case_title, need_def ? "1" : "0", need_pro ? "1" : "0", need_judge ? "1" : "0",
+                           need_juror ? "1" : "0", need_steno ? "1" : "0", ""});
+
+    // Send to players who have matching casing preferences
+    bool needs[5] = {need_def, need_pro, need_judge, need_juror, need_steno};
+    server.room().for_each_session([&](ServerSession& s) {
+        if (!s.joined || s.casing_preferences.size() < 5)
+            return;
+        for (int i = 0; i < 5; ++i) {
+            if (needs[i] && s.casing_preferences[i]) {
+                server.send(s.client_id, pkt);
+                break;
+            }
+        }
+    });
+
+    Log::log_print(INFO, "AO: CASEA from %s: %s", format_client_id(session.client_id).c_str(), case_title.c_str());
+}
+
+// Set casing preferences
+
+void AOPacketSETCASE::handle_server(AOServer& server, ServerSession& session) {
+    if (!session.joined)
+        return;
+
+    session.casing_preferences = preferences;
 }
 
 // Keepalive
