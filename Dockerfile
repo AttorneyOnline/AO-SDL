@@ -36,17 +36,23 @@ RUN cmake -B build -G Ninja \
 
 RUN strip build/apps/kagami/kagami
 
+# Build the firewall helper (small C binary, no cmake needed)
+RUN cc -O2 -Wall -Wextra -o build/kagami-fw-helper tools/kagami-fw-helper.c \
+    && strip build/kagami-fw-helper
+
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime
 # ---------------------------------------------------------------------------
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libssl3t64 liburing2 ca-certificates \
+        libssl3t64 liburing2 ca-certificates nftables libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --from=build /src/build/apps/kagami/kagami .
+COPY --from=build /src/build/kagami-fw-helper .
+RUN setcap cap_net_admin+ep /app/kagami-fw-helper
 
 EXPOSE 8080 8081
 
