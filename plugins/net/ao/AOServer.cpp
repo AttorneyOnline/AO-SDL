@@ -6,15 +6,20 @@
 #include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
+/// Linker anchor for OOC command registrars.
+void ao_register_commands();
+
 static auto& ao_errors_ =
     metrics::MetricsRegistry::instance().counter("kagami_ao_errors_total", "AO protocol errors", {"type"});
 
 AOServer::AOServer(GameRoom& room) : room_(room) {
     ao_register_packet_types();
+    ao_register_commands();
 
     room_.add_ic_broadcast([this](const std::string& area, const ICEvent& evt) { broadcast_ic(area, evt); });
     room_.add_ooc_broadcast([this](const std::string& area, const OOCEvent& evt) { broadcast_ooc(area, evt); });
     room_.add_char_select_broadcast([this](const CharSelectEvent& evt) { broadcast_char_select(evt); });
+    room_.add_music_broadcast([this](const std::string& area, const MusicEvent& evt) { broadcast_music(area, evt); });
     room_.add_chars_taken_broadcast([this](const std::vector<int>& taken) { broadcast_chars_taken(taken); });
 }
 
@@ -188,6 +193,16 @@ void AOServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
 
 void AOServer::broadcast_ooc(const std::string& area, const OOCEvent& evt) {
     send_to_area(area, AOPacket("CT", {evt.action.name, evt.action.message, "0"}));
+}
+
+void AOServer::broadcast_music(const std::string& area, const MusicEvent& evt) {
+    auto& a = evt.action;
+    // MC field 1 is the char_id of the sender, looked up from the session.
+    auto* session = room_.get_session(a.sender_id);
+    int sender_char_id = session ? session->character_id : -1;
+    AOPacket mc("MC", {a.track, std::to_string(sender_char_id), a.showname, a.looping ? "1" : "0",
+                       std::to_string(a.channel), "0"});
+    send_to_area(area, mc);
 }
 
 void AOServer::broadcast_char_select(const CharSelectEvent& evt) {

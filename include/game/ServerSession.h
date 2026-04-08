@@ -12,13 +12,16 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 struct ServerSession {
     ServerSession() = default;
     ServerSession(ServerSession&& o) noexcept
         : client_id(o.client_id), session_id(o.session_id), session_token(std::move(o.session_token)),
           display_name(std::move(o.display_name)), client_software(std::move(o.client_software)),
-          character_id(o.character_id), area(std::move(o.area)), joined(o.joined), moderator(o.moderator),
+          character_id(o.character_id), area(std::move(o.area)), ipid(std::move(o.ipid)),
+          hardware_id(std::move(o.hardware_id)), password(std::move(o.password)),
+          casing_preferences(std::move(o.casing_preferences)), joined(o.joined), moderator(o.moderator),
           protocol(std::move(o.protocol)), last_activity_ns(o.last_activity_ns.load(std::memory_order_relaxed)),
           bytes_sent(o.bytes_sent.load(std::memory_order_relaxed)),
           bytes_received(o.bytes_received.load(std::memory_order_relaxed)),
@@ -39,11 +42,26 @@ struct ServerSession {
     int character_id = -1;       ///< Selected character (-1 = none).
     std::string area;            ///< Current area/room.
 
+    std::string ipid;        ///< SHA-256(IP).left(8), stable short identifier for moderation.
+    std::string hardware_id; ///< Hardware ID reported by the client (HDID).
+
+    /// Password sent via PW packet (used in some auth flows).
+    std::string password;
+
+    /// Casing preferences for CASEA announcements.
+    /// 5 booleans: def_attorney, prosecutor, judge, juror, stenographer.
+    std::vector<bool> casing_preferences;
+
     /// True if the session has completed the handshake and is fully joined.
     bool joined = false;
 
     /// True if the session has moderator privileges (e.g. all-areas broadcast).
     bool moderator = false;
+
+    /// True if the client is a spectator (character_id == -1 after joining).
+    bool is_spectator() const {
+        return character_id < 0;
+    }
 
     /// Protocol backend that owns this session ("ao2" or "aonx").
     std::string protocol;

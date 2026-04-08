@@ -33,7 +33,7 @@ class AreaJoinEndpoint : public NXEndpoint {
         if (!state)
             return RestResponse::error(404, "Area not found");
 
-        if (state->locked)
+        if (!state->can_enter(req.session->client_id))
             return RestResponse::error(403, "Area is locked");
 
         req.session->area = state->name;

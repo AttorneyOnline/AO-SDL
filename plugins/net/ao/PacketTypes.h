@@ -231,8 +231,12 @@ class AOPacketCharsCheck : public AOPacket {
 class AOPacketPW : public AOPacket {
   public:
     AOPacketPW(const std::string& password);
+    AOPacketPW(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
+    std::string password_;
+    static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 1;
 };
 
@@ -322,6 +326,7 @@ class AOPacketMC : public AOPacket {
     AOPacketMC(const std::vector<std::string>& fields);
 
     virtual void handle(AOClient& cli) override;
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
     std::string name;
@@ -390,6 +395,7 @@ class AOPacketHP : public AOPacket {
   public:
     AOPacketHP(const std::vector<std::string>& fields);
     virtual void handle(AOClient& cli) override;
+    void handle_server(AOServer& server, ServerSession& session) override;
 
   private:
     int side = 0;
@@ -452,6 +458,18 @@ class AOPacketPU : public AOPacket {
     static constexpr int MIN_FIELDS = 3;
 };
 
+/// Mod call / alert (client → server). Notifies all moderators.
+class AOPacketZZ : public AOPacket {
+  public:
+    AOPacketZZ(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    std::string alert_reason;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 0;
+};
+
 class AOPacketCT : public AOPacket {
   public:
     AOPacketCT(const std::string& sender_name, const std::string& message, bool system_message);
@@ -467,4 +485,101 @@ class AOPacketCT : public AOPacket {
 
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 2;
+};
+
+/// Moderator action packet (client → server). Kick/ban via packet UI.
+class AOPacketMA : public AOPacket {
+  public:
+    AOPacketMA(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    std::string target_ipid;
+    int duration = 0;    ///< 0 = kick, >0 = ban (seconds), -1 = permanent.
+    std::string reason;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 3;
+};
+
+/// Witness testimony / cross-examination animation (client → server).
+class AOPacketRT : public AOPacket {
+  public:
+    AOPacketRT(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    std::string animation; ///< "testimony1" (WT) or "testimony2" (CE).
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 1;
+};
+
+/// Add evidence (client → server).
+class AOPacketPE : public AOPacket {
+  public:
+    AOPacketPE(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    std::string ev_name;
+    std::string ev_description;
+    std::string ev_image;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 3;
+};
+
+/// Edit evidence (client → server).
+class AOPacketEE : public AOPacket {
+  public:
+    AOPacketEE(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    int ev_id = 0;
+    std::string ev_name;
+    std::string ev_description;
+    std::string ev_image;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 4;
+};
+
+/// Delete evidence (client → server).
+class AOPacketDE : public AOPacket {
+  public:
+    AOPacketDE(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    int ev_id = 0;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 1;
+};
+
+/// Case announcement (client → server). Notify players of needed roles.
+class AOPacketCASEA : public AOPacket {
+  public:
+    AOPacketCASEA(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    std::string case_title;
+    bool need_def = false;
+    bool need_pro = false;
+    bool need_judge = false;
+    bool need_juror = false;
+    bool need_steno = false;
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 6;
+};
+
+/// Set casing preferences (client → server).
+class AOPacketSETCASE : public AOPacket {
+  public:
+    AOPacketSETCASE(const std::vector<std::string>& fields);
+    void handle_server(AOServer& server, ServerSession& session) override;
+
+  private:
+    std::string showname;
+    std::vector<bool> preferences; ///< 5 bools: def, pro, judge, juror, steno.
+    static PacketRegistrar registrar;
+    static constexpr int MIN_FIELDS = 7;
 };

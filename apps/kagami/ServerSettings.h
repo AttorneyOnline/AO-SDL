@@ -58,6 +58,11 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return value<std::string>("motd");
     }
 
+    /// Moderator password for simple auth. Empty = auth disabled.
+    std::string mod_password() const {
+        return value<std::string>("mod_password");
+    }
+
     /// Session TTL in seconds. 0 = no expiry.
     int session_ttl_seconds() const {
         return std::max(0, value<int>("session_ttl_seconds"));
@@ -168,6 +173,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"bind_address", "0.0.0.0"},
             {"max_players", 100},
             {"motd", ""},
+            {"mod_password", ""},
             {"session_ttl_seconds", 300},
             {"cors_origin", "https://web.aceattorneyonline.com"},
             {"log_level", "verbose"},
