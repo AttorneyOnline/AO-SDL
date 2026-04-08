@@ -18,6 +18,8 @@ services:
     image: ${KAGAMI_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/kagami:latest}
     restart: unless-stopped
     network_mode: host
+    cap_add:
+      - NET_ADMIN  # Required for kagami-fw-helper nftables operations
     volumes:
       - ./kagami.json:/app/kagami.json:ro
       - kagami_logs:/logs
