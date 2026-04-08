@@ -6,7 +6,6 @@
 #include <cctype>
 #include <fstream>
 #include <json.hpp>
-#include <thread>
 
 // -- Duration parsing ---------------------------------------------------------
 
@@ -26,8 +25,7 @@ int64_t parse_ban_duration(const std::string& input) {
     int64_t current_num = 0;
     bool has_unit = false;
 
-    for (size_t i = 0; i < lower.size(); ++i) {
-        char c = lower[i];
+    for (char c : lower) {
         if (std::isdigit(c)) {
             current_num = current_num * 10 + (c - '0');
         }
@@ -62,6 +60,16 @@ int64_t parse_ban_duration(const std::string& input) {
 
 // -- BanManager ---------------------------------------------------------------
 
+BanManager::BanManager() : writer_thread_([this](std::stop_token st) { writer_loop(st); }) {
+}
+
+BanManager::~BanManager() {
+    // Signal the writer to stop and flush any pending write.
+    writer_thread_.request_stop();
+    writer_cv_.notify_one();
+    // jthread destructor joins automatically.
+}
+
 void BanManager::add_ban(BanEntry entry) {
     std::lock_guard lock(mutex_);
     auto ipid = entry.ipid;
@@ -92,23 +100,42 @@ bool BanManager::is_banned(const std::string& ipid, const std::string& hdid) con
     return false;
 }
 
-const BanEntry* BanManager::find_ban(const std::string& ipid) const {
+std::optional<BanEntry> BanManager::find_ban(const std::string& ipid) const {
     std::lock_guard lock(mutex_);
     auto it = bans_.find(ipid);
     if (it != bans_.end() && !it->second.is_expired())
-        return &it->second;
-    return nullptr;
+        return it->second; // copy
+    return std::nullopt;
 }
 
-const BanEntry* BanManager::find_ban_by_hdid(const std::string& hdid) const {
+std::optional<BanEntry> BanManager::find_ban_by_hdid(const std::string& hdid) const {
     if (hdid.empty())
-        return nullptr;
+        return std::nullopt;
     std::lock_guard lock(mutex_);
     for (auto& [_, entry] : bans_) {
         if (!entry.hdid.empty() && entry.hdid == hdid && !entry.is_expired())
-            return &entry;
+            return entry; // copy
     }
-    return nullptr;
+    return std::nullopt;
+}
+
+std::string BanManager::get_ban_reason(const std::string& ipid, const std::string& hdid) const {
+    std::lock_guard lock(mutex_);
+
+    // Check by IPID first
+    auto it = bans_.find(ipid);
+    if (it != bans_.end() && !it->second.is_expired())
+        return it->second.reason;
+
+    // Check by HDID
+    if (!hdid.empty()) {
+        for (auto& [_, entry] : bans_) {
+            if (!entry.hdid.empty() && entry.hdid == hdid && !entry.is_expired())
+                return entry.reason;
+        }
+    }
+
+    return "Banned";
 }
 
 size_t BanManager::count() const {
@@ -169,42 +196,74 @@ void BanManager::load(const std::string& path) {
     }
 }
 
-void BanManager::save_async(const std::string& path) const {
-    // Copy bans under mutex
-    std::unordered_map<std::string, BanEntry> copy;
+std::unordered_map<std::string, BanEntry> BanManager::snapshot() const {
+    std::lock_guard lock(mutex_);
+    return bans_;
+}
+
+void BanManager::write_to_disk(const std::unordered_map<std::string, BanEntry>& bans, const std::string& path) {
+    try {
+        nlohmann::json j = nlohmann::json::array();
+        for (auto& [_, entry] : bans) {
+            if (entry.is_expired())
+                continue;
+            j.push_back({
+                {"ipid", entry.ipid},
+                {"hdid", entry.hdid},
+                {"reason", entry.reason},
+                {"moderator", entry.moderator},
+                {"timestamp", entry.timestamp},
+                {"duration", entry.duration},
+            });
+        }
+
+        std::ofstream file(path);
+        if (file.is_open()) {
+            file << j.dump(2) << std::endl;
+            Log::log_print(DEBUG, "BanManager: saved %zu bans to %s", j.size(), path.c_str());
+        }
+        else {
+            Log::log_print(WARNING, "BanManager: failed to open %s for writing", path.c_str());
+        }
+    }
+    catch (const std::exception& e) {
+        Log::log_print(WARNING, "BanManager: save failed: %s", e.what());
+    }
+}
+
+void BanManager::save_async(const std::string& path) {
     {
-        std::lock_guard lock(mutex_);
-        copy = bans_;
+        std::lock_guard lock(writer_mutex_);
+        writer_path_ = path;
+        writer_snapshot_ = snapshot();
+        writer_pending_ = true;
+    }
+    writer_cv_.notify_one();
+}
+
+void BanManager::save_sync(const std::string& path) const {
+    write_to_disk(snapshot(), path);
+}
+
+void BanManager::writer_loop(std::stop_token stop) {
+    while (!stop.stop_requested()) {
+        std::unique_lock lock(writer_mutex_);
+        writer_cv_.wait(lock, [&] { return writer_pending_ || stop.stop_requested(); });
+
+        if (writer_pending_) {
+            auto snap = std::move(writer_snapshot_);
+            auto path = std::move(writer_path_);
+            writer_pending_ = false;
+            lock.unlock();
+
+            write_to_disk(snap, path);
+        }
     }
 
-    // Write on detached thread
-    std::thread([copy = std::move(copy), path]() {
-        try {
-            nlohmann::json j = nlohmann::json::array();
-            for (auto& [_, entry] : copy) {
-                if (entry.is_expired())
-                    continue;
-                j.push_back({
-                    {"ipid", entry.ipid},
-                    {"hdid", entry.hdid},
-                    {"reason", entry.reason},
-                    {"moderator", entry.moderator},
-                    {"timestamp", entry.timestamp},
-                    {"duration", entry.duration},
-                });
-            }
-
-            std::ofstream file(path);
-            if (file.is_open()) {
-                file << j.dump(2) << std::endl;
-                Log::log_print(DEBUG, "BanManager: saved %zu bans to %s", j.size(), path.c_str());
-            }
-            else {
-                Log::log_print(WARNING, "BanManager: failed to open %s for writing", path.c_str());
-            }
-        }
-        catch (const std::exception& e) {
-            Log::log_print(WARNING, "BanManager: save failed: %s", e.what());
-        }
-    }).detach();
+    // Flush any final pending write on shutdown
+    std::lock_guard lock(writer_mutex_);
+    if (writer_pending_) {
+        write_to_disk(writer_snapshot_, writer_path_);
+        writer_pending_ = false;
+    }
 }

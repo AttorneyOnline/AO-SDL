@@ -49,10 +49,7 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
     // Ban enforcement: check IPID and HDID before allowing connection
     if (auto* bm = server.room().ban_manager()) {
         if (bm->is_banned(session.ipid, session.hardware_id)) {
-            auto* entry = bm->find_ban(session.ipid);
-            if (!entry)
-                entry = bm->find_ban_by_hdid(session.hardware_id);
-            std::string reason = entry ? entry->reason : "Banned";
+            std::string reason = bm->get_ban_reason(session.ipid, session.hardware_id);
             Log::log_print(INFO, "AO: %s rejected (banned): %s", format_client_id(session.client_id).c_str(),
                            reason.c_str());
             server.send(session.client_id, AOPacket("KB", {reason}));
