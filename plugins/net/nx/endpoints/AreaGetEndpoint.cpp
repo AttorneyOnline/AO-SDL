@@ -32,9 +32,12 @@ class AreaGetEndpoint : public NXEndpoint {
             return RestResponse::error(404, "Area not found");
 
         nlohmann::json area_obj = {
-            {"id", state->id},         {"name", state->name},
-            {"path", state->path},     {"players", static_cast<int>(room().sessions_in_area(state->name).size())},
-            {"status", state->status}, {"cm", state->cm},
+            {"id", state->id},
+            {"name", state->name},
+            {"path", state->path},
+            {"players", static_cast<int>(room().sessions_in_area(state->name).size())},
+            {"status", state->status},
+            {"cm", state->cm},
             {"locked", state->lock_mode != AreaLockMode::FREE},
         };
 

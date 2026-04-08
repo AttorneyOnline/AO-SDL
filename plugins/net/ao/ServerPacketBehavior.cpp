@@ -43,8 +43,8 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
         }
     }
 
-    Log::log_print(INFO, "AO: %s HWID: %s IPID: %s", format_client_id(session.client_id).c_str(),
-                   hardware_id.c_str(), session.ipid.c_str());
+    Log::log_print(INFO, "AO: %s HWID: %s IPID: %s", format_client_id(session.client_id).c_str(), hardware_id.c_str(),
+                   session.ipid.c_str());
 
     // Ban enforcement: check IPID and HDID before allowing connection
     if (auto* bm = server.room().ban_manager()) {
@@ -253,10 +253,8 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
                 [&server](uint64_t client_id, const std::string& msg) {
                     server.send(client_id, AOPacket("CT", {"Server", msg, "1"}));
                 },
-            .send_area_join_info =
-                [&server](uint64_t client_id, const std::string& area) {
-                    server.send_area_join_info(client_id, area);
-                },
+            .send_area_join_info = [&server](uint64_t client_id,
+                                             const std::string& area) { server.send_area_join_info(client_id, area); },
             .broadcast_background =
                 [&server](const std::string& area, const std::string& bg) {
                     server.send_to_area(area, AOPacket("BN", {bg, "def"}));
@@ -335,8 +333,7 @@ void AOPacketMC::handle_server(AOServer& server, ServerSession& session) {
             // Check if the area allows entry
             auto* area = room.find_area_by_name(area_name);
             if (area && !area->can_enter(session.client_id)) {
-                server.send(session.client_id,
-                            AOPacket("CT", {"Server", "Area " + area_name + " is locked.", "1"}));
+                server.send(session.client_id, AOPacket("CT", {"Server", "Area " + area_name + " is locked.", "1"}));
                 return;
             }
 
@@ -427,9 +424,9 @@ void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
         entry.hdid = target_hdid;
         entry.reason = reason;
         entry.moderator = session.display_name;
-        entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-                              std::chrono::system_clock::now().time_since_epoch())
-                              .count();
+        entry.timestamp =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
         entry.duration = (duration == -1) ? -2 : duration; // -1 from packet = permanent (-2 internal)
         bm->add_ban(entry);
 

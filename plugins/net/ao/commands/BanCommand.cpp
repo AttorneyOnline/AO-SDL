@@ -9,7 +9,6 @@
 
 #include <chrono>
 
-
 class BanCommand : public CommandHandler {
   public:
     const std::string& name() const override {
@@ -41,8 +40,7 @@ class BanCommand : public CommandHandler {
 
         int64_t duration = parse_ban_duration(duration_str);
         if (duration == -1) {
-            ctx.send_system_message(
-                "Invalid duration: " + duration_str + ". Use 'perma', '30m', '1h', '2h30m', etc.");
+            ctx.send_system_message("Invalid duration: " + duration_str + ". Use 'perma', '30m', '1h', '2h30m', etc.");
             return;
         }
 

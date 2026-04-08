@@ -81,8 +81,8 @@ class TestimonyDisplayCommand : public CommandHandler {
         else if (t.state == TestimonyState::ADD)
             state_str = "ADD";
 
-        std::string text = "Testimony (" + std::string(state_str) + "), " +
-                           std::to_string(t.statements.size()) + " statement(s):";
+        std::string text =
+            "Testimony (" + std::string(state_str) + "), " + std::to_string(t.statements.size()) + " statement(s):";
         for (int i = 0; i < static_cast<int>(t.statements.size()); ++i) {
             text += "\n  " + std::to_string(i + 1) + ". ";
             if (i == t.current_index)

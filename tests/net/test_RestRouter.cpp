@@ -1180,7 +1180,7 @@ TEST_F(NXEndpointTest, AreaJoinLocked) {
 
     auto* cr1 = room_.find_area_by_name("Courtroom 1");
     ASSERT_NE(cr1, nullptr);
-    cr1->locked = true;
+    cr1->lock_mode = AreaLockMode::LOCKED;
 
     auto res = cli.Post("/aonx/v1/areas/" + cr1->id + "/join", h, "", "application/json");
     ASSERT_TRUE(res);
@@ -2104,7 +2104,7 @@ TEST_F(NXEndpointTest, AreaGet_LockedAreaShowsLocked) {
     http::Headers h = {{"Authorization", "Bearer " + token}};
 
     auto* cr1 = room_.find_area_by_name("Courtroom 1");
-    cr1->locked = true;
+    cr1->lock_mode = AreaLockMode::LOCKED;
 
     // The area list should report locked
     auto res = cli.Get("/aonx/v1/areas", h);

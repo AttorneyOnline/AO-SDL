@@ -283,7 +283,8 @@ void MetricsCollector::start(http::Server& http) {
                         ++count;
                 });
                 area_players.labels({state.name, state.status}).set(count);
-                area_info.labels({state.name, state.status, state.lock_mode != AreaLockMode::FREE ? "true" : "false"}).set(1);
+                area_info.labels({state.name, state.status, state.lock_mode != AreaLockMode::FREE ? "true" : "false"})
+                    .set(1);
             }
 
             session_bytes_sent.clear();

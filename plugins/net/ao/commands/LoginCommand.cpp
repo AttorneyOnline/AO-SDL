@@ -50,9 +50,8 @@ class LoginCommand : public CommandHandler {
         if (cooldown > 0) {
             auto elapsed = std::chrono::steady_clock::now() - ctx.session.last_login_failure;
             if (elapsed < std::chrono::seconds(cooldown)) {
-                auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
-                                     std::chrono::seconds(cooldown) - elapsed)
-                                     .count();
+                auto remaining =
+                    std::chrono::duration_cast<std::chrono::seconds>(std::chrono::seconds(cooldown) - elapsed).count();
                 ctx.send_system_message("Too many failed attempts. Try again in " + std::to_string(remaining) + "s.");
                 return;
             }
@@ -64,8 +63,7 @@ class LoginCommand : public CommandHandler {
         //   "mypassword"        → stored as plaintext (legacy)
         bool match = false;
         static const std::string hash_prefix = "sha256:";
-        if (configured.size() > hash_prefix.size() &&
-            configured.compare(0, hash_prefix.size(), hash_prefix) == 0) {
+        if (configured.size() > hash_prefix.size() && configured.compare(0, hash_prefix.size(), hash_prefix) == 0) {
             // Config has a hash — compare hash-to-hash
             std::string stored_hash = configured.substr(hash_prefix.size());
             match = (crypto::sha256(ctx.args[1]) == stored_hash);

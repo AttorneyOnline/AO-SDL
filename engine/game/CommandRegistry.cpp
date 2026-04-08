@@ -43,8 +43,8 @@ bool CommandRegistry::try_dispatch(CommandContext& ctx, const std::string& messa
 
     handler->execute(ctx);
 
-    Log::log_print(INFO, "Command: /%s from %s [%s]", cmd_name.c_str(),
-                   ctx.session.display_name.c_str(), ctx.session.ipid.c_str());
+    Log::log_print(INFO, "Command: /%s from %s [%s]", cmd_name.c_str(), ctx.session.display_name.c_str(),
+                   ctx.session.ipid.c_str());
 
     return true;
 }

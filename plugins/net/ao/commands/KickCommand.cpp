@@ -49,9 +49,8 @@ class KickCommand : public CommandHandler {
         });
 
         if (kicked > 0) {
-            Log::log_print(INFO, "Kick: %s [%s] kicked IPID %s (%d session(s)): %s",
-                           ctx.session.display_name.c_str(), ctx.session.ipid.c_str(), target_ipid.c_str(), kicked,
-                           reason.c_str());
+            Log::log_print(INFO, "Kick: %s [%s] kicked IPID %s (%d session(s)): %s", ctx.session.display_name.c_str(),
+                           ctx.session.ipid.c_str(), target_ipid.c_str(), kicked, reason.c_str());
             ctx.send_system_message("Kicked " + std::to_string(kicked) + " session(s) for IPID " + target_ipid + ".");
         }
         else {

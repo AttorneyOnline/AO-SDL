@@ -495,7 +495,7 @@ class AOPacketMA : public AOPacket {
 
   private:
     std::string target_ipid;
-    int duration = 0;    ///< 0 = kick, >0 = ban (seconds), -1 = permanent.
+    int duration = 0; ///< 0 = kick, >0 = ban (seconds), -1 = permanent.
     std::string reason;
     static PacketRegistrar registrar;
     static constexpr int MIN_FIELDS = 3;

@@ -15,8 +15,7 @@ int64_t parse_ban_duration(const std::string& input) {
 
     // Check for "perma" / "permanent"
     std::string lower = input;
-    std::transform(lower.begin(), lower.end(), lower.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
     if (lower == "perma" || lower == "permanent")
         return -2;
 

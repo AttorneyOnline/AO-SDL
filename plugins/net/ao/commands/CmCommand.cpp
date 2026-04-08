@@ -51,8 +51,7 @@ class CmCommand : public CommandHandler {
             area->cm = ctx.session.display_name;
             area->invited.insert(ctx.session.client_id);
             ctx.send_system_message("You are now a case master of " + ctx.session.area + ".");
-            Log::log_print(INFO, "CM: %s became CM of %s", ctx.session.display_name.c_str(),
-                           ctx.session.area.c_str());
+            Log::log_print(INFO, "CM: %s became CM of %s", ctx.session.display_name.c_str(), ctx.session.area.c_str());
         }
     }
 };
