@@ -54,6 +54,6 @@ COPY --from=build /src/build/apps/kagami/kagami .
 COPY --from=build /src/build/kagami-fw-helper .
 RUN setcap cap_net_admin+ep /app/kagami-fw-helper
 
-EXPOSE 8080 8081
+EXPOSE 8080 27016
 
 ENTRYPOINT ["./kagami"]
