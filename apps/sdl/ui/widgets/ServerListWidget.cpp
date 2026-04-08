@@ -24,19 +24,26 @@ void ServerListWidget::render() {
 
     // Direct connect bar
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 80);
-    bool enter_pressed = ImGui::InputTextWithHint("##direct", "host:port", direct_connect_buf_,
+    bool enter_pressed = ImGui::InputTextWithHint("##direct", "wss://host:port", direct_connect_buf_,
                                                   sizeof(direct_connect_buf_), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();
     if (ImGui::Button("Connect", ImVec2(72, 0)) || enter_pressed) {
         std::string addr(direct_connect_buf_);
         if (!addr.empty()) {
-            uint16_t port = 27016; // AO2 default WS port
-            auto colon = addr.rfind(':');
-            if (colon != std::string::npos) {
-                port = static_cast<uint16_t>(std::atoi(addr.c_str() + colon + 1));
-                addr = addr.substr(0, colon);
+            // If a ws:// or wss:// scheme is present, pass the full URL and
+            // let parse_ws_url() handle host/port/TLS extraction.
+            if (addr.starts_with("ws://") || addr.starts_with("wss://")) {
+                screen_.direct_connect(addr, 0);
             }
-            screen_.direct_connect(addr, port);
+            else {
+                uint16_t port = 27016; // AO2 default WS port
+                auto colon = addr.rfind(':');
+                if (colon != std::string::npos) {
+                    port = static_cast<uint16_t>(std::atoi(addr.c_str() + colon + 1));
+                    addr = addr.substr(0, colon);
+                }
+                screen_.direct_connect(addr, port);
+            }
         }
     }
 
@@ -52,7 +59,7 @@ void ServerListWidget::render() {
 
         for (int i = 0; i < (int)servers.size(); i++) {
             const auto& s = servers[i];
-            std::optional<uint16_t> port = s.ws_port.has_value() ? s.ws_port : s.wss_port;
+            bool can_connect = s.wss_port.has_value() || s.ws_port.has_value();
 
             ImGui::TableNextRow();
 
@@ -60,11 +67,11 @@ void ServerListWidget::render() {
             bool is_selected = (screen_.get_selected() == i);
             ImGui::PushID(i);
             if (ImGui::Selectable(s.name.c_str(), is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
-                if (port.has_value()) {
+                if (can_connect) {
                     screen_.select_server(i);
                 }
             }
-            if (!port.has_value()) {
+            if (!can_connect) {
                 ImGui::SetItemTooltip("TCP-only server (not supported)");
             }
             ImGui::PopID();
