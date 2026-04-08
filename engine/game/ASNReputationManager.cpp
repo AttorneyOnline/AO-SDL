@@ -48,10 +48,7 @@ void ASNReputationManager::prune_window(ASNReputationEntry& entry) const {
 ASNReputationManager::ASNReputationManager() : writer_thread_([this](std::stop_token st) { writer_loop(st); }) {
 }
 
-ASNReputationManager::~ASNReputationManager() {
-    writer_thread_.request_stop();
-    writer_cv_.notify_one();
-}
+ASNReputationManager::~ASNReputationManager() = default;
 
 void ASNReputationManager::configure(const ASNReputationConfig& config) {
     std::lock_guard lock(mutex_);
@@ -407,7 +404,10 @@ void ASNReputationManager::save_sync(const std::string& path) const {
 void ASNReputationManager::writer_loop(std::stop_token stop) {
     while (!stop.stop_requested()) {
         std::unique_lock lock(writer_mutex_);
-        writer_cv_.wait(lock, [&] { return writer_pending_ || stop.stop_requested(); });
+        writer_cv_.wait(lock, stop, [&] { return writer_pending_; });
+
+        if (stop.stop_requested())
+            break;
 
         if (writer_pending_) {
             auto snap = std::move(writer_snapshot_);

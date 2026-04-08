@@ -141,7 +141,7 @@ class ASNReputationManager {
     // because members initialize in declaration order, and the jthread
     // starts immediately — it must not touch uninitialized synchronization primitives.
     std::mutex writer_mutex_;
-    std::condition_variable writer_cv_;
+    std::condition_variable_any writer_cv_;
     bool writer_pending_ = false;
     std::string writer_path_;
     std::unordered_map<uint32_t, ASNReputationEntry> writer_snapshot_;

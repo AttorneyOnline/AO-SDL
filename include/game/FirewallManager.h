@@ -93,7 +93,7 @@ class FirewallManager {
         std::string target; ///< IP or CIDR (empty for "flush")
     };
     std::mutex exec_mutex_;
-    std::condition_variable exec_cv_;
+    std::condition_variable_any exec_cv_;
     std::deque<HelperCommand> exec_queue_;
     std::jthread exec_thread_;
 

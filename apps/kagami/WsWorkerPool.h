@@ -62,7 +62,7 @@ class WsWorkerPool {
     };
     struct WsSlot {
         std::mutex mutex;
-        std::condition_variable cv;
+        std::condition_variable_any cv;
         std::deque<WsWorkItem> queue;
     };
 

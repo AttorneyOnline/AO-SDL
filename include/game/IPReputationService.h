@@ -112,7 +112,7 @@ class IPReputationService {
     // because members initialize in declaration order, and the jthread
     // starts immediately.
     std::mutex queue_mutex_;
-    std::condition_variable queue_cv_;
+    std::condition_variable_any queue_cv_;
     std::deque<PendingLookup> queue_;
 
     // Declared after its synchronization primitives:
@@ -134,7 +134,7 @@ class IPReputationService {
     // --- Persistence (same pattern as BanManager) ---
     // writer_mutex_ and writer_cv_ must be declared BEFORE writer_thread_.
     std::mutex writer_mutex_;
-    std::condition_variable writer_cv_;
+    std::condition_variable_any writer_cv_;
     bool writer_pending_ = false;
     std::string writer_path_;
     std::unordered_map<std::string, IPReputationEntry> writer_snapshot_;

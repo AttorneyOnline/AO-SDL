@@ -110,8 +110,8 @@ FirewallManager::~FirewallManager() {
         exec_helper("flush", "");
     }
 
+    // jthread destructor calls request_stop() which wakes condition_variable_any.
     exec_thread_.request_stop();
-    exec_cv_.notify_one();
 }
 
 void FirewallManager::configure(const FirewallConfig& config) {
@@ -295,7 +295,7 @@ void FirewallManager::exec_loop(std::stop_token stop) {
 
         {
             std::unique_lock lock(exec_mutex_);
-            exec_cv_.wait(lock, [&] { return !exec_queue_.empty() || stop.stop_requested(); });
+            exec_cv_.wait(lock, stop, [&] { return !exec_queue_.empty(); });
             if (stop.stop_requested())
                 break;
             cmd = std::move(exec_queue_.front());

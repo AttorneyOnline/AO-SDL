@@ -62,12 +62,7 @@ int64_t parse_ban_duration(const std::string& input) {
 BanManager::BanManager() : writer_thread_([this](std::stop_token st) { writer_loop(st); }) {
 }
 
-BanManager::~BanManager() {
-    // Signal the writer to stop and flush any pending write.
-    writer_thread_.request_stop();
-    writer_cv_.notify_one();
-    // jthread destructor joins automatically.
-}
+BanManager::~BanManager() = default;
 
 void BanManager::add_ban(BanEntry entry) {
     std::lock_guard lock(mutex_);
@@ -228,7 +223,10 @@ void BanManager::save_sync(const std::string& path) const {
 void BanManager::writer_loop(std::stop_token stop) {
     while (!stop.stop_requested()) {
         std::unique_lock lock(writer_mutex_);
-        writer_cv_.wait(lock, [&] { return writer_pending_ || stop.stop_requested(); });
+        writer_cv_.wait(lock, stop, [&] { return writer_pending_; });
+
+        if (stop.stop_requested())
+            break;
 
         if (writer_pending_) {
             auto snap = std::move(writer_snapshot_);

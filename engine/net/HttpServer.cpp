@@ -113,7 +113,7 @@ struct Server::ServerState {
     // Worker pool
     std::vector<std::jthread> workers;
     std::mutex work_mutex;
-    std::condition_variable work_cv;
+    std::condition_variable_any work_cv;
 
     std::atomic<bool> running{false};
 
@@ -520,7 +520,7 @@ static void worker_loop(Server::ServerState& state, std::stop_token st, size_t w
         auto idle_start = std::chrono::steady_clock::now();
         {
             std::unique_lock lock(state.work_mutex);
-            state.work_cv.wait(lock, [&] { return state.work_channel.has_events() || st.stop_requested(); });
+            state.work_cv.wait(lock, st, [&] { return state.work_channel.has_events(); });
         }
         auto idle_end = std::chrono::steady_clock::now();
         auto idle_elapsed =

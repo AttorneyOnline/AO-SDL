@@ -96,11 +96,12 @@ static const OpusFileCallbacks opus_callbacks = {opus_read_cb, opus_seek_cb, opu
 int AudioStream::stream_read(uint8_t* buf, int count) {
     std::unique_lock lock(raw_mutex_);
 
-    // Wait until data is available, EOF, or cancelled
-    raw_cv_.wait(lock,
-                 [&] { return raw_read_pos_ < raw_data_.size() || raw_complete_ || stop_source_.stop_requested(); });
+    // Wait until data is available, EOF, or cancelled.
+    // Use stop_token-aware wait to avoid lost-wakeup race on cancel().
+    auto stop = stop_source_.get_token();
+    raw_cv_.wait(lock, stop, [&] { return raw_read_pos_ < raw_data_.size() || raw_complete_; });
 
-    if (stop_source_.stop_requested())
+    if (stop.stop_requested())
         return 0;
 
     size_t avail = raw_data_.size() - raw_read_pos_;
