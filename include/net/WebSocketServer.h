@@ -60,7 +60,9 @@ class WebSocketServer {
 
     ~WebSocketServer();
 
-    void set_timeouts(const TimeoutConfig& t) { timeouts_ = t; }
+    void set_timeouts(const TimeoutConfig& t) {
+        timeouts_ = t;
+    }
 
     WebSocketServer(const WebSocketServer&) = delete;
     WebSocketServer& operator=(const WebSocketServer&) = delete;

@@ -53,8 +53,8 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
     static constexpr size_t MAX_INCOMPLETE_BUF = 65536;
     if (proto.incomplete_buf.size() > MAX_INCOMPLETE_BUF) {
         ao_errors_.labels({"buffer_overflow"}).inc();
-        Log::log_print(WARNING, "AO: buffer overflow (%zu bytes) from %s",
-                       proto.incomplete_buf.size(), format_client_id(client_id).c_str());
+        Log::log_print(WARNING, "AO: buffer overflow (%zu bytes) from %s", proto.incomplete_buf.size(),
+                       format_client_id(client_id).c_str());
         send(client_id, AOPacket("CT", {"Server", "[ERROR] Message too large", "1"}));
         proto.incomplete_buf.clear();
         return;
