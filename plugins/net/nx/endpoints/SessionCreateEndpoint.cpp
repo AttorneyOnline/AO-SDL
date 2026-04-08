@@ -34,9 +34,10 @@ class SessionCreateEndpoint : public NXEndpoint {
             return RestResponse::error(429, "Too many session creation attempts");
         }
 
-        if (room().session_count() >= static_cast<size_t>(room().max_players)) {
-            return RestResponse::error(503, "Server is full");
-        }
+        // max_players is a legacy UI hint only — not enforced server-side.
+        // AO servers historically advertised a player limit, but modern
+        // usage treats it as cosmetic. Players are silently admitted
+        // beyond the advertised count.
 
         if (!req.body) {
             return RestResponse::error(400, "Request body is required");

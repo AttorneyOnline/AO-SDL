@@ -119,23 +119,23 @@ std::optional<BanEntry> BanManager::find_ban_by_hdid(const std::string& hdid) co
     return std::nullopt;
 }
 
-std::string BanManager::get_ban_reason(const std::string& ipid, const std::string& hdid) const {
+std::optional<BanEntry> BanManager::check_ban(const std::string& ipid, const std::string& hdid) const {
     std::lock_guard lock(mutex_);
 
     // Check by IPID first
     auto it = bans_.find(ipid);
     if (it != bans_.end() && !it->second.is_expired())
-        return it->second.reason;
+        return it->second;
 
     // Check by HDID
     if (!hdid.empty()) {
         for (auto& [_, entry] : bans_) {
             if (!entry.hdid.empty() && entry.hdid == hdid && !entry.is_expired())
-                return entry.reason;
+                return entry;
         }
     }
 
-    return "Banned";
+    return std::nullopt;
 }
 
 size_t BanManager::count() const {

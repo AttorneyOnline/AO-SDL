@@ -153,9 +153,13 @@ class WebSocketServer {
     /// Thread-safe — workers call this from any thread.
     void queue_send(ClientId client_id, std::vector<uint8_t> data);
 
-    /// Flush all queued sends. Called by the poll thread after workers
-    /// have enqueued their broadcast results. Uses io_uring submit_send
-    /// when available, blocking send otherwise.
+    /// Queue a deferred close for a client. Thread-safe.
+    /// The actual close (and on_disconnected callback) happens on the
+    /// poll thread during flush_sends(), outside any dispatch locks.
+    void close_client_deferred(ClientId client_id, uint16_t code = 1000, const std::string& reason = "");
+
+    /// Flush all queued sends and deferred closes. Called by the poll
+    /// thread after workers have enqueued their results.
     void flush_sends();
 
   private:
@@ -183,6 +187,13 @@ class WebSocketServer {
     };
     std::mutex send_queue_mutex_;
     std::vector<PendingSend> global_send_queue_;
+
+    struct PendingClose {
+        ClientId client_id;
+        uint16_t code;
+        std::string reason;
+    };
+    std::vector<PendingClose> deferred_close_queue_; ///< Guarded by send_queue_mutex_.
 
     /// Drain recv_buf + socket into a single byte vector.
     std::vector<uint8_t> drain_client(ClientConnection& client);
