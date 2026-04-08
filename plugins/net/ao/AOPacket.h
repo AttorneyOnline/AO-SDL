@@ -38,6 +38,11 @@ class AOPacket {
 
     static constexpr const char* DELIMITER = "#%";
 
+    /// Public read-only access to the packet type (e.g. "MS", "CT", "CC").
+    const std::string& get_header() const {
+        return header;
+    }
+
   protected:
     bool valid;
 

@@ -152,9 +152,9 @@ class WebSocketServer {
     struct ClientConnection {
         ClientId id = 0;
         std::unique_ptr<ITcpSocket> socket;
-        std::string remote_addr;                                              ///< Peer IP address.
-        std::chrono::steady_clock::time_point connected_at;                   ///< When TCP was accepted.
-        std::chrono::steady_clock::time_point last_data_at;                   ///< Last time data was received.
+        std::string remote_addr;                            ///< Peer IP address.
+        std::chrono::steady_clock::time_point connected_at; ///< When TCP was accepted.
+        std::chrono::steady_clock::time_point last_data_at; ///< Last time data was received.
         bool handshake_complete = false;
         std::vector<uint8_t> extra_data;
         std::vector<uint8_t> fragment_buf;

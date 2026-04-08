@@ -63,6 +63,13 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return std::max(0, value<int>("session_ttl_seconds"));
     }
 
+    // -- Rate limiting --
+
+    /// Raw rate_limits JSON object for configuring the RateLimiter.
+    nlohmann::json rate_limit_config() const {
+        return value<nlohmann::json>("rate_limits");
+    }
+
     // -- Logging --
 
     /// Minimum log level for stdout / terminal UI. Default: "verbose".
@@ -178,6 +185,19 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"secret_access_key", ""},
                  {"flush_interval", 5},
                  {"log_level", "info"},
+             }},
+            {"rate_limits",
+             nlohmann::json{
+                 {"session_create", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
+                 {"ws_frame", nlohmann::json{{"rate", 30.0}, {"burst", 60.0}}},
+                 {"ws_bytes", nlohmann::json{{"rate", 32768.0}, {"burst", 65536.0}}},
+                 {"ao:MS", nlohmann::json{{"rate", 5.0}, {"burst", 10.0}}},
+                 {"ao:CT", nlohmann::json{{"rate", 3.0}, {"burst", 6.0}}},
+                 {"ao:CC", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
+                 {"ws_handshake_deadline_sec", 10},
+                 {"ws_idle_timeout_sec", 120},
+                 {"ws_partial_frame_timeout_sec", 10},
+                 {"ws_max_frame_size", 65536},
              }},
         });
     }

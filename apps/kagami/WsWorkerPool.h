@@ -15,6 +15,9 @@ class AOServer;
 class RestRouter;
 class GameRoom;
 class ServerSettings;
+namespace net {
+class RateLimiter;
+}
 
 /// Lock-free atomic stats exposed for the metrics collector to read.
 struct WsPollStats {
@@ -37,7 +40,7 @@ struct WsWorkerStats {
 class WsWorkerPool {
   public:
     WsWorkerPool(WebSocketServer& ws, AOServer& ao_backend, RestRouter& router, GameRoom& room,
-                 const ServerSettings& cfg);
+                 const ServerSettings& cfg, net::RateLimiter* rate_limiter = nullptr);
 
     /// Spawn worker threads and the poll thread. Wires ao_backend.set_send_func().
     void start();
@@ -76,4 +79,5 @@ class WsWorkerPool {
     RestRouter& router_;
     GameRoom& room_;
     const ServerSettings& cfg_;
+    net::RateLimiter* rate_limiter_;
 };

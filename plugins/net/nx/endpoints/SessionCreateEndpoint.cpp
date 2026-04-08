@@ -29,6 +29,11 @@ class SessionCreateEndpoint : public NXEndpoint {
     }
 
     RestResponse handle(const RestRequest& req) override {
+        // Layer 2: per-IP session creation rate limit
+        if (rate_limiter() && !rate_limiter()->allow("session_create", req.remote_addr)) {
+            return RestResponse::error(429, "Too many session creation attempts");
+        }
+
         if (room().session_count() >= static_cast<size_t>(room().max_players)) {
             return RestResponse::error(503, "Server is full");
         }
