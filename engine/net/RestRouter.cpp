@@ -1,6 +1,7 @@
 #include "net/RestRouter.h"
 
 #include "game/ServerSession.h"
+#include "net/RateLimiter.h"
 #include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
@@ -172,7 +173,7 @@ void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http
         // Rate limit check (before dispatch lock — rejected requests never contend)
         if (rate_limiter_) {
             std::string key = rest_req.bearer_token.empty() ? rest_req.remote_addr : rest_req.bearer_token;
-            if (!rate_limiter_->allow("endpoint:" + endpoint.path_pattern(), key)) {
+            if (!key.empty() && !rate_limiter_->allow("endpoint:" + endpoint.path_pattern(), key)) {
                 Log::log_print(VERBOSE, "REST: << 429 %s %s (rate limited)", req.method.c_str(), req.path.c_str());
                 res.status = 429;
                 res.set_content(R"({"reason":"Rate limit exceeded","code":"RATE_LIMITED"})", "application/json");

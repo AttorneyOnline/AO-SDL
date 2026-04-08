@@ -196,7 +196,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"ao:CC", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
                  {"ws_handshake_deadline_sec", 10},
                  {"ws_idle_timeout_sec", 120},
-                 {"ws_partial_frame_timeout_sec", 10},
+                 {"ws_partial_frame_timeout_sec", 30},
                  {"ws_max_frame_size", 65536},
              }},
         });

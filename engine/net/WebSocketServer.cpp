@@ -146,20 +146,24 @@ std::vector<WebSocketServer::ClientFrame> WebSocketServer::poll(int timeout_ms) 
                 continue;
             }
 
-            // Layer 1.5: Slow loris defense
-            if (!client.handshake_complete && now - client.connected_at > std::chrono::seconds(10)) {
+            // Layer 1.5: Slow loris defense (timeouts configurable via set_timeouts())
+            if (!client.handshake_complete && now - client.connected_at > std::chrono::seconds(timeouts_.handshake_sec)) {
                 Log::log_print(WARNING, "WS: handshake timeout for %s (client %llu)", client.remote_addr.c_str(),
                                (unsigned long long)id);
                 dead_clients.push_back(id);
                 continue;
             }
-            if (client.handshake_complete && now - client.last_data_at > std::chrono::seconds(120)) {
+            if (client.handshake_complete && now - client.last_data_at > std::chrono::seconds(timeouts_.idle_sec)) {
                 Log::log_print(INFO, "WS: idle timeout for %s (client %llu)", client.remote_addr.c_str(),
                                (unsigned long long)id);
                 dead_clients.push_back(id);
                 continue;
             }
-            if (!client.extra_data.empty() && now - client.last_data_at > std::chrono::seconds(10)) {
+            // Partial frame stall: a client sent part of a WS frame then stopped.
+            // Only triggers if extra_data has been sitting unfinished — not for idle
+            // clients with empty buffers (those are caught by the idle timeout above).
+            if (!client.extra_data.empty()
+                && now - client.last_data_at > std::chrono::seconds(timeouts_.partial_frame_sec)) {
                 Log::log_print(WARNING, "WS: partial frame timeout for %s (client %llu)", client.remote_addr.c_str(),
                                (unsigned long long)id);
                 dead_clients.push_back(id);

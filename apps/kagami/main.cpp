@@ -164,6 +164,14 @@ int main(int /*argc*/, char* argv[]) {
         rest_router.with_lock([&] { ao_backend.on_client_disconnected(id); });
     });
 
+    {
+        auto rl_cfg = cfg.rate_limit_config();
+        WebSocketServer::TimeoutConfig wst;
+        wst.handshake_sec = rl_cfg.value("ws_handshake_deadline_sec", 10);
+        wst.idle_sec = rl_cfg.value("ws_idle_timeout_sec", 120);
+        wst.partial_frame_sec = rl_cfg.value("ws_partial_frame_timeout_sec", 30);
+        ws.set_timeouts(wst);
+    }
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());
 

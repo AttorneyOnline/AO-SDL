@@ -20,6 +20,10 @@ class PacketFactory {
         creators[header] = creator;
     }
 
+    bool has_packet(const std::string& header) const {
+        return creators.count(header) > 0;
+    }
+
     std::unique_ptr<AOPacket> create_packet(const std::string& header, const std::vector<std::string>& fields) const {
         auto it = creators.find(header);
         if (it != creators.end()) {
