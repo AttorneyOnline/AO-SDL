@@ -16,11 +16,8 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-#include <bcrypt.h>
-#pragma comment(lib, "bcrypt.lib")
-#else
-#include <stdlib.h> // arc4random_buf
+#ifndef _WIN32
+#include <stdlib.h> // arc4random_buf (macOS, Linux glibc 2.36+)
 #endif
 
 namespace crypto {
@@ -498,8 +495,10 @@ inline std::string pbkdf2_sha256_hex(const std::string& password, const std::str
 inline std::vector<uint8_t> randbytes(size_t count) {
     std::vector<uint8_t> buf(count);
 #ifdef _WIN32
-    // BCryptGenRandom is available on Vista+
-    BCryptGenRandom(nullptr, buf.data(), static_cast<unsigned long>(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    // RtlGenRandom (SystemFunction036) — available on XP+ via advapi32.
+    // Declared here to avoid pulling in ntsecapi.h / bcrypt.h.
+    extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void*, unsigned long);
+    SystemFunction036(buf.data(), static_cast<unsigned long>(count));
 #else
     // arc4random_buf is available on macOS and modern Linux (glibc 2.36+)
     arc4random_buf(buf.data(), count);

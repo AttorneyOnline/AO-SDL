@@ -47,17 +47,24 @@ struct UserEntry {
 class PreparedStatement {
   public:
     PreparedStatement() = default;
-    explicit PreparedStatement(sqlite3_stmt* s) : stmt_(s) {}
+    explicit PreparedStatement(sqlite3_stmt* s) : stmt_(s) {
+    }
     ~PreparedStatement();
 
-    PreparedStatement(PreparedStatement&& o) noexcept : stmt_(o.stmt_) { o.stmt_ = nullptr; }
+    PreparedStatement(PreparedStatement&& o) noexcept : stmt_(o.stmt_) {
+        o.stmt_ = nullptr;
+    }
     PreparedStatement& operator=(PreparedStatement&& o) noexcept;
 
     PreparedStatement(const PreparedStatement&) = delete;
     PreparedStatement& operator=(const PreparedStatement&) = delete;
 
-    sqlite3_stmt* get() const { return stmt_; }
-    explicit operator bool() const { return stmt_ != nullptr; }
+    sqlite3_stmt* get() const {
+        return stmt_;
+    }
+    explicit operator bool() const {
+        return stmt_ != nullptr;
+    }
 
   private:
     sqlite3_stmt* stmt_ = nullptr;
@@ -109,8 +116,7 @@ class DatabaseManager {
     // -- User operations ------------------------------------------------------
 
     /// Create a new user. Future resolves to true on success, false if username exists.
-    std::future<bool> create_user(std::string username, std::string salt,
-                                  std::string password_hash, std::string acl);
+    std::future<bool> create_user(std::string username, std::string salt, std::string password_hash, std::string acl);
 
     /// Delete a user by username. Future resolves to true if the user was deleted.
     std::future<bool> delete_user(std::string username);
@@ -125,12 +131,11 @@ class DatabaseManager {
     std::future<bool> update_acl(std::string username, std::string acl);
 
     /// Update the password (and salt) for a user.
-    std::future<bool> update_password(std::string username, std::string salt,
-                                      std::string password_hash);
+    std::future<bool> update_password(std::string username, std::string salt, std::string password_hash);
 
   private:
-    sqlite3* db_ = nullptr;           ///< Only accessed from worker thread.
-    std::atomic<bool> open_{false};    ///< Set after successful open().
+    sqlite3* db_ = nullptr;         ///< Only accessed from worker thread.
+    std::atomic<bool> open_{false}; ///< Set after successful open().
 
     // -- Worker thread and task queue -----------------------------------------
     std::jthread worker_;

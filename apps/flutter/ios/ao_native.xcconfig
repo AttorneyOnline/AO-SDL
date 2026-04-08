@@ -8,7 +8,7 @@ AO_THIRDPARTY_DIR = $(AO_LIB_DIR)/third-party
 // -force_load on ao_bridge only — this ensures all ao_* symbols survive
 // dead-stripping (Dart FFI resolves them at runtime via dlsym).
 // The remaining libs are linked normally; the bridge's references pull them in.
-AO_COMMON_LDFLAGS = $(inherited) -force_load $(AO_LIB_DIR)/libao_bridge.a -lao_protocol -lao_game -lao_net -laoengine -laorender_metal -lopusfile -lnghttp2 -lwebp -lwebpdecoder -lwebpdemux -lsharpyuv -logg -lopus -lz -lc++ -framework Metal -framework MetalKit -framework QuartzCore -framework CoreText -framework Foundation -framework IOKit -framework Network -framework Security -framework AudioToolbox -framework CoreAudio -framework AVFoundation
+AO_COMMON_LDFLAGS = $(inherited) -force_load $(AO_LIB_DIR)/libao_bridge.a -lao_protocol -lao_game -lao_net -laoengine -laorender_metal -lopusfile -lnghttp2 -lsqlite3 -lwebp -lwebpdecoder -lwebpdemux -lsharpyuv -logg -lopus -lz -lc++ -framework Metal -framework MetalKit -framework QuartzCore -framework CoreText -framework Foundation -framework IOKit -framework Network -framework Security -framework AudioToolbox -framework CoreAudio -framework AVFoundation
 OTHER_LDFLAGS[sdk=iphoneos*] = $(AO_COMMON_LDFLAGS) -lbit7z64 -lfreetype
 OTHER_LDFLAGS[sdk=iphonesimulator*] = $(AO_COMMON_LDFLAGS) -lbit7z64_d -lfreetyped
 LIBRARY_SEARCH_PATHS = $(inherited) $(AO_LIB_DIR) $(AO_LIB_DIR)/lib $(AO_THIRDPARTY_DIR)/freetype $(AO_THIRDPARTY_DIR)/libwebp $(AO_THIRDPARTY_DIR)/ogg $(AO_THIRDPARTY_DIR)/opus
