@@ -36,7 +36,6 @@ class UnbanCommand : public CommandHandler {
         auto& target_ipid = ctx.args[1];
 
         if (bm->remove_ban(target_ipid)) {
-            bm->save_async(DEFAULT_BAN_FILE);
             Log::log_print(INFO, "Unban: %s [%s] unbanned IPID %s", ctx.session.display_name.c_str(),
                            ctx.session.ipid.c_str(), target_ipid.c_str());
             ctx.send_system_message("Unbanned IPID " + target_ipid + ".");

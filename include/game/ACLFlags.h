@@ -137,3 +137,21 @@ inline const char* permission_name(ACLPermission p) {
         return "UNKNOWN";
     }
 }
+
+/// Expand a permission set into a comma-separated list of permission names.
+/// SUPER returns "ALL". NONE returns "NONE".
+inline std::string permissions_pretty(ACLPermission perms) {
+    if (perms == ACLPermission::SUPER)
+        return "ALL";
+    if (perms == ACLPermission::NONE)
+        return "NONE";
+    std::string result;
+    for (uint32_t bit = 0; bit < 18; ++bit) {
+        if ((static_cast<uint32_t>(perms) & (1u << bit)) != 0) {
+            if (!result.empty())
+                result += ", ";
+            result += permission_name(static_cast<ACLPermission>(1u << bit));
+        }
+    }
+    return result.empty() ? "NONE" : result;
+}

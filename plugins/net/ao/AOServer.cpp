@@ -38,6 +38,13 @@ void AOServer::on_client_connected(uint64_t client_id) {
 
 void AOServer::on_client_disconnected(uint64_t client_id) {
     auto addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
+
+    // Broadcast PR REMOVE before destroying the session (need session_id).
+    if (auto* session = room_.get_session(client_id)) {
+        if (session->joined)
+            broadcast_player_remove(session->session_id);
+    }
+
     room_.destroy_session(client_id);
     proto_state_.erase(client_id);
     Log::log_print(INFO, "AO: %s disconnected (%s)", format_client_id(client_id).c_str(), addr.c_str());
@@ -240,6 +247,36 @@ void AOServer::send_area_join_info(uint64_t client_id, const std::string& area_n
             items.push_back(ev.name + "&" + ev.description + "&" + ev.image);
         send(client_id, AOPacket("LE", items));
     }
+}
+
+void AOServer::send_player_list_snapshot(uint64_t client_id) {
+    // Send PR ADD + all PU fields for every joined session.
+    room_.for_each_session([&](ServerSession& s) {
+        if (!s.joined)
+            return;
+        auto sid = std::to_string(s.session_id);
+        send(client_id, AOPacket("PR", {sid, "0"})); // ADD
+        if (!s.display_name.empty())
+            send(client_id, AOPacket("PU", {sid, "0", s.display_name}));
+        if (s.character_id >= 0 && s.character_id < static_cast<int>(room_.characters.size()))
+            send(client_id, AOPacket("PU", {sid, "1", room_.characters[s.character_id]}));
+        // showname (charname) is display_name for now
+        int area_idx = room_.area_index(s.area);
+        if (area_idx >= 0)
+            send(client_id, AOPacket("PU", {sid, "3", std::to_string(area_idx)}));
+    });
+}
+
+void AOServer::broadcast_player_add(uint64_t session_id) {
+    send_to_all(AOPacket("PR", {std::to_string(session_id), "0"}));
+}
+
+void AOServer::broadcast_player_remove(uint64_t session_id) {
+    send_to_all(AOPacket("PR", {std::to_string(session_id), "1"}));
+}
+
+void AOServer::broadcast_player_update(uint64_t session_id, int data_type, const std::string& data) {
+    send_to_all(AOPacket("PU", {std::to_string(session_id), std::to_string(data_type), data}));
 }
 
 void AOServer::broadcast_chars_taken(const std::vector<int>& taken) {

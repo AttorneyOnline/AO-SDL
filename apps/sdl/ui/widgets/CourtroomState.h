@@ -32,6 +32,12 @@ struct CourtroomState {
     };
     std::map<int, PlayerInfo> players;
 
+    /// Our own player ID (session_id from ID packet).
+    int local_player_id = -1;
+
+    /// Our current area index (-1 = unknown). Updated from PU AREA_ID for our own player.
+    int current_area_id = -1;
+
     // Health bars (from HP packet)
     int def_hp = 0;
     int pro_hp = 0;
@@ -55,6 +61,8 @@ struct CourtroomState {
         now_playing.clear();
         evidence.clear();
         players.clear();
+        local_player_id = -1;
+        current_area_id = -1;
         def_hp = 0;
         pro_hp = 0;
         chat_log.clear();

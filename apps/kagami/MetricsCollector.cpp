@@ -3,6 +3,8 @@
 #include "WsWorkerPool.h"
 
 #include "event/EventManager.h"
+#include "game/ACLFlags.h"
+#include "game/DatabaseManager.h"
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
 #include "metrics/ProcessMetrics.h"
@@ -43,15 +45,15 @@ void MetricsCollector::start(http::Server& http) {
     auto& max_players = reg.gauge("kagami_max_players", "Configured max player slots");
     auto& event_publishes = reg.gauge("kagami_event_publishes", "Cumulative events published per channel", {"channel"});
     auto& session_bytes_sent = reg.gauge("kagami_session_bytes_sent", "Bytes sent per session",
-                                         {"session_id", "display_name", "protocol", "area", "character"});
+                                         {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& session_bytes_recv = reg.gauge("kagami_session_bytes_received", "Bytes received per session",
-                                         {"session_id", "display_name", "protocol", "area", "character"});
+                                         {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& session_packets_sent = reg.gauge("kagami_session_packets_sent", "Packets sent per session",
-                                           {"session_id", "display_name", "protocol", "area", "character"});
+                                           {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& session_packets_recv = reg.gauge("kagami_session_packets_received", "Packets received per session",
-                                           {"session_id", "display_name", "protocol", "area", "character"});
+                                           {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
-                                   {"session_id", "display_name", "protocol", "area", "character"});
+                                   {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& http_open_conns = reg.gauge("kagami_http_open_connections", "Currently open TCP connections");
     auto& http_work_queue = reg.gauge("kagami_http_work_queue_depth", "Pending requests in worker queue");
     auto& http_result_queue = reg.gauge("kagami_http_result_queue_depth", "Pending results awaiting poll thread");
@@ -79,6 +81,8 @@ void MetricsCollector::start(http::Server& http) {
     auto& reputation_cache_size = reg.gauge("kagami_reputation_cache_size", "IP reputation cache entries");
     auto& firewall_rules_active = reg.gauge("kagami_firewall_rules_active", "Active firewall rules");
     auto& asn_tracked = reg.gauge("kagami_asn_tracked", "Tracked ASNs with reputation data");
+    auto& auth_mode = reg.gauge("kagami_auth_mode", "Authentication mode", {"mode"});
+    auto& registered_user = reg.gauge("kagami_registered_user", "Registered moderator user", {"username", "role", "permissions"});
 
     auto cors = cfg_.cors_origins();
     server_info
@@ -96,7 +100,8 @@ void MetricsCollector::start(http::Server& http) {
                             &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util, &poll_events,
                             &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util, &ws_dispatch_rate,
                             &ws_worker_util, &ws_worker_active, &ws_work_queue_depth, &lock_util,
-                            &reputation_cache_size, &firewall_rules_active, &asn_tracked, &reg](std::stop_token st) {
+                            &reputation_cache_size, &firewall_rules_active, &asn_tracked,
+                            &auth_mode, &registered_user, &reg](std::stop_token st) {
         uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
         uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
         size_t worker_count = 0;
@@ -300,8 +305,11 @@ void MetricsCollector::start(http::Server& http) {
                 std::string char_name = (s->character_id >= 0 && s->character_id < (int)room_.characters.size())
                                             ? room_.characters[s->character_id]
                                             : "none";
+                std::string login = s->moderator_name.empty() ? "" : s->moderator_name;
+                if (!s->acl_role.empty() && s->moderator)
+                    login += " [" + s->acl_role + "]";
                 std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol, s->area,
-                                                   std::move(char_name)};
+                                                   std::move(char_name), s->ip_address, login};
                 session_bytes_sent.labels(labels).set(
                     static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
                 session_bytes_recv.labels(labels).set(
@@ -324,6 +332,24 @@ void MetricsCollector::start(http::Server& http) {
                 firewall_rules_active.get().set(static_cast<double>(fw->list_rules().size()));
             if (auto* asn = room_.asn_reputation())
                 asn_tracked.get().set(static_cast<double>(asn->count()));
+
+            // Auth mode
+            auth_mode.clear();
+            auto mode = room_.auth_type.load(std::memory_order_relaxed);
+            auth_mode.labels({mode == AuthType::ADVANCED ? "advanced" : "simple"}).set(1);
+
+            // Registered moderator users (from DB)
+            registered_user.clear();
+            if (auto* db = room_.db_manager(); db && db->is_open()) {
+                auto usernames = db->list_users().get();
+                for (auto& uname : usernames) {
+                    auto user_opt = db->get_user(uname).get();
+                    if (user_opt) {
+                        auto perms = permissions_pretty(acl_permissions_for_role(user_opt->acl));
+                        registered_user.labels({user_opt->username, user_opt->acl, perms}).set(1);
+                    }
+                }
+            }
 
             // Serialize and cache
             auto text = std::make_shared<const std::string>(reg.collect());

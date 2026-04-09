@@ -21,7 +21,8 @@ services:
     cap_add:
       - NET_ADMIN  # Required for kagami-fw-helper nftables operations
     volumes:
-      - ./kagami.json:/app/kagami.json:ro
+      - ./kagami.json:/app/kagami.json
+      - ./config:/app/config:ro
       - kagami_logs:/logs
 
   # --- Metrics ---
@@ -61,10 +62,10 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-kagami}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_RBAC_PERMISSION_CACHE=false
       - GF_USERS_EDITORS_CAN_ADMIN=true
       - GF_AUTH_BASIC_ENABLED=true

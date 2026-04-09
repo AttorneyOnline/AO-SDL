@@ -1,0 +1,78 @@
+# Staging Caddyfile: game server + observability on one host.
+#
+# Architecture (host networking):
+#   Client :443   (HTTPS) → Caddy → kagami :8080  (HTTP REST/AONX + /metrics)
+#   Client :27015 (WSS)   → Caddy → kagami :27016 (WS AO2)
+#   Client :27016 (WS)    → direct to kagami       (plaintext, no TLS)
+#
+# Grafana and Prometheus are reverse-proxied under /grafana and /prometheus.
+
+# --- Global server options (must be first) ---
+{
+	servers :443 {
+		timeouts {
+			read_header 10s
+			read_body   30s
+			idle        120s
+		}
+	}
+	servers :27015 {
+		timeouts {
+			read_header 10s
+			idle        120s
+		}
+	}
+}
+
+# Shared TLS configuration (DNS-01 for IPv6-only / dual-stack instances)
+(tls_dns) {
+	tls {
+		dns route53
+	}
+}
+
+# --- HTTP/REST API + Observability (port 443) ---
+{$KAGAMI_DOMAIN} {
+	import tls_dns
+
+	# Layer 1: max request body 64KB (largest valid IC message is ~4KB)
+	request_body {
+		max_size 64KB
+	}
+
+	# Grafana (served from /grafana/, handles its own sub-path via GF_SERVER_SERVE_FROM_SUB_PATH)
+	handle /grafana* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# Prometheus (served from /prometheus/, configured via --web.external-url)
+	handle /prometheus* {
+		reverse_proxy 127.0.0.1:9090
+	}
+
+	# Everything else goes to kagami (game server API, /metrics, root)
+	handle {
+		reverse_proxy 127.0.0.1:8080 {
+			transport http {
+				keepalive 60s
+				keepalive_idle_conns 64
+				max_conns_per_host 256
+				read_timeout  30s
+				write_timeout 30s
+			}
+		}
+	}
+}
+
+# --- WebSocket / AO2 protocol (port 27015, TLS) ---
+{$KAGAMI_DOMAIN}:27015 {
+	import tls_dns
+
+	reverse_proxy 127.0.0.1:27016 {
+		transport http {
+			keepalive     off
+			read_timeout  120s
+			write_timeout 120s
+		}
+	}
+}

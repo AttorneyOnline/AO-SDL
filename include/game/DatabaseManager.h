@@ -113,6 +113,9 @@ class DatabaseManager {
     /// Return the N most recent bans.
     std::future<std::vector<BanEntry>> recent_bans(int limit = 5);
 
+    /// Return all currently active (non-expired, non-invalidated) bans.
+    std::future<std::vector<BanEntry>> all_active_bans();
+
     // -- User operations ------------------------------------------------------
 
     /// Create a new user. Future resolves to true on success, false if username exists.

@@ -1,0 +1,49 @@
+[
+  {
+    "category": "== Prelude ==",
+    "songs": [
+      {
+        "name": "Ace Attorney/Prelude/[AA] Prelude.opus",
+        "length": -1
+      },
+      {
+        "name": "Ace Attorney/Prelude/[JFA] Prelude.opus",
+        "length": -1
+      },
+      {
+        "name": "Ace Attorney/Prelude/[T&T] Prelude.opus",
+        "length": -1
+      }
+    ]
+  },
+  {
+    "category": "== Trial ==",
+    "songs": [
+      {
+        "name": "Ace Attorney/Trial/[AA] Trial.opus",
+        "length": -1
+      },
+      {
+        "name": "Ace Attorney/Trial/[JFA] Trial.opus",
+        "length": -1
+      },
+      {
+        "name": "Ace Attorney/Trial/[T&T] Trial.opus",
+        "length": -1
+      }
+    ]
+  },
+  {
+    "category": "== Objection ==",
+    "songs": [
+      {
+        "name": "Ace Attorney/Objection/[AA] Objection.opus",
+        "length": -1
+      },
+      {
+        "name": "Ace Attorney/Objection/[JFA] Objection.opus",
+        "length": -1
+      }
+    ]
+  }
+]

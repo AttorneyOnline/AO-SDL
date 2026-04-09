@@ -56,17 +56,23 @@ class BanCommand : public CommandHandler {
             }
         }
 
-        // Find the HDID of the target (from any matching session)
+        // Find the HDID and IP of the target (from any matching session)
         std::string target_hdid;
+        std::string target_ip;
         ctx.room.for_each_session([&](ServerSession& session) {
-            if (session.ipid == target_ipid && !session.hardware_id.empty())
-                target_hdid = session.hardware_id;
+            if (session.ipid == target_ipid) {
+                if (!session.hardware_id.empty())
+                    target_hdid = session.hardware_id;
+                if (!session.ip_address.empty())
+                    target_ip = session.ip_address;
+            }
         });
 
         // Create ban entry
         BanEntry entry;
         entry.ipid = target_ipid;
         entry.hdid = target_hdid;
+        entry.ip = target_ip;
         entry.reason = reason;
         entry.moderator = ctx.session.display_name;
         entry.timestamp =
@@ -92,8 +98,6 @@ class BanCommand : public CommandHandler {
                 ++kicked;
             }
         });
-
-        bm->save_async(DEFAULT_BAN_FILE);
 
         Log::log_print(INFO, "Ban: %s [%s] banned IPID %s (duration: %s, kicked %d): %s",
                        ctx.session.display_name.c_str(), ctx.session.ipid.c_str(), target_ipid.c_str(),

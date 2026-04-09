@@ -6,6 +6,7 @@
 #include "game/CommandRegistrar.h"
 #include "game/GameRoom.h"
 #include "game/IPReputationService.h"
+#include "game/ServerSession.h"
 
 #include "utils/Log.h"
 
@@ -53,6 +54,22 @@ class AsnCommand : public CommandHandler {
     }
 
   private:
+    /// Resolve an IPID to a raw IP address from connected sessions.
+    /// Returns empty string if not found or if target is already an IP.
+    static std::string resolve_ip(CommandContext& ctx, const std::string& target) {
+        // If it contains '.' or ':', it's already an IP address
+        if (target.find('.') != std::string::npos || target.find(':') != std::string::npos)
+            return target;
+
+        // Looks like an IPID — find matching session
+        std::string ip;
+        ctx.room.for_each_session([&](ServerSession& s) {
+            if (s.ipid == target && !s.ip_address.empty())
+                ip = s.ip_address;
+        });
+        return ip;
+    }
+
     void do_lookup(CommandContext& ctx) {
         auto* rep = ctx.room.reputation_service();
         if (!rep) {
@@ -61,10 +78,17 @@ class AsnCommand : public CommandHandler {
         }
 
         auto& target = ctx.args[1];
-        auto cached = rep->find_cached(target);
+        std::string ip = resolve_ip(ctx, target);
+        if (ip.empty()) {
+            ctx.send_system_message("Could not resolve IPID " + target +
+                                    " to an IP address. The player may not be connected.");
+            return;
+        }
+
+        auto cached = rep->find_cached(ip);
         if (!cached) {
-            ctx.send_system_message("No cached reputation data for " + target + ". Triggering lookup...");
-            rep->lookup(target);
+            ctx.send_system_message("No cached reputation data for " + ip + ". Triggering lookup...");
+            rep->lookup(ip);
             return;
         }
 

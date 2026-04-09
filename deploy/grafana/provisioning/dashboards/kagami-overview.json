@@ -1522,7 +1522,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "session_id|display_name 1|protocol 1|area 1|character 1|Value #idle|Value #bytes_out|Value #bytes_in|Value #pkts_out|Value #pkts_in"
+              "pattern": "session_id|display_name 1|protocol 1|area 1|character 1|ip 1|login 1|Value #idle|Value #bytes_out|Value #bytes_in|Value #pkts_out|Value #pkts_in"
             }
           }
         },
@@ -1534,6 +1534,8 @@
               "protocol 1": "protocol",
               "area 1": "area",
               "character 1": "character",
+              "ip 1": "ip",
+              "login 1": "login",
               "Value #idle": "idle",
               "Value #bytes_out": "bytes_out",
               "Value #bytes_in": "bytes_in",
@@ -1542,15 +1544,17 @@
             },
             "indexByName": {
               "session_id": 0,
-              "name": 1,
-              "character": 2,
-              "protocol": 3,
-              "area": 4,
-              "bytes_out": 5,
-              "bytes_in": 6,
-              "pkts_out": 7,
-              "pkts_in": 8,
-              "idle": 9
+              "ip": 1,
+              "name": 2,
+              "login": 3,
+              "character": 4,
+              "protocol": 5,
+              "area": 6,
+              "bytes_out": 7,
+              "bytes_in": 8,
+              "pkts_out": 9,
+              "pkts_in": 10,
+              "idle": 11
             }
           }
         }
@@ -1598,13 +1602,95 @@
       }
     },
     {
+      "type": "stat",
+      "title": "Auth Mode",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 116
+      },
+      "targets": [
+        {
+          "expr": "kagami_auth_mode{instance=~\"$instance\"}",
+          "legendFormat": "{{mode}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "blue", "value": null}]
+          },
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "textMode": "name",
+        "colorMode": "background",
+        "graphMode": "none"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Registered Users",
+      "gridPos": {
+        "h": 8,
+        "w": 20,
+        "x": 4,
+        "y": 116
+      },
+      "targets": [
+        {
+          "expr": "kagami_registered_user{instance=~\"$instance\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "username|role|permissions"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {},
+            "indexByName": {
+              "username": 0,
+              "role": 1,
+              "permissions": 2
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "permissions"},
+            "properties": [{"id": "custom.width", "value": 500}]
+          }
+        ]
+      }
+    },
+    {
       "type": "row",
       "title": "Event Channels & Errors",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 116
+        "y": 125
       },
       "collapsed": false
     },

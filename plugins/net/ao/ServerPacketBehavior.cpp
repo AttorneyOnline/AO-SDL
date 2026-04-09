@@ -42,6 +42,7 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
     if (server.ws()) {
         std::string ip = server.ws()->get_client_addr(session.client_id);
         if (!ip.empty()) {
+            session.ip_address = ip;
             session.ipid = crypto::sha256(ip).substr(0, 8);
         }
     }
@@ -179,9 +180,14 @@ void AOPacketRD::handle_server(AOServer& server, ServerSession& session) {
     server.send(session.client_id, AOPacket("CharsCheck", taken_fields));
 
     server.send(session.client_id, AOPacket("DONE", {}));
-    server.send(session.client_id, AOPacket("BN", {"gs4", "def"}));
-    server.send(session.client_id, AOPacket("HP", {"1", "10"}));
-    server.send(session.client_id, AOPacket("HP", {"2", "10"}));
+    server.send_area_join_info(session.client_id, session.area);
+
+    // Player list: send full snapshot to this client, then announce this player to all
+    server.send_player_list_snapshot(session.client_id);
+    server.broadcast_player_add(session.session_id);
+    int area_idx = room.area_index(session.area);
+    if (area_idx >= 0)
+        server.broadcast_player_update(session.session_id, 3, std::to_string(area_idx));
 
     if (!room.server_description.empty()) {
         server.send(session.client_id, AOPacket("CT", {room.server_name, room.server_description, "1"}));
@@ -209,7 +215,14 @@ void AOPacketCC::handle_server(AOServer& server, ServerSession& session) {
     CharSelectAction action;
     action.sender_id = session.client_id;
     action.character_id = requested_char;
-    server.room().handle_char_select(action);
+    if (server.room().handle_char_select(action)) {
+        // Broadcast character name to all clients
+        auto& chars = server.room().characters;
+        std::string char_name;
+        if (requested_char >= 0 && requested_char < static_cast<int>(chars.size()))
+            char_name = chars[requested_char];
+        server.broadcast_player_update(session.session_id, 1, char_name);
+    }
 }
 
 void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
@@ -279,6 +292,11 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
     action.effects = f(25);
     action.blipname = f(26);
     action.slide = fb(27);
+
+    // Broadcast showname update if changed
+    if (!action.showname.empty() && session.display_name != action.showname) {
+        server.broadcast_player_update(session.session_id, 2, action.showname);
+    }
 
     server.room().handle_ic(action);
 }
@@ -357,6 +375,12 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
         }
     }
 
+    // Broadcast OOC name update if changed
+    if (session.display_name != sender_name) {
+        session.display_name = sender_name;
+        server.broadcast_player_update(session.session_id, 0, sender_name);
+    }
+
     OOCAction action;
     action.sender_id = session.client_id;
     action.name = sender_name;
@@ -413,6 +437,11 @@ void AOPacketMC::handle_server(AOServer& server, ServerSession& session) {
 
             // Send area-join info (BN, HP, LE) to the client
             server.send_area_join_info(session.client_id, area_name);
+
+            // Broadcast area change to all clients
+            int area_idx = room.area_index(area_name);
+            if (area_idx >= 0)
+                server.broadcast_player_update(session.session_id, 3, std::to_string(area_idx));
             return;
         }
     }
@@ -483,14 +512,20 @@ void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
             return;
 
         std::string target_hdid;
+        std::string target_ip;
         room.for_each_session([&](ServerSession& s) {
-            if (s.ipid == target_ipid && !s.hardware_id.empty())
-                target_hdid = s.hardware_id;
+            if (s.ipid == target_ipid) {
+                if (!s.hardware_id.empty())
+                    target_hdid = s.hardware_id;
+                if (!s.ip_address.empty())
+                    target_ip = s.ip_address;
+            }
         });
 
         BanEntry entry;
         entry.ipid = target_ipid;
         entry.hdid = target_hdid;
+        entry.ip = target_ip;
         entry.reason = reason;
         entry.moderator = session.display_name;
         entry.timestamp =
@@ -506,7 +541,6 @@ void AOPacketMA::handle_server(AOServer& server, ServerSession& session) {
             }
         });
 
-        bm->save_async(DEFAULT_BAN_FILE);
         Log::log_print(INFO, "MA ban: %s [%s] banned IPID %s (dur=%d): %s", session.display_name.c_str(),
                        session.ipid.c_str(), target_ipid.c_str(), duration, reason.c_str());
     }

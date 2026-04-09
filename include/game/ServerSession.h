@@ -20,7 +20,7 @@ struct ServerSession {
         : client_id(o.client_id), session_id(o.session_id), session_token(std::move(o.session_token)),
           display_name(std::move(o.display_name)), client_software(std::move(o.client_software)),
           character_id(o.character_id), area(std::move(o.area)), ipid(std::move(o.ipid)),
-          hardware_id(std::move(o.hardware_id)), password(std::move(o.password)),
+          ip_address(std::move(o.ip_address)), hardware_id(std::move(o.hardware_id)), password(std::move(o.password)),
           casing_preferences(std::move(o.casing_preferences)), joined(o.joined), moderator(o.moderator),
           acl_role(std::move(o.acl_role)), moderator_name(std::move(o.moderator_name)),
           change_auth_started(o.change_auth_started), protocol(std::move(o.protocol)),
@@ -45,6 +45,7 @@ struct ServerSession {
     std::string area;            ///< Current area/room.
 
     std::string ipid;        ///< SHA-256(IP).left(8), stable short identifier for moderation.
+    std::string ip_address;  ///< Raw client IP (for telemetry/admin). Not sent to other clients.
     std::string hardware_id; ///< Hardware ID reported by the client (HDID).
 
     /// Password sent via PW packet (used in some auth flows).

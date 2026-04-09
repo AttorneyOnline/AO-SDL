@@ -231,6 +231,9 @@ class GameRoom {
     /// Find area state by display name, or nullptr.
     AreaState* find_area_by_name(const std::string& area_name);
 
+    /// Find the index of an area by name, or -1 if not found.
+    int area_index(const std::string& area_name) const;
+
     /// Read-only access to all area states (keyed by area_id).
     const std::unordered_map<std::string, AreaState>& area_states() const {
         return area_states_;
