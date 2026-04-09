@@ -41,7 +41,10 @@ enum class ACLPermission : uint32_t {
     IGNORE_BGLIST = 1 << 15,
     SEND_NOTICE = 1 << 16,
     JUKEBOX = 1 << 17,
-    SUPER = 0xffffffff
+    SUPER = 0xffffffff,
+
+    /// Number of individual permission bits (excluding SUPER).
+    BIT_COUNT = 18
 };
 
 inline ACLPermission operator|(ACLPermission a, ACLPermission b) {
@@ -146,7 +149,7 @@ inline std::string permissions_pretty(ACLPermission perms) {
     if (perms == ACLPermission::NONE)
         return "NONE";
     std::string result;
-    for (uint32_t bit = 0; bit < 18; ++bit) {
+    for (uint32_t bit = 0; bit < static_cast<uint32_t>(ACLPermission::BIT_COUNT); ++bit) {
         if ((static_cast<uint32_t>(perms) & (1u << bit)) != 0) {
             if (!result.empty())
                 result += ", ";

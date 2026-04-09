@@ -4,7 +4,6 @@
 #include "game/CommandRegistrar.h"
 #include "game/GameRoom.h"
 #include "game/IPReputationService.h"
-#include "game/ServerSession.h"
 
 class ReputationCommand : public CommandHandler {
   public:
@@ -43,19 +42,11 @@ class ReputationCommand : public CommandHandler {
 
         auto& target = subcmd;
 
-        // Resolve IPID → raw IP from connected sessions
-        std::string ip = target;
-        if (target.find('.') == std::string::npos && target.find(':') == std::string::npos) {
-            ip.clear();
-            ctx.room.for_each_session([&](ServerSession& s) {
-                if (s.ipid == target && !s.ip_address.empty())
-                    ip = s.ip_address;
-            });
-            if (ip.empty()) {
-                ctx.send_system_message("Could not resolve IPID " + target +
-                                        " to an IP. The player may not be connected.");
-                return;
-            }
+        std::string ip = ctx.resolve_ip(target);
+        if (ip.empty()) {
+            ctx.send_system_message("Could not resolve IPID " + target +
+                                    " to an IP. The player may not be connected.");
+            return;
         }
 
         auto cached = rep->find_cached(ip);

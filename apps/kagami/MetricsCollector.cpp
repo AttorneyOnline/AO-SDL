@@ -343,15 +343,21 @@ void MetricsCollector::start(http::Server& http) {
             auto mode = room_.auth_type.load(std::memory_order_relaxed);
             auth_mode.labels({mode == AuthType::ADVANCED ? "advanced" : "simple"}).set(1);
 
-            // Registered moderator users (from DB)
-            registered_user.clear();
-            if (auto* db = room_.db_manager(); db && db->is_open()) {
-                auto usernames = db->list_users().get();
-                for (auto& uname : usernames) {
-                    auto user_opt = db->get_user(uname).get();
-                    if (user_opt) {
-                        auto perms = permissions_pretty(acl_permissions_for_role(user_opt->acl));
-                        registered_user.labels({user_opt->username, user_opt->acl, perms}).set(1);
+            // Registered moderator users (from DB, cached 60s)
+            {
+                static auto last_user_refresh = std::chrono::steady_clock::time_point{};
+                if (now - last_user_refresh > std::chrono::seconds(60)) {
+                    last_user_refresh = now;
+                    registered_user.clear();
+                    if (auto* db = room_.db_manager(); db && db->is_open()) {
+                        auto usernames = db->list_users().get();
+                        for (auto& uname : usernames) {
+                            auto user_opt = db->get_user(uname).get();
+                            if (user_opt) {
+                                auto perms = permissions_pretty(acl_permissions_for_role(user_opt->acl));
+                                registered_user.labels({user_opt->username, user_opt->acl, perms}).set(1);
+                            }
+                        }
                     }
                 }
             }
