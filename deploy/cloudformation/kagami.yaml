@@ -561,10 +561,10 @@ Resources:
                   env_file: .env
                   environment:
                     - GF_SECURITY_ADMIN_USER=admin
-                    - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+                    - GF_SECURITY_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
                     - GF_USERS_ALLOW_SIGN_UP=false
                     - GF_AUTH_ANONYMOUS_ENABLED=false
-                    - GF_SERVER_ROOT_URL=https://${KAGAMI_DOMAIN}/grafana/
+                    - GF_SERVER_ROOT_URL=https://$KAGAMI_DOMAIN/grafana/
                     - GF_SERVER_SERVE_FROM_SUB_PATH=true
                     - GF_SERVER_HTTP_ADDR=127.0.0.1
                     - GF_SERVER_HTTP_PORT=3000
@@ -592,14 +592,15 @@ Resources:
               PROM
 
               # --- Download content config from repo ---
-              CONTENT_BASE="https://raw.githubusercontent.com/AttorneyOnline/AO-SDL/master/deploy"
-              for f in config/characters.txt config/music.json config/areas.ini config/backgrounds.txt; do
-                  curl -fsSL "$CONTENT_BASE/$f" -o "$f" || echo "Warning: failed to download $f"
-              done
+              CBASE=https://raw.githubusercontent.com/AttorneyOnline/AO-SDL/master/deploy
+              curl -fsSL $CBASE/config/characters.txt -o config/characters.txt || true
+              curl -fsSL $CBASE/config/music.json -o config/music.json || true
+              curl -fsSL $CBASE/config/areas.ini -o config/areas.ini || true
+              curl -fsSL $CBASE/config/backgrounds.txt -o config/backgrounds.txt || true
 
               # --- Download Grafana provisioning from repo ---
               mkdir -p grafana/provisioning/dashboards grafana/provisioning/datasources
-              curl -fsSL "$CONTENT_BASE/grafana/provisioning/dashboards/kagami-overview.json" \
+              curl -fsSL $CBASE/grafana/provisioning/dashboards/kagami-overview.json \
                   -o grafana/provisioning/dashboards/kagami-overview.json || true
               # Dashboard provider config
               cat > grafana/provisioning/dashboards/default.yaml <<'DASHPROV'
