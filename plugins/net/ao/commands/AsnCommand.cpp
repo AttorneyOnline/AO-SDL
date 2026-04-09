@@ -92,7 +92,7 @@ class AsnCommand : public CommandHandler {
             return;
         }
 
-        std::string msg = "IP: " + cached->ip + "\n";
+        std::string msg = "IPID: " + target + "\n";
         msg += "ASN: AS" + std::to_string(cached->asn) + " (" + cached->as_org + ")\n";
         msg += "Country: " + cached->country_code + "\n";
         msg += "ISP: " + cached->isp + "\n";
