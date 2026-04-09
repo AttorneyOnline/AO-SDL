@@ -13,7 +13,8 @@
 namespace {
 
 int64_t now_seconds() {
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
 }
 
 BanEntry make_ban(const std::string& ipid, const std::string& hdid = "", int64_t duration = -2) {
