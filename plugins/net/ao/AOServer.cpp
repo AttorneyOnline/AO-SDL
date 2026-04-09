@@ -29,9 +29,11 @@ void AOServer::set_send_func(SendFunc func) {
 }
 
 void AOServer::on_client_connected(uint64_t client_id) {
-    room_.create_session(client_id, "ao2");
+    auto* session = room_.create_session(client_id, "ao2").get();
     proto_state_.emplace(client_id, AOProtocolState{});
     auto addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
+    if (session && !addr.empty())
+        session->ip_address = addr;
     Log::log_print(INFO, "AO: %s connected (%s)", format_client_id(client_id).c_str(), addr.c_str());
     send(client_id, AOPacket("decryptor", {"NOENCRYPT"}));
 }
