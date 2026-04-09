@@ -415,6 +415,20 @@ void WebSocketServer::on_client_disconnected(std::function<void(ClientId)> callb
     on_disconnected_ = std::move(callback);
 }
 
+void WebSocketServer::set_cors_origins(const std::vector<std::string>& origins) {
+    std::lock_guard lock(mutex_);
+    cors_wildcard_ = false;
+    cors_origins_.clear();
+    for (auto& o : origins) {
+        if (o == "*") {
+            cors_wildcard_ = true;
+            cors_origins_.clear();
+            return;
+        }
+        cors_origins_.push_back(o);
+    }
+}
+
 void WebSocketServer::set_reverse_proxy_config(const ReverseProxyConfig& config) {
     std::lock_guard lock(mutex_);
     reverse_proxy_config_ = config;
@@ -577,6 +591,23 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
     response += std::format("Sec-WebSocket-Accept: {}\r\n", accept_value);
     if (!selected_protocol.empty())
         response += std::format("Sec-WebSocket-Protocol: {}\r\n", selected_protocol);
+
+    // CORS: reflect the Origin if allowed
+    if (cors_wildcard_) {
+        response += "Access-Control-Allow-Origin: *\r\n";
+    }
+    else if (!cors_origins_.empty()) {
+        auto origin_it = headers.find("Origin");
+        if (origin_it != headers.end()) {
+            for (const auto& allowed : cors_origins_) {
+                if (allowed == origin_it->second) {
+                    response += std::format("Access-Control-Allow-Origin: {}\r\n", allowed);
+                    break;
+                }
+            }
+        }
+    }
+
     response += "\r\n";
 
     client.socket->send(reinterpret_cast<const uint8_t*>(response.data()), response.size());

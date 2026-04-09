@@ -289,6 +289,7 @@ int main(int /*argc*/, char* argv[]) {
                        rp_cfg.trusted_proxies.size(), rp_cfg.proxy_protocol ? "on" : "off");
     }
 
+    ws.set_cors_origins(cfg.cors_origins());
     ws.start(static_cast<uint16_t>(cfg.ws_port()));
     ao_backend.set_ws(&ws);
     Log::log_print(INFO, "WebSocket listening on %s:%d", cfg.bind_address().c_str(), cfg.ws_port());

@@ -147,6 +147,10 @@ class WebSocketServer {
         return poller_.io_stats();
     }
 
+    /// Set allowed CORS origins for the WebSocket handshake.
+    /// Use {"*"} to allow all origins. Empty = no CORS headers sent.
+    void set_cors_origins(const std::vector<std::string>& origins);
+
     /// Configure reverse proxy support. Call before start().
     void set_reverse_proxy_config(const ReverseProxyConfig& config);
 
@@ -226,6 +230,10 @@ class WebSocketServer {
     std::function<void(ClientId)> on_disconnected_;
 
     TimeoutConfig timeouts_;
+
+    // CORS
+    std::vector<std::string> cors_origins_;
+    bool cors_wildcard_ = false;
 
     // Reverse proxy support
     ReverseProxyConfig reverse_proxy_config_;
