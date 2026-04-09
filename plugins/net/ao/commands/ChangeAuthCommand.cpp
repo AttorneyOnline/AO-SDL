@@ -14,10 +14,6 @@ class ChangeAuthCommand : public CommandHandler {
         return n;
     }
 
-    bool requires_moderator() const override {
-        return true;
-    }
-
     ACLPermission required_permission() const override {
         return ACLPermission::SUPER;
     }

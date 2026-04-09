@@ -79,6 +79,17 @@ inline ACLPermission acl_permissions_for_role(const std::string& role_id) {
     return ACLPermission::NONE;
 }
 
+/// Validate a username: 1-32 chars, alphanumeric + underscore + hyphen.
+inline bool is_valid_username(const std::string& name) {
+    if (name.empty() || name.size() > 32)
+        return false;
+    for (char c : name) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-')
+            return false;
+    }
+    return true;
+}
+
 /// Return a human-readable name for a permission flag.
 inline const char* permission_name(ACLPermission p) {
     switch (p) {

@@ -38,6 +38,11 @@ class AddUserCommand : public CommandHandler {
         auto& username = ctx.args[1];
         auto& password = ctx.args[2];
 
+        if (!is_valid_username(username)) {
+            ctx.send_system_message("Invalid username. Use 1-32 characters: letters, numbers, _ or -.");
+            return;
+        }
+
         if (password.size() < 8) {
             ctx.send_system_message("Password must be at least 8 characters.");
             return;

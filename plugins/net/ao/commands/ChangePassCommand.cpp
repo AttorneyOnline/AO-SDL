@@ -9,8 +9,8 @@
 #include "utils/Crypto.h"
 #include "utils/Log.h"
 
-/// /changepass <password> — Change your own password.
-/// /changepass <username> <password> — Change another user's password (requires SUPER).
+/// /changepass <old_password> <new_password> — Change your own password.
+/// /changepass <username> <new_password> — Change another user's password (requires SUPER).
 class ChangePassCommand : public CommandHandler {
   public:
     const std::string& name() const override {
@@ -23,11 +23,11 @@ class ChangePassCommand : public CommandHandler {
     }
 
     int min_args() const override {
-        return 1;
+        return 2;
     }
 
     std::string usage() const override {
-        return "/changepass <password>  OR  /changepass <username> <password>";
+        return "/changepass <old_password> <new_password>  OR  /changepass <username> <new_password>";
     }
 
     void execute(CommandContext& ctx) override {
@@ -41,17 +41,50 @@ class ChangePassCommand : public CommandHandler {
         std::string target_user;
         std::string new_password;
 
-        if (arg_count == 1) {
-            // Change own password
-            if (ctx.session.moderator_name.empty()) {
-                ctx.send_system_message("You are not logged in with a user account.");
-                return;
+        if (arg_count == 2 && !ctx.session.moderator_name.empty()) {
+            // Could be self-change or admin-change. Check if first arg
+            // is a known username to disambiguate.
+            auto caller_perms = acl_permissions_for_role(ctx.session.acl_role);
+            auto target = db->get_user(ctx.args[1]).get();
+
+            if (target && ctx.args[1] != ctx.session.moderator_name &&
+                has_permission(caller_perms, ACLPermission::SUPER)) {
+                // Admin changing another user's password
+                target_user = ctx.args[1];
+                new_password = ctx.args[2];
             }
-            target_user = ctx.session.moderator_name;
-            new_password = ctx.args[1];
+            else {
+                // Self-change: /changepass <old_password> <new_password>
+                if (ctx.session.moderator_name.empty()) {
+                    ctx.send_system_message("You are not logged in with a user account.");
+                    return;
+                }
+
+                // Verify old password
+                auto& old_password = ctx.args[1];
+                auto user = db->get_user(ctx.session.moderator_name).get();
+                if (!user) {
+                    ctx.send_system_message("User account not found.");
+                    return;
+                }
+
+                std::string computed;
+                if (user->salt.size() >= 32)
+                    computed = crypto::pbkdf2_sha256_hex(old_password, user->salt);
+                else
+                    computed = crypto::hmac_sha256_hex(user->salt, old_password);
+
+                if (computed != user->password) {
+                    ctx.send_system_message("Current password is incorrect.");
+                    return;
+                }
+
+                target_user = ctx.session.moderator_name;
+                new_password = ctx.args[2];
+            }
         }
-        else {
-            // Change another user's password — requires SUPER
+        else if (arg_count >= 2) {
+            // Not logged in with a user account, or 3+ args — treat as admin change
             auto caller_perms = acl_permissions_for_role(ctx.session.acl_role);
             if (!has_permission(caller_perms, ACLPermission::SUPER)) {
                 ctx.send_system_message("Permission denied. Changing another user's password requires SUPER.");
@@ -59,6 +92,10 @@ class ChangePassCommand : public CommandHandler {
             }
             target_user = ctx.args[1];
             new_password = ctx.args[2];
+        }
+        else {
+            ctx.send_system_message("Usage: " + usage());
+            return;
         }
 
         if (new_password.size() < 8) {

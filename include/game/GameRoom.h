@@ -152,7 +152,8 @@ class GameRoom {
     std::string mod_password;
 
     /// Authentication mode: SIMPLE (shared password) or ADVANCED (per-user DB auth).
-    AuthType auth_type = AuthType::SIMPLE;
+    /// Atomic because /changeauth can flip it while concurrent logins are in flight.
+    std::atomic<AuthType> auth_type{AuthType::SIMPLE};
 
     /// Database manager (non-owning). Used by auth commands for user/ban persistence.
     DatabaseManager* db_manager() const {
