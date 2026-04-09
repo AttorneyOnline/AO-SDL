@@ -47,6 +47,9 @@ struct CommandContext {
     /// Broadcast a background change to all clients in an area.
     std::function<void(const std::string& area, const std::string& bg)> broadcast_background;
 
+    /// Broadcast an area update (ARUP) to all clients. type: 0=players, 1=status, 2=cm, 3=locked.
+    std::function<void(int arup_type)> broadcast_arup;
+
     /// Client IDs to disconnect after the command finishes.
     /// Commands push IDs here; the protocol backend closes them after
     /// try_dispatch returns, outside any locks that would deadlock

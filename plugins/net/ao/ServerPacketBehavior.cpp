@@ -189,6 +189,10 @@ void AOPacketRD::handle_server(AOServer& server, ServerSession& session) {
     if (area_idx >= 0)
         server.broadcast_player_update(session.session_id, 3, std::to_string(area_idx));
 
+    // ARUP: send full area state to new client, then broadcast player count update
+    server.send_full_arup(session.client_id);
+    server.broadcast_arup(AOServer::ARUP_PLAYERS);
+
     if (!room.server_description.empty()) {
         server.send(session.client_id, AOPacket("CT", {room.server_name, room.server_description, "1"}));
     }
@@ -325,6 +329,10 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
                 [&server](const std::string& area, const std::string& bg) {
                     server.send_to_area(area, AOPacket("BN", {bg, "def"}));
                 },
+            .broadcast_arup =
+                [&server](int arup_type) {
+                    server.broadcast_arup(static_cast<AOServer::ArupType>(arup_type));
+                },
         };
 
         // Set callbacks that reference ctx (must be done after construction
@@ -438,10 +446,11 @@ void AOPacketMC::handle_server(AOServer& server, ServerSession& session) {
             // Send area-join info (BN, HP, LE) to the client
             server.send_area_join_info(session.client_id, area_name);
 
-            // Broadcast area change to all clients
+            // Broadcast area change to all clients (PU + ARUP player counts)
             int area_idx = room.area_index(area_name);
             if (area_idx >= 0)
                 server.broadcast_player_update(session.session_id, 3, std::to_string(area_idx));
+            server.broadcast_arup(AOServer::ARUP_PLAYERS);
             return;
         }
     }

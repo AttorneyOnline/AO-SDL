@@ -39,14 +39,43 @@ void AOServer::on_client_connected(uint64_t client_id) {
 void AOServer::on_client_disconnected(uint64_t client_id) {
     auto addr = ws_ ? ws_->get_client_addr(client_id) : std::string{};
 
-    // Broadcast PR REMOVE before destroying the session (need session_id).
+    bool was_joined = false;
+    bool was_cm = false;
+
     if (auto* session = room_.get_session(client_id)) {
-        if (session->joined)
+        was_joined = session->joined;
+        if (was_joined) {
             broadcast_player_remove(session->session_id);
+
+            // Clean up CM ownership in all areas
+            for (auto& [id, state] : room_.area_states_mut()) {
+                if (state.cm_owners.erase(client_id)) {
+                    was_cm = true;
+                    if (state.cm_owners.empty()) {
+                        state.cm.clear();
+                        // If last CM left, unlock the area
+                        if (state.lock_mode != AreaLockMode::FREE) {
+                            state.lock_mode = AreaLockMode::FREE;
+                            state.invited.clear();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     room_.destroy_session(client_id);
     proto_state_.erase(client_id);
+
+    // Broadcast ARUP updates after session cleanup
+    if (was_joined) {
+        broadcast_arup(ARUP_PLAYERS);
+        if (was_cm) {
+            broadcast_arup(ARUP_CM);
+            broadcast_arup(ARUP_LOCKED);
+        }
+    }
+
     Log::log_print(INFO, "AO: %s disconnected (%s)", format_client_id(client_id).c_str(), addr.c_str());
 }
 
@@ -277,6 +306,135 @@ void AOServer::broadcast_player_remove(uint64_t session_id) {
 
 void AOServer::broadcast_player_update(uint64_t session_id, int data_type, const std::string& data) {
     send_to_all(AOPacket("PU", {std::to_string(session_id), std::to_string(data_type), data}));
+}
+
+void AOServer::broadcast_arup(ArupType type) {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(type));
+
+    for (const auto& area_name : room_.areas) {
+        auto* area = room_.find_area_by_name(area_name);
+        switch (type) {
+        case ARUP_PLAYERS: {
+            int count = 0;
+            room_.for_each_session([&](ServerSession& s) {
+                if (s.joined && s.area == area_name)
+                    ++count;
+            });
+            fields.push_back(std::to_string(count));
+            break;
+        }
+        case ARUP_STATUS:
+            fields.push_back(area ? area->status : "IDLE");
+            break;
+        case ARUP_CM:
+            if (area && !area->cm_owners.empty()) {
+                std::string cms;
+                for (auto owner_id : area->cm_owners) {
+                    auto* session = room_.get_session(owner_id);
+                    if (!session)
+                        continue;
+                    if (!cms.empty())
+                        cms += ", ";
+                    std::string char_name =
+                        (session->character_id >= 0 && session->character_id < static_cast<int>(room_.characters.size()))
+                            ? room_.characters[session->character_id]
+                            : session->display_name;
+                    cms += "[" + std::to_string(session->session_id) + "] " + char_name;
+                }
+                fields.push_back(cms.empty() ? "FREE" : cms);
+            }
+            else {
+                fields.push_back("FREE");
+            }
+            break;
+        case ARUP_LOCKED:
+            if (area) {
+                switch (area->lock_mode) {
+                case AreaLockMode::FREE:
+                    fields.push_back("FREE");
+                    break;
+                case AreaLockMode::LOCKED:
+                    fields.push_back("LOCKED");
+                    break;
+                case AreaLockMode::SPECTATABLE:
+                    fields.push_back("SPECTATABLE");
+                    break;
+                }
+            }
+            else {
+                fields.push_back("FREE");
+            }
+            break;
+        }
+    }
+
+    send_to_all(AOPacket("ARUP", fields));
+}
+
+void AOServer::send_full_arup(uint64_t client_id) {
+    for (int type = 0; type <= 3; ++type) {
+        std::vector<std::string> fields;
+        fields.push_back(std::to_string(type));
+
+        for (const auto& area_name : room_.areas) {
+            auto* area = room_.find_area_by_name(area_name);
+            switch (static_cast<ArupType>(type)) {
+            case ARUP_PLAYERS: {
+                int count = 0;
+                room_.for_each_session([&](ServerSession& s) {
+                    if (s.joined && s.area == area_name)
+                        ++count;
+                });
+                fields.push_back(std::to_string(count));
+                break;
+            }
+            case ARUP_STATUS:
+                fields.push_back(area ? area->status : "IDLE");
+                break;
+            case ARUP_CM:
+                if (area && !area->cm_owners.empty()) {
+                    std::string cms;
+                    for (auto owner_id : area->cm_owners) {
+                        auto* session = room_.get_session(owner_id);
+                        if (!session)
+                            continue;
+                        if (!cms.empty())
+                            cms += ", ";
+                        std::string char_name = (session->character_id >= 0 &&
+                                                 session->character_id < static_cast<int>(room_.characters.size()))
+                                                    ? room_.characters[session->character_id]
+                                                    : session->display_name;
+                        cms += "[" + std::to_string(session->session_id) + "] " + char_name;
+                    }
+                    fields.push_back(cms.empty() ? "FREE" : cms);
+                }
+                else {
+                    fields.push_back("FREE");
+                }
+                break;
+            case ARUP_LOCKED:
+                if (area) {
+                    switch (area->lock_mode) {
+                    case AreaLockMode::FREE:
+                        fields.push_back("FREE");
+                        break;
+                    case AreaLockMode::LOCKED:
+                        fields.push_back("LOCKED");
+                        break;
+                    case AreaLockMode::SPECTATABLE:
+                        fields.push_back("SPECTATABLE");
+                        break;
+                    }
+                }
+                else {
+                    fields.push_back("FREE");
+                }
+                break;
+            }
+        }
+        send(client_id, AOPacket("ARUP", fields));
+    }
 }
 
 void AOServer::broadcast_chars_taken(const std::vector<int>& taken) {
