@@ -1,3 +1,4 @@
+#include "game/ACLFlags.h"
 #include "game/ASNReputationManager.h"
 #include "game/BanManager.h"
 #include "game/CommandContext.h"
@@ -17,8 +18,8 @@ class AsnCommand : public CommandHandler {
         return n;
     }
 
-    bool requires_moderator() const override {
-        return true;
+    ACLPermission required_permission() const override {
+        return ACLPermission::BAN;
     }
 
     int min_args() const override {

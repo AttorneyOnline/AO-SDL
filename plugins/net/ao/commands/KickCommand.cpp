@@ -1,3 +1,4 @@
+#include "game/ACLFlags.h"
 #include "game/CommandContext.h"
 #include "game/CommandHandler.h"
 #include "game/CommandRegistrar.h"
@@ -13,8 +14,8 @@ class KickCommand : public CommandHandler {
         return n;
     }
 
-    bool requires_moderator() const override {
-        return true;
+    ACLPermission required_permission() const override {
+        return ACLPermission::KICK;
     }
 
     int min_args() const override {

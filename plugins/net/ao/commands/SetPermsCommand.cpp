@@ -8,6 +8,8 @@
 
 #include "utils/Log.h"
 
+#include <algorithm>
+
 /// /setperms <username> <role> — Set ACL role for a user.
 class SetPermsCommand : public CommandHandler {
   public:
@@ -36,7 +38,16 @@ class SetPermsCommand : public CommandHandler {
         }
 
         auto& username = ctx.args[1];
-        auto& role = ctx.args[2];
+        auto role = ctx.args[2];
+
+        // Uppercase the role for consistent storage.
+        std::transform(role.begin(), role.end(), role.begin(), [](unsigned char c) { return std::toupper(c); });
+
+        // Validate against known roles.
+        if (role != "SUPER" && role != "NONE") {
+            ctx.send_system_message("Unknown role '" + role + "'. Known roles: SUPER, NONE.");
+            return;
+        }
 
         // Cannot set SUPER unless caller has SUPER
         auto caller_perms = acl_permissions_for_role(ctx.session.acl_role);

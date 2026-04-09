@@ -1,3 +1,4 @@
+#include "game/ACLFlags.h"
 #include "game/AreaState.h"
 #include "game/CommandContext.h"
 #include "game/CommandHandler.h"
@@ -13,6 +14,10 @@ class BackgroundCommand : public CommandHandler {
     const std::string& name() const override {
         static const std::string n = "background";
         return n;
+    }
+
+    ACLPermission required_permission() const override {
+        return ACLPermission::BGLOCK;
     }
 
     int min_args() const override {

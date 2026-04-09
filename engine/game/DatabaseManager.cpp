@@ -418,12 +418,17 @@ std::future<std::optional<UserEntry>> DatabaseManager::get_user(std::string user
         if (sqlite3_step(stmt.get()) != SQLITE_ROW)
             return std::nullopt;
 
+        auto col_text = [&](int col) -> std::string {
+            auto* p = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), col));
+            return p ? p : "";
+        };
+
         UserEntry user;
         user.id = sqlite3_column_int64(stmt.get(), 0);
-        user.username = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 1));
-        user.salt = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 2));
-        user.password = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 3));
-        user.acl = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 4));
+        user.username = col_text(1);
+        user.salt = col_text(2);
+        user.password = col_text(3);
+        user.acl = col_text(4);
 
         return user;
     });
