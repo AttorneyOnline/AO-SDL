@@ -81,15 +81,15 @@ bool MasterServerAdvertiser::publish_once() {
     // Build JSON payload
     nlohmann::json payload;
 
-    std::string hostname = cfg_.advertiser_hostname();
+    std::string hostname = cfg_.domain();
     if (!hostname.empty())
         payload["ip"] = hostname;
 
-    int ws_port = cfg_.advertiser_ws_port();
+    int ws_port = cfg_.ws_port();
     if (ws_port > 0)
         payload["ws_port"] = ws_port;
 
-    int wss_port = cfg_.advertiser_wss_port();
+    int wss_port = cfg_.wss_port();
     if (wss_port > 0)
         payload["wss_port"] = wss_port;
 

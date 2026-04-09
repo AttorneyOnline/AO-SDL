@@ -66,8 +66,9 @@ fi
 
 echo "=== Bootstrap complete ==="
 echo "Next steps:"
-echo "  1. Copy deploy/ contents to /opt/kagami/"
-echo "  2. Create /opt/kagami/kagami.json from kagami.example.json"
-echo "  3. cd /opt/kagami && docker compose up -d"
+echo "  1. Copy .env.example to /opt/kagami/.env and set KAGAMI_DOMAIN"
+echo "  2. Copy kagami.example.json to /opt/kagami/kagami.json and configure"
+echo "  3. Run deploy.sh to push files, generate Caddyfile, and start services"
+echo "  See deploy/README.md for the full guide."
 docker --version
 docker compose version

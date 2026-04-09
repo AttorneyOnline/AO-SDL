@@ -1,12 +1,16 @@
 {
+    "domain": "",
+    "server_name": "Kagami Server",
+    "server_description": "",
     "bind_address": "0.0.0.0",
     "http_port": 8080,
     "ws_port": 27016,
+    "wss_port": 27015,
     "cors_origin": "*",
-    "server_name": "Kagami Server",
-    "server_description": "",
     "max_players": 100,
     "motd": "",
+    "asset_url": "",
+    "mod_password": "",
     "session_ttl_seconds": 300,
     "log_level": "info",
     "log_file": "/logs/kagami.log",
@@ -14,6 +18,18 @@
     "loki_url": "",
     "metrics_enabled": true,
     "metrics_path": "/metrics",
+    "advertiser": {
+        "enabled": false,
+        "url": "https://servers.aceattorneyonline.com/servers"
+    },
+    "deploy": {
+        "tls": "auto",
+        "observability": false,
+        "metrics_allow": "",
+        "image": "ghcr.io/attorneyonline/kagami:latest",
+        "grafana_user": "admin",
+        "grafana_password": "changeme"
+    },
     "cloudwatch": {
         "region": "",
         "log_group": "",
