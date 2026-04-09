@@ -6,6 +6,9 @@ Description: >
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
+      - Label: { default: Pre-built Config (optional) }
+        Parameters:
+          - ConfigS3URL
       - Label: { default: Server Settings }
         Parameters:
           - ServerName
@@ -27,6 +30,7 @@ Metadata:
           - UseSpotInstance
           - KeyPairName
     ParameterLabels:
+      ConfigS3URL: { default: "S3 URL for kagami.json (skips form below)" }
       ServerName: { default: "Server Name" }
       ServerDescription: { default: "Description" }
       Domain: { default: "Domain Name" }
@@ -41,23 +45,30 @@ Metadata:
       KeyPairName: { default: "SSH Key Pair" }
 
 Parameters:
+  ConfigS3URL:
+    Type: String
+    Default: ''
+    Description: >
+      S3 URL to a pre-built kagami.json (e.g. s3://my-bucket/kagami.json).
+      If set, the config is downloaded from S3 and the Server Settings
+      fields below are ignored. The instance role has S3 read access.
+
   ServerName:
     Type: String
     Default: Kagami Server
-    Description: Displayed in the server browser and in-game.
+    Description: Displayed in the server browser and in-game. Ignored if ConfigS3URL is set.
 
   ServerDescription:
     Type: String
     Default: ''
-    Description: Short description shown in the server list.
+    Description: Short description shown in the server list. Ignored if ConfigS3URL is set.
 
   Domain:
     Type: String
-    AllowedPattern: ^[a-zA-Z0-9][a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}$
-    ConstraintDescription: Must be a valid domain name (e.g. ao.example.com).
+    Default: example.com
     Description: >
       Your domain name. After stack creation, create an A record pointing
-      to the Elastic IP shown in the Outputs tab.
+      to the Elastic IP shown in the Outputs tab. Ignored if ConfigS3URL is set.
 
   ModPassword:
     Type: String
@@ -120,6 +131,7 @@ Parameters:
 
 Conditions:
   IsSpot: !Equals [!Ref UseSpotInstance, 'true']
+  HasS3Config: !Not [!Equals [!Ref ConfigS3URL, '']]
 
 Resources:
   # --- Security Group ---
@@ -219,7 +231,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
       Policies:
-        - PolicyName: KagamiCloudWatchFromRole
+        - PolicyName: KagamiInstancePermissions
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -229,6 +241,10 @@ Resources:
                   - logs:CreateLogStream
                   - logs:DescribeLogStreams
                 Resource: !GetAtt LogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: '*'
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -281,6 +297,7 @@ Resources:
               echo "=== Kagami CloudFormation Init ==="
 
               # --- CF parameters as shell vars ---
+              CF_CONFIG_S3="${CfConfigS3URL}"
               CF_DOMAIN="${CfDomain}"
               CF_SERVER_NAME="${CfServerName}"
               CF_SERVER_DESC="${CfServerDescription}"
@@ -319,7 +336,14 @@ Resources:
               chown -R ubuntu:ubuntu /opt/kagami
               cd /opt/kagami
 
-              # --- Generate kagami.json via python (safe JSON encoding) ---
+              # --- kagami.json: download from S3 or generate from form ---
+              if [ -n "$CF_CONFIG_S3" ]; then
+                  echo "Downloading kagami.json from $CF_CONFIG_S3"
+                  aws s3 cp "$CF_CONFIG_S3" kagami.json
+                  # Read domain from the downloaded config for Caddyfile/.env
+                  CF_DOMAIN=$(python3 -c "import json; print(json.load(open('kagami.json')).get('domain',''))")
+                  CF_GRAFANA_PASSWORD=$(python3 -c "import json; print(json.load(open('kagami.json')).get('deploy',{}).get('grafana_password','changeme'))")
+              else
               python3 -c "
               import json
               cfg = {
@@ -379,6 +403,7 @@ Resources:
               }
               json.dump(cfg, open('kagami.json','w'), indent=4)
               "
+              fi
 
               # --- Generate .env ---
               cat > .env <<DOTENV
@@ -534,7 +559,8 @@ Resources:
               sudo -u ubuntu docker compose up -d
 
               echo "=== Kagami init complete ==="
-            - CfDomain: !Ref Domain
+            - CfConfigS3URL: !Ref ConfigS3URL
+              CfDomain: !Ref Domain
               CfServerName: !Ref ServerName
               CfServerDescription: !Ref ServerDescription
               CfMaxPlayers: !Ref MaxPlayers
