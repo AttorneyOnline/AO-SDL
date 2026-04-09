@@ -408,7 +408,9 @@ Resources:
                   'metrics_path': '/metrics',
                   'advertiser': {
                       'enabled': '$CF_ADVERTISE' == 'true',
-                      'url': 'https://servers.aceattorneyonline.com/servers'
+                      'url': 'https://servers.aceattorneyonline.com/servers',
+                      'ws_port': 80,
+                      'wss_port': 443
                   },
                   'deploy': {
                       'tls': 'auto',

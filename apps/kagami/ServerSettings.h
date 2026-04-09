@@ -249,6 +249,15 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
     std::string advertiser_url() const {
         return value<std::string>("advertiser/url");
     }
+    /// Override WS port for advertising (0 = use ws_port). Useful when Caddy
+    /// serves WS on port 80 but kagami listens on 27016 internally.
+    int advertiser_ws_port() const {
+        return value<int>("advertiser/ws_port");
+    }
+    /// Override WSS port for advertising (0 = use wss_port).
+    int advertiser_wss_port() const {
+        return value<int>("advertiser/wss_port");
+    }
 
     // -- Reverse proxy --
 
@@ -314,6 +323,8 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
              nlohmann::json{
                  {"enabled", false},
                  {"url", "https://servers.aceattorneyonline.com/servers"},
+                 {"ws_port", 0},
+                 {"wss_port", 0},
              }},
             {"deploy",
              nlohmann::json{
