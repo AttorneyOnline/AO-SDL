@@ -224,7 +224,7 @@ Resources:
     Properties:
       UserName: !Ref CloudWatchUser
 
-  # --- IAM Role (ECR pull, general instance permissions) ---
+  # --- IAM Role ---
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -237,6 +237,18 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Policies:
+        - PolicyName: KagamiCloudWatchFromRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt LogGroup.Arn
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -549,25 +561,25 @@ Resources:
 Mappings:
   RegionAMI:
     us-east-1:
-      arm64: ami-0a2463b7ddd1e8ef4
+      arm64: ami-0aa5d717d07100ae3
     us-east-2:
-      arm64: ami-09da212cf18033880
+      arm64: ami-0eb6f60b2909a10f7
     us-west-1:
-      arm64: ami-0e0fc6fdb397a350c
+      arm64: ami-0d9bc523efe773c7e
     us-west-2:
-      arm64: ami-0bfddf4206f1fa7b9
+      arm64: ami-0f56909138373b2b1
     eu-west-1:
-      arm64: ami-0a89fa9a6d8c7ad98
+      arm64: ami-09fcfca38c345ed14
     eu-west-2:
-      arm64: ami-0a94c4bb76a845360
+      arm64: ami-09845d003af37f2cc
     eu-central-1:
-      arm64: ami-08ec85e5e1b3a0ca0
+      arm64: ami-0dea4a76243d93099
     ap-northeast-1:
-      arm64: ami-0d1f4d88f776d498c
+      arm64: ami-0cd23faf16164eca9
     ap-southeast-1:
-      arm64: ami-04c3f51ef02662dba
+      arm64: ami-0a117009aebe46be5
     ap-southeast-2:
-      arm64: ami-0c9c5a8d3a09b27cc
+      arm64: ami-096857e53454cef93
 
 Outputs:
   IPv4Address:
