@@ -2,6 +2,16 @@
 
 ## Quick Start
 
+### One-click AWS deploy
+
+[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=kagami&templateURL=https://kagami-deploy.s3.us-west-2.amazonaws.com/cloudformation/kagami.yaml)
+
+Fill in the form (server name, domain, password) and launch. Creates a fully
+configured EC2 instance with TLS, observability, and CloudWatch logging.
+Estimated cost: **~$17/month** (t4g.small) or **~$8/month** (t4g.nano).
+
+### Manual deploy
+
 ```bash
 # 1. Copy and edit the config
 cp kagami.example.json kagami.json
@@ -17,13 +27,94 @@ cp kagami.example.json kagami.json
 ## Architecture
 
 ```
-Client :443        (HTTPS) --> Caddy --> kagami :8080  (REST API)
-Client :27015      (WSS)   --> Caddy --> kagami :27016 (AO2 WebSocket)
-Client :27016      (WS)    --> direct to kagami        (plaintext, no TLS)
+Client :443  (HTTPS + WSS) --> Caddy --> kagami :8080  (REST API)
+                                     --> kagami :27016 (AO2 WebSocket)
+Client :80   (HTTP + WS)   --> Caddy --> kagami :27016 (WS upgrade)
+                                     --> HTTPS redirect (everything else)
 ```
 
-Caddy handles TLS termination and reverse proxying. All services run in Docker
-with host networking. Ports are configurable in `kagami.json`.
+Everything runs on ports 80 and 443. Caddy detects WebSocket upgrade requests
+and routes them to the game server, while all other traffic goes to the REST API.
+All services run in Docker with host networking.
+
+## SSH Access
+
+```bash
+# CloudFormation deploy — find IP from stack outputs
+aws cloudformation describe-stacks --stack-name kagami \
+  --query 'Stacks[0].Outputs[?OutputKey==`IPv4Address`].OutputValue' --output text
+
+# SSH in (Ubuntu)
+ssh -i ~/.ssh/your-key.pem ubuntu@<ip>
+```
+
+## Managing the Server
+
+The game server runs as a Docker container managed by `docker compose`.
+All commands should be run from `/opt/kagami/`.
+
+```bash
+cd /opt/kagami
+
+# View running containers
+docker compose ps
+
+# View kagami logs (live)
+docker compose logs kagami -f
+
+# Restart kagami
+docker compose restart kagami
+
+# Pull latest image and restart
+docker compose pull kagami && docker compose up -d kagami
+```
+
+### Editing kagami.json
+
+**Important:** Kagami writes `mod_password` and `server_description` back to
+`kagami.json` on shutdown. This means if you edit the file while the server is
+running and then restart, your changes to those fields will be overwritten by
+the runtime values.
+
+To safely edit config:
+
+```bash
+cd /opt/kagami
+
+# 1. Stop kagami first (waits for graceful shutdown + config save)
+docker compose stop kagami
+
+# 2. Edit the config
+nano kagami.json   # or vim, etc.
+
+# 3. Start kagami with the new config
+docker compose start kagami
+```
+
+If you edit other fields (ports, rate limits, reputation, etc.) you can
+restart without stopping first — those fields are not written back on shutdown.
+
+### Updating the Docker image
+
+```bash
+cd /opt/kagami
+
+# Pull the latest image
+docker compose pull kagami
+
+# Restart with the new image
+docker compose up -d kagami
+```
+
+To use a specific image (e.g. from ECR for testing):
+
+```bash
+# Edit .env to change the image
+sed -i 's|^KAGAMI_IMAGE=.*|KAGAMI_IMAGE=your-registry/kagami:tag|' .env
+
+# Pull and restart (source .env so compose picks up the new image)
+. ./.env && docker pull $KAGAMI_IMAGE && docker compose up -d --force-recreate kagami
+```
 
 ## Configuration
 
@@ -35,11 +126,21 @@ options with defaults.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `domain` | *(required)* | Public domain for TLS + advertiser |
-| `ws_port` | `27016` | Cleartext WebSocket port (kagami listens) |
-| `wss_port` | `27015` | TLS WebSocket port (Caddy listens) |
-| `http_port` | `8080` | HTTP API port (kagami listens) |
 | `server_name` | `"Kagami Server"` | Displayed in server list |
 | `mod_password` | `""` | Moderator password (empty = disabled) |
+| `max_players` | `100` | Player limit shown in server browser |
+| `asset_url` | `""` | Content URL for WebAO clients |
+| `ws_port` | `27016` | Internal WebSocket port (kagami listens) |
+| `http_port` | `8080` | Internal HTTP port (kagami listens) |
+
+### Advertiser settings
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `advertiser.enabled` | `false` | List on the master server |
+| `advertiser.url` | `"https://servers.aceattorneyonline.com/servers"` | Master server URL |
+| `advertiser.ws_port` | `80` | WS port advertised to clients |
+| `advertiser.wss_port` | `443` | WSS port advertised to clients |
 
 ### Deploy settings (`deploy` section)
 
@@ -66,9 +167,10 @@ options with defaults.
 Usage: deploy.sh [options] user@host
 
 Options:
-  --config <path>   Path to local kagami.json (required)
-  --key <path>      SSH private key
-  --bootstrap       First-time host setup (installs Docker, creates dirs)
+  --config <path>          Path to local kagami.json (required)
+  --key <path>             SSH private key
+  --bootstrap              First-time host setup (installs Docker, creates dirs)
+  --migrate-akashi <path>  Migrate from an akashi installation
 ```
 
 The deploy script:
@@ -77,25 +179,10 @@ The deploy script:
 3. Uploads everything to the host
 4. Pulls the Docker image and restarts services
 
-### Examples
-
-```bash
-# Minimal game server
-./deploy.sh user@host --bootstrap --config ./kagami.json --key ~/.ssh/key.pem
-
-# With observability (set in kagami.json: "deploy": {"observability": true})
-./deploy.sh user@host --config ./kagami.json --key ~/.ssh/key.pem
-
-# ECR image (set in kagami.json: "deploy": {"image": "123456.dkr.ecr..."})
-# ECR login happens automatically when an ECR image URL is detected
-./deploy.sh user@host --config ./kagami.json --key ~/.ssh/key.pem
-```
-
 ## Migrating from Akashi
 
-If you're running an akashi server, migrate to kagami in one command:
-
 ```bash
+# One command — migrates config, content, and database
 ./deploy.sh user@host --bootstrap --migrate-akashi /path/to/akashi --key ~/.ssh/key.pem
 ```
 
@@ -113,8 +200,9 @@ You can also run the migration separately:
 ./deploy.sh user@host --config ./migrated/kagami.json --key ~/.ssh/key.pem
 ```
 
-After migrating, set `"domain"` in `kagami.json` — akashi doesn't have an equivalent
-field so it's left empty.
+After migrating, set `"domain"` in `kagami.json` — akashi doesn't have an
+equivalent field so it's left empty. Auth mode is auto-detected: if the
+database has users, kagami switches to ADVANCED auth automatically.
 
 ## Content Config
 
@@ -127,14 +215,19 @@ Game content is loaded from the `config/` directory:
 | `areas.ini` | Area definitions and settings |
 | `backgrounds.txt` | Available backgrounds |
 
+If no `config/` directory exists, kagami falls back to a minimal built-in set
+(5 characters, 3 tracks, 3 areas).
+
 ## Files
 
 | File | Tracked | Purpose |
 |------|---------|---------|
 | `deploy.sh` | Yes | Deploy script (includes bootstrap) |
 | `generate-caddyfile.sh` | Yes | Caddyfile generator |
+| `migrate-akashi.sh` | Yes | Akashi migration tool |
 | `docker-compose.yml` | Yes | Service definitions |
 | `kagami.example.json` | Yes | Config template |
+| `cloudformation/kagami.yaml` | Yes | AWS CloudFormation template |
 | `kagami.json` | No | Your server config |
 | `.env` | No | Generated by deploy.sh |
 | `Caddyfile` | No | Generated by deploy.sh |
