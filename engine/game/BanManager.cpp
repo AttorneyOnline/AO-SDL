@@ -245,7 +245,8 @@ std::vector<BanEntry> BanManager::list_bans(int limit) const {
         result.push_back(entry);
 
     // Sort by timestamp descending
-    std::sort(result.begin(), result.end(), [](const BanEntry& a, const BanEntry& b) { return a.timestamp > b.timestamp; });
+    std::sort(result.begin(), result.end(),
+              [](const BanEntry& a, const BanEntry& b) { return a.timestamp > b.timestamp; });
 
     if (static_cast<int>(result.size()) > limit)
         result.resize(limit);

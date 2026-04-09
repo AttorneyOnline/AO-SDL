@@ -330,9 +330,7 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
                     server.send_to_area(area, AOPacket("BN", {bg, "def"}));
                 },
             .broadcast_arup =
-                [&server](int arup_type) {
-                    server.broadcast_arup(static_cast<AOServer::ArupType>(arup_type));
-                },
+                [&server](int arup_type) { server.broadcast_arup(static_cast<AOServer::ArupType>(arup_type)); },
         };
 
         // Set callbacks that reference ctx (must be done after construction

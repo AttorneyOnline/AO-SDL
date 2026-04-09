@@ -27,10 +27,10 @@ class DatabaseManager;
 class FirewallManager;
 
 struct BanEntry {
-    int64_t id = 0;        ///< Database row ID (0 = not yet persisted).
+    int64_t id = 0; ///< Database row ID (0 = not yet persisted).
     std::string ipid;
     std::string hdid;
-    std::string ip;        ///< Raw IP address (for firewall blocking).
+    std::string ip; ///< Raw IP address (for firewall blocking).
     std::string reason;
     std::string moderator; ///< Display name of the banning moderator.
     int64_t timestamp = 0; ///< Unix seconds when the ban was issued.

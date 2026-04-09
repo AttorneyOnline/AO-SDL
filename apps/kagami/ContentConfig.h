@@ -25,10 +25,10 @@ struct AreaConfig {
 /// point it at their existing config/ directory and everything works.
 struct ContentConfig {
     std::vector<std::string> characters;
-    std::vector<std::string> music;         ///< Ordered: categories + song names interleaved.
+    std::vector<std::string> music; ///< Ordered: categories + song names interleaved.
     std::vector<std::string> backgrounds;
-    std::vector<std::string> area_names;    ///< Display names in area order.
-    std::vector<AreaConfig> area_configs;    ///< Parallel to area_names.
+    std::vector<std::string> area_names;  ///< Display names in area order.
+    std::vector<AreaConfig> area_configs; ///< Parallel to area_names.
 
     /// Load all content files from `dir`. Returns true if at least
     /// characters and areas were loaded successfully.

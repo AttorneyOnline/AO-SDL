@@ -49,8 +49,7 @@ class SearchBansCommand : public CommandHandler {
 
         ctx.send_system_message("Found " + std::to_string(results.size()) + " ban(s) matching \"" + query + "\":");
 
-        auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                        .count();
 
         for (auto& ban : results) {

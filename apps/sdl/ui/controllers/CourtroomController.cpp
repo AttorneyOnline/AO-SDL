@@ -3,7 +3,6 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
-#include "ui/widgets/CourtroomState.h"
 #include "asset/MountManager.h"
 #include "audio/SDLAudioDevice.h"
 #include "event/EventManager.h"
@@ -13,6 +12,7 @@
 #include "game/IScenePresenter.h"
 #include "render/RenderManager.h"
 #include "ui/DebugContext.h"
+#include "ui/widgets/CourtroomState.h"
 #include "utils/Log.h"
 
 #include <imgui.h>

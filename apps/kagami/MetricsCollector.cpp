@@ -44,14 +44,18 @@ void MetricsCollector::start(http::Server& http) {
                                    "bind_address", "cors_origin"});
     auto& max_players = reg.gauge("kagami_max_players", "Configured max player slots");
     auto& event_publishes = reg.gauge("kagami_event_publishes", "Cumulative events published per channel", {"channel"});
-    auto& session_bytes_sent = reg.gauge("kagami_session_bytes_sent", "Bytes sent per session",
-                                         {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
-    auto& session_bytes_recv = reg.gauge("kagami_session_bytes_received", "Bytes received per session",
-                                         {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
-    auto& session_packets_sent = reg.gauge("kagami_session_packets_sent", "Packets sent per session",
-                                           {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
-    auto& session_packets_recv = reg.gauge("kagami_session_packets_received", "Packets received per session",
-                                           {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
+    auto& session_bytes_sent =
+        reg.gauge("kagami_session_bytes_sent", "Bytes sent per session",
+                  {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
+    auto& session_bytes_recv =
+        reg.gauge("kagami_session_bytes_received", "Bytes received per session",
+                  {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
+    auto& session_packets_sent =
+        reg.gauge("kagami_session_packets_sent", "Packets sent per session",
+                  {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
+    auto& session_packets_recv =
+        reg.gauge("kagami_session_packets_received", "Packets received per session",
+                  {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
                                    {"session_id", "display_name", "protocol", "area", "character", "ip", "login"});
     auto& http_open_conns = reg.gauge("kagami_http_open_connections", "Currently open TCP connections");
@@ -82,7 +86,8 @@ void MetricsCollector::start(http::Server& http) {
     auto& firewall_rules_active = reg.gauge("kagami_firewall_rules_active", "Active firewall rules");
     auto& asn_tracked = reg.gauge("kagami_asn_tracked", "Tracked ASNs with reputation data");
     auto& auth_mode = reg.gauge("kagami_auth_mode", "Authentication mode", {"mode"});
-    auto& registered_user = reg.gauge("kagami_registered_user", "Registered moderator user", {"username", "role", "permissions"});
+    auto& registered_user =
+        reg.gauge("kagami_registered_user", "Registered moderator user", {"username", "role", "permissions"});
 
     auto cors = cfg_.cors_origins();
     server_info
@@ -100,8 +105,8 @@ void MetricsCollector::start(http::Server& http) {
                             &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util, &poll_events,
                             &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util, &ws_dispatch_rate,
                             &ws_worker_util, &ws_worker_active, &ws_work_queue_depth, &lock_util,
-                            &reputation_cache_size, &firewall_rules_active, &asn_tracked,
-                            &auth_mode, &registered_user, &reg](std::stop_token st) {
+                            &reputation_cache_size, &firewall_rules_active, &asn_tracked, &auth_mode, &registered_user,
+                            &reg](std::stop_token st) {
         uint64_t prev_worker_busy = 0, prev_worker_idle = 0;
         uint64_t prev_poll_busy = 0, prev_poll_idle = 0;
         size_t worker_count = 0;
@@ -309,7 +314,7 @@ void MetricsCollector::start(http::Server& http) {
                 if (!s->acl_role.empty() && s->moderator)
                     login += " [" + s->acl_role + "]";
                 std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol, s->area,
-                                                   std::move(char_name), s->ip_address, login};
+                                                   std::move(char_name),          s->ip_address,   login};
                 session_bytes_sent.labels(labels).set(
                     static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
                 session_bytes_recv.labels(labels).set(
