@@ -103,4 +103,5 @@ class BanCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<BanCommand>());
-void ao_cmd_ban() {}
+void ao_cmd_ban() {
+}

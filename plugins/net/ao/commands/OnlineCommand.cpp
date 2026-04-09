@@ -33,4 +33,5 @@ class OnlineCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<OnlineCommand>());
-void ao_cmd_online() {}
+void ao_cmd_online() {
+}

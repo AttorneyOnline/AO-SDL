@@ -142,4 +142,5 @@ static CommandRegistrar reg1(std::make_unique<AreaLockCommand>());
 static CommandRegistrar reg2(std::make_unique<AreaUnlockCommand>());
 static CommandRegistrar reg3(std::make_unique<AreaSpectateCommand>());
 static CommandRegistrar reg4(std::make_unique<AreaKickCommand>());
-void ao_cmd_arealock() {}
+void ao_cmd_arealock() {
+}

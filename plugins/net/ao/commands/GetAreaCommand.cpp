@@ -89,4 +89,5 @@ class GetAreasCommand : public CommandHandler {
 
 static CommandRegistrar reg1(std::make_unique<GetAreaCommand>());
 static CommandRegistrar reg2(std::make_unique<GetAreasCommand>());
-void ao_cmd_getarea() {}
+void ao_cmd_getarea() {
+}
