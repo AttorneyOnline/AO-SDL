@@ -223,6 +223,11 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync CloudFormation template to S3
+        run: aws s3 cp deploy/cloudformation/kagami.yaml s3://kagami-deploy/cloudformation/kagami.yaml
+
       - name: Find instance by stack name
         id: instance
         run: |
