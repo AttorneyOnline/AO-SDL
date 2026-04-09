@@ -379,6 +379,7 @@ Resources:
 
               # --- Deploy directory ---
               mkdir -p /opt/kagami/config /opt/kagami/prometheus
+              touch /opt/kagami/kagami.db
               chown -R ubuntu:ubuntu /opt/kagami
               cd /opt/kagami
 
@@ -546,6 +547,7 @@ Resources:
                   volumes:
                     - ./kagami.json:/app/kagami.json
                     - ./config:/app/config:ro
+                    - ./kagami.db:/app/kagami.db
                     - kagami_logs:/logs
                 prometheus:
                   image: prom/prometheus:latest

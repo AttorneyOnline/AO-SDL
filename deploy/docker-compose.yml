@@ -22,6 +22,7 @@ services:
       - NET_ADMIN  # Required for kagami-fw-helper nftables operations
     volumes:
       - ./kagami.json:/app/kagami.json
+      - ./kagami.db:/app/kagami.db
       - ./config:/app/config:ro
       - kagami_logs:/logs
 
