@@ -618,7 +618,7 @@ Resources:
                 - name: Prometheus
                   type: prometheus
                   access: proxy
-                  url: http://127.0.0.1:9090
+                  url: http://127.0.0.1:9090/prometheus
                   isDefault: true
               DSPROV
               # Loki datasource
