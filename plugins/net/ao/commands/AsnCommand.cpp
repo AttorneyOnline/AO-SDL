@@ -214,4 +214,5 @@ class AsnCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<AsnCommand>());
-void ao_cmd_asn() {}
+void ao_cmd_asn() {
+}

@@ -108,4 +108,5 @@ class UnlockBackgroundCommand : public CommandHandler {
 static CommandRegistrar reg1(std::make_unique<BackgroundCommand>());
 static CommandRegistrar reg2(std::make_unique<LockBackgroundCommand>());
 static CommandRegistrar reg3(std::make_unique<UnlockBackgroundCommand>());
-void ao_cmd_background() {}
+void ao_cmd_background() {
+}

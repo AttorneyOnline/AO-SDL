@@ -31,4 +31,5 @@ class HelpCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<HelpCommand>());
-void ao_cmd_help() {}
+void ao_cmd_help() {
+}

@@ -194,4 +194,5 @@ static CommandRegistrar reg1(std::make_unique<CmCommand>());
 static CommandRegistrar reg2(std::make_unique<UncmCommand>());
 static CommandRegistrar reg3(std::make_unique<InviteCommand>());
 static CommandRegistrar reg4(std::make_unique<UninviteCommand>());
-void ao_cmd_cm() {}
+void ao_cmd_cm() {
+}

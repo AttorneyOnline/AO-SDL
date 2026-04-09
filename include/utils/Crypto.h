@@ -491,13 +491,16 @@ inline std::string pbkdf2_sha256_hex(const std::string& password, const std::str
 
 // -- Secure random bytes ------------------------------------------------------
 
+#ifdef _WIN32
+// RtlGenRandom (SystemFunction036) — available on XP+ via advapi32.
+// Declared at file scope to avoid pulling in ntsecapi.h / bcrypt.h.
+extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void*, unsigned long);
+#endif
+
 /// Generate cryptographically secure random bytes.
 inline std::vector<uint8_t> randbytes(size_t count) {
     std::vector<uint8_t> buf(count);
 #ifdef _WIN32
-    // RtlGenRandom (SystemFunction036) — available on XP+ via advapi32.
-    // Declared here to avoid pulling in ntsecapi.h / bcrypt.h.
-    extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void*, unsigned long);
     SystemFunction036(buf.data(), static_cast<unsigned long>(count));
 #else
     // arc4random_buf is available on macOS and modern Linux (glibc 2.36+)

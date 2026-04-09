@@ -47,4 +47,5 @@ class UnbanCommand : public CommandHandler {
 };
 
 static CommandRegistrar reg(std::make_unique<UnbanCommand>());
-void ao_cmd_unban() {}
+void ao_cmd_unban() {
+}
