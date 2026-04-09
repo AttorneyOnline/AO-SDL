@@ -318,16 +318,15 @@ Resources:
               # --- Install Docker ---
               if ! command -v docker &>/dev/null; then
                   curl -fsSL https://get.docker.com | sh
-                  usermod -aG docker ec2-user
+                  usermod -aG docker ubuntu
               fi
               if ! docker compose version &>/dev/null 2>&1; then
-                  yum install -y docker-compose-plugin 2>/dev/null || \
-                  apt-get update -qq && apt-get install -y -qq docker-compose-plugin 2>/dev/null || true
+                  apt-get update -qq
+                  apt-get install -y -qq docker-compose-plugin
               fi
 
               # --- Install nftables ---
-              yum install -y nftables 2>/dev/null || \
-              apt-get install -y -qq nftables 2>/dev/null || true
+              apt-get install -y -qq nftables
 
               # --- Docker seccomp for io_uring ---
               if [ ! -f /etc/docker/daemon.json ] || ! grep -q seccomp /etc/docker/daemon.json 2>/dev/null; then
@@ -337,7 +336,7 @@ Resources:
 
               # --- Deploy directory ---
               mkdir -p /opt/kagami/config /opt/kagami/prometheus
-              chown -R ec2-user:ec2-user /opt/kagami
+              chown -R ubuntu:ubuntu /opt/kagami
               cd /opt/kagami
 
               # --- Generate kagami.json via python (safe JSON encoding) ---
@@ -360,7 +359,7 @@ Resources:
                   'log_level': 'info',
                   'log_file': '/logs/kagami.log',
                   'log_file_level': 'verbose',
-                  'loki_url': 'http://loki:3100',
+                  'loki_url': 'http://127.0.0.1:3100',
                   'metrics_enabled': True,
                   'metrics_path': '/metrics',
                   'advertiser': {
@@ -430,12 +429,20 @@ Resources:
               }
               {$KAGAMI_DOMAIN} {
               	import tls_active
-              	request_body { max_size 64KB }
-              	handle /grafana* { reverse_proxy 127.0.0.1:3000 }
-              	handle /prometheus* { reverse_proxy 127.0.0.1:9090 }
+              	request_body {
+              		max_size 64KB
+              	}
+              	handle /grafana* {
+              		reverse_proxy 127.0.0.1:3000
+              	}
+              	handle /prometheus* {
+              		reverse_proxy 127.0.0.1:9090
+              	}
               	handle /metrics {
               		@allowed remote_ip 127.0.0.1 ::1
-              		handle @allowed { reverse_proxy 127.0.0.1:8080 }
+              		handle @allowed {
+              			reverse_proxy 127.0.0.1:8080
+              		}
               		respond "Forbidden" 403
               	}
               	handle {
@@ -539,9 +546,9 @@ Resources:
               done
 
               # --- Fix ownership and start ---
-              chown -R ec2-user:ec2-user /opt/kagami
-              sudo -u ec2-user docker compose pull
-              sudo -u ec2-user docker compose up -d
+              chown -R ubuntu:ubuntu /opt/kagami
+              sudo -u ubuntu docker compose pull
+              sudo -u ubuntu docker compose up -d
 
               echo "=== Kagami init complete ==="
             - CfDomain: !Ref Domain
@@ -558,29 +565,29 @@ Resources:
               CfCwAccessKey: !Ref CloudWatchAccessKey
               CfCwSecretKey: !GetAtt CloudWatchAccessKey.SecretAccessKey
 
-# --- AMI Map (Amazon Linux 2023, arm64) ---
+# --- AMI Map (Ubuntu 24.04 LTS, arm64) ---
 Mappings:
   RegionAMI:
     us-east-1:
-      arm64: ami-0aa5d717d07100ae3
+      arm64: ami-0bc0f64eea5d47edf
     us-east-2:
-      arm64: ami-0eb6f60b2909a10f7
+      arm64: ami-0823767a63030e222
     us-west-1:
-      arm64: ami-0d9bc523efe773c7e
+      arm64: ami-06288d073b32b5929
     us-west-2:
-      arm64: ami-0f56909138373b2b1
+      arm64: ami-078ec8cff91030153
     eu-west-1:
-      arm64: ami-09fcfca38c345ed14
+      arm64: ami-0476c6b26004a1760
     eu-west-2:
-      arm64: ami-09845d003af37f2cc
+      arm64: ami-0c6531eb236cf82e3
     eu-central-1:
-      arm64: ami-0dea4a76243d93099
+      arm64: ami-023c2be60b92b00a3
     ap-northeast-1:
-      arm64: ami-0cd23faf16164eca9
+      arm64: ami-07ff2b45dd9f7b8d5
     ap-southeast-1:
-      arm64: ami-0a117009aebe46be5
+      arm64: ami-0c59d90bab0666019
     ap-southeast-2:
-      arm64: ami-096857e53454cef93
+      arm64: ami-08b3499b18390ca41
 
 Outputs:
   IPv4Address:
@@ -617,7 +624,7 @@ Outputs:
 
   SSHCommand:
     Description: SSH into the server
-    Value: !Sub 'ssh -i ~/.ssh/${KeyPairName}.pem ec2-user@${ElasticIP}'
+    Value: !Sub 'ssh -i ~/.ssh/${KeyPairName}.pem ubuntu@${ElasticIP}'
 
   CloudWatchLogGroup:
     Description: CloudWatch log group for server logs
