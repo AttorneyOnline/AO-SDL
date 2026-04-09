@@ -45,12 +45,20 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
     std::string server_description() const {
         return value<std::string>("server_description");
     }
+    /// Public domain name. Used for Caddyfile generation and advertiser hostname.
+    std::string domain() const {
+        return value<std::string>("domain");
+    }
 
     int http_port() const {
         return value<int>("http_port");
     }
     int ws_port() const {
         return value<int>("ws_port");
+    }
+    /// TLS WebSocket port (Caddy listens here, proxies to ws_port).
+    int wss_port() const {
+        return value<int>("wss_port");
     }
     std::string bind_address() const {
         return value<std::string>("bind_address");
@@ -241,18 +249,6 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
     std::string advertiser_url() const {
         return value<std::string>("advertiser/url");
     }
-    /// Optional hostname/IP to advertise. Empty = let the master server detect it.
-    std::string advertiser_hostname() const {
-        return value<std::string>("advertiser/hostname");
-    }
-    /// Cleartext WebSocket port to advertise. 0 = do not advertise.
-    int advertiser_ws_port() const {
-        return value<int>("advertiser/ws_port");
-    }
-    /// TLS WebSocket port to advertise. 0 = do not advertise.
-    int advertiser_wss_port() const {
-        return value<int>("advertiser/wss_port");
-    }
 
     // -- Reverse proxy --
 
@@ -287,8 +283,10 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         set_defaults({
             {"server_name", "Kagami Server"},
             {"server_description", ""},
+            {"domain", ""},
             {"http_port", 8080},
-            {"ws_port", 8081},
+            {"ws_port", 27016},
+            {"wss_port", 27015},
             {"bind_address", "0.0.0.0"},
             {"max_players", 100},
             {"motd", ""},
@@ -316,9 +314,15 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
              nlohmann::json{
                  {"enabled", false},
                  {"url", "https://servers.aceattorneyonline.com/servers"},
-                 {"hostname", ""},
-                 {"ws_port", 0},
-                 {"wss_port", 0},
+             }},
+            {"deploy",
+             nlohmann::json{
+                 {"tls", "auto"},
+                 {"observability", false},
+                 {"metrics_allow", ""},
+                 {"image", "ghcr.io/attorneyonline/kagami:latest"},
+                 {"grafana_user", "admin"},
+                 {"grafana_password", "changeme"},
              }},
             {"reverse_proxy",
              nlohmann::json{

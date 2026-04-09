@@ -1,7 +1,7 @@
 services:
   # --- Reverse proxy + TLS ---
   caddy:
-    image: ${CADDY_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/caddy-dns:latest}
+    image: ${CADDY_IMAGE:-caddy:latest}
     restart: unless-stopped
     network_mode: host
     environment:
@@ -15,7 +15,7 @@ services:
 
   # --- Game server ---
   kagami:
-    image: ${KAGAMI_IMAGE:-257922448991.dkr-ecr.us-west-2.on.aws/kagami:latest}
+    image: ${KAGAMI_IMAGE:-ghcr.io/attorneyonline/kagami:latest}
     restart: unless-stopped
     network_mode: host
     cap_add:
