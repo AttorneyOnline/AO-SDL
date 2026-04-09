@@ -320,9 +320,15 @@ TEST_F(AOServerTest, ICMessagePreservesAllExtensionFields) {
     auto pkts = packets_to(id2);
     ASSERT_GE(pkts.size(), 1u);
 
-    // The echo is a 32-field server→client MS. Verify key fields survive.
-    auto& echo = pkts[0];
-    EXPECT_NE(echo.find("MS#"), std::string::npos);
+    // Find the MS echo (may be preceded by PU broadcasts).
+    std::string echo;
+    for (auto& p : pkts) {
+        if (p.find("MS#") != std::string::npos) {
+            echo = p;
+            break;
+        }
+    }
+    ASSERT_FALSE(echo.empty()) << "No MS packet found in broadcast";
 
     // Split the echo on '#' to check field positions
     std::vector<std::string> ef;

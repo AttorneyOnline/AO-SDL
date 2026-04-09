@@ -1,35 +1,40 @@
 /**
  * @file BanManager.h
- * @brief Protocol-agnostic ban storage with async JSON persistence.
+ * @brief Protocol-agnostic ban storage backed by DatabaseManager (SQLite).
  *
  * Bans are keyed by IPID (SHA-256 of IP, first 8 hex chars). The manager
  * also supports lookup by HDID (hardware ID) for hardware bans.
  *
- * Thread safety: all public methods are mutex-protected. save_async()
- * enqueues a write to a background writer thread that is joined on
- * destruction, ensuring in-flight writes complete before shutdown.
+ * Architecture: in-memory cache (unordered_map) for O(1) ban checks on
+ * every connection, with write-through to SQLite via DatabaseManager.
+ * The in-memory map is authoritative for reads; the DB is authoritative
+ * for persistence across restarts.
+ *
+ * Thread safety: all public methods are mutex-protected. DB writes are
+ * fire-and-forget dispatches to the DatabaseManager worker thread.
  */
 #pragma once
 
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
 #include <unordered_map>
+#include <vector>
 
-/// Default ban file path. Used by commands and main.cpp.
-inline constexpr const char* DEFAULT_BAN_FILE = "bans.json";
+class DatabaseManager;
+class FirewallManager;
 
 struct BanEntry {
+    int64_t id = 0;        ///< Database row ID (0 = not yet persisted).
     std::string ipid;
     std::string hdid;
+    std::string ip;        ///< Raw IP address (for firewall blocking).
     std::string reason;
     std::string moderator; ///< Display name of the banning moderator.
     int64_t timestamp = 0; ///< Unix seconds when the ban was issued.
-    int64_t duration = 0;  ///< Duration in seconds. -2 = permanent.
+    int64_t duration = 0;  ///< Duration in seconds. -2 = permanent, 0 = invalidated.
 
     bool is_permanent() const {
         return duration == -2;
@@ -38,6 +43,8 @@ struct BanEntry {
     bool is_expired() const {
         if (is_permanent())
             return false;
+        if (duration == 0)
+            return true; // invalidated
         auto now = std::chrono::system_clock::now();
         auto expires = std::chrono::system_clock::from_time_t(timestamp) + std::chrono::seconds(duration);
         return now > expires;
@@ -49,19 +56,44 @@ struct BanEntry {
 /// Returns -1 on parse failure.
 int64_t parse_ban_duration(const std::string& input);
 
+/// Format a duration in seconds to a human-readable string.
+/// -2 = "permanent", 0 = "invalidated", >0 = "Xh Ym Zs".
+std::string format_ban_duration(int64_t duration);
+
 class BanManager {
   public:
-    BanManager();
-    ~BanManager();
+    BanManager() = default;
+    ~BanManager() = default;
 
     BanManager(const BanManager&) = delete;
     BanManager& operator=(const BanManager&) = delete;
 
+    /// Set the database backend. Call before load_from_db().
+    /// If null, operates in-memory only (for tests).
+    void set_db(DatabaseManager* db) {
+        db_ = db;
+    }
+
+    /// Set the firewall backend. If set, bans will also block/unblock at the kernel level.
+    void set_firewall(FirewallManager* fw) {
+        fw_ = fw;
+    }
+
+    /// Load all active bans from the database into the in-memory cache.
+    /// Blocks on startup. Call after set_db().
+    void load_from_db();
+
     /// Add a ban. Overwrites any existing ban for the same IPID.
+    /// Writes through to DB asynchronously.
     void add_ban(BanEntry entry);
 
-    /// Remove a ban by IPID. Returns true if a ban was removed.
+    /// Remove (invalidate) a ban by IPID. Returns true if a ban was found.
+    /// Soft-deletes in DB (sets duration=0) to preserve audit history.
     bool remove_ban(const std::string& ipid);
+
+    /// Update a ban field ("reason" or "duration") by IPID.
+    /// Returns true if the ban was found and updated.
+    bool update_ban(const std::string& ipid, const std::string& field, const std::string& value);
 
     /// Check if banned and return the ban entry in a single lock acquisition.
     /// Returns std::nullopt if not banned.
@@ -73,16 +105,12 @@ class BanManager {
     /// Find a ban by HDID across all entries. Returns a copy.
     std::optional<BanEntry> find_ban_by_hdid(const std::string& hdid) const;
 
-    /// Load bans from a JSON file. Skips expired entries.
-    void load(const std::string& path);
+    /// Search bans by substring match (case-insensitive) against IPID, HDID,
+    /// reason, and moderator. Returns up to `limit` matching entries.
+    std::vector<BanEntry> search_bans(const std::string& query, int limit = 10) const;
 
-    /// Enqueue an async save. The background writer thread will write
-    /// a snapshot of the ban map to disk. Joining the writer on
-    /// destruction guarantees in-flight writes complete before shutdown.
-    void save_async(const std::string& path);
-
-    /// Synchronous save. Blocks until the file is written.
-    void save_sync(const std::string& path) const;
+    /// Return all bans sorted by timestamp descending, up to `limit`.
+    std::vector<BanEntry> list_bans(int limit = 20) const;
 
     /// Number of active (non-expired) bans.
     size_t count() const;
@@ -90,20 +118,6 @@ class BanManager {
   private:
     mutable std::mutex mutex_;
     std::unordered_map<std::string, BanEntry> bans_; ///< Keyed by IPID.
-
-    /// Snapshot the ban map under the lock (for save operations).
-    std::unordered_map<std::string, BanEntry> snapshot() const;
-
-    /// Write a ban map snapshot to disk.
-    static void write_to_disk(const std::unordered_map<std::string, BanEntry>& bans, const std::string& path);
-
-    // Background writer thread
-    std::jthread writer_thread_;
-    std::mutex writer_mutex_;
-    std::condition_variable_any writer_cv_;
-    bool writer_pending_ = false;
-    std::string writer_path_;
-    std::unordered_map<std::string, BanEntry> writer_snapshot_;
-
-    void writer_loop(std::stop_token stop);
+    DatabaseManager* db_ = nullptr;
+    FirewallManager* fw_ = nullptr;
 };

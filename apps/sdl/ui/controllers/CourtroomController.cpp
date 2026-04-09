@@ -3,6 +3,7 @@
 #include "ao/asset/AOAssetLibrary.h"
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
+#include "ui/widgets/CourtroomState.h"
 #include "asset/MountManager.h"
 #include "audio/SDLAudioDevice.h"
 #include "event/EventManager.h"
@@ -155,6 +156,7 @@ void CourtroomController::update_debug_stats() {
     while (auto ev = server_ch.get_event()) {
         s.server_software = ev->get_software();
         s.server_version = ev->get_version();
+        CourtroomState::instance().local_player_id = ev->get_player_num();
     }
 
     auto& player_ch = EventManager::instance().get_channel<PlayerCountEvent>();

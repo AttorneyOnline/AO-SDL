@@ -1,3 +1,4 @@
+#include "ContentConfig.h"
 #include "LogSinkSetup.h"
 #include "MetricsCollector.h"
 #include "ReplCommand.h"
@@ -67,18 +68,43 @@ int main(int /*argc*/, char* argv[]) {
 
     Log::log_print(INFO, "Server: %s", cfg.server_name().c_str());
 
+    // --- Content config (akashi-compatible) ---
+    ContentConfig content;
+    {
+        auto bin_dir = std::filesystem::path(argv[0]).parent_path();
+        auto config_dir = (bin_dir / "config").string();
+        if (content.load(config_dir)) {
+            Log::log_print(INFO, "Loaded content config from %s", config_dir.c_str());
+        }
+        else {
+            Log::log_print(WARNING, "No content config in %s — using built-in defaults", config_dir.c_str());
+            content.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
+            content.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
+            content.area_names = {"Lobby", "Courtroom 1", "Courtroom 2"};
+        }
+    }
+
     // --- Game state ---
     GameRoom room;
     room.server_name = cfg.server_name();
     room.server_description = cfg.server_description();
     room.max_players = cfg.max_players();
     room.mod_password = cfg.mod_password();
-    room.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
-    room.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
-    room.areas = {"Lobby", "Courtroom 1", "Courtroom 2"};
+    room.characters = std::move(content.characters);
+    room.music = std::move(content.music);
+    room.areas = std::move(content.area_names);
     room.reset_taken();
     room.build_char_id_index();
     room.build_area_index();
+
+    // Apply per-area settings from areas.ini
+    for (auto& ac : content.area_configs) {
+        auto* area = room.find_area_by_name(ac.name);
+        if (!area)
+            continue;
+        area->background.name = ac.background;
+        area->bg_locked = ac.bg_locked;
+    }
 
     // --- Database ---
     DatabaseManager db;
@@ -94,11 +120,6 @@ int main(int /*argc*/, char* argv[]) {
             Log::log_print(INFO, "Auth: ADVANCED mode (%zu users in database)", users.size());
         }
     }
-
-    // --- Ban manager ---
-    BanManager ban_manager;
-    ban_manager.load(DEFAULT_BAN_FILE);
-    room.set_ban_manager(&ban_manager);
 
     // --- IP Reputation ---
     IPReputationService reputation;
@@ -133,6 +154,14 @@ int main(int /*argc*/, char* argv[]) {
     firewall.configure(cfg.firewall_config());
     firewall.load("firewall_rules.json");
     room.set_firewall(&firewall);
+
+    // --- Ban manager (DB-backed, akashi-compatible schema) ---
+    // Placed after firewall so bans can sync kernel-level blocks on startup.
+    BanManager ban_manager;
+    ban_manager.set_db(&db);
+    ban_manager.set_firewall(&firewall);
+    ban_manager.load_from_db();
+    room.set_ban_manager(&ban_manager);
 
     // Wire ASN reputation escalation → firewall blocking
     asn_reputation.set_status_callback([&firewall](uint32_t asn, ASNReputationEntry::Status /*old_status*/,

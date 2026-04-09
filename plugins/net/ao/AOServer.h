@@ -57,6 +57,14 @@ class AOServer {
     /// Send area-join state (BN, HP, LE) to a specific client.
     void send_area_join_info(uint64_t client_id, const std::string& area_name);
 
+    /// Send the full player list (PR ADD + all PU fields) to a specific client.
+    void send_player_list_snapshot(uint64_t client_id);
+
+    /// Broadcast a PR/PU update to all joined AO2 clients.
+    void broadcast_player_add(uint64_t session_id);
+    void broadcast_player_remove(uint64_t session_id);
+    void broadcast_player_update(uint64_t session_id, int data_type, const std::string& data);
+
   private:
     void dispatch(uint64_t client_id, AOPacket& packet);
 

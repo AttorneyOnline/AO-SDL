@@ -20,6 +20,8 @@ class SessionsCommand : public SimpleReplCommand {
             }
             ctx.room.for_each_session([&](const ServerSession& s) {
                 std::string info = "  " + format_client_id(s.client_id);
+                if (!s.ip_address.empty())
+                    info += " [" + s.ip_address + "]";
                 if (!s.display_name.empty())
                     info += " \"" + s.display_name + "\"";
                 if (s.character_id >= 0)

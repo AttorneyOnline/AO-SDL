@@ -24,6 +24,7 @@ echo "=== Syncing deploy files to $HOST:$DEPLOY_DIR ==="
 $SCP -r \
     "$SCRIPT_DIR/docker-compose.yml" \
     "$SCRIPT_DIR/Caddyfile" \
+    "$SCRIPT_DIR/config" \
     "$SCRIPT_DIR/prometheus" \
     "$SCRIPT_DIR/grafana" \
     "$SCRIPT_DIR/kagami-firewall.sh" \

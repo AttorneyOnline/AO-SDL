@@ -599,6 +599,8 @@ add_library(ao_net STATIC
     plugins/net/ao/commands/KickCommand.cpp
     plugins/net/ao/commands/AsnCommand.cpp
     plugins/net/ao/commands/BanCommand.cpp
+    plugins/net/ao/commands/EditBanCommand.cpp
+    plugins/net/ao/commands/SearchBansCommand.cpp
     plugins/net/ao/commands/FirewallCommand.cpp
     plugins/net/ao/commands/ReputationCommand.cpp
     plugins/net/ao/commands/UnbanCommand.cpp

@@ -1,11 +1,11 @@
 #include "game/BanManager.h"
 
+#include "game/DatabaseManager.h"
+#include "game/FirewallManager.h"
 #include "utils/Log.h"
 
 #include <algorithm>
 #include <cctype>
-#include <fstream>
-#include <json.hpp>
 
 // -- Duration parsing ---------------------------------------------------------
 
@@ -57,29 +57,129 @@ int64_t parse_ban_duration(const std::string& input) {
     return has_unit ? total : -1;
 }
 
-// -- BanManager ---------------------------------------------------------------
+std::string format_ban_duration(int64_t duration) {
+    if (duration == -2)
+        return "permanent";
+    if (duration <= 0)
+        return "invalidated";
 
-BanManager::BanManager() : writer_thread_([this](std::stop_token st) { writer_loop(st); }) {
+    std::string result;
+    int64_t h = duration / 3600;
+    int64_t m = (duration % 3600) / 60;
+    int64_t s = duration % 60;
+    if (h > 0)
+        result += std::to_string(h) + "h";
+    if (m > 0)
+        result += std::to_string(m) + "m";
+    if (s > 0 || result.empty())
+        result += std::to_string(s) + "s";
+    return result;
 }
 
-BanManager::~BanManager() = default;
+// -- BanManager ---------------------------------------------------------------
+
+void BanManager::load_from_db() {
+    if (!db_ || !db_->is_open())
+        return;
+
+    auto bans = db_->all_active_bans().get(); // blocks — startup only
+
+    std::lock_guard lock(mutex_);
+    bans_.clear();
+    int fw_synced = 0;
+    for (auto& entry : bans) {
+        // Sync firewall state for bans with known IPs
+        if (fw_ && fw_->is_enabled() && !entry.ip.empty()) {
+            int64_t fw_dur = entry.is_permanent() ? DURATION_PERMANENT : entry.duration;
+            fw_->block_ip(entry.ip, entry.reason, fw_dur);
+            ++fw_synced;
+        }
+        bans_[entry.ipid] = std::move(entry);
+    }
+
+    Log::log_print(INFO, "BanManager: loaded %zu active bans from database (%d firewall rules synced)", bans_.size(),
+                   fw_synced);
+}
 
 void BanManager::add_ban(BanEntry entry) {
+    // Firewall block (before taking the lock — fw has its own mutex)
+    if (fw_ && fw_->is_enabled() && !entry.ip.empty()) {
+        int64_t fw_dur = entry.is_permanent() ? DURATION_PERMANENT : entry.duration;
+        fw_->block_ip(entry.ip, entry.reason, fw_dur);
+    }
+
     std::lock_guard lock(mutex_);
     auto ipid = entry.ipid;
-    bans_[ipid] = std::move(entry);
+    bans_[ipid] = entry;
+
+    if (db_) {
+        db_->add_ban(std::move(entry));
+    }
 }
 
 bool BanManager::remove_ban(const std::string& ipid) {
     std::lock_guard lock(mutex_);
-    return bans_.erase(ipid) > 0;
+    auto it = bans_.find(ipid);
+    if (it == bans_.end())
+        return false;
+
+    int64_t ban_id = it->second.id;
+    std::string ip = it->second.ip;
+    bans_.erase(it);
+
+    if (db_ && ban_id > 0)
+        db_->invalidate_ban(ban_id);
+
+    // Firewall unblock (after releasing map entry, fw has its own mutex)
+    if (fw_ && fw_->is_enabled() && !ip.empty())
+        fw_->unblock_ip(ip);
+
+    return true;
+}
+
+bool BanManager::update_ban(const std::string& ipid, const std::string& field, const std::string& value) {
+    std::lock_guard lock(mutex_);
+    auto it = bans_.find(ipid);
+    if (it == bans_.end())
+        return false;
+
+    // Update in-memory
+    if (field == "reason") {
+        it->second.reason = value;
+    }
+    else if (field == "duration") {
+        int64_t dur = parse_ban_duration(value);
+        if (dur == -1)
+            return false;
+        it->second.duration = dur;
+    }
+    else {
+        return false;
+    }
+
+    // Write-through to DB
+    if (db_ && it->second.id > 0) {
+        std::string db_value = value;
+        if (field == "duration")
+            db_value = std::to_string(it->second.duration);
+        db_->update_ban(it->second.id, field, db_value);
+    }
+
+    // Update firewall rule if duration changed
+    if (field == "duration" && fw_ && fw_->is_enabled() && !it->second.ip.empty()) {
+        fw_->unblock_ip(it->second.ip);
+        int64_t fw_dur = it->second.is_permanent() ? DURATION_PERMANENT : it->second.duration;
+        fw_->block_ip(it->second.ip, it->second.reason, fw_dur);
+    }
+
+    return true;
 }
 
 std::optional<BanEntry> BanManager::find_ban(const std::string& ipid) const {
     std::lock_guard lock(mutex_);
     auto it = bans_.find(ipid);
     if (it != bans_.end() && !it->second.is_expired())
-        return it->second; // copy
+        return it->second;
     return std::nullopt;
 }
 
@@ -89,7 +189,7 @@ std::optional<BanEntry> BanManager::find_ban_by_hdid(const std::string& hdid) co
     std::lock_guard lock(mutex_);
     for (auto& [_, entry] : bans_) {
         if (!entry.hdid.empty() && entry.hdid == hdid && !entry.is_expired())
-            return entry; // copy
+            return entry;
     }
     return std::nullopt;
 }
@@ -97,12 +197,10 @@ std::optional<BanEntry> BanManager::find_ban_by_hdid(const std::string& hdid) co
 std::optional<BanEntry> BanManager::check_ban(const std::string& ipid, const std::string& hdid) const {
     std::lock_guard lock(mutex_);
 
-    // Check by IPID first
     auto it = bans_.find(ipid);
     if (it != bans_.end() && !it->second.is_expired())
         return it->second;
 
-    // Check by HDID
     if (!hdid.empty()) {
         for (auto& [_, entry] : bans_) {
             if (!entry.hdid.empty() && entry.hdid == hdid && !entry.is_expired())
@@ -113,6 +211,47 @@ std::optional<BanEntry> BanManager::check_ban(const std::string& ipid, const std
     return std::nullopt;
 }
 
+std::vector<BanEntry> BanManager::search_bans(const std::string& query, int limit) const {
+    std::string lower_query = query;
+    std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    auto contains = [&](const std::string& field) {
+        std::string lower_field = field;
+        std::transform(lower_field.begin(), lower_field.end(), lower_field.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return lower_field.find(lower_query) != std::string::npos;
+    };
+
+    std::lock_guard lock(mutex_);
+    std::vector<BanEntry> results;
+
+    for (auto& [_, entry] : bans_) {
+        if (contains(entry.ipid) || contains(entry.hdid) || contains(entry.reason) || contains(entry.moderator)) {
+            results.push_back(entry);
+            if (static_cast<int>(results.size()) >= limit)
+                break;
+        }
+    }
+
+    return results;
+}
+
+std::vector<BanEntry> BanManager::list_bans(int limit) const {
+    std::lock_guard lock(mutex_);
+    std::vector<BanEntry> result;
+    result.reserve(bans_.size());
+    for (auto& [_, entry] : bans_)
+        result.push_back(entry);
+
+    // Sort by timestamp descending
+    std::sort(result.begin(), result.end(), [](const BanEntry& a, const BanEntry& b) { return a.timestamp > b.timestamp; });
+
+    if (static_cast<int>(result.size()) > limit)
+        result.resize(limit);
+    return result;
+}
+
 size_t BanManager::count() const {
     std::lock_guard lock(mutex_);
     size_t n = 0;
@@ -121,127 +260,4 @@ size_t BanManager::count() const {
             ++n;
     }
     return n;
-}
-
-void BanManager::load(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        Log::log_print(INFO, "BanManager: no ban file at %s, starting fresh", path.c_str());
-        return;
-    }
-
-    try {
-        nlohmann::json j;
-        file >> j;
-
-        if (!j.is_array()) {
-            Log::log_print(WARNING, "BanManager: %s is not a JSON array", path.c_str());
-            return;
-        }
-
-        std::lock_guard lock(mutex_);
-        bans_.clear();
-        int loaded = 0;
-        int skipped = 0;
-
-        for (auto& item : j) {
-            BanEntry entry;
-            entry.ipid = item.value("ipid", "");
-            entry.hdid = item.value("hdid", "");
-            entry.reason = item.value("reason", "");
-            entry.moderator = item.value("moderator", "");
-            entry.timestamp = item.value("timestamp", int64_t(0));
-            entry.duration = item.value("duration", int64_t(0));
-
-            if (entry.ipid.empty())
-                continue;
-            if (entry.is_expired()) {
-                ++skipped;
-                continue;
-            }
-
-            bans_[entry.ipid] = std::move(entry);
-            ++loaded;
-        }
-
-        Log::log_print(INFO, "BanManager: loaded %d bans from %s (%d expired, skipped)", loaded, path.c_str(), skipped);
-    }
-    catch (const std::exception& e) {
-        Log::log_print(WARNING, "BanManager: failed to parse %s: %s", path.c_str(), e.what());
-    }
-}
-
-std::unordered_map<std::string, BanEntry> BanManager::snapshot() const {
-    std::lock_guard lock(mutex_);
-    return bans_;
-}
-
-void BanManager::write_to_disk(const std::unordered_map<std::string, BanEntry>& bans, const std::string& path) {
-    try {
-        nlohmann::json j = nlohmann::json::array();
-        for (auto& [_, entry] : bans) {
-            if (entry.is_expired())
-                continue;
-            j.push_back({
-                {"ipid", entry.ipid},
-                {"hdid", entry.hdid},
-                {"reason", entry.reason},
-                {"moderator", entry.moderator},
-                {"timestamp", entry.timestamp},
-                {"duration", entry.duration},
-            });
-        }
-
-        std::ofstream file(path);
-        if (file.is_open()) {
-            file << j.dump(2) << std::endl;
-            Log::log_print(DEBUG, "BanManager: saved %zu bans to %s", j.size(), path.c_str());
-        }
-        else {
-            Log::log_print(WARNING, "BanManager: failed to open %s for writing", path.c_str());
-        }
-    }
-    catch (const std::exception& e) {
-        Log::log_print(WARNING, "BanManager: save failed: %s", e.what());
-    }
-}
-
-void BanManager::save_async(const std::string& path) {
-    {
-        std::lock_guard lock(writer_mutex_);
-        writer_path_ = path;
-        writer_snapshot_ = snapshot();
-        writer_pending_ = true;
-    }
-    writer_cv_.notify_one();
-}
-
-void BanManager::save_sync(const std::string& path) const {
-    write_to_disk(snapshot(), path);
-}
-
-void BanManager::writer_loop(std::stop_token stop) {
-    while (!stop.stop_requested()) {
-        std::unique_lock lock(writer_mutex_);
-        writer_cv_.wait(lock, stop, [&] { return writer_pending_; });
-
-        if (stop.stop_requested())
-            break;
-
-        if (writer_pending_) {
-            auto snap = std::move(writer_snapshot_);
-            auto path = std::move(writer_path_);
-            writer_pending_ = false;
-            lock.unlock();
-
-            write_to_disk(snap, path);
-        }
-    }
-
-    // Flush any final pending write on shutdown
-    std::lock_guard lock(writer_mutex_);
-    if (writer_pending_) {
-        write_to_disk(writer_snapshot_, writer_path_);
-        writer_pending_ = false;
-    }
 }

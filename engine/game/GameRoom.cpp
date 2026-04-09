@@ -344,3 +344,11 @@ AreaState* GameRoom::find_area_by_name(const std::string& area_name) {
         return nullptr;
     return find_area(it->second);
 }
+
+int GameRoom::area_index(const std::string& area_name) const {
+    for (int i = 0; i < static_cast<int>(areas.size()); ++i) {
+        if (areas[i] == area_name)
+            return i;
+    }
+    return -1;
+}

@@ -9,6 +9,8 @@ void ao_cmd_arealock();
 void ao_cmd_asn();
 void ao_cmd_background();
 void ao_cmd_ban();
+void ao_cmd_editban();
+void ao_cmd_searchbans();
 void ao_cmd_changeauth();
 void ao_cmd_changepass();
 void ao_cmd_cm();
@@ -38,6 +40,8 @@ void ao_register_commands() {
     ao_cmd_asn();
     ao_cmd_background();
     ao_cmd_ban();
+    ao_cmd_editban();
+    ao_cmd_searchbans();
     ao_cmd_changeauth();
     ao_cmd_changepass();
     ao_cmd_cm();

@@ -211,7 +211,7 @@ std::future<int64_t> DatabaseManager::add_ban(BanEntry entry) {
 
         sqlite3_bind_text(stmt.get(), 1, entry.ipid.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt.get(), 2, entry.hdid.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt.get(), 3, "", -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt.get(), 3, entry.ip.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(stmt.get(), 4, time);
         sqlite3_bind_text(stmt.get(), 5, entry.reason.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(stmt.get(), 6, entry.duration);
@@ -347,6 +347,26 @@ std::future<std::vector<BanEntry>> DatabaseManager::recent_bans(int limit) {
 
         while (sqlite3_step(stmt.get()) == SQLITE_ROW)
             result.push_back(row_to_ban(stmt.get()));
+
+        return result;
+    });
+}
+
+std::future<std::vector<BanEntry>> DatabaseManager::all_active_bans() {
+    return dispatch([this]() -> std::vector<BanEntry> {
+        std::vector<BanEntry> result;
+        if (!db_)
+            return result;
+
+        auto stmt = prepare("SELECT * FROM bans");
+        if (!stmt)
+            return result;
+
+        while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+            auto entry = row_to_ban(stmt.get());
+            if (is_ban_active(entry))
+                result.push_back(std::move(entry));
+        }
 
         return result;
     });
@@ -521,9 +541,10 @@ BanEntry DatabaseManager::row_to_ban(sqlite3_stmt* stmt) {
         return p ? p : "";
     };
 
+    entry.id = sqlite3_column_int64(stmt, 0);
     entry.ipid = col_text(1);
     entry.hdid = col_text(2);
-    // column 3 = IP (not in BanEntry)
+    entry.ip = col_text(3);
     entry.timestamp = sqlite3_column_int64(stmt, 4);
     entry.reason = col_text(5);
     entry.duration = sqlite3_column_int64(stmt, 6);
