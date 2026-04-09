@@ -32,14 +32,9 @@
             "text": "staging",
             "value": "staging",
             "selected": false
-          },
-          {
-            "text": "canary",
-            "value": "canary",
-            "selected": false
           }
         ],
-        "query": "staging,canary",
+        "query": "staging",
         "multi": false,
         "includeAll": true,
         "allValue": ".*"
