@@ -228,6 +228,28 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return cfg;
     }
 
+    // -- Master server advertiser --
+
+    bool advertiser_enabled() const {
+        return value<bool>("advertiser/enabled");
+    }
+    /// Master server list URL (e.g. "https://servers.aceattorneyonline.com/servers").
+    std::string advertiser_url() const {
+        return value<std::string>("advertiser/url");
+    }
+    /// Optional hostname/IP to advertise. Empty = let the master server detect it.
+    std::string advertiser_hostname() const {
+        return value<std::string>("advertiser/hostname");
+    }
+    /// Cleartext WebSocket port to advertise. 0 = do not advertise.
+    int advertiser_ws_port() const {
+        return value<int>("advertiser/ws_port");
+    }
+    /// TLS WebSocket port to advertise. 0 = do not advertise.
+    int advertiser_wss_port() const {
+        return value<int>("advertiser/wss_port");
+    }
+
     // -- Reverse proxy --
 
     ReverseProxyConfig reverse_proxy_config() const {
@@ -284,6 +306,14 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"secret_access_key", ""},
                  {"flush_interval", 5},
                  {"log_level", "info"},
+             }},
+            {"advertiser",
+             nlohmann::json{
+                 {"enabled", false},
+                 {"url", "https://servers.aceattorneyonline.com/servers"},
+                 {"hostname", ""},
+                 {"ws_port", 0},
+                 {"wss_port", 0},
              }},
             {"reverse_proxy",
              nlohmann::json{
