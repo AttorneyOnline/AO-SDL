@@ -1,0 +1,600 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Kagami — Attorney Online game server. Deploys a fully configured instance
+  with TLS, WebSocket support, observability stack, and CloudWatch logging.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Server Settings }
+        Parameters:
+          - ServerName
+          - ServerDescription
+          - Domain
+          - ModPassword
+          - MaxPlayers
+          - MOTD
+          - AssetURL
+      - Label: { default: Master Server }
+        Parameters:
+          - AdvertiserEnabled
+      - Label: { default: Observability }
+        Parameters:
+          - GrafanaPassword
+      - Label: { default: Infrastructure }
+        Parameters:
+          - InstanceType
+          - UseSpotInstance
+          - KeyPairName
+    ParameterLabels:
+      ServerName: { default: "Server Name" }
+      ServerDescription: { default: "Description" }
+      Domain: { default: "Domain Name" }
+      ModPassword: { default: "Moderator Password" }
+      MaxPlayers: { default: "Maximum Players" }
+      MOTD: { default: "Message of the Day" }
+      AssetURL: { default: "Asset URL" }
+      AdvertiserEnabled: { default: "List on master server?" }
+      GrafanaPassword: { default: "Grafana Admin Password" }
+      InstanceType: { default: "Instance Type" }
+      UseSpotInstance: { default: "Use Spot Instance" }
+      KeyPairName: { default: "SSH Key Pair" }
+
+Parameters:
+  ServerName:
+    Type: String
+    Default: Kagami Server
+    Description: Displayed in the server browser and in-game.
+
+  ServerDescription:
+    Type: String
+    Default: ''
+    Description: Short description shown in the server list.
+
+  Domain:
+    Type: String
+    AllowedPattern: ^[a-zA-Z0-9][a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}$
+    ConstraintDescription: Must be a valid domain name (e.g. ao.example.com).
+    Description: >
+      Your domain name. After stack creation, create an A record pointing
+      to the Elastic IP shown in the Outputs tab.
+
+  ModPassword:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Leave empty to disable simple auth.
+
+  MaxPlayers:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 1000
+
+  MOTD:
+    Type: String
+    Default: ''
+    Description: Sent to players when they join.
+
+  AssetURL:
+    Type: String
+    Default: ''
+    Description: URL for custom content (characters, sounds). Leave empty if not hosting assets.
+
+  AdvertiserEnabled:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
+  GrafanaPassword:
+    Type: String
+    Default: changeme
+    NoEcho: true
+    MinLength: 6
+    Description: Password for the Grafana admin dashboard at /grafana/.
+
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues:
+      - t4g.nano
+      - t4g.micro
+      - t4g.small
+      - t4g.medium
+    Description: >
+      Graviton (arm64) instances. t4g.small is recommended for game server
+      + observability. t4g.nano works for game-only.
+
+  UseSpotInstance:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Spot instances are ~70% cheaper but can be interrupted with 2 min
+      notice. Good for testing, not recommended for production servers
+      with active players.
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair for SSH access.
+
+Conditions:
+  IsSpot: !Equals [!Ref UseSpotInstance, 'true']
+
+Resources:
+  # --- Security Group ---
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Kagami game server
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIpv6: '::/0'
+          Description: SSH (IPv6)
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP (ACME challenges)
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIpv6: '::/0'
+          Description: HTTP (ACME challenges, IPv6)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS (REST API)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIpv6: '::/0'
+          Description: HTTPS (REST API, IPv6)
+        - IpProtocol: tcp
+          FromPort: 27015
+          ToPort: 27015
+          CidrIp: 0.0.0.0/0
+          Description: WSS (AO2 WebSocket)
+        - IpProtocol: tcp
+          FromPort: 27015
+          ToPort: 27015
+          CidrIpv6: '::/0'
+          Description: WSS (AO2 WebSocket, IPv6)
+        - IpProtocol: tcp
+          FromPort: 27016
+          ToPort: 27016
+          CidrIp: 0.0.0.0/0
+          Description: WS (AO2 WebSocket, plaintext)
+        - IpProtocol: tcp
+          FromPort: 27016
+          ToPort: 27016
+          CidrIpv6: '::/0'
+          Description: WS (AO2 WebSocket, plaintext, IPv6)
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-sg'
+
+  # --- Elastic IP ---
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-eip'
+
+  EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      InstanceId: !Ref Instance
+
+  # --- CloudWatch ---
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/kagami/${AWS::StackName}'
+      RetentionInDays: 7
+
+  CloudWatchUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: KagamiCloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt LogGroup.Arn
+
+  CloudWatchAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref CloudWatchUser
+
+  # --- IAM Role (ECR pull, general instance permissions) ---
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # --- EC2 Instance ---
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceMarketOptions:
+          !If
+            - IsSpot
+            - MarketType: spot
+              SpotOptions:
+                SpotInstanceType: persistent
+                InstanceInterruptionBehavior: stop
+            - !Ref AWS::NoValue
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', arm64]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      SecurityGroupIds: [!Ref SecurityGroup]
+      IamInstanceProfile: !Ref InstanceProfile
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 12
+            VolumeType: gp3
+            Encrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              set -euo pipefail
+              exec > /var/log/kagami-init.log 2>&1
+
+              echo "=== Kagami CloudFormation Init ==="
+
+              # --- CF parameters as shell vars ---
+              CF_DOMAIN="${CfDomain}"
+              CF_SERVER_NAME="${CfServerName}"
+              CF_SERVER_DESC="${CfServerDescription}"
+              CF_MAX_PLAYERS="${CfMaxPlayers}"
+              CF_MOTD="${CfMOTD}"
+              CF_ASSET_URL="${CfAssetURL}"
+              CF_MOD_PASSWORD="${CfModPassword}"
+              CF_ADVERTISE="${CfAdvertiserEnabled}"
+              CF_GRAFANA_PASSWORD="${CfGrafanaPassword}"
+              CF_CW_REGION="${CfRegion}"
+              CF_CW_LOG_GROUP="${CfLogGroup}"
+              CF_CW_ACCESS_KEY="${CfCwAccessKey}"
+              CF_CW_SECRET_KEY="${CfCwSecretKey}"
+
+              # --- Install Docker ---
+              if ! command -v docker &>/dev/null; then
+                  curl -fsSL https://get.docker.com | sh
+                  usermod -aG docker ec2-user
+              fi
+              if ! docker compose version &>/dev/null 2>&1; then
+                  yum install -y docker-compose-plugin 2>/dev/null || \
+                  apt-get update -qq && apt-get install -y -qq docker-compose-plugin 2>/dev/null || true
+              fi
+
+              # --- Install nftables ---
+              yum install -y nftables 2>/dev/null || \
+              apt-get install -y -qq nftables 2>/dev/null || true
+
+              # --- Docker seccomp for io_uring ---
+              if [ ! -f /etc/docker/daemon.json ] || ! grep -q seccomp /etc/docker/daemon.json 2>/dev/null; then
+                  echo '{ "seccomp-profile": "unconfined" }' > /etc/docker/daemon.json
+                  systemctl restart docker
+              fi
+
+              # --- Deploy directory ---
+              mkdir -p /opt/kagami/config /opt/kagami/prometheus
+              chown -R ec2-user:ec2-user /opt/kagami
+              cd /opt/kagami
+
+              # --- Generate kagami.json via python (safe JSON encoding) ---
+              python3 -c "
+              import json
+              cfg = {
+                  'domain': '$CF_DOMAIN',
+                  'server_name': '$CF_SERVER_NAME',
+                  'server_description': '$CF_SERVER_DESC',
+                  'bind_address': '0.0.0.0',
+                  'http_port': 8080,
+                  'ws_port': 27016,
+                  'wss_port': 27015,
+                  'cors_origin': '*',
+                  'max_players': int('$CF_MAX_PLAYERS'),
+                  'motd': '$CF_MOTD',
+                  'asset_url': '$CF_ASSET_URL',
+                  'mod_password': '$CF_MOD_PASSWORD',
+                  'session_ttl_seconds': 300,
+                  'log_level': 'info',
+                  'log_file': '/logs/kagami.log',
+                  'log_file_level': 'verbose',
+                  'loki_url': 'http://loki:3100',
+                  'metrics_enabled': True,
+                  'metrics_path': '/metrics',
+                  'advertiser': {
+                      'enabled': '$CF_ADVERTISE' == 'true',
+                      'url': 'https://servers.aceattorneyonline.com/servers'
+                  },
+                  'deploy': {
+                      'tls': 'auto',
+                      'observability': True,
+                      'metrics_allow': '127.0.0.1 ::1',
+                      'image': 'ghcr.io/attorneyonline/kagami:latest',
+                      'grafana_user': 'admin',
+                      'grafana_password': '$CF_GRAFANA_PASSWORD'
+                  },
+                  'cloudwatch': {
+                      'region': '$CF_CW_REGION',
+                      'log_group': '$CF_CW_LOG_GROUP',
+                      'log_stream': 'server',
+                      'access_key_id': '$CF_CW_ACCESS_KEY',
+                      'secret_access_key': '$CF_CW_SECRET_KEY',
+                      'flush_interval': 5,
+                      'log_level': 'info'
+                  },
+                  'reverse_proxy': {'enabled': False, 'trusted_proxies': [], 'header_priority': ['X-Forwarded-For','X-Real-IP'], 'proxy_protocol': False},
+                  'reputation': {'enabled': True, 'cache_ttl_hours': 24, 'cache_failure_ttl_minutes': 5, 'ip_api_enabled': True, 'abuseipdb_api_key': '', 'abuseipdb_daily_budget': 1000, 'auto_block_proxy': False, 'auto_block_datacenter': False},
+                  'asn_reputation': {'enabled': True, 'watch_threshold': 2, 'rate_limit_threshold': 3, 'block_threshold': 5, 'window_minutes': 60, 'auto_block_duration': '24h', 'whitelist_asns': [], 'whitelist_multiplier': 5},
+                  'spam_detection': {'enabled': True, 'echo_threshold': 3, 'echo_window_seconds': 60, 'burst_threshold': 20, 'burst_window_seconds': 30, 'join_spam_max_seconds': 5, 'name_pattern_threshold': 3, 'name_pattern_min_prefix': 4, 'name_pattern_window_seconds': 300, 'ghost_threshold': 5, 'hwid_reuse_threshold': 3},
+                  'firewall': {'enabled': True, 'helper_path': '/app/kagami-fw-helper', 'cleanup_on_shutdown': True},
+                  'rate_limits': {
+                      'session_create': {'rate': 2.0, 'burst': 5.0}, 'ws_frame': {'rate': 30.0, 'burst': 60.0}, 'ws_bytes': {'rate': 32768.0, 'burst': 65536.0},
+                      'ao:MS': {'rate': 5.0, 'burst': 10.0}, 'ao:CT': {'rate': 3.0, 'burst': 6.0}, 'ao:CC': {'rate': 2.0, 'burst': 4.0}, 'ao:MC': {'rate': 2.0, 'burst': 5.0}, 'ao:CH': {'rate': 2.0, 'burst': 5.0},
+                      'ao:HP': {'rate': 2.0, 'burst': 4.0}, 'ao:BN': {'rate': 2.0, 'burst': 4.0}, 'ao:RT': {'rate': 3.0, 'burst': 6.0}, 'ao:PE': {'rate': 2.0, 'burst': 5.0}, 'ao:EE': {'rate': 2.0, 'burst': 5.0}, 'ao:DE': {'rate': 2.0, 'burst': 5.0},
+                      'ao:ZZ': {'rate': 1.0, 'burst': 3.0}, 'ao:CASEA': {'rate': 0.5, 'burst': 2.0}, 'ao:SETCASE': {'rate': 1.0, 'burst': 3.0},
+                      'nx:ooc': {'rate': 3.0, 'burst': 6.0}, 'nx:area_join': {'rate': 2.0, 'burst': 5.0}, 'nx:char_select': {'rate': 2.0, 'burst': 4.0}, 'nx:session_renew': {'rate': 1.0, 'burst': 3.0},
+                      'ws_handshake_deadline_sec': 10, 'ws_idle_timeout_sec': 120, 'ws_partial_frame_timeout_sec': 30, 'ws_max_frame_size': 65536
+                  }
+              }
+              json.dump(cfg, open('kagami.json','w'), indent=4)
+              "
+
+              # --- Generate .env ---
+              cat > .env <<DOTENV
+              KAGAMI_DOMAIN=$CF_DOMAIN
+              KAGAMI_IMAGE=ghcr.io/attorneyonline/kagami:latest
+              GRAFANA_ADMIN_USER=admin
+              GRAFANA_ADMIN_PASSWORD=$CF_GRAFANA_PASSWORD
+              DOTENV
+
+              # --- Generate Caddyfile ---
+              cat > Caddyfile <<'CADDY'
+              {
+              	servers :443 {
+              		timeouts {
+              			read_header 10s
+              			read_body   30s
+              			idle        120s
+              		}
+              	}
+              	servers :27015 {
+              		timeouts {
+              			read_header 10s
+              			idle        120s
+              		}
+              	}
+              }
+              (tls_active) {
+              }
+              {$KAGAMI_DOMAIN} {
+              	import tls_active
+              	request_body { max_size 64KB }
+              	handle /grafana* { reverse_proxy 127.0.0.1:3000 }
+              	handle /prometheus* { reverse_proxy 127.0.0.1:9090 }
+              	handle /metrics {
+              		@allowed remote_ip 127.0.0.1 ::1
+              		handle @allowed { reverse_proxy 127.0.0.1:8080 }
+              		respond "Forbidden" 403
+              	}
+              	handle {
+              		reverse_proxy 127.0.0.1:8080 {
+              			transport http {
+              				keepalive 60s
+              				keepalive_idle_conns 64
+              				max_conns_per_host 256
+              				read_timeout  30s
+              				write_timeout 30s
+              			}
+              		}
+              	}
+              }
+              {$KAGAMI_DOMAIN}:27015 {
+              	import tls_active
+              	reverse_proxy 127.0.0.1:27016 {
+              		transport http {
+              			keepalive     off
+              			read_timeout  120s
+              			write_timeout 120s
+              		}
+              	}
+              }
+              CADDY
+
+              # --- Generate docker-compose.yml ---
+              cat > docker-compose.yml <<'COMPOSE'
+              services:
+                caddy:
+                  image: caddy:latest
+                  restart: unless-stopped
+                  network_mode: host
+                  env_file: .env
+                  volumes:
+                    - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                    - caddy_data:/data
+                    - caddy_config:/config
+                  depends_on: [kagami]
+                kagami:
+                  image: ghcr.io/attorneyonline/kagami:latest
+                  restart: unless-stopped
+                  network_mode: host
+                  cap_add: [NET_ADMIN]
+                  volumes:
+                    - ./kagami.json:/app/kagami.json
+                    - ./config:/app/config:ro
+                    - kagami_logs:/logs
+                prometheus:
+                  image: prom/prometheus:latest
+                  restart: unless-stopped
+                  network_mode: host
+                  volumes:
+                    - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+                    - prometheus_data:/prometheus
+                  command: ['--config.file=/etc/prometheus/prometheus.yml','--storage.tsdb.retention.time=24h','--storage.tsdb.retention.size=1GB','--web.external-url=/prometheus/','--web.route-prefix=/prometheus/','--web.listen-address=127.0.0.1:9090']
+                  depends_on: [kagami]
+                loki:
+                  image: grafana/loki:latest
+                  restart: unless-stopped
+                  network_mode: host
+                  volumes: [loki_data:/loki]
+                  command: ['-config.expand-env=true','-config.file=/etc/loki/local-config.yaml']
+                grafana:
+                  image: grafana/grafana:latest
+                  restart: unless-stopped
+                  network_mode: host
+                  env_file: .env
+                  environment:
+                    - GF_SECURITY_ADMIN_USER=admin
+                    - GF_USERS_ALLOW_SIGN_UP=false
+                    - GF_AUTH_ANONYMOUS_ENABLED=false
+                    - GF_SERVER_SERVE_FROM_SUB_PATH=true
+                    - GF_SERVER_HTTP_ADDR=127.0.0.1
+                    - GF_SERVER_HTTP_PORT=3000
+                  volumes: [grafana_data:/var/lib/grafana]
+                  depends_on: [prometheus, loki]
+              volumes:
+                caddy_data:
+                caddy_config:
+                kagami_logs:
+                prometheus_data:
+                loki_data:
+                grafana_data:
+              COMPOSE
+
+              # --- Prometheus config ---
+              cat > prometheus/prometheus.yml <<'PROM'
+              global:
+                scrape_interval: 15s
+              scrape_configs:
+                - job_name: kagami
+                  static_configs:
+                    - targets: ['127.0.0.1:8080']
+              PROM
+
+              # --- Download content config from repo ---
+              CONTENT_BASE="https://raw.githubusercontent.com/AttorneyOnline/AO-SDL/master/deploy/config"
+              for f in characters.txt music.json areas.ini backgrounds.txt; do
+                  curl -fsSL "$CONTENT_BASE/$f" -o "config/$f" || echo "Warning: failed to download $f"
+              done
+
+              # --- Fix ownership and start ---
+              chown -R ec2-user:ec2-user /opt/kagami
+              sudo -u ec2-user docker compose pull
+              sudo -u ec2-user docker compose up -d
+
+              echo "=== Kagami init complete ==="
+            - CfDomain: !Ref Domain
+              CfServerName: !Ref ServerName
+              CfServerDescription: !Ref ServerDescription
+              CfMaxPlayers: !Ref MaxPlayers
+              CfMOTD: !Ref MOTD
+              CfAssetURL: !Ref AssetURL
+              CfModPassword: !Ref ModPassword
+              CfAdvertiserEnabled: !Ref AdvertiserEnabled
+              CfGrafanaPassword: !Ref GrafanaPassword
+              CfRegion: !Ref AWS::Region
+              CfLogGroup: !Sub '/kagami/${AWS::StackName}'
+              CfCwAccessKey: !Ref CloudWatchAccessKey
+              CfCwSecretKey: !GetAtt CloudWatchAccessKey.SecretAccessKey
+
+# --- AMI Map (Amazon Linux 2023, arm64) ---
+Mappings:
+  RegionAMI:
+    us-east-1:
+      arm64: ami-0a2463b7ddd1e8ef4
+    us-east-2:
+      arm64: ami-09da212cf18033880
+    us-west-1:
+      arm64: ami-0e0fc6fdb397a350c
+    us-west-2:
+      arm64: ami-0bfddf4206f1fa7b9
+    eu-west-1:
+      arm64: ami-0a89fa9a6d8c7ad98
+    eu-west-2:
+      arm64: ami-0a94c4bb76a845360
+    eu-central-1:
+      arm64: ami-08ec85e5e1b3a0ca0
+    ap-northeast-1:
+      arm64: ami-0d1f4d88f776d498c
+    ap-southeast-1:
+      arm64: ami-04c3f51ef02662dba
+    ap-southeast-2:
+      arm64: ami-0c9c5a8d3a09b27cc
+
+Outputs:
+  ServerIP:
+    Description: >
+      Elastic IP address. Create an A record for your domain pointing to this IP.
+    Value: !Ref ElasticIP
+
+  GameURL:
+    Description: Game server URL (available after DNS propagation)
+    Value: !Sub 'https://${Domain}/'
+
+  WebSocketWSS:
+    Description: Secure WebSocket endpoint
+    Value: !Sub 'wss://${Domain}:27015'
+
+  WebSocketWS:
+    Description: Plaintext WebSocket endpoint
+    Value: !Sub 'ws://${Domain}:27016'
+
+  GrafanaURL:
+    Description: Grafana dashboard (available after DNS propagation)
+    Value: !Sub 'https://${Domain}/grafana/'
+
+  SSHCommand:
+    Description: SSH into the server
+    Value: !Sub 'ssh -i ~/.ssh/${KeyPairName}.pem ec2-user@${ElasticIP}'
+
+  CloudWatchLogGroup:
+    Description: CloudWatch log group for server logs
+    Value: !Ref LogGroup
