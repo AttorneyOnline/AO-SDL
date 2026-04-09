@@ -336,10 +336,10 @@ void AOServer::broadcast_arup(ArupType type) {
                         continue;
                     if (!cms.empty())
                         cms += ", ";
-                    std::string char_name =
-                        (session->character_id >= 0 && session->character_id < static_cast<int>(room_.characters.size()))
-                            ? room_.characters[session->character_id]
-                            : session->display_name;
+                    std::string char_name = (session->character_id >= 0 &&
+                                             session->character_id < static_cast<int>(room_.characters.size()))
+                                                ? room_.characters[session->character_id]
+                                                : session->display_name;
                     cms += "[" + std::to_string(session->session_id) + "] " + char_name;
                 }
                 fields.push_back(cms.empty() ? "FREE" : cms);
