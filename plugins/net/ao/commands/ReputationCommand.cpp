@@ -4,6 +4,7 @@
 #include "game/CommandRegistrar.h"
 #include "game/GameRoom.h"
 #include "game/IPReputationService.h"
+#include "game/ServerSession.h"
 
 class ReputationCommand : public CommandHandler {
   public:
@@ -41,13 +42,29 @@ class ReputationCommand : public CommandHandler {
         }
 
         auto& target = subcmd;
-        auto cached = rep->find_cached(target);
+
+        // Resolve IPID → raw IP from connected sessions
+        std::string ip = target;
+        if (target.find('.') == std::string::npos && target.find(':') == std::string::npos) {
+            ip.clear();
+            ctx.room.for_each_session([&](ServerSession& s) {
+                if (s.ipid == target && !s.ip_address.empty())
+                    ip = s.ip_address;
+            });
+            if (ip.empty()) {
+                ctx.send_system_message("Could not resolve IPID " + target +
+                                        " to an IP. The player may not be connected.");
+                return;
+            }
+        }
+
+        auto cached = rep->find_cached(ip);
         if (!cached) {
-            ctx.send_system_message("No cached data for " + target + ". Use '/reputation refresh <ip>' to query.");
+            ctx.send_system_message("No cached data for " + target + ". Use '/reputation refresh <ipid>' to query.");
             return;
         }
 
-        std::string msg = "Reputation for " + cached->ip + ":\n";
+        std::string msg = "Reputation for " + target + ":\n";
         msg += "  ASN: AS" + std::to_string(cached->asn) + " (" + cached->as_org + ")\n";
         msg += "  Country: " + cached->country_code + "\n";
         msg += "  ISP: " + cached->isp + "\n";

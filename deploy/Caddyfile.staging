@@ -50,7 +50,16 @@
 		reverse_proxy 127.0.0.1:9090
 	}
 
-	# Everything else goes to kagami (game server API, /metrics, root)
+	# /metrics: restricted to Prometheus (metrics.yuurei.network) and localhost
+	handle /metrics {
+		@allowed remote_ip 127.0.0.1 ::1 2600:1f13:6b4:8b00:88ff:494c:657c:a7cf
+		handle @allowed {
+			reverse_proxy 127.0.0.1:8080
+		}
+		respond "Forbidden" 403
+	}
+
+	# Everything else goes to kagami (game server API, root)
 	handle {
 		reverse_proxy 127.0.0.1:8080 {
 			transport http {
