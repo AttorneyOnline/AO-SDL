@@ -337,6 +337,15 @@ Resources:
               CF_CW_ACCESS_KEY="${CfCwAccessKey}"
               CF_CW_SECRET_KEY="${CfCwSecretKey}"
 
+              # --- Install AWS CLI (for S3 config download) ---
+              if ! command -v aws &>/dev/null; then
+                  apt-get update -qq
+                  apt-get install -y -qq unzip curl
+                  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+                  cd /tmp && unzip -qo awscliv2.zip && ./aws/install
+                  cd /
+              fi
+
               # --- Install SSM agent (for CI deploys via SSM Run Command) ---
               if ! systemctl is-active --quiet amazon-ssm-agent 2>/dev/null; then
                   snap install amazon-ssm-agent --classic 2>/dev/null || true
