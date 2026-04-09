@@ -43,6 +43,8 @@ class AdminSessionsEndpoint : public NXEndpoint {
                 {"protocol", s.protocol},
                 {"area", s.area},
                 {"character_id", s.character_id},
+                {"hardware_id", s.hardware_id},
+                {"client_software", s.client_software},
                 {"bytes_sent", s.bytes_sent.load(std::memory_order_relaxed)},
                 {"bytes_received", s.bytes_received.load(std::memory_order_relaxed)},
                 {"packets_sent", s.packets_sent.load(std::memory_order_relaxed)},

@@ -124,6 +124,8 @@ void AOPacketIDClient::handle_server(AOServer& server, ServerSession& session) {
         return;
     }
 
+    session.client_software = software + " " + version;
+
     Log::log_print(INFO, "AO: %s identifies as %s %s", format_client_id(session.client_id).c_str(), software.c_str(),
                    version.c_str());
 
