@@ -1,5 +1,6 @@
 #include "ContentConfig.h"
 #include "LogSinkSetup.h"
+#include "MasterServerAdvertiser.h"
 #include "MetricsCollector.h"
 #include "ReplCommand.h"
 #include "ReplCommandFactory.h"
@@ -311,6 +312,10 @@ int main(int /*argc*/, char* argv[]) {
     metrics.set_ws_pool(&ws_pool);
     metrics.start(http);
 
+    // --- Master server advertiser ---
+    MasterServerAdvertiser advertiser(cfg, room);
+    advertiser.start();
+
     // --- REPL ---
     kagami_register_commands();
     ReplCommandRegistry repl;
@@ -336,6 +341,7 @@ int main(int /*argc*/, char* argv[]) {
     stop_src.request_stop();
     Log::log_print(INFO, "Shutting down...");
 
+    advertiser.stop();
     log_sinks.teardown();
     ws.stop();
     http.stop();

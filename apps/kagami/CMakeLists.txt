@@ -1,6 +1,7 @@
 add_executable(kagami
     main.cpp
     ContentConfig.cpp
+    MasterServerAdvertiser.cpp
     ServerSettings.cpp
     TerminalUI.cpp
     LogSinkSetup.cpp
