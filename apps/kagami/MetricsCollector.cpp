@@ -56,8 +56,9 @@ void MetricsCollector::start(http::Server& http) {
     auto& session_packets_recv =
         reg.gauge("kagami_session_packets_received", "Packets received per session",
                   {"session_id", "display_name", "protocol", "area", "character", "ip", "login", "hdid", "client"});
-    auto& session_idle = reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
-                                   {"session_id", "display_name", "protocol", "area", "character", "ip", "login", "hdid", "client"});
+    auto& session_idle =
+        reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
+                  {"session_id", "display_name", "protocol", "area", "character", "ip", "login", "hdid", "client"});
     auto& http_open_conns = reg.gauge("kagami_http_open_connections", "Currently open TCP connections");
     auto& http_work_queue = reg.gauge("kagami_http_work_queue_depth", "Pending requests in worker queue");
     auto& http_result_queue = reg.gauge("kagami_http_result_queue_depth", "Pending results awaiting poll thread");
@@ -313,9 +314,15 @@ void MetricsCollector::start(http::Server& http) {
                 std::string login = s->moderator_name.empty() ? "" : s->moderator_name;
                 if (!s->acl_role.empty() && s->moderator)
                     login += " [" + s->acl_role + "]";
-                std::vector<std::string> labels = {std::to_string(s->session_id), s->display_name, s->protocol, s->area,
-                                                   std::move(char_name),          s->ip_address,   login,
-                                                   s->hardware_id,                s->client_software};
+                std::vector<std::string> labels = {std::to_string(s->session_id),
+                                                   s->display_name,
+                                                   s->protocol,
+                                                   s->area,
+                                                   std::move(char_name),
+                                                   s->ip_address,
+                                                   login,
+                                                   s->hardware_id,
+                                                   s->client_software};
                 session_bytes_sent.labels(labels).set(
                     static_cast<double>(s->bytes_sent.load(std::memory_order_relaxed)));
                 session_bytes_recv.labels(labels).set(
