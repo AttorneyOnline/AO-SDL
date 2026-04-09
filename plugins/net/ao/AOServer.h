@@ -60,6 +60,9 @@ class AOServer {
     /// ARUP types (matching akashi's enum).
     enum ArupType { ARUP_PLAYERS = 0, ARUP_STATUS = 1, ARUP_CM = 2, ARUP_LOCKED = 3 };
 
+    /// Build ARUP field vector for a given type (shared by broadcast + unicast).
+    std::vector<std::string> build_arup_fields(ArupType type);
+
     /// Broadcast an ARUP update of the given type to all clients.
     void broadcast_arup(ArupType type);
 

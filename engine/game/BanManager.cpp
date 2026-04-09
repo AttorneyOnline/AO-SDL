@@ -84,20 +84,26 @@ void BanManager::load_from_db() {
 
     auto bans = db_->all_active_bans().get(); // blocks — startup only
 
-    std::lock_guard lock(mutex_);
-    bans_.clear();
-    int fw_synced = 0;
-    for (auto& entry : bans) {
-        // Sync firewall state for bans with known IPs
-        if (fw_ && fw_->is_enabled() && !entry.ip.empty()) {
-            int64_t fw_dur = entry.is_permanent() ? DURATION_PERMANENT : entry.duration;
-            fw_->block_ip(entry.ip, entry.reason, fw_dur);
-            ++fw_synced;
-        }
-        bans_[entry.ipid] = std::move(entry);
+    {
+        std::lock_guard lock(mutex_);
+        bans_.clear();
+        for (auto& entry : bans)
+            bans_[entry.ipid] = entry; // copy — we still need entry for fw below
     }
 
-    Log::log_print(INFO, "BanManager: loaded %zu active bans from database (%d firewall rules synced)", bans_.size(),
+    // Sync firewall state outside the lock
+    int fw_synced = 0;
+    if (fw_ && fw_->is_enabled()) {
+        for (auto& entry : bans) {
+            if (!entry.ip.empty()) {
+                int64_t fw_dur = entry.is_permanent() ? DURATION_PERMANENT : entry.duration;
+                fw_->block_ip(entry.ip, entry.reason, fw_dur);
+                ++fw_synced;
+            }
+        }
+    }
+
+    Log::log_print(INFO, "BanManager: loaded %zu active bans from database (%d firewall rules synced)", bans.size(),
                    fw_synced);
 }
 
@@ -118,19 +124,20 @@ void BanManager::add_ban(BanEntry entry) {
 }
 
 bool BanManager::remove_ban(const std::string& ipid) {
-    std::lock_guard lock(mutex_);
-    auto it = bans_.find(ipid);
-    if (it == bans_.end())
-        return false;
-
-    int64_t ban_id = it->second.id;
-    std::string ip = it->second.ip;
-    bans_.erase(it);
+    int64_t ban_id = 0;
+    std::string ip;
+    {
+        std::lock_guard lock(mutex_);
+        auto it = bans_.find(ipid);
+        if (it == bans_.end())
+            return false;
+        ban_id = it->second.id;
+        ip = it->second.ip;
+        bans_.erase(it);
+    }
 
     if (db_ && ban_id > 0)
         db_->invalidate_ban(ban_id);
-
-    // Firewall unblock (after releasing map entry, fw has its own mutex)
     if (fw_ && fw_->is_enabled() && !ip.empty())
         fw_->unblock_ip(ip);
 
@@ -138,38 +145,49 @@ bool BanManager::remove_ban(const std::string& ipid) {
 }
 
 bool BanManager::update_ban(const std::string& ipid, const std::string& field, const std::string& value) {
-    std::lock_guard lock(mutex_);
-    auto it = bans_.find(ipid);
-    if (it == bans_.end())
-        return false;
+    std::string fw_ip;
+    std::string fw_reason;
+    int64_t fw_dur = 0;
+    bool fw_update = false;
+    int64_t db_id = 0;
+    std::string db_value;
 
-    // Update in-memory
-    if (field == "reason") {
-        it->second.reason = value;
-    }
-    else if (field == "duration") {
-        int64_t dur = parse_ban_duration(value);
-        if (dur == -1)
+    {
+        std::lock_guard lock(mutex_);
+        auto it = bans_.find(ipid);
+        if (it == bans_.end())
             return false;
-        it->second.duration = dur;
-    }
-    else {
-        return false;
+
+        if (field == "reason") {
+            it->second.reason = value;
+        }
+        else if (field == "duration") {
+            int64_t dur = parse_ban_duration(value);
+            if (dur == -1)
+                return false;
+            it->second.duration = dur;
+        }
+        else {
+            return false;
+        }
+
+        db_id = it->second.id;
+        db_value = (field == "duration") ? std::to_string(it->second.duration) : value;
+
+        if (field == "duration" && !it->second.ip.empty()) {
+            fw_update = true;
+            fw_ip = it->second.ip;
+            fw_reason = it->second.reason;
+            fw_dur = it->second.is_permanent() ? DURATION_PERMANENT : it->second.duration;
+        }
     }
 
-    // Write-through to DB
-    if (db_ && it->second.id > 0) {
-        std::string db_value = value;
-        if (field == "duration")
-            db_value = std::to_string(it->second.duration);
-        db_->update_ban(it->second.id, field, db_value);
-    }
+    if (db_ && db_id > 0)
+        db_->update_ban(db_id, field, db_value);
 
-    // Update firewall rule if duration changed
-    if (field == "duration" && fw_ && fw_->is_enabled() && !it->second.ip.empty()) {
-        fw_->unblock_ip(it->second.ip);
-        int64_t fw_dur = it->second.is_permanent() ? DURATION_PERMANENT : it->second.duration;
-        fw_->block_ip(it->second.ip, it->second.reason, fw_dur);
+    if (fw_update && fw_ && fw_->is_enabled()) {
+        fw_->unblock_ip(fw_ip);
+        fw_->block_ip(fw_ip, fw_reason, fw_dur);
     }
 
     return true;

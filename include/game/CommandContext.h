@@ -10,13 +10,13 @@
  */
 #pragma once
 
+#include "game/GameRoom.h"
+#include "game/ServerSession.h"
+
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
-
-class GameRoom;
-struct ServerSession;
 
 struct CommandContext {
     GameRoom& room;
@@ -49,6 +49,20 @@ struct CommandContext {
 
     /// Broadcast an area update (ARUP) to all clients. type: 0=players, 1=status, 2=cm, 3=locked.
     std::function<void(int arup_type)> broadcast_arup;
+
+    /// Resolve an IPID to a raw IP address from connected sessions.
+    /// If target contains '.' or ':', it's assumed to already be an IP.
+    /// Returns empty string if the IPID is not found among connected players.
+    std::string resolve_ip(const std::string& target) const {
+        if (target.find('.') != std::string::npos || target.find(':') != std::string::npos)
+            return target;
+        std::string ip;
+        room.for_each_session([&](const ServerSession& s) {
+            if (s.ipid == target && !s.ip_address.empty())
+                ip = s.ip_address;
+        });
+        return ip;
+    }
 
     /// Client IDs to disconnect after the command finishes.
     /// Commands push IDs here; the protocol backend closes them after

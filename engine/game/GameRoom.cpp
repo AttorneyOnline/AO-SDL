@@ -323,12 +323,15 @@ static std::string slugify(const std::string& name) {
 void GameRoom::build_area_index() {
     area_states_.clear();
     area_name_to_id_.clear();
-    for (const auto& name : areas) {
+    area_name_to_index_.clear();
+    for (int i = 0; i < static_cast<int>(areas.size()); ++i) {
+        const auto& name = areas[i];
         AreaState state;
         state.id = crypto::sha256("area:" + name);
         state.name = name;
         state.path = slugify(name);
         area_name_to_id_[name] = state.id;
+        area_name_to_index_[name] = i;
         area_states_.emplace(state.id, std::move(state));
     }
 }
@@ -346,9 +349,6 @@ AreaState* GameRoom::find_area_by_name(const std::string& area_name) {
 }
 
 int GameRoom::area_index(const std::string& area_name) const {
-    for (int i = 0; i < static_cast<int>(areas.size()); ++i) {
-        if (areas[i] == area_name)
-            return i;
-    }
-    return -1;
+    auto it = area_name_to_index_.find(area_name);
+    return it != area_name_to_index_.end() ? it->second : -1;
 }
