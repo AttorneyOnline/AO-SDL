@@ -158,16 +158,6 @@ Resources:
           ToPort: 443
           CidrIpv6: '::/0'
           Description: HTTPS + WSS (IPv6)
-        - IpProtocol: tcp
-          FromPort: 27016
-          ToPort: 27016
-          CidrIp: 0.0.0.0/0
-          Description: WS (AO2 WebSocket, plaintext)
-        - IpProtocol: tcp
-          FromPort: 27016
-          ToPort: 27016
-          CidrIpv6: '::/0'
-          Description: WS (AO2 WebSocket, plaintext, IPv6)
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-sg'
@@ -446,6 +436,18 @@ Resources:
               				write_timeout 30s
               			}
               		}
+              	}
+              }
+              http://{$KAGAMI_DOMAIN} {
+              	@websocket {
+              		header Connection *Upgrade*
+              		header Upgrade    websocket
+              	}
+              	handle @websocket {
+              		reverse_proxy 127.0.0.1:27016
+              	}
+              	handle {
+              		redir https://{host}{uri} permanent
               	}
               }
               CADDY

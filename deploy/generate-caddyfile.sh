@@ -123,4 +123,20 @@ cat <<EOF
 		}
 	}
 }
+
+# --- HTTP :80 — WebSocket upgrades + HTTPS redirect ---
+# ACME HTTP-01 challenges are handled automatically by Caddy
+# before this block is reached.
+http://{\$KAGAMI_DOMAIN} {
+	@websocket {
+		header Connection *Upgrade*
+		header Upgrade    websocket
+	}
+	handle @websocket {
+		reverse_proxy 127.0.0.1:${WS_PORT}
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}
 EOF
