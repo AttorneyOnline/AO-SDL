@@ -533,7 +533,7 @@ Resources:
                     - caddy_config:/config
                   depends_on: [kagami]
                 kagami:
-                  image: ghcr.io/attorneyonline/kagami:latest
+                  image: $KAGAMI_IMAGE
                   restart: unless-stopped
                   network_mode: host
                   cap_add: [NET_ADMIN]
