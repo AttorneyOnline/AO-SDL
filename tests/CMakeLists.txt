@@ -44,6 +44,9 @@ set(TEST_SOURCES
     game/test_Session.cpp
     game/test_SpamDetector.cpp
     game/test_TickProfiler.cpp
+    game/test_ACLFlags.cpp
+    game/test_BanDuration.cpp
+    game/test_DatabaseManager.cpp
     game/test_GameThread.cpp
     render/test_AnimationPlayer.cpp
     render/test_Layer.cpp
@@ -57,6 +60,7 @@ set(TEST_SOURCES
     utils/test_JsonSchema.cpp
     utils/test_UTF8.cpp
     utils/test_Crypto.cpp
+    utils/test_PBKDF2.cpp
     utils/test_Log.cpp
     utils/test_Metrics.cpp
     utils/test_PersistentMap.cpp
