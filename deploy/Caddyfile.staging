@@ -80,11 +80,8 @@
 metrics.yuurei.network {
 	import tls_dns
 
-	reverse_proxy [2600:1f13:6b4:8b00:88ff:494c:657c:a7cf]:443 {
-		transport http {
-			tls
-			tls_server_name metrics.yuurei.network
-		}
+	reverse_proxy https://metrics.yuurei.network {
+		header_up Host {upstream_hostport}
 	}
 }
 
