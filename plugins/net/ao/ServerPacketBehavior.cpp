@@ -109,6 +109,9 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
 
     server.send(session.client_id, AOPacket("ID", {std::to_string(session.session_id), "kagami", ao_sdl_version()}));
 
+    if (!server.room().asset_url.empty())
+        server.send(session.client_id, AOPacket("ASS", {server.room().asset_url}));
+
     proto->state = AOProtocolState::IDENTIFIED;
 }
 
