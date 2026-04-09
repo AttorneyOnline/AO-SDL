@@ -85,9 +85,9 @@ if [ "$OBSERVABILITY" = "true" ]; then
 		reverse_proxy 127.0.0.1:3000
 	}
 
-	# Prometheus (served from /prometheus/)
+	# Prometheus — block public access (Grafana connects directly on localhost)
 	handle /prometheus* {
-		reverse_proxy 127.0.0.1:9090
+		respond "Forbidden" 403
 	}
 
 EOF
