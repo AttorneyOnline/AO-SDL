@@ -302,7 +302,7 @@ class GameRoom {
     // Area state index (Phase 3)
     std::unordered_map<std::string, AreaState> area_states_;       ///< area_id hash → state.
     std::unordered_map<std::string, std::string> area_name_to_id_; ///< name → area_id.
-    std::unordered_map<std::string, int> area_name_to_index_;    ///< name → index in areas[].
+    std::unordered_map<std::string, int> area_name_to_index_;      ///< name → index in areas[].
 
     std::vector<ICBroadcast> ic_broadcasts_;
     std::vector<OOCBroadcast> ooc_broadcasts_;
