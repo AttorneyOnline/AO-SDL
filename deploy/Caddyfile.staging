@@ -74,8 +74,9 @@
 }
 
 # --- Metrics proxy (IPv4 → IPv6 metrics server) ---
-# metrics.yuurei.network A record points here; Caddy forwards to the
-# IPv6-only metrics server so IPv4 clients can access Grafana.
+# metrics.yuurei.network A record points to this host's EIP.
+# Caddy terminates TLS (DNS-01 via Route53) and proxies to the
+# IPv6-only metrics server over HTTPS.
 metrics.yuurei.network {
 	import tls_dns
 
