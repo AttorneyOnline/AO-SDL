@@ -29,6 +29,9 @@ Metadata:
           - InstanceType
           - UseSpotInstance
           - KeyPairName
+      - Label: { default: "DNS (optional)" }
+        Parameters:
+          - HostedZoneId
     ParameterLabels:
       ConfigS3URL: { default: "S3 URL for kagami.json (skips form below)" }
       ServerName: { default: "Server Name" }
@@ -43,6 +46,7 @@ Metadata:
       InstanceType: { default: "Instance Type" }
       UseSpotInstance: { default: "Use Spot Instance" }
       KeyPairName: { default: "SSH Key Pair" }
+      HostedZoneId: { default: "Route53 Hosted Zone ID (auto-manages DNS)" }
 
 Parameters:
   ConfigS3URL:
@@ -129,9 +133,18 @@ Parameters:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Existing EC2 key pair for SSH access.
 
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: >
+      Route53 hosted zone ID. If set, an A record for your domain is
+      created automatically pointing to the Elastic IP. Leave empty
+      to manage DNS manually at your provider.
+
 Conditions:
   IsSpot: !Equals [!Ref UseSpotInstance, 'true']
   HasS3Config: !Not [!Equals [!Ref ConfigS3URL, '']]
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, '']]
 
 Resources:
   # --- Security Group ---
@@ -188,6 +201,18 @@ Resources:
     Properties:
       AllocationId: !GetAtt ElasticIP.AllocationId
       InstanceId: !Ref Instance
+
+  # --- DNS (optional) ---
+  DNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref Domain
+      Type: A
+      TTL: 60
+      ResourceRecords:
+        - !Ref ElasticIP
 
   # --- CloudWatch ---
   LogGroup:
@@ -311,6 +336,12 @@ Resources:
               CF_CW_LOG_GROUP="${CfLogGroup}"
               CF_CW_ACCESS_KEY="${CfCwAccessKey}"
               CF_CW_SECRET_KEY="${CfCwSecretKey}"
+
+              # --- Install SSM agent (for CI deploys via SSM Run Command) ---
+              if ! systemctl is-active --quiet amazon-ssm-agent 2>/dev/null; then
+                  snap install amazon-ssm-agent --classic 2>/dev/null || true
+                  systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service 2>/dev/null || true
+              fi
 
               # --- Install Docker ---
               if ! command -v docker &>/dev/null; then
