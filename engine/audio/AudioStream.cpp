@@ -154,9 +154,6 @@ int64_t AudioStream::stream_tell() {
 static constexpr size_t RING_CAPACITY = 48000 * 2 * 2;
 
 AudioStream::AudioStream() : pcm_ring_(RING_CAPACITY) {
-    // Decode thread is started lazily after mark_complete() to ensure
-    // all data is available before decoding begins (avoids stuttering
-    // from network jitter during streaming).
 }
 
 AudioStream::~AudioStream() {
@@ -170,6 +167,15 @@ void AudioStream::feed(const uint8_t* data, size_t len) {
         raw_data_.insert(raw_data_.end(), data, data + len);
     }
     raw_cv_.notify_one();
+
+    // Start the decode thread on the first chunk of data so that audio
+    // playback begins while the download is still in progress (true
+    // streaming). The decode thread blocks in stream_read() when it
+    // outruns the download, so network jitter just causes brief silence
+    // rather than a stall.
+    if (!decode_started_.exchange(true, std::memory_order_acq_rel)) {
+        decode_thread_ = std::jthread([this](std::stop_token) { decode_thread_func(stop_source_.get_token()); });
+    }
 }
 
 void AudioStream::mark_complete() {
@@ -179,11 +185,8 @@ void AudioStream::mark_complete() {
     }
     raw_cv_.notify_one();
 
-    // Start the decode thread now that all data is available.
-    if (!decode_thread_.joinable() && !stop_source_.stop_requested() && !raw_data_.empty()) {
-        decode_thread_ = std::jthread([this](std::stop_token) { decode_thread_func(stop_source_.get_token()); });
-    }
-    else if (!decode_thread_.joinable()) {
+    // If feed() was never called (empty stream), mark as finished immediately.
+    if (!decode_started_.load(std::memory_order_acquire)) {
         finished_.store(true, std::memory_order_release);
     }
 }

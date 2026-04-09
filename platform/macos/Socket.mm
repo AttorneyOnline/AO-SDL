@@ -63,6 +63,7 @@ struct Socket::Impl {
     bool is_nw() const { return nw_conn != nil; }
 
     std::atomic<bool> closed{false};
+    bool non_blocking = false; // Tracked for nw_connection (set_non_blocking is otherwise a no-op)
 
     void schedule_receive() {
         if (!nw_conn || closed)
@@ -237,6 +238,12 @@ ssize_t Socket::recv(void *buf, size_t len) {
             return impl_->recv_offset < impl_->recv_buf.size() || impl_->recv_eof || impl_->recv_error;
         };
         if (!has_data()) {
+            if (impl_->non_blocking) {
+                // Non-blocking: return EAGAIN immediately so the caller
+                // can poll/retry later instead of blocking the thread.
+                errno = EAGAIN;
+                return -1;
+            }
             if (impl_->recv_timeout_ms > 0)
                 impl_->recv_cv.wait_for(lock, std::chrono::milliseconds(impl_->recv_timeout_ms), has_data);
             else
@@ -273,8 +280,10 @@ ssize_t Socket::recv(void *buf, size_t len) {
 }
 
 void Socket::set_non_blocking(bool enabled) {
-    if (impl_->is_nw())
-        return; // nw_connection manages its own I/O mode
+    if (impl_->is_nw()) {
+        impl_->non_blocking = enabled;
+        return;
+    }
     if (impl_->fd < 0)
         return;
     int flags = fcntl(impl_->fd, F_GETFL, 0);

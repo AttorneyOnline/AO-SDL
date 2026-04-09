@@ -38,10 +38,19 @@ void SDLAudioDevice::close() {
         SDL_CloseAudioDevice(device_id_);
         device_id_ = 0;
     }
-    std::lock_guard lock(mutex_);
-    for (auto& ch : channels_) {
-        ch.active = false;
-        ch.asset.reset();
+    // Move streams/assets out, then destroy outside the lock to avoid
+    // deadlocking with the audio callback thread during join().
+    std::array<std::shared_ptr<AudioStream>, NUM_CHANNELS> old_streams;
+    std::array<std::shared_ptr<SoundAsset>, NUM_CHANNELS> old_assets;
+    {
+        std::lock_guard lock(mutex_);
+        for (int i = 0; i < NUM_CHANNELS; ++i) {
+            channels_[i].active = false;
+            if (channels_[i].stream)
+                channels_[i].stream->cancel();
+            old_streams[i] = std::move(channels_[i].stream);
+            old_assets[i] = std::move(channels_[i].asset);
+        }
     }
 }
 
@@ -71,39 +80,53 @@ std::vector<SDLAudioDevice::ChannelInfo> SDLAudioDevice::channel_snapshot() cons
 void SDLAudioDevice::play(int channel, std::shared_ptr<SoundAsset> asset, bool loop, float volume) {
     if (channel < 0 || channel >= NUM_CHANNELS || !asset)
         return;
-    std::lock_guard lock(mutex_);
-    auto& ch = channels_[channel];
-    ch.stream.reset(); // Clear any active stream
-    ch.asset = std::move(asset);
-    ch.position = 0;
-    ch.volume = volume;
-    ch.loop = loop;
-    ch.active = true;
+    std::shared_ptr<AudioStream> old_stream;
+    {
+        std::lock_guard lock(mutex_);
+        auto& ch = channels_[channel];
+        old_stream = std::move(ch.stream); // Clear any active stream
+        ch.asset = std::move(asset);
+        ch.position = 0;
+        ch.volume = volume;
+        ch.loop = loop;
+        ch.active = true;
+    }
 }
 
 void SDLAudioDevice::play_stream(int channel, std::shared_ptr<AudioStream> stream, bool loop, float volume) {
     if (channel < 0 || channel >= NUM_CHANNELS || !stream)
         return;
-    std::lock_guard lock(mutex_);
-    auto& ch = channels_[channel];
-    ch.asset.reset(); // Clear any pre-decoded asset
-    ch.stream = std::move(stream);
-    ch.position = 0;
-    ch.volume = volume;
-    ch.loop = loop;
-    ch.active = true;
+    std::shared_ptr<SoundAsset> old_asset;
+    {
+        std::lock_guard lock(mutex_);
+        auto& ch = channels_[channel];
+        old_asset = std::move(ch.asset); // Clear any pre-decoded asset
+        ch.stream = std::move(stream);
+        ch.position = 0;
+        ch.volume = volume;
+        ch.loop = loop;
+        ch.active = true;
+    }
 }
 
 void SDLAudioDevice::stop(int channel) {
     if (channel < 0 || channel >= NUM_CHANNELS)
         return;
-    std::lock_guard lock(mutex_);
-    auto& ch = channels_[channel];
-    ch.active = false;
-    if (ch.stream)
-        ch.stream->cancel();
-    ch.stream.reset();
-    ch.asset.reset();
+    // Move the stream/asset out before destroying them — their destructors
+    // may join background threads (e.g. AudioStream's decode thread), and
+    // destroying them while holding mutex_ deadlocks with the audio callback.
+    std::shared_ptr<AudioStream> old_stream;
+    std::shared_ptr<SoundAsset> old_asset;
+    {
+        std::lock_guard lock(mutex_);
+        auto& ch = channels_[channel];
+        ch.active = false;
+        if (ch.stream)
+            ch.stream->cancel();
+        old_stream = std::move(ch.stream);
+        old_asset = std::move(ch.asset);
+    }
+    // old_stream/old_asset destroyed here, outside the lock
 }
 
 void SDLAudioDevice::set_volume(int channel, float volume) {
@@ -143,8 +166,8 @@ void SDLAudioDevice::mix(float* output, int frames) {
             int out_pos = 0;
 
             while (remaining > 0) {
-                int to_read = std::min(remaining, (int)(mix_buf_.size() / 2));
-                int got = ch.stream->read_frames(mix_buf_.data(), to_read);
+                int to_read = std::min(remaining, BUFFER_SAMPLES);
+                int got = ch.stream->read_frames(mix_buf_, to_read);
 
                 for (int i = 0; i < got * 2; ++i)
                     output[out_pos * 2 + i] += mix_buf_[i] * vol;

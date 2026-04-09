@@ -6,7 +6,6 @@
 
 #include <array>
 #include <mutex>
-#include <vector>
 
 /**
  * @brief SDL2-based audio playback device.
@@ -64,5 +63,5 @@ class SDLAudioDevice : public IAudioDevice {
     SDL_AudioDeviceID device_id_ = 0;
     mutable std::mutex mutex_;
     std::array<Channel, NUM_CHANNELS> channels_{};
-    std::vector<float> mix_buf_{8192}; // scratch buffer for stream reads (heap — 32 KB inline would bloat sizeof)
+    float mix_buf_[BUFFER_SAMPLES * 2]{}; // scratch buffer for stream reads (stereo)
 };

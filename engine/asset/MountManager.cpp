@@ -170,11 +170,20 @@ void MountManager::release_all_http() {
 
 bool MountManager::fetch_streaming(const std::string& relative_path,
                                    std::function<bool(const uint8_t*, size_t)> on_chunk) {
-    std::shared_lock<std::shared_mutex> locker(lock);
-    for (auto& entry : loaded_mounts) {
-        auto* http = dynamic_cast<MountHttp*>(entry.mount.get());
-        if (!http)
-            continue;
+    // Snapshot HTTP mount pointers under a short-lived lock, then stream
+    // without holding the lock.  Holding a shared_lock for the entire
+    // download blocks add_mount()/remove_mount() (which need a unique_lock)
+    // and freezes the UI thread.
+    std::vector<MountHttp*> http_mounts;
+    {
+        std::shared_lock<std::shared_mutex> locker(lock);
+        for (auto& entry : loaded_mounts) {
+            auto* http = dynamic_cast<MountHttp*>(entry.mount.get());
+            if (http)
+                http_mounts.push_back(http);
+        }
+    }
+    for (auto* http : http_mounts) {
         if (http->fetch_streaming(relative_path, on_chunk))
             return true;
     }
@@ -193,41 +202,49 @@ bool MountManager::fetch_streaming_url(const std::string& url, std::function<boo
     std::string host = url.substr(0, path_start);
     std::string path = url.substr(path_start);
 
-    // Find any HTTP mount to borrow its pool for the connection
-    std::shared_lock<std::shared_mutex> locker(lock);
-    for (auto& entry : loaded_mounts) {
-        auto* http = dynamic_cast<MountHttp*>(entry.mount.get());
-        if (!http)
-            continue;
-
-        std::promise<bool> done;
-        auto future = done.get_future();
-        bool got_data = false;
-
-        http->pool().get_streaming(
-            host, path,
-            [&](const uint8_t* data, size_t len) -> bool {
-                got_data = true;
-                return on_chunk(data, len);
-            },
-            [&](HttpResponse resp) {
-                if (resp.status == 200 && got_data) {
-                    Log::log_print(VERBOSE, "MountManager: streamed URL %s", url.c_str());
-                    done.set_value(true);
-                }
-                else {
-                    Log::log_print(VERBOSE, "MountManager: URL stream failed %s (status=%d err=%s)", url.c_str(),
-                                   resp.status, resp.error.c_str());
-                    done.set_value(false);
-                }
-            },
-            HttpPriority::HIGH);
-
-        return future.get();
+    // Find any HTTP mount to borrow its pool, then release the lock
+    // before the blocking download to avoid starving add_mount().
+    HttpPool* pool = nullptr;
+    {
+        std::shared_lock<std::shared_mutex> locker(lock);
+        for (auto& entry : loaded_mounts) {
+            auto* http = dynamic_cast<MountHttp*>(entry.mount.get());
+            if (http) {
+                pool = &http->pool();
+                break;
+            }
+        }
     }
 
-    Log::log_print(WARNING, "MountManager: no HTTP mount available for URL streaming: %s", url.c_str());
-    return false;
+    if (!pool) {
+        Log::log_print(WARNING, "MountManager: no HTTP mount available for URL streaming: %s", url.c_str());
+        return false;
+    }
+
+    std::promise<bool> done;
+    auto future = done.get_future();
+    bool got_data = false;
+
+    pool->get_streaming(
+        host, path,
+        [&](const uint8_t* data, size_t len) -> bool {
+            got_data = true;
+            return on_chunk(data, len);
+        },
+        [&](HttpResponse resp) {
+            if (resp.status == 200 && got_data) {
+                Log::log_print(VERBOSE, "MountManager: streamed URL %s", url.c_str());
+                done.set_value(true);
+            }
+            else {
+                Log::log_print(VERBOSE, "MountManager: URL stream failed %s (status=%d err=%s)", url.c_str(),
+                               resp.status, resp.error.c_str());
+                done.set_value(false);
+            }
+        },
+        HttpPriority::HIGH);
+
+    return future.get();
 }
 
 void MountManager::release_http(const std::string& relative_path) {

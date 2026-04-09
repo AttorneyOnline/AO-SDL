@@ -10,7 +10,9 @@
 #include "platform/HardwareId.h"
 #include "utils/Log.h"
 
-AOClient::AOClient() = default;
+AOClient::AOClient() {
+    ao_register_packet_types();
+}
 
 void AOClient::on_connect() {
     conn_state = CONNECTED;

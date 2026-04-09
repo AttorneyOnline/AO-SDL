@@ -157,6 +157,7 @@ class AudioStream : public std::enable_shared_from_this<AudioStream> {
     // --- State ---
     std::atomic<bool> ready_{false};
     std::atomic<bool> finished_{false};
+    std::atomic<bool> decode_started_{false};
 
     std::stop_source stop_source_;
     std::jthread decode_thread_;
