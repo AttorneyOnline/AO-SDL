@@ -568,7 +568,9 @@ Resources:
                     - GF_SERVER_SERVE_FROM_SUB_PATH=true
                     - GF_SERVER_HTTP_ADDR=127.0.0.1
                     - GF_SERVER_HTTP_PORT=3000
-                  volumes: [grafana_data:/var/lib/grafana]
+                  volumes:
+                    - grafana_data:/var/lib/grafana
+                    - ./grafana/provisioning:/etc/grafana/provisioning:ro
                   depends_on: [prometheus, loki]
               volumes:
                 caddy_data:
@@ -590,10 +592,43 @@ Resources:
               PROM
 
               # --- Download content config from repo ---
-              CONTENT_BASE="https://raw.githubusercontent.com/AttorneyOnline/AO-SDL/master/deploy/config"
-              for f in characters.txt music.json areas.ini backgrounds.txt; do
-                  curl -fsSL "$CONTENT_BASE/$f" -o "config/$f" || echo "Warning: failed to download $f"
+              CONTENT_BASE="https://raw.githubusercontent.com/AttorneyOnline/AO-SDL/master/deploy"
+              for f in config/characters.txt config/music.json config/areas.ini config/backgrounds.txt; do
+                  curl -fsSL "$CONTENT_BASE/$f" -o "$f" || echo "Warning: failed to download $f"
               done
+
+              # --- Download Grafana provisioning from repo ---
+              mkdir -p grafana/provisioning/dashboards grafana/provisioning/datasources
+              curl -fsSL "$CONTENT_BASE/grafana/provisioning/dashboards/kagami-overview.json" \
+                  -o grafana/provisioning/dashboards/kagami-overview.json || true
+              # Dashboard provider config
+              cat > grafana/provisioning/dashboards/default.yaml <<'DASHPROV'
+              apiVersion: 1
+              providers:
+                - name: default
+                  type: file
+                  options:
+                    path: /etc/grafana/provisioning/dashboards
+              DASHPROV
+              # Prometheus datasource
+              cat > grafana/provisioning/datasources/prometheus.yaml <<'DSPROV'
+              apiVersion: 1
+              datasources:
+                - name: Prometheus
+                  type: prometheus
+                  access: proxy
+                  url: http://127.0.0.1:9090
+                  isDefault: true
+              DSPROV
+              # Loki datasource
+              cat > grafana/provisioning/datasources/loki.yaml <<'LOKIPROV'
+              apiVersion: 1
+              datasources:
+                - name: Loki
+                  type: loki
+                  access: proxy
+                  url: http://127.0.0.1:3100
+              LOKIPROV
 
               # --- Fix ownership and start ---
               chown -R ubuntu:ubuntu /opt/kagami
