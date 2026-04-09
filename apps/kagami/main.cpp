@@ -340,6 +340,9 @@ int main(int /*argc*/, char* argv[]) {
     ws.stop();
     http.stop();
 
+    // Sync runtime state back to settings before persisting.
+    cfg.set_value("mod_password", std::any(room.mod_password));
+    cfg.set_value("server_description", std::any(room.server_description));
     ServerSettings::save_to_disk(cfg_path);
     return 0;
 }
