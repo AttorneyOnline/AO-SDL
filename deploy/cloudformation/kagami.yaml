@@ -256,18 +256,16 @@ Resources:
       Roles: [!Ref InstanceRole]
 
   # --- EC2 Instance ---
-  LaunchTemplate:
+  SpotLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
+    Condition: IsSpot
     Properties:
       LaunchTemplateData:
         InstanceMarketOptions:
-          !If
-            - IsSpot
-            - MarketType: spot
-              SpotOptions:
-                SpotInstanceType: persistent
-                InstanceInterruptionBehavior: stop
-            - !Ref AWS::NoValue
+          MarketType: spot
+          SpotOptions:
+            SpotInstanceType: persistent
+            InstanceInterruptionBehavior: stop
 
   Instance:
     Type: AWS::EC2::Instance
@@ -278,8 +276,11 @@ Resources:
       SecurityGroupIds: [!Ref SecurityGroup]
       IamInstanceProfile: !Ref InstanceProfile
       LaunchTemplate:
-        LaunchTemplateId: !Ref LaunchTemplate
-        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+        !If
+          - IsSpot
+          - LaunchTemplateId: !Ref SpotLaunchTemplate
+            Version: !GetAtt SpotLaunchTemplate.LatestVersionNumber
+          - !Ref AWS::NoValue
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
