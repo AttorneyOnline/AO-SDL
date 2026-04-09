@@ -39,6 +39,8 @@ class AreaStatusCommand : public CommandHandler {
         }
 
         area->status = status;
+        if (ctx.broadcast_arup)
+            ctx.broadcast_arup(1); // ARUP_STATUS
         ctx.send_system_message("Area status set to " + status + ".");
     }
 };

@@ -31,6 +31,8 @@ class AreaLockCommand : public CommandHandler {
         for (auto* s : ctx.room.sessions_in_area(ctx.session.area))
             area->invited.insert(s->client_id);
 
+        if (ctx.broadcast_arup)
+            ctx.broadcast_arup(3); // ARUP_LOCKED
         ctx.send_system_message("Area locked. Current players have been invited.");
     }
 };
@@ -58,6 +60,8 @@ class AreaUnlockCommand : public CommandHandler {
 
         area->lock_mode = AreaLockMode::FREE;
         area->invited.clear();
+        if (ctx.broadcast_arup)
+            ctx.broadcast_arup(3); // ARUP_LOCKED
         ctx.send_system_message("Area unlocked.");
     }
 };
@@ -88,6 +92,8 @@ class AreaSpectateCommand : public CommandHandler {
         for (auto* s : ctx.room.sessions_in_area(ctx.session.area))
             area->invited.insert(s->client_id);
 
+        if (ctx.broadcast_arup)
+            ctx.broadcast_arup(3); // ARUP_LOCKED
         ctx.send_system_message("Area set to spectatable. Current players can speak, newcomers can only watch.");
     }
 };
@@ -131,10 +137,14 @@ class AreaKickCommand : public CommandHandler {
             }
         });
 
-        if (kicked > 0)
+        if (kicked > 0) {
+            if (ctx.broadcast_arup)
+                ctx.broadcast_arup(0); // ARUP_PLAYERS
             ctx.send_system_message("Kicked " + std::to_string(kicked) + " player(s) from the area.");
-        else
+        }
+        else {
             ctx.send_system_message("No players with IPID " + target_ipid + " found in this area.");
+        }
     }
 };
 

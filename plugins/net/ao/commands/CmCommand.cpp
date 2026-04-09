@@ -40,16 +40,22 @@ class CmCommand : public CommandHandler {
                     found = true;
                 }
             });
-            if (found)
+            if (found) {
+                if (ctx.broadcast_arup)
+                    ctx.broadcast_arup(2); // ARUP_CM
                 ctx.send_system_message("Added CM for IPID " + target_ipid + ".");
-            else
+            }
+            else {
                 ctx.send_system_message("No player with IPID " + target_ipid + " in this area.");
+            }
         }
         else {
             // Self-CM
             area->cm_owners.insert(ctx.session.client_id);
             area->cm = ctx.session.display_name;
             area->invited.insert(ctx.session.client_id);
+            if (ctx.broadcast_arup)
+                ctx.broadcast_arup(2); // ARUP_CM
             ctx.send_system_message("You are now a case master of " + ctx.session.area + ".");
             Log::log_print(INFO, "CM: %s became CM of %s", ctx.session.display_name.c_str(), ctx.session.area.c_str());
         }
@@ -88,10 +94,14 @@ class UncmCommand : public CommandHandler {
                     found = true;
                 }
             });
-            if (found)
+            if (found) {
+                if (ctx.broadcast_arup)
+                    ctx.broadcast_arup(2); // ARUP_CM
                 ctx.send_system_message("Removed CM for IPID " + target_ipid + ".");
-            else
+            }
+            else {
                 ctx.send_system_message("No player with IPID " + target_ipid + " found.");
+            }
         }
         else {
             // Step down from CM
@@ -102,6 +112,8 @@ class UncmCommand : public CommandHandler {
             area->cm_owners.erase(ctx.session.client_id);
             if (area->cm_owners.empty())
                 area->cm.clear();
+            if (ctx.broadcast_arup)
+                ctx.broadcast_arup(2); // ARUP_CM
             ctx.send_system_message("You are no longer a case master.");
         }
     }

@@ -239,6 +239,11 @@ class GameRoom {
         return area_states_;
     }
 
+    /// Mutable access to all area states (for cleanup operations like CM removal on disconnect).
+    std::unordered_map<std::string, AreaState>& area_states_mut() {
+        return area_states_;
+    }
+
     // --- Actions (called by protocol backends) ---
 
     /// Process an IC message. Validates, then broadcasts to area via all delegates.

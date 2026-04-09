@@ -73,6 +73,20 @@
 	}
 }
 
+# --- Metrics proxy (IPv4 → IPv6 metrics server) ---
+# metrics.yuurei.network A record points here; Caddy forwards to the
+# IPv6-only metrics server so IPv4 clients can access Grafana.
+metrics.yuurei.network {
+	import tls_dns
+
+	reverse_proxy [2600:1f13:6b4:8b00:88ff:494c:657c:a7cf]:443 {
+		transport http {
+			tls
+			tls_server_name metrics.yuurei.network
+		}
+	}
+}
+
 # --- WebSocket / AO2 protocol (port 27015, TLS) ---
 {$KAGAMI_DOMAIN}:27015 {
 	import tls_dns

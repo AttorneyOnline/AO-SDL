@@ -57,6 +57,15 @@ class AOServer {
     /// Send area-join state (BN, HP, LE) to a specific client.
     void send_area_join_info(uint64_t client_id, const std::string& area_name);
 
+    /// ARUP types (matching akashi's enum).
+    enum ArupType { ARUP_PLAYERS = 0, ARUP_STATUS = 1, ARUP_CM = 2, ARUP_LOCKED = 3 };
+
+    /// Broadcast an ARUP update of the given type to all clients.
+    void broadcast_arup(ArupType type);
+
+    /// Send all 4 ARUP types to a single client (on join).
+    void send_full_arup(uint64_t client_id);
+
     /// Send the full player list (PR ADD + all PU fields) to a specific client.
     void send_player_list_snapshot(uint64_t client_id);
 
