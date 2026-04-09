@@ -23,7 +23,8 @@ class SearchBansCommand : public CommandHandler {
     }
 
     std::string usage() const override {
-        return "/searchbans <query> — search active bans by IPID, HDID, reason, or moderator (expired/invalidated bans are in the database only)";
+        return "/searchbans <query> — search active bans by IPID, HDID, reason, or moderator (expired/invalidated bans "
+               "are in the database only)";
     }
 
     void execute(CommandContext& ctx) override {

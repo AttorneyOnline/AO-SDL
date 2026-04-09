@@ -44,8 +44,7 @@ class ReputationCommand : public CommandHandler {
 
         std::string ip = ctx.resolve_ip(target);
         if (ip.empty()) {
-            ctx.send_system_message("Could not resolve IPID " + target +
-                                    " to an IP. The player may not be connected.");
+            ctx.send_system_message("Could not resolve IPID " + target + " to an IP. The player may not be connected.");
             return;
         }
 
