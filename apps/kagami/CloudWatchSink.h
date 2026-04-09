@@ -60,13 +60,20 @@ class CloudWatchSink {
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
                 .count();
 
-        std::string formatted = "[" + timestamp + "][" + log_level_name(level) + "] " + message;
-
+        // Ensure strictly increasing timestamps so CloudWatch preserves insertion order.
+        // Multiple logs within the same ms get successive timestamps.
         std::lock_guard lock(buffer_mutex_);
+        if (now_ms <= last_timestamp_ms_)
+            now_ms = last_timestamp_ms_ + 1;
+        last_timestamp_ms_ = now_ms;
+
+        std::string formatted = "[" + timestamp + "][" + log_level_name(level) + "] " + message;
         buffer_.push_back({now_ms, std::move(formatted)});
     }
 
   private:
+    int64_t last_timestamp_ms_ = 0; ///< For monotonic timestamps within a batch.
+
     struct BufferedEvent {
         int64_t timestamp_ms;
         std::string message;
