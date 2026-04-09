@@ -152,22 +152,12 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-          Description: HTTPS (REST API)
+          Description: HTTPS + WSS (REST API and AO2 WebSocket)
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           CidrIpv6: '::/0'
-          Description: HTTPS (REST API, IPv6)
-        - IpProtocol: tcp
-          FromPort: 27015
-          ToPort: 27015
-          CidrIp: 0.0.0.0/0
-          Description: WSS (AO2 WebSocket)
-        - IpProtocol: tcp
-          FromPort: 27015
-          ToPort: 27015
-          CidrIpv6: '::/0'
-          Description: WSS (AO2 WebSocket, IPv6)
+          Description: HTTPS + WSS (IPv6)
         - IpProtocol: tcp
           FromPort: 27016
           ToPort: 27016
@@ -418,12 +408,6 @@ Resources:
               			idle        120s
               		}
               	}
-              	servers :27015 {
-              		timeouts {
-              			read_header 10s
-              			idle        120s
-              		}
-              	}
               }
               (tls_active) {
               }
@@ -431,6 +415,13 @@ Resources:
               	import tls_active
               	request_body {
               		max_size 64KB
+              	}
+              	@websocket {
+              		header Connection *Upgrade*
+              		header Upgrade    websocket
+              	}
+              	handle @websocket {
+              		reverse_proxy 127.0.0.1:27016
               	}
               	handle /grafana* {
               		reverse_proxy 127.0.0.1:3000
@@ -454,16 +445,6 @@ Resources:
               				read_timeout  30s
               				write_timeout 30s
               			}
-              		}
-              	}
-              }
-              {$KAGAMI_DOMAIN}:27015 {
-              	import tls_active
-              	reverse_proxy 127.0.0.1:27016 {
-              		transport http {
-              			keepalive     off
-              			read_timeout  120s
-              			write_timeout 120s
               		}
               	}
               }
@@ -611,12 +592,8 @@ Outputs:
     Value: !Sub 'https://${Domain}/'
 
   WebSocketWSS:
-    Description: Secure WebSocket endpoint
-    Value: !Sub 'wss://${Domain}:27015'
-
-  WebSocketWS:
-    Description: Plaintext WebSocket endpoint
-    Value: !Sub 'ws://${Domain}:27016'
+    Description: Secure WebSocket endpoint (same port as HTTPS)
+    Value: !Sub 'wss://${Domain}/'
 
   GrafanaURL:
     Description: Grafana dashboard (available after DNS propagation)
