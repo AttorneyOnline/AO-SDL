@@ -2307,12 +2307,14 @@
         "y": 177
       },
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
       },
       "targets": [
         {
-          "expr": "{job=\"kagami\", level=~\"$log_level\"}",
+          "queryMode": "Logs",
+          "logGroupNames": ["/kagami/kagami-staging"],
+          "expression": "fields @timestamp, @message | sort @timestamp desc | limit 200",
           "refId": "A"
         }
       ],

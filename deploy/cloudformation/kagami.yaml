@@ -265,7 +265,13 @@ Resources:
                   - logs:PutLogEvents
                   - logs:CreateLogStream
                   - logs:DescribeLogStreams
-                Resource: !GetAtt LogGroup.Arn
+                  - logs:DescribeLogGroups
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                  - logs:StartQuery
+                  - logs:StopQuery
+                  - logs:GetQueryResults
+                Resource: '*'
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -403,7 +409,7 @@ Resources:
                   'log_level': 'info',
                   'log_file': '/logs/kagami.log',
                   'log_file_level': 'verbose',
-                  'loki_url': 'http://127.0.0.1:3100',
+                  'loki_url': '',
                   'metrics_enabled': True,
                   'metrics_path': '/metrics',
                   'advertiser': {
@@ -550,12 +556,6 @@ Resources:
                     - prometheus_data:/prometheus
                   command: ['--config.file=/etc/prometheus/prometheus.yml','--storage.tsdb.retention.time=24h','--storage.tsdb.retention.size=1GB','--web.external-url=/prometheus/','--web.route-prefix=/prometheus/','--web.listen-address=127.0.0.1:9090']
                   depends_on: [kagami]
-                loki:
-                  image: grafana/loki:latest
-                  restart: unless-stopped
-                  network_mode: host
-                  volumes: [loki_data:/loki]
-                  command: ['-config.expand-env=true','-config.file=/etc/loki/local-config.yaml']
                 grafana:
                   image: grafana/grafana:latest
                   restart: unless-stopped
@@ -573,13 +573,12 @@ Resources:
                   volumes:
                     - grafana_data:/var/lib/grafana
                     - ./grafana/provisioning:/etc/grafana/provisioning:ro
-                  depends_on: [prometheus, loki]
+                  depends_on: [prometheus]
               volumes:
                 caddy_data:
                 caddy_config:
                 kagami_logs:
                 prometheus_data:
-                loki_data:
                 grafana_data:
               COMPOSE
 
@@ -623,15 +622,18 @@ Resources:
                   url: http://127.0.0.1:9090/prometheus
                   isDefault: true
               DSPROV
-              # Loki datasource
-              cat > grafana/provisioning/datasources/loki.yaml <<'LOKIPROV'
+              # CloudWatch datasource (uses instance role — no keys needed)
+              cat > grafana/provisioning/datasources/cloudwatch.yaml <<'CWPROV'
               apiVersion: 1
               datasources:
-                - name: Loki
-                  type: loki
+                - name: CloudWatch
+                  type: cloudwatch
+                  uid: cloudwatch
                   access: proxy
-                  url: http://127.0.0.1:3100
-              LOKIPROV
+                  jsonData:
+                    authType: default
+                    defaultRegion: us-west-2
+              CWPROV
 
               # --- Fix ownership and start ---
               chown -R ubuntu:ubuntu /opt/kagami
