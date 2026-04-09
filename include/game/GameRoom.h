@@ -148,6 +148,9 @@ class GameRoom {
     /// admits players beyond this count. Kept for backwards compatibility.
     int max_players = 100;
 
+    /// Asset URL sent to clients (ASS packet). Empty = none.
+    std::string asset_url;
+
     /// Moderator password for simple auth. Empty = auth disabled.
     std::string mod_password;
 

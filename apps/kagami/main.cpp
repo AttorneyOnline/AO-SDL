@@ -90,6 +90,7 @@ int main(int /*argc*/, char* argv[]) {
     room.server_name = cfg.server_name();
     room.server_description = cfg.server_description();
     room.max_players = cfg.max_players();
+    room.asset_url = cfg.asset_url();
     room.mod_password = cfg.mod_password();
     room.characters = std::move(content.characters);
     room.music = std::move(content.music);

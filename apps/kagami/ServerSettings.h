@@ -62,6 +62,10 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
     std::string motd() const {
         return value<std::string>("motd");
     }
+    /// Asset URL sent to AO2 clients via the ASS packet. Empty = none.
+    std::string asset_url() const {
+        return value<std::string>("asset_url");
+    }
 
     /// Moderator password for simple auth. Empty = auth disabled.
     std::string mod_password() const {
@@ -288,6 +292,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"bind_address", "0.0.0.0"},
             {"max_players", 100},
             {"motd", ""},
+            {"asset_url", ""},
             {"mod_password", ""},
             {"session_ttl_seconds", 300},
             {"cors_origin", "https://web.aceattorneyonline.com"},
