@@ -570,10 +570,21 @@ Mappings:
       arm64: ami-0c9c5a8d3a09b27cc
 
 Outputs:
-  ServerIP:
+  IPv4Address:
     Description: >
-      Elastic IP address. Create an A record for your domain pointing to this IP.
+      Elastic IP (IPv4). Create a DNS A record for your domain pointing here.
     Value: !Ref ElasticIP
+
+  PublicIPv4:
+    Description: >
+      Same as above, for easy copy-paste into your DNS provider's A record.
+    Value: !GetAtt Instance.PublicIp
+
+  DNSSetup:
+    Description: >
+      Create these DNS records at your provider. For IPv6 (AAAA record),
+      find the address in the EC2 console under the instance's network tab.
+    Value: !Sub 'A record: ${Domain} -> ${ElasticIP}'
 
   GameURL:
     Description: Game server URL (available after DNS propagation)
