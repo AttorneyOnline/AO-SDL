@@ -57,9 +57,8 @@ class NXEndpoint : public RestEndpoint {
     ///
     /// Public so unit tests can drive it directly without round-
     /// tripping through the HTTP layer.
-    static ContentVerdictResult apply_content_verdict(ServerSession& session,
-                                                      const moderation::ModerationVerdict& verdict,
-                                                      const char* channel);
+    static ContentVerdictResult
+    apply_content_verdict(ServerSession& session, const moderation::ModerationVerdict& verdict, const char* channel);
 
   protected:
     static NXServer& server() {

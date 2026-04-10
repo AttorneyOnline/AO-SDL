@@ -337,9 +337,8 @@ TEST_F(DatabaseManagerTest, MigrationCreatesModerationTables) {
 
     // active_mutes() filters out expired rows, so our test mute must
     // have a future expiry to survive the query.
-    const int64_t now_sec = std::chrono::duration_cast<std::chrono::seconds>(
-                                std::chrono::system_clock::now().time_since_epoch())
-                                .count();
+    const int64_t now_sec =
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     MuteEntry mute;
     mute.ipid = "mutedipid";
     mute.started_at = now_sec;
@@ -382,8 +381,7 @@ TEST_F(DatabaseManagerTest, MigrationFromV0DatabaseAddsTables) {
     // and verify migrate() creates the tables and advances the
     // version counter. This is the code path a real upgrade hits.
     db_.close();
-    auto raw_path = std::filesystem::temp_directory_path() /
-                    ("test_kagami_v0_" + std::to_string(counter_++) + ".db");
+    auto raw_path = std::filesystem::temp_directory_path() / ("test_kagami_v0_" + std::to_string(counter_++) + ".db");
 
     {
         sqlite3* raw = nullptr;

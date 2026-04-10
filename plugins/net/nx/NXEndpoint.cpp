@@ -58,9 +58,9 @@ NXEndpoint::ContentVerdictResult NXEndpoint::apply_content_verdict(ServerSession
             entry.hdid = session.hardware_id;
             entry.reason = "[auto] content: " + verdict.reason;
             entry.moderator = "ContentModerator";
-            entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-                                  std::chrono::system_clock::now().time_since_epoch())
-                                  .count();
+            entry.timestamp =
+                std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
             entry.duration = (verdict.action == ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
             bm->add_ban(std::move(entry));
         }
