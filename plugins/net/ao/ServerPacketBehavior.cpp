@@ -72,8 +72,15 @@ void send_mod_notice(AOServer& server, ServerSession& session, moderation::Conte
 /// handlers used to have ~50 line copies of this switch and any
 /// future refinement (e.g. additional metric labels, different
 /// log severity per channel) would have to land in two places.
-/// The helper takes the channel string ("ic"/"ooc") so the log
-/// line can still differentiate them.
+///
+/// Log format preservation: callers MUST pass the channel as
+/// `"IC"` or `"OOC"` (uppercase). Pre-refactor the IC/OOC paths
+/// each had inline literals `"AO: IC from..."` / `"AO: OOC from..."`
+/// that operators grep for in runbooks and Loki alerts. The helper
+/// preserves the same format string by substituting the uppercase
+/// channel. KICK/BAN log lines also preserve the original
+/// `"AO: kicking %s for content: %s"` format (no channel) so
+/// existing greps for `"for content:"` keep matching.
 enum class ContentVerdictOutcome {
     Pass,    // NONE / LOG: continue broadcasting unchanged
     Censor,  // CENSOR: caller should swap the message to "[filtered]" and continue
@@ -93,20 +100,29 @@ ContentVerdictOutcome apply_content_verdict(AOServer& server, ServerSession& ses
     case ModerationAction::DROP:
     case ModerationAction::MUTE:
         send_mod_notice(server, session, cm, verdict);
+        // Original (pre-refactor) format: "AO: IC from %s suppressed [content]: %s"
+        // and "AO: OOC from ...". Substitute the uppercase channel so the
+        // literal that operators grep for is preserved exactly.
         Log::log_print(INFO, "AO: %s from %s suppressed [content]: %s", channel,
                        format_client_id(session.client_id).c_str(), verdict.reason.c_str());
         return ContentVerdictOutcome::Stop;
     case ModerationAction::KICK:
-        Log::log_print(WARNING, "AO: kicking %s [content/%s]: %s", format_client_id(session.client_id).c_str(),
-                       channel, verdict.reason.c_str());
+        // Original format: "AO: kicking %s for content: %s" — no channel
+        // substring. Preserved verbatim because operator runbooks grep
+        // for "for content:" and the channel info is redundant with
+        // the session-being-killed-anyway semantic.
+        (void)channel; // unused on this branch by design
+        Log::log_print(WARNING, "AO: kicking %s for content: %s", format_client_id(session.client_id).c_str(),
+                       verdict.reason.c_str());
         server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
         if (server.ws())
             server.ws()->close_client_deferred(session.client_id);
         return ContentVerdictOutcome::Stop;
     case ModerationAction::BAN:
     case ModerationAction::PERMA_BAN:
-        Log::log_print(WARNING, "AO: banning %s [content/%s]: %s", format_client_id(session.client_id).c_str(),
-                       channel, verdict.reason.c_str());
+        // Same preservation rationale as KICK above.
+        Log::log_print(WARNING, "AO: banning %s for content: %s", format_client_id(session.client_id).c_str(),
+                       verdict.reason.c_str());
         if (auto* bm = server.room().ban_manager()) {
             BanEntry entry;
             entry.ipid = session.ipid;
@@ -432,7 +448,7 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
         // or mute state. ContentModerator::check() returns NONE for any
         // message with zero offending-content score.
         auto verdict = cm->check(session.ipid, "ic", action.message);
-        switch (apply_content_verdict(server, session, *cm, verdict, "ic")) {
+        switch (apply_content_verdict(server, session, *cm, verdict, "IC")) {
         case ContentVerdictOutcome::Pass:
             break;
         case ContentVerdictOutcome::Censor:
@@ -539,7 +555,7 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     std::string forwarded_message = message;
     if (auto* cm = server.room().content_moderator()) {
         auto verdict = cm->check(session.ipid, "ooc", message);
-        switch (apply_content_verdict(server, session, *cm, verdict, "ooc")) {
+        switch (apply_content_verdict(server, session, *cm, verdict, "OOC")) {
         case ContentVerdictOutcome::Pass:
             break;
         case ContentVerdictOutcome::Censor:

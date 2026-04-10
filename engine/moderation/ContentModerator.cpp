@@ -569,38 +569,59 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     static auto& l2_skipped_counter = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_layer2_skipped_total", "Times Layer 2 (remote classifier) was skipped and why", {"reason"});
 
-    // Record the "disabled" skip reason when the operator hasn't
-    // wired the remote classifier (no API key, layer turned off in
-    // config, etc). Without this label, dashboards counting Layer 2
-    // skip rate would have a hidden denominator — every check() on
-    // a deploy without a remote classifier was an invisible skip.
-    // Dashboards can now show the full skip-cause breakdown
-    // (safe_hint / layer1_sufficient / rate_limit / disabled) and
-    // the sum equals total checks minus actual remote calls.
-    if (!remote_.is_active())
+    // Skip-reason bookkeeping is structured as a single decision tree
+    // so the four reasons (disabled / safe_hint / layer1_sufficient /
+    // rate_limit) are MUTUALLY EXCLUSIVE by construction — exactly one
+    // gets incremented per check() on the Layer-2-skipped path, and
+    // the gating that enforces the exclusion is structural rather
+    // than scattered across multiple `if (remote_.is_active() && ...)`
+    // guards that a future maintainer might forget to mirror.
+    //
+    // Dashboards can sum any subset of the labels and the sum is
+    // meaningful: total Layer 2 skips = sum across all reasons,
+    // total Layer 2 calls = checks_total - sum across all reasons.
+    //
+    // The reasons are evaluated in priority order:
+    //   1. disabled        — operator never wired the remote layer
+    //   2. layer1_sufficient — Layer 1 already crossed mute threshold,
+    //                          calling remote can't escalate further
+    //   3. safe_hint       — embedding similarity to a known-safe anchor
+    //   4. rate_limit      — per-IPID token bucket exhausted
+    // The final fall-through is the actual remote call.
+    bool should_call_remote = false;
+    if (!remote_.is_active()) {
         l2_skipped_counter.labels({"disabled"}).inc();
-
-    bool safe_hint_hit = false;
-    if (remote_.is_active() && !layer1_sufficient && safe_hint_.is_active() && embedding_backend_) {
-        auto t0 = std::chrono::steady_clock::now();
-        auto hint = safe_hint_.query(message, *embedding_backend_);
-        bump_layer("safe_hint", t0);
-        if (hint.is_safe) {
-            safe_hint_hit = true;
-            l2_skipped_counter.labels({"safe_hint"}).inc();
+    }
+    else if (layer1_sufficient) {
+        l2_skipped_counter.labels({"layer1_sufficient"}).inc();
+    }
+    else {
+        // Try the safe-hint shortcut. Inert if the layer isn't
+        // configured or the embedding backend isn't loaded yet.
+        bool safe_hint_hit = false;
+        if (safe_hint_.is_active() && embedding_backend_) {
+            auto t0 = std::chrono::steady_clock::now();
+            auto hint = safe_hint_.query(message, *embedding_backend_);
+            bump_layer("safe_hint", t0);
+            if (hint.is_safe) {
+                safe_hint_hit = true;
+                l2_skipped_counter.labels({"safe_hint"}).inc();
+            }
+        }
+        if (!safe_hint_hit) {
+            // Per-IPID rate limit is the last gate. Token bucket
+            // returning false means an abuser is firing classifier
+            // calls faster than the configured refill rate — Layer
+            // 1 still ran on this message, the heat ladder still
+            // applies, we just don't burn additional OpenAI quota
+            // on the same client.
+            if (!remote_bucket_allow(ipid))
+                l2_skipped_counter.labels({"rate_limit"}).inc();
+            else
+                should_call_remote = true;
         }
     }
-    if (remote_.is_active() && layer1_sufficient)
-        l2_skipped_counter.labels({"layer1_sufficient"}).inc();
 
-    // Final decision branch: remote_bucket_allow() is the last gate.
-    // If it fails we also record the reason, otherwise the hot-abuser
-    // rate-limit case is invisible in dashboards.
-    bool should_call_remote = remote_.is_active() && !layer1_sufficient && !safe_hint_hit;
-    if (should_call_remote && !remote_bucket_allow(ipid)) {
-        l2_skipped_counter.labels({"rate_limit"}).inc();
-        should_call_remote = false;
-    }
     if (should_call_remote) {
         static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
             "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
