@@ -532,7 +532,7 @@ Resources:
               		max_size 64KB
               	}
               	@websocket {
-              		header Connection *Upgrade*
+              		header_regexp Connection .*[Uu]pgrade.*
               		header Upgrade    websocket
               		not path /grafana*
               	}
@@ -566,7 +566,7 @@ Resources:
               }
               http://{$KAGAMI_DOMAIN} {
               	@websocket {
-              		header Connection *Upgrade*
+              		header_regexp Connection .*[Uu]pgrade.*
               		header Upgrade    websocket
               		not path /grafana*
               	}
