@@ -224,18 +224,33 @@ int main(int /*argc*/, char* argv[]) {
 
         // Phase 3: local embeddings layer. Completely optional — only
         // runs when the layer is enabled AND a HuggingFace model id is
-        // configured. Fetches the model at startup (blocking, may take
-        // minutes on first boot) then installs the embedding backend.
+        // configured. Model fetch + load happens on a background
+        // thread so main() can reach listen() without waiting for a
+        // ~1 GB download on first boot. Until the backend is ready,
+        // the clusterer has a NullEmbeddingBackend installed (the
+        // default from SemanticClusterer::configure) and Layer 3
+        // contributes no heat — identical behavior to the layer
+        // being disabled. Once the background fetch completes, the
+        // backend is swapped in atomically and subsequent check()
+        // calls start populating semantic_echo.
+        //
+        // A blocking fetch on the main thread would stall liveness
+        // probes during first boot and can cause CFN stack creation
+        // failures on slow networks (observed ~45s for bge-small
+        // Q8_0, ~5min for larger models). The background-thread
+        // approach trades "Layer 3 comes up immediately" for "no
+        // deadline the load has to meet".
         if (cm_cfg.enabled && cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) {
             auto cache_dir = (std::filesystem::path(argv[0]).parent_path() / "models").string();
-            Log::log_print(INFO, "ContentModerator: resolving embedding model %s (cache=%s)",
-                           cm_cfg.embeddings.hf_model_id.c_str(), cache_dir.c_str());
-            auto fetch = moderation::resolve_hf_model(cm_cfg.embeddings.hf_model_id, cache_dir);
-            if (!fetch.ok) {
-                Log::log_print(WARNING, "ContentModerator: embedding fetch failed (%s); layer will be inert",
-                               fetch.error.c_str());
-            }
-            else {
+            Log::log_print(INFO, "ContentModerator: scheduling embedding model load (%s)",
+                           cm_cfg.embeddings.hf_model_id.c_str());
+            std::thread([hf_id = cm_cfg.embeddings.hf_model_id, cache_dir, &content_moderator]() mutable {
+                auto fetch = moderation::resolve_hf_model(hf_id, cache_dir);
+                if (!fetch.ok) {
+                    Log::log_print(WARNING, "ContentModerator: embedding fetch failed (%s); layer stays inert",
+                                   fetch.error.c_str());
+                    return;
+                }
                 auto backend = moderation::make_embedding_backend(fetch.local_path);
                 if (backend && backend->is_ready()) {
                     Log::log_print(INFO, "ContentModerator: embedding backend=%s dim=%d (%s)", backend->name(),
@@ -246,7 +261,7 @@ int main(int /*argc*/, char* argv[]) {
                     Log::log_print(WARNING, "ContentModerator: embedding backend not ready — "
                                             "was kagami built with -DKAGAMI_WITH_LLAMA_CPP=ON?");
                 }
-            }
+            }).detach();
         }
 
         room.set_content_moderator(&content_moderator);

@@ -506,16 +506,18 @@ set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
 # --- Optional: llama.cpp for local embedding backend ---
 #
-# Off by default. When enabled, llama.cpp is pulled via FetchContent
-# and linked into aoengine. The moderation subsystem's Layer 3
-# (semantic spam clustering) uses it to compute embeddings from a
-# GGUF model that is downloaded from HuggingFace at startup.
+# ON by default so the shipped Docker image supports the moderation
+# subsystem's Layer 3 (semantic spam clustering) without requiring
+# operators to rebuild from source. The CI container image carries
+# llama.cpp + ggml linked into libaoengine.a.
 #
-# Disable by default because:
-#   - llama.cpp is ~50MB compiled and adds noticeable build time.
-#   - Most deployments will use OpenAI's remote moderation API instead.
-#   - When disabled, the code path gracefully degrades to a null
-#     backend that the rest of the moderation stack handles.
+# Disable with -DKAGAMI_WITH_LLAMA_CPP=OFF to:
+#   - Skip the ~40s configure + ~5min first-build cost from FetchContent
+#     pulling and compiling llama.cpp + ggml kernels.
+#   - Drop ~25MB from the final binary and libgomp1 from the runtime
+#     image (ggml uses OpenMP).
+#   - Keep embedding-layer code compiled as a NullEmbeddingBackend
+#     stub — the rest of the moderation stack handles it transparently.
 option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" ON)
 if(KAGAMI_WITH_LLAMA_CPP)
     include(FetchContent)
