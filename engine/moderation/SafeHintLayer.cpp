@@ -2,6 +2,15 @@
 
 #include "utils/Log.h"
 
+// std::unique_lock is in <mutex>, not <shared_mutex>. The header
+// already pulls <shared_mutex> for the shared_lock used in query(),
+// but libstdc++ doesn't transitively include <mutex> from there, so
+// the load_anchors() / configure() unique_lock<shared_mutex> uses
+// fail to compile on Linux without this explicit include. (libc++
+// happens to pull it transitively, which is why the macOS local
+// build was clean while CI Linux failed.)
+#include <mutex>
+
 namespace moderation {
 
 void SafeHintLayer::configure(const SafeHintConfig& cfg) {

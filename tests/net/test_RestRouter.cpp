@@ -2250,8 +2250,7 @@ class NXContentVerdictTest : public NXEndpointTest {
         // Spin up an in-memory DB + BanManager and wire them into
         // the room so apply_content_verdict's add_ban() call lands
         // somewhere observable.
-        db_path_ = std::filesystem::temp_directory_path() /
-                   ("test_nx_verdict_" + std::to_string(::getpid()) + ".db");
+        db_path_ = std::filesystem::temp_directory_path() / ("test_nx_verdict_" + std::to_string(::getpid()) + ".db");
         ASSERT_TRUE(db_.open(db_path_.string()));
         ban_manager_.set_db(&db_);
         ban_manager_.load_from_db();
@@ -2383,8 +2382,7 @@ TEST_F(NXContentVerdictTest, PermaBanAddsPermanentBan) {
     ASSERT_NE(session, nullptr);
     auto ipid = session->ipid;
 
-    auto r =
-        NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::PERMA_BAN), "ooc");
+    auto r = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::PERMA_BAN), "ooc");
     ASSERT_TRUE(r.early_return.has_value());
     EXPECT_EQ(r.early_return->status, 403);
 

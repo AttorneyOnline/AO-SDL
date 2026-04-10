@@ -252,8 +252,7 @@ TEST_F(ContentModerationDefaultsTest, SlurBlockOnlyLeavesOthersAtDefault) {
 
     EXPECT_TRUE(cfg().value<bool>("content_moderation/enabled"));
     EXPECT_TRUE(cfg().value<bool>("content_moderation/slurs/enabled"));
-    EXPECT_EQ(cfg().value<std::string>("content_moderation/slurs/wordlist_url"),
-              "https://example.invalid/slurs.txt");
+    EXPECT_EQ(cfg().value<std::string>("content_moderation/slurs/wordlist_url"), "https://example.invalid/slurs.txt");
     // Unspecified sub-fields of slurs/ still read from defaults.
     EXPECT_TRUE(cfg().value<std::string>("content_moderation/slurs/exceptions_url").empty());
     EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/slurs/match_score"), 1.0);
