@@ -49,29 +49,21 @@ class AreaOocEndpoint : public NXEndpoint {
         if (max_ooc > 0 && static_cast<int>(action.message.size()) > max_ooc)
             return RestResponse::error(400, "OOC message too long");
 
-        // Content moderation — mirrors the AO2 packet handler path.
-        // Returns an HTTP error for non-broadcast outcomes so the
-        // client sees the same semantic signal as an AO2 client does
-        // via suppressed broadcast.
+        // Content moderation — mirrors the AO2 packet handler path
+        // via the shared apply_content_verdict() helper. KICK / BAN /
+        // PERMA_BAN now correctly invalidate the session and (for
+        // bans) write to BanManager so SessionCreateEndpoint rejects
+        // reconnects. Pre-fix this branch was a 403-only no-op.
+        // Per-message filter: clean messages pass through even for
+        // muted users; ContentModerator::check() returns NONE for
+        // any zero-content-score message regardless of heat.
         if (auto* cm = room().content_moderator()) {
-            // No eager is_muted check — clean messages pass through even
-            // for muted users under the per-message filtering rule.
             auto v = cm->check(req.session->ipid, "ooc", action.message);
-            switch (v.action) {
-            case moderation::ModerationAction::NONE:
-            case moderation::ModerationAction::LOG:
-                break;
-            case moderation::ModerationAction::CENSOR:
+            auto verdict_result = apply_content_verdict(*req.session, v, "ooc");
+            if (verdict_result.early_return)
+                return std::move(*verdict_result.early_return);
+            if (verdict_result.pass_kind == ContentVerdictPass::Censor)
                 action.message = "[filtered]";
-                break;
-            case moderation::ModerationAction::DROP:
-            case moderation::ModerationAction::MUTE:
-                return RestResponse::json(200, {{"accepted", false}, {"reason", "content"}});
-            case moderation::ModerationAction::KICK:
-            case moderation::ModerationAction::BAN:
-            case moderation::ModerationAction::PERMA_BAN:
-                return RestResponse::error(403, "Content moderation: " + v.reason);
-            }
         }
 
         const auto& area_id = it->second;

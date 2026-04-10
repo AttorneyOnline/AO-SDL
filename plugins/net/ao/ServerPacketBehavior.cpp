@@ -61,6 +61,73 @@ void send_mod_notice(AOServer& server, ServerSession& session, moderation::Conte
     server.send(session.client_id, AOPacket("CT", {"Server", msg, "1"}));
 }
 
+/// Apply a moderation verdict to an AO2 session: dispatch the user-
+/// facing notice / KK / KB packet, hit BanManager for BAN/PERMA_BAN,
+/// and queue a deferred close for KICK/BAN/PERMA_BAN. Returns the
+/// `ContentVerdictOutcome` so the caller can decide whether to
+/// continue broadcasting (NONE/LOG/CENSOR) or stop processing the
+/// packet (DROP/MUTE/KICK/BAN/PERMA_BAN).
+///
+/// Extracted because the IC (AOPacketMS) and OOC (AOPacketCT)
+/// handlers used to have ~50 line copies of this switch and any
+/// future refinement (e.g. additional metric labels, different
+/// log severity per channel) would have to land in two places.
+/// The helper takes the channel string ("ic"/"ooc") so the log
+/// line can still differentiate them.
+enum class ContentVerdictOutcome {
+    Pass,    // NONE / LOG: continue broadcasting unchanged
+    Censor,  // CENSOR: caller should swap the message to "[filtered]" and continue
+    Stop,    // DROP / MUTE / KICK / BAN / PERMA_BAN: caller should return immediately
+};
+
+ContentVerdictOutcome apply_content_verdict(AOServer& server, ServerSession& session, moderation::ContentModerator& cm,
+                                            const moderation::ModerationVerdict& verdict, const char* channel) {
+    using moderation::ModerationAction;
+    switch (verdict.action) {
+    case ModerationAction::NONE:
+    case ModerationAction::LOG:
+        return ContentVerdictOutcome::Pass;
+    case ModerationAction::CENSOR:
+        send_mod_notice(server, session, cm, verdict);
+        return ContentVerdictOutcome::Censor;
+    case ModerationAction::DROP:
+    case ModerationAction::MUTE:
+        send_mod_notice(server, session, cm, verdict);
+        Log::log_print(INFO, "AO: %s from %s suppressed [content]: %s", channel,
+                       format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+        return ContentVerdictOutcome::Stop;
+    case ModerationAction::KICK:
+        Log::log_print(WARNING, "AO: kicking %s [content/%s]: %s", format_client_id(session.client_id).c_str(),
+                       channel, verdict.reason.c_str());
+        server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
+        if (server.ws())
+            server.ws()->close_client_deferred(session.client_id);
+        return ContentVerdictOutcome::Stop;
+    case ModerationAction::BAN:
+    case ModerationAction::PERMA_BAN:
+        Log::log_print(WARNING, "AO: banning %s [content/%s]: %s", format_client_id(session.client_id).c_str(),
+                       channel, verdict.reason.c_str());
+        if (auto* bm = server.room().ban_manager()) {
+            BanEntry entry;
+            entry.ipid = session.ipid;
+            entry.ip = session.ip_address;
+            entry.hdid = session.hardware_id;
+            entry.reason = "[auto] content: " + verdict.reason;
+            entry.moderator = "ContentModerator";
+            entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+                                  std::chrono::system_clock::now().time_since_epoch())
+                                  .count();
+            entry.duration = (verdict.action == ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
+            bm->add_ban(std::move(entry));
+        }
+        server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));
+        if (server.ws())
+            server.ws()->close_client_deferred(session.client_id);
+        return ContentVerdictOutcome::Stop;
+    }
+    return ContentVerdictOutcome::Pass;
+}
+
 } // namespace
 
 /// Build an LE (evidence list) packet for an area.
@@ -365,47 +432,13 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
         // or mute state. ContentModerator::check() returns NONE for any
         // message with zero offending-content score.
         auto verdict = cm->check(session.ipid, "ic", action.message);
-        switch (verdict.action) {
-        case moderation::ModerationAction::NONE:
-        case moderation::ModerationAction::LOG:
+        switch (apply_content_verdict(server, session, *cm, verdict, "ic")) {
+        case ContentVerdictOutcome::Pass:
             break;
-        case moderation::ModerationAction::CENSOR:
+        case ContentVerdictOutcome::Censor:
             action.message = "[filtered]";
-            send_mod_notice(server, session, *cm, verdict);
             break;
-        case moderation::ModerationAction::DROP:
-        case moderation::ModerationAction::MUTE:
-            send_mod_notice(server, session, *cm, verdict);
-            Log::log_print(INFO, "AO: IC from %s suppressed [content]: %s", format_client_id(session.client_id).c_str(),
-                           verdict.reason.c_str());
-            return;
-        case moderation::ModerationAction::KICK:
-            Log::log_print(WARNING, "AO: kicking %s for content: %s", format_client_id(session.client_id).c_str(),
-                           verdict.reason.c_str());
-            server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
-            if (server.ws())
-                server.ws()->close_client_deferred(session.client_id);
-            return;
-        case moderation::ModerationAction::BAN:
-        case moderation::ModerationAction::PERMA_BAN:
-            Log::log_print(WARNING, "AO: banning %s for content: %s", format_client_id(session.client_id).c_str(),
-                           verdict.reason.c_str());
-            if (auto* bm = server.room().ban_manager()) {
-                BanEntry entry;
-                entry.ipid = session.ipid;
-                entry.ip = session.ip_address;
-                entry.hdid = session.hardware_id;
-                entry.reason = "[auto] content: " + verdict.reason;
-                entry.moderator = "ContentModerator";
-                entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-                                      std::chrono::system_clock::now().time_since_epoch())
-                                      .count();
-                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
-                bm->add_ban(std::move(entry));
-            }
-            server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));
-            if (server.ws())
-                server.ws()->close_client_deferred(session.client_id);
+        case ContentVerdictOutcome::Stop:
             return;
         }
     }
@@ -506,47 +539,13 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     std::string forwarded_message = message;
     if (auto* cm = server.room().content_moderator()) {
         auto verdict = cm->check(session.ipid, "ooc", message);
-        switch (verdict.action) {
-        case moderation::ModerationAction::NONE:
-        case moderation::ModerationAction::LOG:
+        switch (apply_content_verdict(server, session, *cm, verdict, "ooc")) {
+        case ContentVerdictOutcome::Pass:
             break;
-        case moderation::ModerationAction::CENSOR:
+        case ContentVerdictOutcome::Censor:
             forwarded_message = "[filtered]";
-            send_mod_notice(server, session, *cm, verdict);
             break;
-        case moderation::ModerationAction::DROP:
-        case moderation::ModerationAction::MUTE:
-            send_mod_notice(server, session, *cm, verdict);
-            Log::log_print(INFO, "AO: OOC from %s suppressed [content]: %s",
-                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
-            return;
-        case moderation::ModerationAction::KICK:
-            Log::log_print(WARNING, "AO: kicking %s for content: %s", format_client_id(session.client_id).c_str(),
-                           verdict.reason.c_str());
-            server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
-            if (server.ws())
-                server.ws()->close_client_deferred(session.client_id);
-            return;
-        case moderation::ModerationAction::BAN:
-        case moderation::ModerationAction::PERMA_BAN:
-            Log::log_print(WARNING, "AO: banning %s for content: %s", format_client_id(session.client_id).c_str(),
-                           verdict.reason.c_str());
-            if (auto* bm = server.room().ban_manager()) {
-                BanEntry entry;
-                entry.ipid = session.ipid;
-                entry.ip = session.ip_address;
-                entry.hdid = session.hardware_id;
-                entry.reason = "[auto] content: " + verdict.reason;
-                entry.moderator = "ContentModerator";
-                entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-                                      std::chrono::system_clock::now().time_since_epoch())
-                                      .count();
-                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
-                bm->add_ban(std::move(entry));
-            }
-            server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));
-            if (server.ws())
-                server.ws()->close_client_deferred(session.client_id);
+        case ContentVerdictOutcome::Stop:
             return;
         }
     }

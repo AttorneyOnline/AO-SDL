@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
+#include "game/BanManager.h"
+#include "game/DatabaseManager.h"
 #include "game/GameRoom.h"
 #include "game/ServerSession.h"
+#include "moderation/ModerationTypes.h"
 #include "net/EndpointFactory.h"
 #include "net/RestEndpoint.h"
 #include "net/RestRouter.h"
@@ -11,8 +14,10 @@
 
 #include "net/Http.h"
 
+#include <filesystem>
 #include <set>
 #include <thread>
+#include <unistd.h>
 
 // -- Test helpers ------------------------------------------------------------
 
@@ -2224,6 +2229,169 @@ TEST_F(NXEndpointTest, FullLifecycle_ConnectSelectJoinChatLeave) {
     EXPECT_EQ(room_.session_count(), 0u);
     auto pc = cli.Get("/aonx/v1/server");
     EXPECT_EQ(nlohmann::json::parse(pc->body)["online"], 0);
+}
+
+// ---------------------------------------------------------------------------
+// Content moderation verdict dispatch on the NX REST path
+// ---------------------------------------------------------------------------
+//
+// Regression coverage for the C2 fix: pre-fix, KICK / BAN / PERMA_BAN
+// verdicts on the NX endpoints just returned 403 without invalidating
+// the session token or writing to BanManager. An attacker could keep
+// POSTing IC/OOC requests through the same token because the heat
+// decayed back to zero between requests. These tests drive
+// NXEndpoint::apply_content_verdict directly with hand-crafted
+// verdicts and assert the side effects on a real BanManager + DB.
+
+class NXContentVerdictTest : public NXEndpointTest {
+  protected:
+    void SetUp() override {
+        NXEndpointTest::SetUp();
+        // Spin up an in-memory DB + BanManager and wire them into
+        // the room so apply_content_verdict's add_ban() call lands
+        // somewhere observable.
+        db_path_ = std::filesystem::temp_directory_path() /
+                   ("test_nx_verdict_" + std::to_string(::getpid()) + ".db");
+        ASSERT_TRUE(db_.open(db_path_.string()));
+        ban_manager_.set_db(&db_);
+        ban_manager_.load_from_db();
+        room_.set_ban_manager(&ban_manager_);
+    }
+
+    void TearDown() override {
+        room_.set_ban_manager(nullptr);
+        db_.close();
+        std::filesystem::remove(db_path_);
+        std::filesystem::remove(db_path_.string() + "-wal");
+        std::filesystem::remove(db_path_.string() + "-shm");
+        NXEndpointTest::TearDown();
+    }
+
+    /// Build a verdict with the given action and a synthetic reason.
+    static moderation::ModerationVerdict make_verdict(moderation::ModerationAction action) {
+        moderation::ModerationVerdict v;
+        v.action = action;
+        v.reason = "test";
+        return v;
+    }
+
+    /// Resolve the active session for the bearer token.
+    ServerSession* lookup(const std::string& token) {
+        return room_.find_session_by_token(token);
+    }
+
+    BanManager ban_manager_;
+    DatabaseManager db_;
+    std::filesystem::path db_path_;
+};
+
+TEST_F(NXContentVerdictTest, NoneAndLogPassThrough) {
+    auto token = create_session();
+    auto* session = lookup(token);
+    ASSERT_NE(session, nullptr);
+
+    auto r = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::NONE), "ic");
+    EXPECT_FALSE(r.early_return.has_value());
+    EXPECT_EQ(r.pass_kind, NXEndpoint::ContentVerdictPass::Pass);
+
+    auto r2 = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::LOG), "ic");
+    EXPECT_FALSE(r2.early_return.has_value());
+    EXPECT_EQ(r2.pass_kind, NXEndpoint::ContentVerdictPass::Pass);
+
+    // Session still resolves; no ban was created.
+    EXPECT_NE(lookup(token), nullptr);
+    EXPECT_FALSE(ban_manager_.find_ban(session->ipid).has_value());
+}
+
+TEST_F(NXContentVerdictTest, CensorReturnsCensorOutcomeWithoutEarlyReturn) {
+    auto token = create_session();
+    auto* session = lookup(token);
+    ASSERT_NE(session, nullptr);
+
+    auto r = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::CENSOR), "ic");
+    EXPECT_FALSE(r.early_return.has_value());
+    EXPECT_EQ(r.pass_kind, NXEndpoint::ContentVerdictPass::Censor);
+
+    EXPECT_NE(lookup(token), nullptr);
+    EXPECT_FALSE(ban_manager_.find_ban(session->ipid).has_value());
+}
+
+TEST_F(NXContentVerdictTest, DropReturnsErrorButKeepsSession) {
+    // DROP / MUTE block the single message but the session keeps
+    // working — per-message filtering means subsequent clean
+    // messages still pass through.
+    auto token = create_session();
+    auto* session = lookup(token);
+    ASSERT_NE(session, nullptr);
+    auto ipid = session->ipid;
+
+    auto r = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::DROP), "ooc");
+    ASSERT_TRUE(r.early_return.has_value());
+    EXPECT_EQ(r.early_return->status, 200);
+
+    EXPECT_NE(lookup(token), nullptr);
+    EXPECT_FALSE(ban_manager_.find_ban(ipid).has_value());
+}
+
+TEST_F(NXContentVerdictTest, KickDestroysSessionWithoutBanning) {
+    // KICK invalidates the session token but does NOT add a ban.
+    // The client can reconnect, just has to re-auth.
+    auto token = create_session();
+    auto* session = lookup(token);
+    ASSERT_NE(session, nullptr);
+    auto ipid = session->ipid;
+
+    auto r = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::KICK), "ic");
+    ASSERT_TRUE(r.early_return.has_value());
+    EXPECT_EQ(r.early_return->status, 403);
+
+    // Session token is gone.
+    EXPECT_EQ(lookup(token), nullptr);
+    // No ban added — KICK is a session-only sanction.
+    EXPECT_FALSE(ban_manager_.find_ban(ipid).has_value());
+}
+
+TEST_F(NXContentVerdictTest, BanAddsBanAndDestroysSession) {
+    // BAN: 24-hour timed ban + session destruction. This is the
+    // pre-C2-fix regression case — the old code returned 403 and
+    // left the session valid, so the attacker could keep posting
+    // through the same token until heat decayed.
+    auto token = create_session();
+    auto* session = lookup(token);
+    ASSERT_NE(session, nullptr);
+    auto ipid = session->ipid;
+
+    auto r = NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::BAN), "ic");
+    ASSERT_TRUE(r.early_return.has_value());
+    EXPECT_EQ(r.early_return->status, 403);
+
+    // Session token is dead.
+    EXPECT_EQ(lookup(token), nullptr);
+    // Ban exists in BanManager with the right IPID and a positive
+    // duration (24h = 86400s, not perma).
+    auto ban = ban_manager_.find_ban(ipid);
+    ASSERT_TRUE(ban.has_value());
+    EXPECT_EQ(ban->ipid, ipid);
+    EXPECT_EQ(ban->duration, 24 * 60 * 60);
+    EXPECT_EQ(ban->moderator, "ContentModerator");
+}
+
+TEST_F(NXContentVerdictTest, PermaBanAddsPermanentBan) {
+    // PERMA_BAN: duration sentinel of -2 means "no expiry".
+    auto token = create_session();
+    auto* session = lookup(token);
+    ASSERT_NE(session, nullptr);
+    auto ipid = session->ipid;
+
+    auto r =
+        NXEndpoint::apply_content_verdict(*session, make_verdict(moderation::ModerationAction::PERMA_BAN), "ooc");
+    ASSERT_TRUE(r.early_return.has_value());
+    EXPECT_EQ(r.early_return->status, 403);
+
+    EXPECT_EQ(lookup(token), nullptr);
+    auto ban = ban_manager_.find_ban(ipid);
+    ASSERT_TRUE(ban.has_value());
+    EXPECT_EQ(ban->duration, -2); // perma sentinel
 }
 
 // ---------------------------------------------------------------------------
