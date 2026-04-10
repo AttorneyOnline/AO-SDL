@@ -195,10 +195,16 @@ bool DatabaseManager::create_tables() {
 
     // The two indexes that matter: lookup by IPID (to answer "show me
     // all recent moderation events for this user") and by timestamp
-    // (to answer "show me the last N events" cheaply).
-    exec("CREATE INDEX IF NOT EXISTS idx_mod_events_ipid ON moderation_events(IPID, TIMESTAMP_MS DESC)");
-    exec("CREATE INDEX IF NOT EXISTS idx_mod_events_ts ON moderation_events(TIMESTAMP_MS DESC)");
-    exec("CREATE INDEX IF NOT EXISTS idx_mod_events_action ON moderation_events(ACTION, TIMESTAMP_MS DESC)");
+    // (to answer "show me the last N events" cheaply). Index creation
+    // checks the result for parity with the table creates above —
+    // index creates almost never fail right after a successful CREATE
+    // TABLE, but the inconsistency between checked-table-creates and
+    // unchecked-index-creates was a code-review snag worth resolving.
+    ok = exec("CREATE INDEX IF NOT EXISTS idx_mod_events_ipid ON moderation_events(IPID, TIMESTAMP_MS DESC)") &&
+         exec("CREATE INDEX IF NOT EXISTS idx_mod_events_ts ON moderation_events(TIMESTAMP_MS DESC)") &&
+         exec("CREATE INDEX IF NOT EXISTS idx_mod_events_action ON moderation_events(ACTION, TIMESTAMP_MS DESC)");
+    if (!ok)
+        return false;
 
     ok = exec("CREATE TABLE IF NOT EXISTS mutes ("
               "  ID          INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -210,9 +216,9 @@ bool DatabaseManager::create_tables() {
               ")");
     if (!ok)
         return false;
-    exec("CREATE INDEX IF NOT EXISTS idx_mutes_ipid ON mutes(IPID)");
-    exec("CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(EXPIRES_AT)");
-    return true;
+    ok = exec("CREATE INDEX IF NOT EXISTS idx_mutes_ipid ON mutes(IPID)") &&
+         exec("CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(EXPIRES_AT)");
+    return ok;
 }
 
 bool DatabaseManager::migrate() {
@@ -237,30 +243,32 @@ bool DatabaseManager::migrate() {
     // it's idempotent on a reopen after rollback.
     if (!exec("BEGIN IMMEDIATE"))
         return false;
-    auto rollback_on_failure = [this](bool ok) {
-        if (!ok)
-            exec("ROLLBACK");
-        return ok;
+    // Roll back the open transaction and report failure to the
+    // caller. Only ever called on the failure path, so the previous
+    // bool-conditional version of this lambda was dead code.
+    auto rollback_and_fail = [this]() {
+        exec("ROLLBACK");
+        return false;
     };
 
     switch (version) {
     case 0:
         if (!exec("PRAGMA user_version = 1"))
-            return rollback_on_failure(false);
+            return rollback_and_fail();
         [[fallthrough]];
     case 1:
         // v1 → v2: moderation_events and mutes. create_tables() runs
         // CREATE IF NOT EXISTS unconditionally every open(), so there
         // is nothing to do here beyond bumping user_version.
         if (!exec("PRAGMA user_version = 2"))
-            return rollback_on_failure(false);
+            return rollback_and_fail();
         [[fallthrough]];
     default:
         break;
     }
 
     if (!exec("COMMIT"))
-        return rollback_on_failure(false);
+        return rollback_and_fail();
     return true;
 }
 
