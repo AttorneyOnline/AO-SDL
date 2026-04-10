@@ -70,7 +70,13 @@ int main(int /*argc*/, char* argv[]) {
     bool interactive = IS_INTERACTIVE();
     TerminalUI ui;
     LogSinkSetup log_sinks;
-    log_sinks.init(cfg, ui, interactive);
+
+    // The moderation audit log is constructed here (before log_sinks
+    // init) so its destructor runs AFTER log_sinks.teardown(). This
+    // ensures the audit flushers stop before the audit log itself
+    // goes out of scope.
+    moderation::ModerationAuditLog mod_audit_log;
+    log_sinks.init(cfg, ui, interactive, &mod_audit_log);
 
     Log::log_print(INFO, "Server: %s", cfg.server_name().c_str());
 
@@ -155,12 +161,13 @@ int main(int /*argc*/, char* argv[]) {
     // (ic/ooc) are enabled, so there is no way to "accidentally" broadcast
     // behavior to production without explicit config.
     //
-    // The audit log is a separate instance from the regular Log sinks —
-    // moderation events can be shipped to their own file / Loki stream /
-    // CloudWatch stream without dragging every INFO log along. The sqlite
-    // sink (if enabled) also writes rows to the moderation_events table,
-    // which is queryable via DatabaseManager::query_moderation_events().
-    moderation::ModerationAuditLog mod_audit_log;
+    // The audit log (mod_audit_log, declared above next to log_sinks) is a
+    // separate instance from the regular Log sinks — moderation events can
+    // be shipped to their own file / Loki stream / CloudWatch stream without
+    // dragging every INFO log along. Loki and CloudWatch audit sinks are
+    // initialized by log_sinks.init() when configured. The sqlite sink (if
+    // enabled) also writes rows to the moderation_events table, which is
+    // queryable via DatabaseManager::query_moderation_events().
     moderation::ContentModerator content_moderator;
     {
         auto cm_cfg = cfg.content_moderation_config();

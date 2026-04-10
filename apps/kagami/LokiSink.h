@@ -23,6 +23,11 @@ class LokiSink {
     struct Config {
         std::string url = "http://loki:3100"; // Loki base URL
         int flush_interval_seconds = 2;
+        /// Grafana "job" label applied to every pushed stream. The
+        /// default groups logs under `{job="kagami"}`. The moderation
+        /// audit sink overrides this to `{job="kagami_mod_audit"}` so
+        /// Grafana queries can separate the two streams cleanly.
+        std::string job_label = "kagami";
     };
 
     explicit LokiSink(Config config) : config_(std::move(config)), client_(config_.url) {
@@ -120,7 +125,7 @@ class LokiSink {
         payload["streams"] = nlohmann::json::array();
         for (auto& [level, values] : streams) {
             payload["streams"].push_back({
-                {"stream", {{"job", "kagami"}, {"level", level}}},
+                {"stream", {{"job", config_.job_label}, {"level", level}}},
                 {"values", values},
             });
         }

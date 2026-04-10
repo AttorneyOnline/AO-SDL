@@ -8,14 +8,28 @@ class LokiSink;
 class ServerSettings;
 class TerminalUI;
 
-/// Manages the lifecycle of all log sinks (file, CloudWatch, Loki).
-/// Call init() at startup and teardown() before destroying protocol backends.
+namespace moderation {
+class ModerationAuditLog;
+}
+
+/// Manages the lifecycle of all log sinks (file, CloudWatch, Loki)
+/// AND the dedicated moderation audit sinks. Keeping them in one
+/// place means shutdown ordering is always correct: audit flushers
+/// stop before the worker threads that may push to them.
+///
+/// Call init() at startup and teardown() before destroying protocol
+/// backends. Passing a non-null ModerationAuditLog* enables the
+/// dedicated audit channel — the Loki and CloudWatch instances here
+/// are SEPARATE from the regular log sinks, with distinct stream
+/// labels so moderation events can be queried without dragging the
+/// full application log along with them.
 class LogSinkSetup {
   public:
     LogSinkSetup();
     ~LogSinkSetup();
 
-    void init(const ServerSettings& cfg, TerminalUI& ui, bool interactive);
+    void init(const ServerSettings& cfg, TerminalUI& ui, bool interactive,
+              moderation::ModerationAuditLog* audit = nullptr);
 
     /// Remove all sinks and stop background flushers.
     /// Must be called before protocol backends are destroyed.
@@ -25,4 +39,11 @@ class LogSinkSetup {
     std::shared_ptr<std::ofstream> log_file_;
     std::unique_ptr<CloudWatchSink> cw_sink_;
     std::unique_ptr<LokiSink> loki_sink_;
+
+    // Dedicated moderation audit sinks. Each owns its own Loki/CW
+    // instance so it can push to a distinct stream label without
+    // interfering with the application log sinks above.
+    std::unique_ptr<LokiSink> mod_audit_loki_;
+    std::unique_ptr<CloudWatchSink> mod_audit_cw_;
+    moderation::ModerationAuditLog* audit_ = nullptr;
 };
