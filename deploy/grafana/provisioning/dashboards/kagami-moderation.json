@@ -16,7 +16,7 @@
   "templating": {
     "list": []
   },
-  "title": "Kagami — Content Moderation",
+  "title": "Kagami \u2014 Content Moderation",
   "uid": "kagami-moderation",
   "version": 12,
   "time": {
@@ -195,7 +195,7 @@
         "x": 0,
         "y": 4
       },
-      "description": "Rate of moderation decisions by action, stacked. Most traffic should sit on 'none'; escalation through log → censor → drop → mute → kick → ban indicates active abuse response.",
+      "description": "Rate of moderation decisions by action, stacked. Most traffic should sit on 'none'; escalation through log \u2192 censor \u2192 drop \u2192 mute \u2192 kick \u2192 ban indicates active abuse response.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -265,7 +265,7 @@
         "x": 0,
         "y": 13
       },
-      "description": "How often each moderation axis scores above its visibility floor. Helps tune HeatConfig weights — axes that fire often but produce nuisance actions probably need lower weights.",
+      "description": "How often each moderation axis scores above its visibility floor. Helps tune HeatConfig weights \u2014 axes that fire often but produce nuisance actions probably need lower weights.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -321,7 +321,7 @@
     },
     {
       "id": 9,
-      "title": "Layer latency — mean (ns per call, 5m)",
+      "title": "Layer latency \u2014 mean (ns per call, 5m)",
       "type": "timeseries",
       "gridPos": {
         "h": 9,
@@ -329,7 +329,7 @@
         "x": 0,
         "y": 22
       },
-      "description": "Per-layer mean latency. unicode and urls are sub-millisecond rules-based layers. remote (OpenAI) is ~50-500ms when enabled. embeddings (llama.cpp) varies by model size — typically 10-50ms for bge-small.",
+      "description": "Per-layer mean latency. unicode and urls are sub-millisecond rules-based layers. remote (OpenAI) is ~50-500ms when enabled. embeddings (llama.cpp) varies by model size \u2014 typically 10-50ms for bge-small.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -456,7 +456,7 @@
         "x": 0,
         "y": 39
       },
-      "description": "Structured view of the ModerationAuditLog CloudWatch sink, parsed out of the JSON payload. Columns: timestamp, action, channel, ipid, heat_after, reason, message_sample, and the per-axis scores that fired. Query uses CloudWatch Logs Insights regex parse on the JSON line — adjust the regexes in the expression if you add new axes.",
+      "description": "Structured view of the ModerationAuditLog CloudWatch sink, parsed out of the JSON payload. Columns: timestamp, action, channel, ipid, heat_after, reason, message_sample, and the per-axis scores that fired. Query uses CloudWatch Logs Insights regex parse on the JSON line \u2014 adjust the regexes in the expression if you add new axes.",
       "datasource": {
         "type": "cloudwatch",
         "uid": "cloudwatch"
@@ -471,7 +471,7 @@
               "name": "/kagami/kagami-staging"
             }
           ],
-          "expression": "fields @timestamp\n| filter @logStream = \"moderation\"\n| parse @message /\"action\":\"(?<action>[^\"]+)\"/\n| parse @message /\"channel\":\"(?<channel>[^\"]+)\"/\n| parse @message /\"ipid\":\"(?<ipid>[^\"]*)\"/\n| parse @message /\"heat_after\":(?<heat>[0-9.e+-]+)/\n| parse @message /\"reason\":\"(?<reason>[^\"]*)\"/\n| parse @message /\"message_sample\":\"(?<sample>[^\"]*)\"/\n| parse @message /\"visual_noise\":(?<visual_noise>[0-9.e+-]+)/\n| parse @message /\"link_risk\":(?<link_risk>[0-9.e+-]+)/\n| parse @message /\"toxicity\":(?<toxicity>[0-9.e+-]+)/\n| parse @message /\"hate\":(?<hate>[0-9.e+-]+)/\n| parse @message /\"sexual\":(?<sexual>[0-9.e+-]+)/\n| parse @message /\"sexual_minors\":(?<sexual_minors>[0-9.e+-]+)/\n| parse @message /\"violence\":(?<violence>[0-9.e+-]+)/\n| parse @message /\"self_harm\":(?<self_harm>[0-9.e+-]+)/\n| parse @message /\"semantic_echo\":(?<semantic_echo>[0-9.e+-]+)/\n| display @timestamp, action, channel, ipid, heat, reason, sample, visual_noise, link_risk, toxicity, hate, sexual, sexual_minors, violence, self_harm, semantic_echo\n| sort @timestamp desc\n| limit 200"
+          "expression": "fields @timestamp\n| filter @logStream = \"moderation\"\n| parse @message /\"action\":\"(?<action>[^\"]+)\"/\n| parse @message /\"channel\":\"(?<channel>[^\"]+)\"/\n| parse @message /\"ipid\":\"(?<ipid>[^\"]*)\"/\n| parse @message /\"heat_after\":(?<heat>[0-9.e+-]+)/\n| parse @message /\"reason\":\"(?<reason>[^\"]*)\"/\n| parse @message /\"message_sample\":\"(?<sample>[^\"]*)\"/\n| parse @message /\"visual_noise\":(?<visual_noise>[0-9.e+-]+)/\n| parse @message /\"link_risk\":(?<link_risk>[0-9.e+-]+)/\n| parse @message /\"slurs\":(?<slurs>[0-9.e+-]+)/\n| parse @message /\"toxicity\":(?<toxicity>[0-9.e+-]+)/\n| parse @message /\"hate\":(?<hate>[0-9.e+-]+)/\n| parse @message /\"sexual\":(?<sexual>[0-9.e+-]+)/\n| parse @message /\"sexual_minors\":(?<sexual_minors>[0-9.e+-]+)/\n| parse @message /\"violence\":(?<violence>[0-9.e+-]+)/\n| parse @message /\"self_harm\":(?<self_harm>[0-9.e+-]+)/\n| parse @message /\"semantic_echo\":(?<semantic_echo>[0-9.e+-]+)/\n| display @timestamp, action, channel, ipid, heat, reason, sample, visual_noise, link_risk, slurs, toxicity, hate, sexual, sexual_minors, violence, self_harm, semantic_echo\n| sort @timestamp desc\n| limit 200"
         }
       ],
       "options": {
@@ -715,7 +715,7 @@
     },
     {
       "id": 15,
-      "title": "Embedding model — tokens/sec (5m)",
+      "title": "Embedding model \u2014 tokens/sec (5m)",
       "type": "stat",
       "description": "Token throughput of the llama.cpp embedding backend. For bge-small-en on arm64 CPU, expect ~200-500 tok/s sustained; lower means the backend is under-fed (most traffic isn't getting clustered) or the model is CPU-bound. Use alongside the per-call token count to sanity-check traffic shape.",
       "datasource": {
@@ -756,7 +756,7 @@
     },
     {
       "id": 16,
-      "title": "Embedding — mean tokens / call",
+      "title": "Embedding \u2014 mean tokens / call",
       "type": "stat",
       "description": "Average token count per embedding call. For a chat server this tracks message length in tokens; a sudden spike usually means someone's trying to maximize model cost or exfiltrate via long inputs.",
       "datasource": {
@@ -784,9 +784,9 @@
     },
     {
       "id": 17,
-      "title": "Embedding — decode time / token (ns)",
+      "title": "Embedding \u2014 decode time / token (ns)",
       "type": "stat",
-      "description": "Nanoseconds of llama_decode (model forward pass) per token processed. This is the raw cost of the embedding model independent of tokenizer overhead. For bge-small on arm64 CPU expect 50-200 µs/tok; sudden growth indicates CPU contention.",
+      "description": "Nanoseconds of llama_decode (model forward pass) per token processed. This is the raw cost of the embedding model independent of tokenizer overhead. For bge-small on arm64 CPU expect 50-200 \u00b5s/tok; sudden growth indicates CPU contention.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -922,7 +922,7 @@
     },
     {
       "id": 14,
-      "title": "Action ladder — events per 1m bucket",
+      "title": "Action ladder \u2014 events per 1m bucket",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -930,7 +930,7 @@
         "x": 0,
         "y": 72
       },
-      "description": "Raw event counts per action in 1-minute buckets. A sustained climb through the ladder (more drops → more mutes → more kicks) is a warning that a burst of abuse is in progress.",
+      "description": "Raw event counts per action in 1-minute buckets. A sustained climb through the ladder (more drops \u2192 more mutes \u2192 more kicks) is a warning that a burst of abuse is in progress.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -952,6 +952,77 @@
             "fillOpacity": 80
           },
           "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Layer 2 skipped calls by reason (5m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 80
+      },
+      "description": "Why the remote classifier call was skipped. safe_hint = incoming message embedded close to a known-safe anchor (cost savings). layer1_sufficient = Layer 1 (unicode/urls/slurs) already produced enough heat delta to cross the mute threshold, so the classifier can't escalate. rate_limit = per-IPID token bucket exhausted (throttling an abuser).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(kagami_moderation_layer2_skipped_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 40
+          },
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "Layer 2 skip share (last 1h)",
+      "type": "piechart",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 80
+      },
+      "description": "Proportional view of why Layer 2 was skipped over the last hour. On a healthy deployment with the safe-hint layer active, safe_hint should dominate (most messages are mundane chatter). A persistent rate_limit slice means an IPID is sustaining remote calls above the token bucket refill \u2014 inspect the top contributing IPID in the CloudWatch events table.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(kagami_moderation_layer2_skipped_total[1h]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
         }
       }
     }
