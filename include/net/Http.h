@@ -1112,7 +1112,8 @@ class ClientImpl {
 
   private:
     Result execute_request(const std::string& method, const std::string& path, const Headers& headers,
-                           const std::string& body, ContentReceiver content_receiver = nullptr);
+                           const std::string& body, ContentReceiver content_receiver = nullptr,
+                           ResponseHandler response_handler = nullptr);
     bool ensure_connected(bool& is_fresh);
 
     int connection_timeout_ms() const;

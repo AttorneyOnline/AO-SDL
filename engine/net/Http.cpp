@@ -1027,7 +1027,8 @@ bool ClientImpl::ensure_connected(bool& is_fresh) {
 }
 
 Result ClientImpl::execute_request(const std::string& method, const std::string& path, const Headers& headers,
-                                   const std::string& body, ContentReceiver content_receiver) {
+                                   const std::string& body, ContentReceiver content_receiver,
+                                   ResponseHandler response_handler) {
     std::lock_guard lock(socket_mutex_);
 
     if (is_stopping_)
@@ -1090,6 +1091,24 @@ Result ClientImpl::execute_request(const std::string& method, const std::string&
         auto res = std::make_unique<Response>();
         res->status = pr.status;
         res->headers = std::move(pr.headers);
+
+        // Invoke the caller-supplied ResponseHandler BEFORE streaming
+        // the body. This is the hook that lets streaming GET consumers
+        // see the status code and headers before deciding what to do
+        // with the body bytes (e.g. TextListFetcher capturing the
+        // status + Location header for manual redirect handling).
+        //
+        // If the handler returns false, abort the request: close the
+        // socket and return a falsy Result with Error::Canceled. We
+        // return a null response (rather than attaching the partial
+        // response we've parsed so far) so callers that check
+        // `if (!result)` uniformly see the abort as a failure path —
+        // the handler already saw the headers that led it to abort,
+        // so nothing useful is lost by dropping them from the return.
+        if (response_handler && !response_handler(*res)) {
+            socket_.reset();
+            return Result(nullptr, Error::Canceled);
+        }
 
         // Determine body length
         auto te = res->get_header_value("Transfer-Encoding");
@@ -1183,22 +1202,26 @@ Result ClientImpl::Get(const std::string& path, const Headers& headers, ContentR
     return Get(path, headers, std::move(content_receiver));
 }
 
-Result ClientImpl::Get(const std::string& path, ResponseHandler, ContentReceiver content_receiver) {
-    return Get(path, std::move(content_receiver));
+Result ClientImpl::Get(const std::string& path, ResponseHandler response_handler, ContentReceiver content_receiver) {
+    return execute_request("GET", path, default_headers_, "", std::move(content_receiver), std::move(response_handler));
 }
 
-Result ClientImpl::Get(const std::string& path, const Headers& headers, ResponseHandler,
+Result ClientImpl::Get(const std::string& path, const Headers& headers, ResponseHandler response_handler,
                        ContentReceiver content_receiver) {
-    return Get(path, headers, std::move(content_receiver));
+    Headers merged = default_headers_;
+    for (auto& [k, v] : headers)
+        merged.emplace(k, v);
+    return execute_request("GET", path, merged, "", std::move(content_receiver), std::move(response_handler));
 }
 
-Result ClientImpl::Get(const std::string& path, ResponseHandler, ContentReceiver content_receiver, Progress) {
-    return Get(path, std::move(content_receiver));
+Result ClientImpl::Get(const std::string& path, ResponseHandler response_handler, ContentReceiver content_receiver,
+                       Progress) {
+    return Get(path, std::move(response_handler), std::move(content_receiver));
 }
 
-Result ClientImpl::Get(const std::string& path, const Headers& headers, ResponseHandler,
+Result ClientImpl::Get(const std::string& path, const Headers& headers, ResponseHandler response_handler,
                        ContentReceiver content_receiver, Progress) {
-    return Get(path, headers, std::move(content_receiver));
+    return Get(path, headers, std::move(response_handler), std::move(content_receiver));
 }
 
 Result ClientImpl::Get(const std::string& path, const Params&, const Headers& headers, Progress) {
@@ -1210,9 +1233,9 @@ Result ClientImpl::Get(const std::string& path, const Params&, const Headers& he
     return Get(path, headers, std::move(content_receiver));
 }
 
-Result ClientImpl::Get(const std::string& path, const Params&, const Headers& headers, ResponseHandler,
+Result ClientImpl::Get(const std::string& path, const Params&, const Headers& headers, ResponseHandler response_handler,
                        ContentReceiver content_receiver, Progress) {
-    return Get(path, headers, std::move(content_receiver));
+    return Get(path, headers, std::move(response_handler), std::move(content_receiver));
 }
 
 // HEAD
