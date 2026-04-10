@@ -8,7 +8,6 @@
 #include "event/OutgoingHealthBarEvent.h"
 #include "event/OutgoingMusicEvent.h"
 #include "platform/HardwareId.h"
-#include "utils/Log.h"
 
 AOClient::AOClient() {
     ao_register_packet_types();
@@ -27,18 +26,10 @@ void AOClient::on_message(const std::string& message) {
         std::string complete_msg = incomplete_buf.substr(0, delimiter_pos + std::strlen(AOPacket::DELIMITER));
         incomplete_buf.erase(0, delimiter_pos + std::strlen(AOPacket::DELIMITER));
 
-        try {
-            std::unique_ptr<AOPacket> packet = AOPacket::deserialize(complete_msg);
-            if (packet->is_valid()) {
-                packet->handle(*this);
-            }
-            else {
-                Log::log_print(ERR, "Failed to parse AOPacket from message: %s", complete_msg.c_str());
-            }
-        }
-        catch (const std::exception& e) {
-            Log::log_print(ERR, "Exception while handling message: %s, Error: %s", complete_msg.c_str(), e.what());
-        }
+        // All exception handling — parse errors, handler bugs, bad numeric
+        // fields — is centralized inside safe_dispatch. Never call
+        // AOPacket::deserialize + handle() directly; see AOPacket.h for why.
+        ao_packet::safe_dispatch(complete_msg, "AOClient", [this](AOPacket& pkt) { pkt.handle(*this); });
     }
 }
 
