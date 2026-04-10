@@ -9,13 +9,16 @@
   "refresh": "15s",
   "liveNow": true,
   "schemaVersion": 39,
-  "tags": ["kagami", "moderation"],
+  "tags": [
+    "kagami",
+    "moderation"
+  ],
   "templating": {
     "list": []
   },
   "title": "Kagami — Content Moderation",
   "uid": "kagami-moderation",
-  "version": 1,
+  "version": 12,
   "time": {
     "from": "now-6h",
     "to": "now"
@@ -23,58 +26,117 @@
   "panels": [
     {
       "id": 1,
-      "title": "Action mix (rate over 5m)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "description": "Rate of moderation decisions by action across both channels. A ladder climbing through log → censor → drop → mute → kick → ban corresponds to escalating heat; most traffic should sit on 'none' or 'log'.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "title": "Check throughput (req/s, last 5m)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "description": "Sustained rate of ContentModerator::check() calls. This is the total moderation workload across IC and OOC, both protocols.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "targets": [
         {
-          "expr": "sum by (action) (rate(kagami_moderation_events_total[5m]))",
-          "legendFormat": "{{action}}",
+          "expr": "rate(kagami_moderation_checks_total[5m])",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } },
-          "unit": "ops"
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "orange",
+                "value": 100
+              }
+            ]
+          }
         }
       }
     },
     {
       "id": 2,
-      "title": "Channel breakdown (rate over 5m)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "description": "IC vs OOC split. Most moderation events should land on OOC for typical chat servers; a spike in IC events usually means a courtroom is being flooded.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "title": "Mean check() latency",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "description": "Average time in ContentModerator::check() over the last 5 minutes, including all enabled layers and audit log fan-out. Watch this for drift after enabling Layer 2 (remote) or Layer 3 (embeddings).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "targets": [
         {
-          "expr": "sum by (channel) (rate(kagami_moderation_events_total[5m]))",
-          "legendFormat": "{{channel}}",
+          "expr": "rate(kagami_moderation_check_nanoseconds_total[5m]) / rate(kagami_moderation_checks_total[5m])",
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "ops" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns"
+        }
+      }
     },
     {
       "id": 3,
-      "title": "Tracked IPIDs with heat",
+      "title": "Tracked IPIDs (heat > 0)",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
-      "description": "Count of clients currently accumulating moderation heat. A spike here tends to precede enforcement actions.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "kagami_moderation_heat_tracked_ipids", "refId": "A" }],
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "description": "Count of clients currently carrying nonzero moderation heat. Decays over time as users stop offending.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "kagami_moderation_heat_tracked_ipids",
+          "refId": "A"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "orange", "value": 20 },
-              { "color": "red", "value": 50 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
             ]
           }
         }
@@ -84,18 +146,40 @@
       "id": 4,
       "title": "Active mutes",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
-      "description": "IPIDs currently under an auto-mute. Should drop to zero within mute_duration_seconds of the last offense.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "kagami_moderation_muted_ipids", "refId": "A" }],
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "description": "IPIDs currently under an auto-mute entry (persisted in kagami.db). Drops as expires_at passes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "kagami_moderation_muted_ipids",
+          "refId": "A"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 3 },
-              { "color": "red", "value": 10 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           }
         }
@@ -103,26 +187,237 @@
     },
     {
       "id": 5,
-      "title": "Mean check latency (ns)",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
-      "description": "Average time spent in ContentModerator::check() including all enabled layers and audit log fan-out. Watch for drift after enabling Layer 2 (remote) or Layer 3 (embeddings).",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "title": "Action mix (rate over 5m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "description": "Rate of moderation decisions by action, stacked. Most traffic should sit on 'none'; escalation through log → censor → drop → mute → kick → ban indicates active abuse response.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "targets": [
         {
-          "expr": "rate(kagami_moderation_check_nanoseconds_total[5m]) / rate(kagami_moderation_checks_total[5m])",
+          "expr": "sum by (action) (rate(kagami_moderation_events_total[5m]))",
+          "legendFormat": "{{action}}",
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "ns" } }
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 60
+          },
+          "unit": "ops"
+        }
+      }
     },
     {
       "id": 6,
-      "title": "Remote classifier error rate",
+      "title": "Channel split (rate over 5m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "description": "IC vs OOC event split. A surge in IC events usually means a courtroom is being flooded; OOC is the more common chat path.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(kagami_moderation_events_total[5m]))",
+          "legendFormat": "{{channel}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 60
+          },
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Per-axis fire rate (5m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "description": "How often each moderation axis scores above its visibility floor. Helps tune HeatConfig weights — axes that fire often but produce nuisance actions probably need lower weights.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (axis) (rate(kagami_moderation_axis_fires_total[5m]))",
+          "legendFormat": "{{axis}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Per-axis fire share (last 1h)",
+      "type": "piechart",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "description": "Relative distribution of axis fires over the last hour. A well-tuned deployment sees mostly visual_noise/link_risk/toxicity; hate and sexual_minors should be rare signals when they do hit.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (axis) (increase(kagami_moderation_axis_fires_total[1h]))",
+          "legendFormat": "{{axis}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Layer latency — mean (ns per call, 5m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "description": "Per-layer mean latency. unicode and urls are sub-millisecond rules-based layers. remote (OpenAI) is ~50-500ms when enabled. embeddings (llama.cpp) varies by model size — typically 10-50ms for bge-small.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (layer) (rate(kagami_moderation_layer_nanoseconds_total[5m])) / sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Layer call rate (5m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "description": "How often each layer runs. Layers short-circuit when their config disables them, so this is a deployment sanity check: if the remote layer shows zero calls despite enabled=true, the API key is probably missing or empty.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Remote classifier errors by cause (15m)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "description": "Failures of the OpenAI moderation API, broken down by cause: transport (network/timeout), http_4xx (usually auth), http_5xx (upstream outage). With fail_open=true (default), errors are silently absorbed and this is the only way to notice.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(kagami_moderation_remote_errors_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Remote classifier error total (15m)",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
-      "description": "Count of non-2xx responses from the OpenAI moderation endpoint in the last 15 minutes, grouped by cause. With fail_open=true, errors are silently absorbed and this is the only way to notice.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "description": "Count of remote classifier failures in the last 15 minutes, across all causes. A persistent nonzero reading indicates a misconfigured API key or an OpenAI incident; the moderation stack keeps working because Layer 1 carries the decision.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "targets": [
         {
           "expr": "sum(increase(kagami_moderation_remote_errors_total[15m]))",
@@ -134,53 +429,38 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "red", "value": 50 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
             ]
           }
         }
       }
     },
     {
-      "id": 7,
-      "title": "Per-layer mean latency (ns)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
-      "description": "How long each moderation layer takes per invocation. unicode and urls are sub-millisecond; remote is ~100ms when enabled; embeddings varies by model size.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "expr": "sum by (layer) (rate(kagami_moderation_layer_nanoseconds_total[5m])) / sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
-          "legendFormat": "{{layer}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "ns" } }
-    },
-    {
-      "id": 8,
-      "title": "Layer call rate (5m)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
-      "description": "How often each layer runs. Layers short-circuit when config disables them, so this panel is also a deployment sanity check: if the remote layer has zero calls despite being enabled, check the API key.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "expr": "sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
-          "legendFormat": "{{layer}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "ops" } }
-    },
-    {
-      "id": 9,
-      "title": "Recent moderation events (CloudWatch)",
-      "type": "logs",
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 20 },
-      "description": "JSON-structured moderation events shipped to CloudWatch. Set the CloudWatch log group in kagami.json under content_moderation.audit.cloudwatch_log_group. Filter syntax is CloudWatch Logs Insights — adjust the `fields` line to surface additional axes.",
-      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "id": 13,
+      "title": "Recent moderation events (parsed, CloudWatch / moderation stream)",
+      "type": "table",
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "description": "Structured view of the ModerationAuditLog CloudWatch sink, parsed out of the JSON payload. Columns: timestamp, action, channel, ipid, heat_after, reason, message_sample, and the per-axis scores that fired. Query uses CloudWatch Logs Insights regex parse on the JSON line — adjust the regexes in the expression if you add new axes.",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
       "targets": [
         {
           "refId": "A",
@@ -191,29 +471,489 @@
               "name": "/kagami/kagami-staging"
             }
           ],
-          "expression": "fields @timestamp, @message\n| filter @logStream like /moderation/\n| sort @timestamp desc\n| limit 200"
+          "expression": "fields @timestamp\n| filter @logStream = \"moderation\"\n| parse @message /\"action\":\"(?<action>[^\"]+)\"/\n| parse @message /\"channel\":\"(?<channel>[^\"]+)\"/\n| parse @message /\"ipid\":\"(?<ipid>[^\"]*)\"/\n| parse @message /\"heat_after\":(?<heat>[0-9.e+-]+)/\n| parse @message /\"reason\":\"(?<reason>[^\"]*)\"/\n| parse @message /\"message_sample\":\"(?<sample>[^\"]*)\"/\n| parse @message /\"visual_noise\":(?<visual_noise>[0-9.e+-]+)/\n| parse @message /\"link_risk\":(?<link_risk>[0-9.e+-]+)/\n| parse @message /\"toxicity\":(?<toxicity>[0-9.e+-]+)/\n| parse @message /\"hate\":(?<hate>[0-9.e+-]+)/\n| parse @message /\"sexual\":(?<sexual>[0-9.e+-]+)/\n| parse @message /\"sexual_minors\":(?<sexual_minors>[0-9.e+-]+)/\n| parse @message /\"violence\":(?<violence>[0-9.e+-]+)/\n| parse @message /\"self_harm\":(?<self_harm>[0-9.e+-]+)/\n| parse @message /\"semantic_echo\":(?<semantic_echo>[0-9.e+-]+)/\n| display @timestamp, action, channel, ipid, heat, reason, sample, visual_noise, link_risk, toxicity, hate, sexual, sexual_minors, violence, self_harm, semantic_echo\n| sort @timestamp desc\n| limit 200"
         }
       ],
       "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "action"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "none": {
+                        "color": "text",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "log": {
+                        "color": "blue",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "censor": {
+                        "color": "yellow",
+                        "index": 2
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "drop": {
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "mute": {
+                        "color": "orange",
+                        "index": 4
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "kick": {
+                        "color": "red",
+                        "index": 5
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "ban": {
+                        "color": "red",
+                        "index": 6
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "perma_ban": {
+                        "color": "dark-red",
+                        "index": 7
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "channel"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ipid"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heat"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sample"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 350
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "visual_noise|link_risk|toxicity|hate|sexual|sexual_minors|violence|self_harm|semantic_echo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.15
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.4
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.7
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     {
-      "id": 10,
-      "title": "Action ladder heatmap",
-      "type": "heatmap",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
-      "description": "Distribution of moderation actions over time. A bar climbing up the action axis (more severe actions over time) indicates heat escalation.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 15,
+      "title": "Embedding model — tokens/sec (5m)",
+      "type": "stat",
+      "description": "Token throughput of the llama.cpp embedding backend. For bge-small-en on arm64 CPU, expect ~200-500 tok/s sustained; lower means the backend is under-fed (most traffic isn't getting clustered) or the model is CPU-bound. Use alongside the per-call token count to sanity-check traffic shape.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 59
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_embedding_tokens_total[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "gray",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Embedding — mean tokens / call",
+      "type": "stat",
+      "description": "Average token count per embedding call. For a chat server this tracks message length in tokens; a sudden spike usually means someone's trying to maximize model cost or exfiltrate via long inputs.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 59
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_embedding_tokens_total[5m]) / rate(kagami_moderation_layer_calls_total{layer=\"embeddings\"}[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Embedding — decode time / token (ns)",
+      "type": "stat",
+      "description": "Nanoseconds of llama_decode (model forward pass) per token processed. This is the raw cost of the embedding model independent of tokenizer overhead. For bge-small on arm64 CPU expect 50-200 µs/tok; sudden growth indicates CPU contention.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 59
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_embedding_decode_nanoseconds_total[5m]) / rate(kagami_moderation_embedding_tokens_total[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Semantic cluster fires (15m)",
+      "type": "stat",
+      "description": "Count of times the Layer 3 semantic detector crossed cluster_threshold distinct IPIDs in its sliding window. Nonzero means a coordinated paraphrase campaign was detected.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 59
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(kagami_moderation_semantic_cluster_fires_total[15m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Embedding decode vs tokenize breakdown (5m)",
+      "type": "timeseries",
+      "description": "Where time is being spent inside the embedding backend: tokenize (BPE/WordPiece) vs decode (model forward pass). Decode should dominate for any non-trivial input; tokenize time spiking without decode moving usually means unusually large inputs.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_embedding_tokenize_nanoseconds_total[5m])",
+          "legendFormat": "tokenize",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(kagami_moderation_embedding_decode_nanoseconds_total[5m])",
+          "legendFormat": "decode",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 40
+          },
+          "unit": "nsps"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Embedding backend errors (5m)",
+      "type": "timeseries",
+      "description": "Failures from EmbeddingBackend::embed by cause: not_ready (backend not loaded), empty_text (caller bug), tokenize (vocab mismatch), decode (llama.cpp failure), other. A persistent nonzero reading indicates the embedding layer is silently degrading and Layer 3 scoring is stalled.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(kagami_moderation_embedding_errors_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Action ladder — events per 1m bucket",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "description": "Raw event counts per action in 1-minute buckets. A sustained climb through the ladder (more drops → more mutes → more kicks) is a warning that a burst of abuse is in progress.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "targets": [
         {
           "expr": "sum by (action) (increase(kagami_moderation_events_total[1m]))",
           "legendFormat": "{{action}}",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          },
+          "unit": "short"
+        }
+      }
     }
   ]
 }

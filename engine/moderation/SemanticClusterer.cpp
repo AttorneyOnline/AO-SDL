@@ -1,10 +1,10 @@
 #include "moderation/SemanticClusterer.h"
 
+#include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <utility>
 
 namespace moderation {
@@ -50,6 +50,24 @@ void SemanticClusterer::prune_locked(int64_t now_ms) {
 }
 
 SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::string_view message) {
+    // Metric families. Static locals so registration happens once per
+    // process and the hot path is just an atomic increment.
+    static auto& embed_tokens = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_embedding_tokens_total",
+        "Total tokens processed by the embedding backend");
+    static auto& embed_tokenize_ns = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_embedding_tokenize_nanoseconds_total",
+        "Wall-clock nanoseconds spent tokenizing inputs for the embedding backend");
+    static auto& embed_decode_ns = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_embedding_decode_nanoseconds_total",
+        "Wall-clock nanoseconds spent in llama_decode (model forward pass) for embeddings");
+    static auto& embed_errors = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_embedding_errors_total",
+        "Embedding backend failures by reason", {"reason"});
+    static auto& cluster_fires = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_semantic_cluster_fires_total",
+        "Times the semantic cluster detector crossed the cluster_threshold");
+
     SemanticClusterResult r;
     if (!cfg_.enabled)
         return r;
@@ -63,12 +81,26 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
         std::lock_guard lock(mu_);
         backend = backend_.get();
     }
-    if (!backend || !backend->is_ready())
+    if (!backend || !backend->is_ready()) {
+        embed_errors.labels({"not_ready"}).inc();
         return r;
+    }
 
     auto er = backend->embed(message);
-    if (!er.ok || er.vector.empty())
+    if (!er.ok || er.vector.empty()) {
+        const std::string reason = er.error.empty() ? "unknown"
+                                   : er.error.find("empty") != std::string::npos ? "empty_text"
+                                   : er.error.find("tokenize") != std::string::npos ? "tokenize"
+                                   : er.error.find("decode") != std::string::npos ? "decode"
+                                                                                   : "other";
+        embed_errors.labels({reason}).inc();
         return r;
+    }
+
+    // Per-call stats from the backend.
+    embed_tokens.get().inc(static_cast<uint64_t>(er.token_count));
+    embed_tokenize_ns.get().inc(static_cast<uint64_t>(er.tokenize_ns));
+    embed_decode_ns.get().inc(static_cast<uint64_t>(er.decode_ns));
 
     // Insert + compare under the lock. Scan the ring for near-dupes
     // and count distinct IPIDs in the match set, excluding self.
@@ -115,6 +147,7 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
         if (r.distinct_ipids + 1 == cfg_.cluster_threshold)
             r.score = 1.0;
         r.reason = "semantic_cluster(" + std::to_string(r.distinct_ipids + 1) + "_ipids)";
+        cluster_fires.get().inc();
     }
     return r;
 }

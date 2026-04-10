@@ -1619,14 +1619,25 @@
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [{"color": "blue", "value": null}]
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
           },
-          "color": {"mode": "thresholds"}
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "textMode": "name",
         "colorMode": "background",
         "graphMode": "none"
@@ -1674,8 +1685,16 @@
         "defaults": {},
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "permissions"},
-            "properties": [{"id": "custom.width", "value": 500}]
+            "matcher": {
+              "id": "byName",
+              "options": "permissions"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 500
+              }
+            ]
           }
         ]
       }
@@ -2313,7 +2332,9 @@
       "targets": [
         {
           "queryMode": "Logs",
-          "logGroupNames": ["/kagami/kagami-staging"],
+          "logGroupNames": [
+            "/kagami/kagami-staging"
+          ],
           "expression": "fields @timestamp, @message | sort @timestamp desc | limit 200",
           "refId": "A"
         }
@@ -2424,6 +2445,289 @@
           "refId": "D"
         }
       ]
+    },
+    {
+      "type": "row",
+      "collapsed": false,
+      "title": "Content Moderation",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 194
+      },
+      "panels": [],
+      "id": 1001
+    },
+    {
+      "type": "stat",
+      "title": "Moderation checks/s (5m)",
+      "description": "Sustained rate of ContentModerator::check() calls across IC and OOC on both protocol backends.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 195
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_checks_total[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "id": 1002
+    },
+    {
+      "type": "stat",
+      "title": "Mean check() latency",
+      "description": "Average time in ContentModerator::check() including all enabled layers and audit log fan-out.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 195
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_check_nanoseconds_total[5m]) / rate(kagami_moderation_checks_total[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns"
+        }
+      },
+      "id": 1003
+    },
+    {
+      "type": "stat",
+      "title": "Tracked IPIDs (heat > 0)",
+      "description": "Clients currently carrying moderation heat. Decays over time.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 195
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "kagami_moderation_heat_tracked_ipids",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        }
+      },
+      "id": 1004
+    },
+    {
+      "type": "stat",
+      "title": "Active mutes",
+      "description": "IPIDs under an active auto-mute.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 195
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "kagami_moderation_muted_ipids",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        }
+      },
+      "id": 1005
+    },
+    {
+      "type": "stat",
+      "title": "Remote errors (15m)",
+      "description": "Count of OpenAI moderation API failures. fail_open=true means these do not block chat — Layer 1 carries the decision.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 195
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(kagami_moderation_remote_errors_total[15m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          }
+        }
+      },
+      "id": 1006
+    },
+    {
+      "type": "dashlist",
+      "title": "Deep dive",
+      "description": "Open the dedicated moderation dashboard for per-axis fire rates, action ladder heatmap, and the CloudWatch audit log viewer.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 195
+      },
+      "options": {
+        "showHeadings": false,
+        "showSearch": false,
+        "showRecentlyViewed": false,
+        "showStarred": false,
+        "maxItems": 5,
+        "query": "moderation",
+        "tags": [
+          "moderation"
+        ]
+      },
+      "id": 1007
+    },
+    {
+      "type": "timeseries",
+      "title": "Action mix (5m rate)",
+      "description": "Stacked rate of moderation decisions by action.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 199
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (action) (rate(kagami_moderation_events_total[5m]))",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 60
+          },
+          "unit": "ops"
+        }
+      },
+      "id": 1008
+    },
+    {
+      "type": "timeseries",
+      "title": "Per-layer mean latency (5m)",
+      "description": "How long each moderation layer takes per call. remote is the expensive one when enabled.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 199
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (layer) (rate(kagami_moderation_layer_nanoseconds_total[5m])) / sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns"
+        }
+      },
+      "id": 1009
     }
-  ]
+  ],
+  "version": 10
 }

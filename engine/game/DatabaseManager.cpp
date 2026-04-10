@@ -808,6 +808,20 @@ std::future<std::vector<MuteEntry>> DatabaseManager::active_mutes() {
     });
 }
 
+std::future<int> DatabaseManager::delete_mutes_by_ipid(std::string ipid) {
+    return dispatch([this, ipid = std::move(ipid)]() -> int {
+        if (!db_)
+            return 0;
+        auto stmt = prepare("DELETE FROM mutes WHERE IPID = ?");
+        if (!stmt)
+            return 0;
+        sqlite3_bind_text(stmt.get(), 1, ipid.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE)
+            return 0;
+        return sqlite3_changes(db_);
+    });
+}
+
 std::future<int> DatabaseManager::prune_expired_mutes() {
     return dispatch([this]() -> int {
         if (!db_)

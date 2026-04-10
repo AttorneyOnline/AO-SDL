@@ -54,8 +54,8 @@ class AreaOocEndpoint : public NXEndpoint {
         // client sees the same semantic signal as an AO2 client does
         // via suppressed broadcast.
         if (auto* cm = room().content_moderator()) {
-            if (cm->is_muted(req.session->ipid))
-                return RestResponse::error(403, "Muted by content moderation");
+            // No eager is_muted check — clean messages pass through even
+            // for muted users under the per-message filtering rule.
             auto v = cm->check(req.session->ipid, "ooc", action.message);
             switch (v.action) {
             case moderation::ModerationAction::NONE:

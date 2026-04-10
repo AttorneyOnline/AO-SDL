@@ -22,9 +22,14 @@ class NXServer {
         bool moderator;
     };
 
-    /// Create a session for a REST client.
+    /// Create a session for a REST client. @p remote_addr is the raw
+    /// client IP seen by the REST listener (post proxy-header
+    /// resolution). It is hashed to form the session's IPID, which
+    /// matches the AO2 HI-packet derivation and allows cross-protocol
+    /// moderation state (heat, mutes) to key by the same identifier.
     SessionInfo create_session(const std::string& hdid, const std::string& client_name,
-                               const std::string& client_version);
+                               const std::string& client_version,
+                               const std::string& remote_addr = "");
     void destroy_session(uint64_t client_id);
 
     /// Server configuration values, set once at startup by main.cpp

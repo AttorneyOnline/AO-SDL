@@ -13,6 +13,7 @@
 #ifdef KAGAMI_WITH_LLAMA_CPP
 #include "llama.h"
 
+#include <chrono>
 #include <cmath>
 #include <mutex>
 #include <vector>
@@ -82,6 +83,7 @@ class LlamaCppEmbeddingBackend : public EmbeddingBackend {
 
         // Tokenize. llama_tokenize writes the token ids into a caller-
         // allocated buffer; we grow on overflow.
+        const auto tok_start = std::chrono::steady_clock::now();
         std::vector<llama_token> tokens(text.size() + 16);
         auto vocab = llama_model_get_vocab(model_);
         int n = llama_tokenize(vocab, text.data(), static_cast<int>(text.size()),
@@ -98,8 +100,13 @@ class LlamaCppEmbeddingBackend : public EmbeddingBackend {
             return out;
         }
         tokens.resize(n);
+        out.tokenize_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                              std::chrono::steady_clock::now() - tok_start)
+                              .count();
+        out.token_count = n;
 
         // Build a batch with all tokens in a single sequence.
+        const auto dec_start = std::chrono::steady_clock::now();
         llama_batch batch = llama_batch_init(static_cast<int>(tokens.size()), 0, 1);
         for (int i = 0; i < n; ++i) {
             batch.token[i] = tokens[i];
@@ -139,6 +146,9 @@ class LlamaCppEmbeddingBackend : public EmbeddingBackend {
         }
 
         llama_batch_free(batch);
+        out.decode_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now() - dec_start)
+                            .count();
         out.ok = true;
         return out;
     }

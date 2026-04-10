@@ -50,20 +50,27 @@ NXServer::NXServer(GameRoom& room) : room_(room) {
 }
 
 NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const std::string& client_name,
-                                               const std::string& client_version) {
-    // TODO: store hdid on session for future ban/rate-limiting support
-    (void)hdid;
+                                               const std::string& client_version,
+                                               const std::string& remote_addr) {
     uint64_t id = next_rest_id_++;
     auto token = generate_token();
 
     auto session = room_.create_session_with_token(id, "aonx", token);
     session->display_name = client_name;
     session->client_software = client_name + "/" + client_version;
+    session->hardware_id = hdid;
+    session->ip_address = remote_addr;
+    // Match the AO2 HI-packet derivation: SHA-256 of the client IP,
+    // first 8 hex chars. This gives cross-protocol moderation state
+    // (heat, mutes) a stable key regardless of which backend the
+    // client connected through.
+    if (!remote_addr.empty())
+        session->ipid = crypto::sha256(remote_addr).substr(0, 8);
     session->joined = true;
     room_.stats.joined.fetch_add(1, std::memory_order_relaxed);
 
-    Log::log_print(INFO, "NX: session created (%s, client=%s)", format_client_id(id).c_str(),
-                   session->client_software.c_str());
+    Log::log_print(INFO, "NX: session created (%s, client=%s, ipid=%s)", format_client_id(id).c_str(),
+                   session->client_software.c_str(), session->ipid.c_str());
     return {session->session_token, session->session_id, session->moderator};
 }
 

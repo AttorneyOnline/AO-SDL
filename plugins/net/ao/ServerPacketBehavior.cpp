@@ -314,11 +314,10 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
     // any broadcast side-effects. Does nothing if no moderator is wired
     // or the subsystem is disabled in config.
     if (auto* cm = server.room().content_moderator()) {
-        if (cm->is_muted(session.ipid)) {
-            Log::log_print(INFO, "AO: IC from %s suppressed (muted)",
-                           format_client_id(session.client_id).c_str());
-            return;
-        }
+        // No eager is_muted check: per-message filtering semantics mean
+        // clean messages pass through regardless of accumulated heat
+        // or mute state. ContentModerator::check() returns NONE for any
+        // message with zero offending-content score.
         auto verdict = cm->check(session.ipid, "ic", action.message);
         switch (verdict.action) {
         case moderation::ModerationAction::NONE:
@@ -461,11 +460,6 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     // heat score, so a spree across both channels escalates as expected.
     std::string forwarded_message = message;
     if (auto* cm = server.room().content_moderator()) {
-        if (cm->is_muted(session.ipid)) {
-            Log::log_print(INFO, "AO: OOC from %s suppressed (muted)",
-                           format_client_id(session.client_id).c_str());
-            return;
-        }
         auto verdict = cm->check(session.ipid, "ooc", message);
         switch (verdict.action) {
         case moderation::ModerationAction::NONE:
