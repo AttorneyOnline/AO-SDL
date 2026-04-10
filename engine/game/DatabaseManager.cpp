@@ -4,6 +4,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <chrono>
 
 // -- PreparedStatement --------------------------------------------------------
@@ -163,7 +164,55 @@ bool DatabaseManager::create_tables() {
               "  PASSWORD TEXT,"
               "  ACL      TEXT"
               ")");
-    return ok;
+    if (!ok)
+        return false;
+
+    // Content moderation audit trail. Every decision the moderator
+    // makes (including LOG-only events when enabled) lands here. The
+    // table is wide because we store denormalized per-axis scores so
+    // operators can ad-hoc-query without joining anything.
+    ok = exec("CREATE TABLE IF NOT EXISTS moderation_events ("
+              "  ID              INTEGER PRIMARY KEY AUTOINCREMENT,"
+              "  TIMESTAMP_MS    INTEGER NOT NULL,"
+              "  IPID            TEXT,"
+              "  CHANNEL         TEXT,"
+              "  MESSAGE_SAMPLE  TEXT,"
+              "  ACTION          TEXT,"
+              "  HEAT_AFTER      REAL,"
+              "  REASON          TEXT,"
+              "  VISUAL_NOISE    REAL,"
+              "  LINK_RISK       REAL,"
+              "  TOXICITY        REAL,"
+              "  HATE            REAL,"
+              "  SEXUAL          REAL,"
+              "  SEXUAL_MINORS   REAL,"
+              "  VIOLENCE        REAL,"
+              "  SELF_HARM       REAL,"
+              "  SEMANTIC_ECHO   REAL"
+              ")");
+    if (!ok)
+        return false;
+
+    // The two indexes that matter: lookup by IPID (to answer "show me
+    // all recent moderation events for this user") and by timestamp
+    // (to answer "show me the last N events" cheaply).
+    exec("CREATE INDEX IF NOT EXISTS idx_mod_events_ipid ON moderation_events(IPID, TIMESTAMP_MS DESC)");
+    exec("CREATE INDEX IF NOT EXISTS idx_mod_events_ts ON moderation_events(TIMESTAMP_MS DESC)");
+    exec("CREATE INDEX IF NOT EXISTS idx_mod_events_action ON moderation_events(ACTION, TIMESTAMP_MS DESC)");
+
+    ok = exec("CREATE TABLE IF NOT EXISTS mutes ("
+              "  ID          INTEGER PRIMARY KEY AUTOINCREMENT,"
+              "  IPID        TEXT NOT NULL,"
+              "  STARTED_AT  INTEGER NOT NULL,"
+              "  EXPIRES_AT  INTEGER NOT NULL,"
+              "  REASON      TEXT,"
+              "  MODERATOR   TEXT"
+              ")");
+    if (!ok)
+        return false;
+    exec("CREATE INDEX IF NOT EXISTS idx_mutes_ipid ON mutes(IPID)");
+    exec("CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(EXPIRES_AT)");
+    return true;
 }
 
 bool DatabaseManager::migrate() {
@@ -183,6 +232,13 @@ bool DatabaseManager::migrate() {
     switch (version) {
     case 0:
         if (!exec("PRAGMA user_version = 1"))
+            return false;
+        [[fallthrough]];
+    case 1:
+        // v1 → v2: moderation_events and mutes. create_tables() runs
+        // CREATE IF NOT EXISTS unconditionally every open(), so there
+        // is nothing to do here beyond bumping user_version.
+        if (!exec("PRAGMA user_version = 2"))
             return false;
         [[fallthrough]];
     default:
@@ -557,4 +613,214 @@ bool DatabaseManager::is_ban_active(const BanEntry& entry) {
     if (entry.duration == 0)
         return false;
     return !entry.is_expired();
+}
+
+// -- Moderation events --------------------------------------------------------
+
+std::future<int64_t> DatabaseManager::record_moderation_event(moderation::ModerationEvent event) {
+    return dispatch([this, event = std::move(event)]() -> int64_t {
+        if (!db_)
+            return -1;
+
+        auto stmt = prepare("INSERT INTO moderation_events ("
+                            "  TIMESTAMP_MS, IPID, CHANNEL, MESSAGE_SAMPLE, ACTION, HEAT_AFTER, REASON,"
+                            "  VISUAL_NOISE, LINK_RISK, TOXICITY, HATE, SEXUAL, SEXUAL_MINORS,"
+                            "  VIOLENCE, SELF_HARM, SEMANTIC_ECHO"
+                            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        if (!stmt)
+            return -1;
+
+        sqlite3_bind_int64(stmt.get(), 1, event.timestamp_ms);
+        sqlite3_bind_text(stmt.get(), 2, event.ipid.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 3, event.channel.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 4, event.message_sample.c_str(), -1, SQLITE_TRANSIENT);
+        const char* action_str = moderation::to_string(event.action);
+        sqlite3_bind_text(stmt.get(), 5, action_str, -1, SQLITE_STATIC);
+        sqlite3_bind_double(stmt.get(), 6, event.heat_after);
+        sqlite3_bind_text(stmt.get(), 7, event.reason.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt.get(), 8, event.scores.visual_noise);
+        sqlite3_bind_double(stmt.get(), 9, event.scores.link_risk);
+        sqlite3_bind_double(stmt.get(), 10, event.scores.toxicity);
+        sqlite3_bind_double(stmt.get(), 11, event.scores.hate);
+        sqlite3_bind_double(stmt.get(), 12, event.scores.sexual);
+        sqlite3_bind_double(stmt.get(), 13, event.scores.sexual_minors);
+        sqlite3_bind_double(stmt.get(), 14, event.scores.violence);
+        sqlite3_bind_double(stmt.get(), 15, event.scores.self_harm);
+        sqlite3_bind_double(stmt.get(), 16, event.scores.semantic_echo);
+
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
+            Log::log_print(WARNING, "DatabaseManager: record_moderation_event failed: %s", sqlite3_errmsg(db_));
+            return -1;
+        }
+        return sqlite3_last_insert_rowid(db_);
+    });
+}
+
+std::future<std::vector<moderation::ModerationEvent>>
+DatabaseManager::query_moderation_events(ModerationQuery query) {
+    return dispatch([this, query = std::move(query)]() -> std::vector<moderation::ModerationEvent> {
+        std::vector<moderation::ModerationEvent> result;
+        if (!db_)
+            return result;
+
+        // Build a dynamic WHERE clause. We only add filters that were
+        // actually set, so the common "recent events" query hits the
+        // primary timestamp index cleanly.
+        std::string sql = "SELECT ID, TIMESTAMP_MS, IPID, CHANNEL, MESSAGE_SAMPLE, ACTION, HEAT_AFTER, REASON,"
+                          " VISUAL_NOISE, LINK_RISK, TOXICITY, HATE, SEXUAL, SEXUAL_MINORS,"
+                          " VIOLENCE, SELF_HARM, SEMANTIC_ECHO FROM moderation_events";
+        std::vector<std::string> clauses;
+        if (query.ipid)
+            clauses.emplace_back("IPID = ?");
+        if (query.channel)
+            clauses.emplace_back("CHANNEL = ?");
+        if (query.action)
+            clauses.emplace_back("ACTION = ?");
+        if (query.since_ms)
+            clauses.emplace_back("TIMESTAMP_MS >= ?");
+        if (query.until_ms)
+            clauses.emplace_back("TIMESTAMP_MS <= ?");
+        if (!clauses.empty()) {
+            sql += " WHERE ";
+            for (size_t i = 0; i < clauses.size(); ++i) {
+                if (i > 0)
+                    sql += " AND ";
+                sql += clauses[i];
+            }
+        }
+        sql += " ORDER BY TIMESTAMP_MS DESC LIMIT ?";
+
+        auto stmt = prepare(sql.c_str());
+        if (!stmt)
+            return result;
+
+        int bind = 1;
+        if (query.ipid)
+            sqlite3_bind_text(stmt.get(), bind++, query.ipid->c_str(), -1, SQLITE_TRANSIENT);
+        if (query.channel)
+            sqlite3_bind_text(stmt.get(), bind++, query.channel->c_str(), -1, SQLITE_TRANSIENT);
+        if (query.action)
+            sqlite3_bind_text(stmt.get(), bind++, query.action->c_str(), -1, SQLITE_TRANSIENT);
+        if (query.since_ms)
+            sqlite3_bind_int64(stmt.get(), bind++, *query.since_ms);
+        if (query.until_ms)
+            sqlite3_bind_int64(stmt.get(), bind++, *query.until_ms);
+        const int limit = std::clamp(query.limit, 1, 1000);
+        sqlite3_bind_int(stmt.get(), bind++, limit);
+
+        auto col_text = [&](int col) -> std::string {
+            auto* p = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), col));
+            return p ? p : "";
+        };
+        auto parse_action = [](const std::string& s) -> moderation::ModerationAction {
+            using A = moderation::ModerationAction;
+            if (s == "log")
+                return A::LOG;
+            if (s == "censor")
+                return A::CENSOR;
+            if (s == "drop")
+                return A::DROP;
+            if (s == "mute")
+                return A::MUTE;
+            if (s == "kick")
+                return A::KICK;
+            if (s == "ban")
+                return A::BAN;
+            if (s == "perma_ban")
+                return A::PERMA_BAN;
+            return A::NONE;
+        };
+
+        while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+            moderation::ModerationEvent ev;
+            ev.id = sqlite3_column_int64(stmt.get(), 0);
+            ev.timestamp_ms = sqlite3_column_int64(stmt.get(), 1);
+            ev.ipid = col_text(2);
+            ev.channel = col_text(3);
+            ev.message_sample = col_text(4);
+            ev.action = parse_action(col_text(5));
+            ev.heat_after = sqlite3_column_double(stmt.get(), 6);
+            ev.reason = col_text(7);
+            ev.scores.visual_noise = sqlite3_column_double(stmt.get(), 8);
+            ev.scores.link_risk = sqlite3_column_double(stmt.get(), 9);
+            ev.scores.toxicity = sqlite3_column_double(stmt.get(), 10);
+            ev.scores.hate = sqlite3_column_double(stmt.get(), 11);
+            ev.scores.sexual = sqlite3_column_double(stmt.get(), 12);
+            ev.scores.sexual_minors = sqlite3_column_double(stmt.get(), 13);
+            ev.scores.violence = sqlite3_column_double(stmt.get(), 14);
+            ev.scores.self_harm = sqlite3_column_double(stmt.get(), 15);
+            ev.scores.semantic_echo = sqlite3_column_double(stmt.get(), 16);
+            result.push_back(std::move(ev));
+        }
+        return result;
+    });
+}
+
+// -- Mutes --------------------------------------------------------------------
+
+std::future<int64_t> DatabaseManager::add_mute(MuteEntry entry) {
+    return dispatch([this, entry = std::move(entry)]() -> int64_t {
+        if (!db_)
+            return -1;
+        auto stmt = prepare("INSERT INTO mutes (IPID, STARTED_AT, EXPIRES_AT, REASON, MODERATOR) "
+                            "VALUES (?, ?, ?, ?, ?)");
+        if (!stmt)
+            return -1;
+        sqlite3_bind_text(stmt.get(), 1, entry.ipid.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(stmt.get(), 2, entry.started_at);
+        sqlite3_bind_int64(stmt.get(), 3, entry.expires_at);
+        sqlite3_bind_text(stmt.get(), 4, entry.reason.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 5, entry.moderator.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE)
+            return -1;
+        return sqlite3_last_insert_rowid(db_);
+    });
+}
+
+std::future<std::vector<MuteEntry>> DatabaseManager::active_mutes() {
+    return dispatch([this]() -> std::vector<MuteEntry> {
+        std::vector<MuteEntry> result;
+        if (!db_)
+            return result;
+        const int64_t now =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        auto stmt = prepare("SELECT ID, IPID, STARTED_AT, EXPIRES_AT, REASON, MODERATOR FROM mutes "
+                            "WHERE EXPIRES_AT = 0 OR EXPIRES_AT > ?");
+        if (!stmt)
+            return result;
+        sqlite3_bind_int64(stmt.get(), 1, now);
+        auto col_text = [&](int col) -> std::string {
+            auto* p = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), col));
+            return p ? p : "";
+        };
+        while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+            MuteEntry m;
+            m.id = sqlite3_column_int64(stmt.get(), 0);
+            m.ipid = col_text(1);
+            m.started_at = sqlite3_column_int64(stmt.get(), 2);
+            m.expires_at = sqlite3_column_int64(stmt.get(), 3);
+            m.reason = col_text(4);
+            m.moderator = col_text(5);
+            result.push_back(std::move(m));
+        }
+        return result;
+    });
+}
+
+std::future<int> DatabaseManager::prune_expired_mutes() {
+    return dispatch([this]() -> int {
+        if (!db_)
+            return 0;
+        const int64_t now =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        auto stmt = prepare("DELETE FROM mutes WHERE EXPIRES_AT > 0 AND EXPIRES_AT <= ?");
+        if (!stmt)
+            return 0;
+        sqlite3_bind_int64(stmt.get(), 1, now);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE)
+            return 0;
+        return sqlite3_changes(db_);
+    });
 }

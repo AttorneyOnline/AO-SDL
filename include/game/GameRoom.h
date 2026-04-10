@@ -33,6 +33,9 @@
 #include <vector>
 
 class DatabaseManager;
+namespace moderation {
+class ContentModerator;
+}
 
 class GameRoom {
   public:
@@ -203,6 +206,15 @@ class GameRoom {
         spam_detector_ = sd;
     }
 
+    /// Content moderator (non-owning). Nullable — when absent, packet
+    /// handlers skip all content moderation layers and broadcast as-is.
+    moderation::ContentModerator* content_moderator() const {
+        return content_moderator_;
+    }
+    void set_content_moderator(moderation::ContentModerator* cm) {
+        content_moderator_ = cm;
+    }
+
     /// Firewall manager (non-owning).
     FirewallManager* firewall() const {
         return firewall_;
@@ -301,6 +313,7 @@ class GameRoom {
     ASNReputationManager* asn_reputation_ = nullptr;
     SpamDetector* spam_detector_ = nullptr;
     FirewallManager* firewall_ = nullptr;
+    moderation::ContentModerator* content_moderator_ = nullptr;
 
     // Character ID index (Phase 3)
     std::vector<std::string> char_ids_;                     ///< Parallel to `characters`.

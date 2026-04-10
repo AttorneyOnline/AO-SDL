@@ -1,0 +1,166 @@
+/**
+ * @file ContentModerator.h
+ * @brief Top-level coordinator for content moderation.
+ *
+ * ContentModerator is the thing packet handlers actually call. It:
+ *
+ *   1. Runs the configured Layer 1 rules (unicode, urls) synchronously.
+ *   2. (Phase 2+) Dispatches a remote classifier call.
+ *   3. (Phase 3+) Runs cross-message semantic clustering.
+ *   4. Sums axis scores into a heat delta and applies it to ModerationHeat.
+ *   5. Picks an action from the heat ladder.
+ *   6. Writes a ModerationEvent to the audit log (including sqlite).
+ *
+ * It is stateless from the packet handler's perspective — the handler
+ * passes a message in, gets a ModerationVerdict out, and decides what
+ * to do (broadcast, drop, kick). Sanctions that involve side effects
+ * on the BanManager are dispatched via an ActionCallback, so this
+ * class doesn't need to know about BanManager or the WS server.
+ *
+ * Phase 1 scope: Layers 1 + heat + audit log. Layers 2 & 3 are declared
+ * in config but not wired here. Hooks in the `check()` path will be
+ * filled in as follow-up commits.
+ */
+#pragma once
+
+#include "moderation/ContentModerationConfig.h"
+#include "moderation/EmbeddingBackend.h"
+#include "moderation/ModerationAuditLog.h"
+#include "moderation/ModerationHeat.h"
+#include "moderation/ModerationTypes.h"
+#include "moderation/RemoteClassifier.h"
+#include "moderation/SemanticClusterer.h"
+#include "moderation/UnicodeClassifier.h"
+#include "moderation/UrlExtractor.h"
+
+#include <cstdint>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
+class DatabaseManager;
+
+namespace moderation {
+
+/// Callback invoked when the moderator wants the host application to
+/// apply a sanction. The host decides how to implement it (for example,
+/// BAN hits BanManager + closes the WS; MUTE is enforced at the next
+/// check() call by the moderator's own mute table).
+///
+/// Arguments:
+///   ipid    — client identifier.
+///   action  — the sanction level.
+///   reason  — human-readable reason to show the user or log.
+using ActionCallback =
+    std::function<void(const std::string& ipid, ModerationAction action, const std::string& reason)>;
+
+class ContentModerator {
+  public:
+    ContentModerator() = default;
+    ~ContentModerator() = default;
+
+    ContentModerator(const ContentModerator&) = delete;
+    ContentModerator& operator=(const ContentModerator&) = delete;
+
+    /// Apply configuration. Safe to call at runtime — future incidents
+    /// use the new config, past heat and active mutes are preserved.
+    void configure(const ContentModerationConfig& cfg);
+
+    /// Wire the audit log fan-out. Optional; if null, audit events
+    /// are dropped on the floor (useful for unit tests).
+    void set_audit_log(ModerationAuditLog* audit);
+
+    /// Wire the database manager. Used for persisting moderation
+    /// events and mutes. Optional; if null, moderation works entirely
+    /// in memory and does not survive restart.
+    void set_database(DatabaseManager* db);
+
+    /// Wire the sanction callback. Called from check() for any action
+    /// above LOG. The callback may itself take a mutex — it is NOT
+    /// called with the moderator's mutex held.
+    void set_action_callback(ActionCallback cb);
+
+    /// Swap in a custom remote classifier transport (mock for tests).
+    /// Must be called after configure().
+    void set_remote_transport(std::unique_ptr<RemoteClassifierTransport> t);
+
+    /// Install the embedding backend used by the semantic clustering
+    /// layer. Typically called once at startup after the HF model has
+    /// been fetched. Use make_embedding_backend() for the default, or
+    /// provide a custom implementation for testing.
+    void set_embedding_backend(std::unique_ptr<EmbeddingBackend> backend);
+
+    /// Decide what to do with a message. Called from the OOC and IC
+    /// packet handlers before broadcast.
+    ///
+    /// @param ipid      client identifier
+    /// @param channel   "ic" or "ooc"
+    /// @param message   the raw message text (UTF-8)
+    ModerationVerdict check(const std::string& ipid, std::string_view channel, std::string_view message);
+
+    /// True if the given IPID is currently under an active mute.
+    /// Packet handlers should call this BEFORE check() to enforce
+    /// mutes from prior offenses without running the Layer 1 scan.
+    bool is_muted(const std::string& ipid) const;
+
+    /// Manually lift a mute. Returns true if the IPID was muted.
+    bool lift_mute(const std::string& ipid);
+
+    /// Periodic housekeeping: prune decayed heat entries and expired
+    /// mutes. Call every 30s from the same sweep loop as SpamDetector.
+    void sweep();
+
+    /// Read the current heat for an IPID. For REPL/admin diagnostics.
+    double current_heat(const std::string& ipid);
+
+    /// Point-in-time summary statistics over the full heat table.
+    /// Used by the Prometheus collector to export gauges without
+    /// blowing up cardinality with per-IPID labels.
+    struct HeatStats {
+        size_t tracked_ipids = 0;  ///< Number of IPIDs with nonzero heat.
+        size_t muted_ipids = 0;    ///< Number of currently-active mutes.
+        double max_heat = 0.0;     ///< Highest current heat across all IPIDs.
+        double sum_heat = 0.0;     ///< Sum of current heat (mean = sum / tracked).
+        size_t above_censor = 0;   ///< Count of IPIDs >= censor_threshold.
+        size_t above_drop = 0;
+        size_t above_mute = 0;
+    };
+    HeatStats compute_heat_stats();
+
+  private:
+    /// Convert per-axis scores to a heat delta using HeatConfig weights.
+    double heat_delta_from(const ModerationAxisScores& scores) const;
+
+    /// Format a human-readable reason string from triggered axes.
+    static std::string format_reason(const ModerationVerdict& v);
+
+    /// Truncate a message to config.message_sample_length for the
+    /// audit log, respecting UTF-8 boundaries.
+    std::string sample(std::string_view message) const;
+
+    ContentModerationConfig cfg_;
+    UnicodeClassifier unicode_;
+    UrlExtractor urls_;
+    RemoteClassifier remote_;
+    SemanticClusterer clusterer_;
+    ModerationHeat heat_;
+
+    ModerationAuditLog* audit_ = nullptr;
+    DatabaseManager* db_ = nullptr;
+    ActionCallback action_cb_;
+
+    mutable std::mutex mu_;
+    /// ipid -> expires_at (seconds since epoch, 0 = never). In-memory
+    /// mirror of the mutes table. Loaded on configure() from db if set.
+    std::unordered_map<std::string, int64_t> active_mutes_;
+};
+
+/// Register the Prometheus metric collectors for a ContentModerator
+/// instance. Idempotent: calling it twice re-registers the collector
+/// so scraping continues to reflect the latest pointer. Must be called
+/// after configure() (so heat thresholds are populated for bucketing).
+void register_moderator_metrics(ContentModerator& cm);
+
+} // namespace moderation

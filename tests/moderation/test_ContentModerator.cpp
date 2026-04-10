@@ -1,0 +1,158 @@
+#include "moderation/ContentModerator.h"
+
+#include <gtest/gtest.h>
+
+#include <vector>
+
+namespace {
+
+using moderation::ContentModerationConfig;
+using moderation::ContentModerator;
+using moderation::ModerationAction;
+using moderation::ModerationAuditLog;
+
+ContentModerationConfig enable_unicode_only() {
+    ContentModerationConfig cfg;
+    cfg.enabled = true;
+    cfg.check_ic = true;
+    cfg.check_ooc = true;
+    cfg.unicode.enabled = true;
+    // Keep heat low so small scores still produce actions in tests.
+    cfg.heat.decay_half_life_seconds = 600.0;
+    cfg.heat.censor_threshold = 0.1;
+    cfg.heat.drop_threshold = 1.0;
+    cfg.heat.mute_threshold = 2.0;
+    cfg.heat.kick_threshold = 4.0;
+    cfg.heat.ban_threshold = 8.0;
+    cfg.heat.perma_ban_threshold = 16.0;
+    cfg.heat.mute_duration_seconds = 60;
+    cfg.heat.weight_visual_noise = 1.0;
+    return cfg;
+}
+
+ContentModerationConfig enable_urls_only() {
+    ContentModerationConfig cfg;
+    cfg.enabled = true;
+    cfg.check_ic = true;
+    cfg.check_ooc = true;
+    cfg.urls.enabled = true;
+    cfg.urls.blocklist = {"bad.com"};
+    cfg.urls.blocked_score = 1.0;
+    // Weight is large enough that a single blocked link pushes the
+    // user past the mute threshold on the first strike. This matches
+    // the tuning a production deployment would use for malware links.
+    cfg.heat.censor_threshold = 0.5;
+    cfg.heat.drop_threshold = 2.0;
+    cfg.heat.mute_threshold = 5.0;
+    cfg.heat.kick_threshold = 100.0;
+    cfg.heat.ban_threshold = 200.0;
+    cfg.heat.perma_ban_threshold = 500.0;
+    cfg.heat.weight_link_risk = 6.0;
+    return cfg;
+}
+
+class ContentModeratorTest : public ::testing::Test {
+  protected:
+    ContentModerator cm_;
+};
+
+} // namespace
+
+TEST_F(ContentModeratorTest, DisabledSubsystemReturnsNone) {
+    ContentModerationConfig cfg;
+    cfg.enabled = false;
+    cm_.configure(cfg);
+
+    auto v = cm_.check("ipid1", "ooc", "hello world");
+    EXPECT_EQ(v.action, ModerationAction::NONE);
+    EXPECT_DOUBLE_EQ(v.heat_after, 0.0);
+}
+
+TEST_F(ContentModeratorTest, DisabledChannelReturnsNone) {
+    auto cfg = enable_urls_only();
+    cfg.check_ic = false;
+    cm_.configure(cfg);
+
+    auto v = cm_.check("ipid1", "ic", "see bad.com/scam");
+    EXPECT_EQ(v.action, ModerationAction::NONE);
+}
+
+TEST_F(ContentModeratorTest, CleanMessagePassesThrough) {
+    cm_.configure(enable_unicode_only());
+    auto v = cm_.check("ipid1", "ooc", "hello friend");
+    EXPECT_EQ(v.action, ModerationAction::NONE);
+}
+
+TEST_F(ContentModeratorTest, BlockedLinkTriggersAction) {
+    cm_.configure(enable_urls_only());
+    auto v = cm_.check("ipid1", "ooc", "join bad.com today");
+    // weight=3 × score=1 = 3 heat delta → mute threshold (2.0) crossed
+    EXPECT_GE(static_cast<int>(v.action), static_cast<int>(ModerationAction::MUTE));
+    EXPECT_GT(v.scores.link_risk, 0.0);
+}
+
+TEST_F(ContentModeratorTest, MuteActionMarksIpidMuted) {
+    cm_.configure(enable_urls_only());
+    cm_.check("ipid1", "ooc", "join bad.com today");
+    EXPECT_TRUE(cm_.is_muted("ipid1"));
+    // A different IPID should not be affected.
+    EXPECT_FALSE(cm_.is_muted("ipid2"));
+}
+
+TEST_F(ContentModeratorTest, LiftMuteClearsIt) {
+    cm_.configure(enable_urls_only());
+    cm_.check("ipid1", "ooc", "bad.com");
+    ASSERT_TRUE(cm_.is_muted("ipid1"));
+    EXPECT_TRUE(cm_.lift_mute("ipid1"));
+    EXPECT_FALSE(cm_.is_muted("ipid1"));
+}
+
+TEST_F(ContentModeratorTest, HeatAccumulatesAcrossMessages) {
+    auto cfg = enable_unicode_only();
+    cfg.heat.weight_visual_noise = 0.5; // small per-message
+    cm_.configure(cfg);
+
+    // Feed 5 zalgo-y messages; heat should climb monotonically.
+    std::string zalgo = "h";
+    for (int i = 0; i < 20; ++i)
+        zalgo += "\xCC\x80";
+    zalgo += "i";
+
+    double last = 0.0;
+    for (int i = 0; i < 5; ++i) {
+        auto v = cm_.check("ipid1", "ooc", zalgo);
+        EXPECT_GE(v.heat_after, last);
+        last = v.heat_after;
+    }
+}
+
+TEST_F(ContentModeratorTest, AuditLogReceivesEvent) {
+    cm_.configure(enable_urls_only());
+
+    ModerationAuditLog audit;
+    std::vector<moderation::ModerationEvent> seen;
+    audit.add_sink("capture", [&seen](const moderation::ModerationEvent& ev) { seen.push_back(ev); });
+    cm_.set_audit_log(&audit);
+
+    cm_.check("ipid1", "ooc", "check bad.com now");
+    ASSERT_FALSE(seen.empty());
+    EXPECT_EQ(seen[0].ipid, "ipid1");
+    EXPECT_EQ(seen[0].channel, "ooc");
+    EXPECT_GT(seen[0].scores.link_risk, 0.0);
+}
+
+TEST_F(ContentModeratorTest, JsonSerializationRoundTrip) {
+    moderation::ModerationEvent ev;
+    ev.timestamp_ms = 123456;
+    ev.ipid = "abc";
+    ev.channel = "ic";
+    ev.message_sample = "hi";
+    ev.action = ModerationAction::CENSOR;
+    ev.heat_after = 1.5;
+    ev.scores.visual_noise = 0.4;
+
+    auto line = ModerationAuditLog::to_json_line(ev);
+    EXPECT_NE(line.find("\"ipid\":\"abc\""), std::string::npos);
+    EXPECT_NE(line.find("\"action\":\"censor\""), std::string::npos);
+    EXPECT_NE(line.find("\"visual_noise\":0.4"), std::string::npos);
+}

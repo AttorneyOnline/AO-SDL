@@ -13,6 +13,7 @@
 #pragma once
 
 #include "game/BanManager.h" // BanEntry
+#include "moderation/ModerationTypes.h"
 
 #include <condition_variable>
 #include <cstdint>
@@ -32,7 +33,31 @@ struct sqlite3_stmt;
 inline constexpr const char* DEFAULT_DB_FILE = "kagami.db";
 
 /// Current schema version. Bump when adding migrations.
-inline constexpr int DB_VERSION = 1;
+///   v1 — bans, users.
+///   v2 — moderation_events, mutes (content moderation subsystem).
+inline constexpr int DB_VERSION = 2;
+
+/// A row from the `mutes` table. Not every mute is a row here — only
+/// ones that should survive restart. Short in-memory mutes (e.g. 60s
+/// cooldowns) can live entirely in ContentModerator.
+struct MuteEntry {
+    int64_t id = 0;
+    std::string ipid;
+    int64_t started_at = 0;  ///< seconds since epoch
+    int64_t expires_at = 0;  ///< seconds since epoch; 0 = active until lifted
+    std::string reason;
+    std::string moderator;   ///< "ContentModerator" or a human mod name
+};
+
+/// Filter for querying the moderation audit trail.
+struct ModerationQuery {
+    std::optional<std::string> ipid;      ///< Exact IPID match.
+    std::optional<std::string> channel;   ///< "ic" or "ooc".
+    std::optional<std::string> action;    ///< Exact action name (e.g. "ban").
+    std::optional<int64_t> since_ms;      ///< Inclusive lower bound on timestamp_ms.
+    std::optional<int64_t> until_ms;      ///< Inclusive upper bound on timestamp_ms.
+    int limit = 100;
+};
 
 /// A row from the `users` table.
 struct UserEntry {
@@ -135,6 +160,29 @@ class DatabaseManager {
 
     /// Update the password (and salt) for a user.
     std::future<bool> update_password(std::string username, std::string salt, std::string password_hash);
+
+    // -- Moderation events ----------------------------------------------------
+
+    /// Persist a moderation event. Returns the new row id. Writes are
+    /// fire-and-forget from callers' perspective; awaiting the future
+    /// is only needed in tests.
+    std::future<int64_t> record_moderation_event(moderation::ModerationEvent event);
+
+    /// Query moderation events by filter. Results are ordered newest
+    /// first, limited by `query.limit` (cap 1000).
+    std::future<std::vector<moderation::ModerationEvent>> query_moderation_events(ModerationQuery query);
+
+    // -- Mutes ----------------------------------------------------------------
+
+    /// Insert a mute row. Returns the new row id, or -1 on failure.
+    std::future<int64_t> add_mute(MuteEntry entry);
+
+    /// Return all mutes that have not yet expired (expires_at == 0 OR
+    /// expires_at > now).
+    std::future<std::vector<MuteEntry>> active_mutes();
+
+    /// Delete expired mute rows. Returns number of rows removed.
+    std::future<int> prune_expired_mutes();
 
   private:
     sqlite3* db_ = nullptr;         ///< Only accessed from worker thread.

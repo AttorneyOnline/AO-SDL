@@ -17,6 +17,10 @@
 #include "game/IPReputationService.h"
 #include "game/SpamDetector.h"
 #include "metrics/MetricsRegistry.h"
+#include "moderation/ContentModerator.h"
+#include "moderation/EmbeddingBackend.h"
+#include "moderation/HfModelFetcher.h"
+#include "moderation/ModerationAuditLog.h"
 #include "net/EndpointFactory.h"
 #include "net/Http.h"
 #include "net/PlatformServerSocket.h"
@@ -142,6 +146,106 @@ int main(int /*argc*/, char* argv[]) {
     SpamDetector spam_detector;
     spam_detector.configure(cfg.spam_detection_config());
     room.set_spam_detector(&spam_detector);
+
+    // --- Content Moderator (opt-in) ---
+    //
+    // Disabled by default. Enabling requires both `content_moderation/enabled`
+    // AND at least one sub-layer's `enabled` flag in kagami.json. Even with
+    // everything on, check() runs only when both the layer and the channel
+    // (ic/ooc) are enabled, so there is no way to "accidentally" broadcast
+    // behavior to production without explicit config.
+    //
+    // The audit log is a separate instance from the regular Log sinks —
+    // moderation events can be shipped to their own file / Loki stream /
+    // CloudWatch stream without dragging every INFO log along. The sqlite
+    // sink (if enabled) also writes rows to the moderation_events table,
+    // which is queryable via DatabaseManager::query_moderation_events().
+    moderation::ModerationAuditLog mod_audit_log;
+    moderation::ContentModerator content_moderator;
+    {
+        auto cm_cfg = cfg.content_moderation_config();
+        content_moderator.configure(cm_cfg);
+        content_moderator.set_database(&db);
+        content_moderator.set_audit_log(&mod_audit_log);
+
+        // Parse min_action string once to avoid string compares per event.
+        auto parse_action = [](const std::string& s) -> moderation::ModerationAction {
+            using A = moderation::ModerationAction;
+            if (s == "none")
+                return A::NONE;
+            if (s == "log")
+                return A::LOG;
+            if (s == "censor")
+                return A::CENSOR;
+            if (s == "drop")
+                return A::DROP;
+            if (s == "mute")
+                return A::MUTE;
+            if (s == "kick")
+                return A::KICK;
+            if (s == "ban")
+                return A::BAN;
+            if (s == "perma_ban")
+                return A::PERMA_BAN;
+            return A::LOG;
+        };
+        mod_audit_log.set_min_action(parse_action(cm_cfg.audit.min_action));
+
+        // Register the audit sinks configured in kagami.json. Each is
+        // independently opt-in; the whole set defaults to empty so a
+        // fresh config produces zero log traffic.
+        if (cm_cfg.audit.stdout_enabled)
+            mod_audit_log.add_sink("stderr", moderation::make_stderr_sink());
+        if (!cm_cfg.audit.file_path.empty()) {
+            auto sink = moderation::make_file_sink(cm_cfg.audit.file_path);
+            if (sink)
+                mod_audit_log.add_sink("file", std::move(sink));
+        }
+
+        if (cm_cfg.enabled)
+            Log::log_print(INFO, "ContentModerator: enabled (unicode=%s urls=%s remote=%s embeddings=%s)",
+                           cm_cfg.unicode.enabled ? "on" : "off",
+                           cm_cfg.urls.enabled ? "on" : "off",
+                           (cm_cfg.remote.enabled && !cm_cfg.remote.api_key.empty()) ? "on" : "off",
+                           (cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) ? "on" : "off");
+
+        // Register the Prometheus collector even when the subsystem is
+        // disabled — scrapes for kagami_moderation_* will return zero,
+        // which is useful for dashboards that want to show a flatline
+        // rather than a missing series.
+        if (cfg.metrics_enabled())
+            moderation::register_moderator_metrics(content_moderator);
+
+        // Phase 3: local embeddings layer. Completely optional — only
+        // runs when the layer is enabled AND a HuggingFace model id is
+        // configured. Fetches the model at startup (blocking, may take
+        // minutes on first boot) then installs the embedding backend.
+        if (cm_cfg.enabled && cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) {
+            auto cache_dir = (std::filesystem::path(argv[0]).parent_path() / "models").string();
+            Log::log_print(INFO, "ContentModerator: resolving embedding model %s (cache=%s)",
+                           cm_cfg.embeddings.hf_model_id.c_str(), cache_dir.c_str());
+            auto fetch = moderation::resolve_hf_model(cm_cfg.embeddings.hf_model_id, cache_dir);
+            if (!fetch.ok) {
+                Log::log_print(WARNING, "ContentModerator: embedding fetch failed (%s); layer will be inert",
+                               fetch.error.c_str());
+            }
+            else {
+                auto backend = moderation::make_embedding_backend(fetch.local_path);
+                if (backend && backend->is_ready()) {
+                    Log::log_print(INFO, "ContentModerator: embedding backend=%s dim=%d (%s)",
+                                   backend->name(), backend->dimension(),
+                                   fetch.downloaded ? "downloaded" : "cached");
+                    content_moderator.set_embedding_backend(std::move(backend));
+                }
+                else {
+                    Log::log_print(WARNING, "ContentModerator: embedding backend not ready — "
+                                            "was kagami built with -DKAGAMI_WITH_LLAMA_CPP=ON?");
+                }
+            }
+        }
+
+        room.set_content_moderator(&content_moderator);
+    }
 
     // --- Firewall Manager ---
     FirewallManager firewall;
