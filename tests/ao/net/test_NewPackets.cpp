@@ -228,8 +228,8 @@ TEST(AOPacketMS, DeserializeWebaoNaNSfxDelayDoesNotThrow) {
     AOClient cli;
     cli.conn_state = CONNECTED;
 
-    constexpr const char* webao_wire =
-        "MS#1#-#neuro#/normal#test#def#02  = 03  = 04  = 05  = 06  = 07  = 08  = 0#0#40#NaN#0#0#0#0#0##-1#0#0#0#0#-#-#-#0#||#%";
+    constexpr const char* webao_wire = "MS#1#-#neuro#/normal#test#def#02  = 03  = 04  = 05  = 06  = 07  = 08  = "
+                                       "0#0#40#NaN#0#0#0#0#0##-1#0#0#0#0#-#-#-#0#||#%";
 
     // Constructor must not throw even though field 9 ("NaN") is non-numeric.
     // safe_stoi in PacketTypes.cpp recovers with 0.

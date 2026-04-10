@@ -126,8 +126,8 @@ TEST(AOPacketSafeDispatch, WebaoMsNanDoesNotCrash) {
     // After the fix, safe_stoi inside the MS constructor recovers with 0,
     // so the packet is dispatched normally. safe_dispatch would also catch
     // any exception that did escape — belt-and-suspenders.
-    constexpr const char* webao_wire =
-        "MS#1#-#neuro#/normal#test#def#02  = 03  = 04  = 05  = 06  = 07  = 08  = 0#0#40#NaN#0#0#0#0#0##-1#0#0#0#0#-#-#-#0#||#%";
+    constexpr const char* webao_wire = "MS#1#-#neuro#/normal#test#def#02  = 03  = 04  = 05  = 06  = 07  = 08  = "
+                                       "0#0#40#NaN#0#0#0#0#0##-1#0#0#0#0#-#-#-#0#||#%";
 
     bool dispatched = false;
     auto result = ao_packet::safe_dispatch(webao_wire, "unit-test", [&](AOPacket& pkt) {
