@@ -300,6 +300,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         // Embeddings layer (Phase 3 wiring — config only in Phase 1)
         cfg.embeddings.enabled = value<bool>("content_moderation/embeddings/enabled");
         cfg.embeddings.hf_model_id = value<std::string>("content_moderation/embeddings/hf_model_id");
+        cfg.embeddings.cache_dir = value<std::string>("content_moderation/embeddings/cache_dir");
         cfg.embeddings.ring_size = value<int>("content_moderation/embeddings/ring_size");
         cfg.embeddings.similarity_threshold = value<double>("content_moderation/embeddings/similarity_threshold");
         cfg.embeddings.cluster_threshold = value<int>("content_moderation/embeddings/cluster_threshold");
@@ -571,6 +572,12 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       // id = layer inert. No model bundled with binary.
                       {"enabled", false},
                       {"hf_model_id", ""},
+                      // Model cache dir. Shared with slurs/safe_hint in
+                      // deploy layouts so a single bind-mounted volume
+                      // persists all moderation downloads across
+                      // container recreates. Default matches the other
+                      // moderation layer caches for consistency.
+                      {"cache_dir", "/tmp/kagami-moderation"},
                       {"ring_size", 500},
                       {"similarity_threshold", 0.9},
                       {"cluster_threshold", 3},

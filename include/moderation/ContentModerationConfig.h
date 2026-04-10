@@ -252,6 +252,14 @@ struct EmbeddingsLayerConfig {
     /// no model is bundled with the server binary.
     std::string hf_model_id;
 
+    /// Filesystem directory for the downloaded GGUF model. HfModelFetcher
+    /// caches the file here and short-circuits subsequent boots if the
+    /// file already exists, so a persistent (bind-mounted) directory
+    /// avoids re-downloading the model on every container recreate.
+    /// Empty string falls back to `<binary_dir>/models` at runtime so
+    /// dev/test runs without a deploy layout still work.
+    std::string cache_dir = "/tmp/kagami-moderation";
+
     /// Ring buffer of recent embeddings across all clients, used to
     /// detect near-duplicate spam from many IPs.
     int ring_size = 500;
