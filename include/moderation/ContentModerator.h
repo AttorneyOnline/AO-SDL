@@ -30,6 +30,7 @@
 #include "moderation/ModerationTypes.h"
 #include "moderation/RemoteClassifier.h"
 #include "moderation/SemanticClusterer.h"
+#include "moderation/SlurFilter.h"
 #include "moderation/UnicodeClassifier.h"
 #include "moderation/UrlExtractor.h"
 
@@ -92,6 +93,16 @@ class ContentModerator {
     /// been fetched. Use make_embedding_backend() for the default, or
     /// provide a custom implementation for testing.
     void set_embedding_backend(std::unique_ptr<EmbeddingBackend> backend);
+
+    /// Install the Layer 1c slur wordlist. Called from main.cpp on a
+    /// background thread after the TextListFetcher completes. Takes
+    /// raw newline entries — normalization and deduplication happen
+    /// inside SlurFilter::load_wordlist().
+    void set_slur_wordlist(const std::vector<std::string>& raw);
+
+    /// Install the Layer 1c exception list (tokens to suppress). Same
+    /// background-fetch pattern as set_slur_wordlist.
+    void set_slur_exceptions(const std::vector<std::string>& raw);
 
     /// Decide what to do with a message. Called from the OOC and IC
     /// packet handlers before broadcast.
@@ -187,6 +198,7 @@ class ContentModerator {
     std::shared_ptr<const ContentModerationConfig> cfg_;
     UnicodeClassifier unicode_;
     UrlExtractor urls_;
+    SlurFilter slurs_;
     RemoteClassifier remote_;
     SemanticClusterer clusterer_;
     ModerationHeat heat_;

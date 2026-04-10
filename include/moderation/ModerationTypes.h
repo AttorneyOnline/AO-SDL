@@ -78,6 +78,7 @@ struct ModerationAxisScores {
     // Layer 1: rule-based
     double visual_noise = 0.0; ///< Zalgo, exotic unicode, script-mixing.
     double link_risk = 0.0;    ///< URLs against a blocklist or suspicious TLDs.
+    double slurs = 0.0;        ///< Operator-supplied slur wordlist hits (Layer 1c).
 
     // Layer 2: remote classifier
     double toxicity = 0.0;      ///< General harassment / abuse.

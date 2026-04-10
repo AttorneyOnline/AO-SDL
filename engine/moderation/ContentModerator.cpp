@@ -43,6 +43,7 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
         cfg_ = new_cfg;
         unicode_.configure(new_cfg->unicode);
         urls_.configure(new_cfg->urls);
+        slurs_.configure(new_cfg->slurs);
         remote_.configure(new_cfg->remote);
         clusterer_.configure(new_cfg->embeddings);
         heat_.configure(new_cfg->heat);
@@ -95,6 +96,21 @@ void ContentModerator::set_embedding_backend(std::unique_ptr<EmbeddingBackend> b
     // Note: SemanticClusterer takes its own mutex; we don't hold the
     // moderator mutex here to avoid nested-lock subtlety.
     clusterer_.set_backend(std::move(backend));
+}
+
+void ContentModerator::set_slur_wordlist(const std::vector<std::string>& raw) {
+    // SlurFilter owns its own mutex. We don't take mu_ here for the
+    // same reason we don't take it around clusterer_.set_backend:
+    // nested-lock avoidance. The hot path (check()) reads the wordlist
+    // under SlurFilter's internal lock, so the reload is invisible
+    // to in-flight scans.
+    slurs_.load_wordlist(raw);
+    Log::log_print(INFO, "ContentModerator: loaded %zu slur wordlist entries", slurs_.wordlist_size());
+}
+
+void ContentModerator::set_slur_exceptions(const std::vector<std::string>& raw) {
+    slurs_.load_exceptions(raw);
+    Log::log_print(INFO, "ContentModerator: loaded %zu slur exception entries", slurs_.exception_size());
 }
 
 bool ContentModerator::is_muted(const std::string& ipid) const {
@@ -260,6 +276,7 @@ namespace {
 // raise the heat weights for a stricter baseline.
 constexpr double kAxisFloorNoise = 0.0;    // rules-based, non-zero = real
 constexpr double kAxisFloorLinkRisk = 0.0; // rules-based, non-zero = real
+constexpr double kAxisFloorSlurs = 0.0;    // exact-token match; any hit is real
 /// OpenAI's hate axis is high-precision but low-recall: confident slurs
 /// like "gas the jews" score 0.9+, but common casual slurs ("tranny",
 /// "heil hitler", racial epithets used casually) often score in the
@@ -293,6 +310,8 @@ double ContentModerator::heat_delta_from(const ModerationAxisScores& s, const He
         d += s.visual_noise * h.weight_visual_noise;
     if (s.link_risk > kAxisFloorLinkRisk)
         d += s.link_risk * h.weight_link_risk;
+    if (s.slurs > kAxisFloorSlurs)
+        d += s.slurs * h.weight_slurs;
     if (s.toxicity > kAxisFloorToxicity)
         d += s.toxicity * h.weight_toxicity;
     if (s.hate > kAxisFloorHate)
@@ -448,6 +467,35 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         bump_layer("urls", t0);
     }
 
+    // --- Layer 1c: slur wordlist ------------------------------------
+    // Word-boundary match against an operator-supplied wordlist after
+    // a Scunthorpe-safe normalizer pass. Runs before Layer 2 because:
+    //
+    //   1. It's strictly local — no network, no rate-limit concerns.
+    //   2. The remote classifier misses this class of content. OpenAI
+    //      scores "heil hitler" at hate=0.00014 and various racial
+    //      epithets in the 0.05-0.3 range, which can't be caught by
+    //      any sensible floor tweak. This layer fills that gap.
+    //   3. A hit contributes enough heat (slurs × weight_slurs, 6.0
+    //      by default) to cross the mute_threshold on a single
+    //      message — which makes layer1_sufficient fire below and
+    //      short-circuits the remote call. No money spent classifying
+    //      a message we already know is abuse.
+    //
+    // Inert by default: slurs_.is_active() is false until the layer
+    // is enabled in config AND a wordlist has been loaded (which only
+    // happens if the operator supplied a URL and TextListFetcher
+    // succeeded or a cache file exists).
+    if (slurs_.is_active()) {
+        auto t0 = std::chrono::steady_clock::now();
+        auto slur_result = slurs_.scan(message);
+        v.scores.slurs = slur_result.score;
+        if (slur_result.score > 0.0) {
+            v.triggered_axes.push_back(slur_result.reason);
+        }
+        bump_layer("slurs", t0);
+    }
+
     // --- Layer 2: remote classifier ---------------------------------
     // Synchronously calls OpenAI's moderation API (or any compatible
     // endpoint) with the configured timeout. On any failure — network,
@@ -600,6 +648,8 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         axis_fires.labels({"visual_noise"}).inc();
     if (v.scores.link_risk > kAxisFloorLinkRisk)
         axis_fires.labels({"link_risk"}).inc();
+    if (v.scores.slurs > kAxisFloorSlurs)
+        axis_fires.labels({"slurs"}).inc();
     if (v.scores.toxicity > kAxisFloorToxicity)
         axis_fires.labels({"toxicity"}).inc();
     if (v.scores.hate > kAxisFloorHate)
