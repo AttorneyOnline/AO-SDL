@@ -569,6 +569,17 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     static auto& l2_skipped_counter = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_layer2_skipped_total", "Times Layer 2 (remote classifier) was skipped and why", {"reason"});
 
+    // Record the "disabled" skip reason when the operator hasn't
+    // wired the remote classifier (no API key, layer turned off in
+    // config, etc). Without this label, dashboards counting Layer 2
+    // skip rate would have a hidden denominator — every check() on
+    // a deploy without a remote classifier was an invisible skip.
+    // Dashboards can now show the full skip-cause breakdown
+    // (safe_hint / layer1_sufficient / rate_limit / disabled) and
+    // the sum equals total checks minus actual remote calls.
+    if (!remote_.is_active())
+        l2_skipped_counter.labels({"disabled"}).inc();
+
     bool safe_hint_hit = false;
     if (remote_.is_active() && !layer1_sufficient && safe_hint_.is_active() && embedding_backend_) {
         auto t0 = std::chrono::steady_clock::now();

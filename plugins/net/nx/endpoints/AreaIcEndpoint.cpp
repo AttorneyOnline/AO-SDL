@@ -124,25 +124,18 @@ class AreaIcEndpoint : public NXEndpoint {
         if (max_ic > 0 && static_cast<int>(action.message.size()) > max_ic)
             return RestResponse::error(400, "IC message too long");
 
-        // Content moderation — mirrors the OOC endpoint above and the
-        // AO2 packet handler path.
+        // Content moderation — mirrors the AO2 packet handler path
+        // via the shared apply_content_verdict() helper. KICK / BAN /
+        // PERMA_BAN now correctly invalidate the session and (for
+        // bans) write to BanManager so SessionCreateEndpoint rejects
+        // reconnects. Pre-fix this branch was a 403-only no-op.
         if (auto* cm = room().content_moderator()) {
             auto v = cm->check(req.session->ipid, "ic", action.message);
-            switch (v.action) {
-            case moderation::ModerationAction::NONE:
-            case moderation::ModerationAction::LOG:
-                break;
-            case moderation::ModerationAction::CENSOR:
+            auto verdict_result = apply_content_verdict(*req.session, v, "ic");
+            if (verdict_result.early_return)
+                return std::move(*verdict_result.early_return);
+            if (verdict_result.pass_kind == ContentVerdictPass::Censor)
                 action.message = "[filtered]";
-                break;
-            case moderation::ModerationAction::DROP:
-            case moderation::ModerationAction::MUTE:
-                return RestResponse::json(200, {{"accepted", false}, {"reason", "content"}});
-            case moderation::ModerationAction::KICK:
-            case moderation::ModerationAction::BAN:
-            case moderation::ModerationAction::PERMA_BAN:
-                return RestResponse::error(403, "Content moderation: " + v.reason);
-            }
         }
 
         const auto& area_id = it->second;

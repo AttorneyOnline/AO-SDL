@@ -1,5 +1,78 @@
 #include "NXEndpoint.h"
 
+#include "game/BanManager.h"
+#include "game/ServerSession.h"
+#include "utils/Log.h"
+
+#include <chrono>
+
+NXEndpoint::ContentVerdictResult NXEndpoint::apply_content_verdict(ServerSession& session,
+                                                                   const moderation::ModerationVerdict& verdict,
+                                                                   const char* channel) {
+    using moderation::ModerationAction;
+    ContentVerdictResult out;
+    switch (verdict.action) {
+    case ModerationAction::NONE:
+    case ModerationAction::LOG:
+        out.pass_kind = ContentVerdictPass::Pass;
+        return out;
+
+    case ModerationAction::CENSOR:
+        out.pass_kind = ContentVerdictPass::Censor;
+        return out;
+
+    case ModerationAction::DROP:
+    case ModerationAction::MUTE:
+        // Don't broadcast, but the session token stays valid — the
+        // client can keep sending other requests, mute is enforced
+        // per-message by the next check() call.
+        Log::log_print(INFO, "NX: %s from ipid=%s suppressed [content]: %s", channel, session.ipid.c_str(),
+                       verdict.reason.c_str());
+        out.early_return = RestResponse::json(200, {{"accepted", false}, {"reason", "content"}});
+        return out;
+
+    case ModerationAction::KICK:
+        // KICK: invalidate the session token immediately so the
+        // client must re-auth to keep using the server. The connection
+        // can come back, but it's interrupted as a clear "you got
+        // kicked" signal — same semantics as the AO2 KK packet.
+        Log::log_print(WARNING, "NX: kicking ipid=%s [content/%s]: %s", session.ipid.c_str(), channel,
+                       verdict.reason.c_str());
+        server().destroy_session(session.client_id);
+        out.early_return = RestResponse::error(403, "Content moderation: " + verdict.reason);
+        return out;
+
+    case ModerationAction::BAN:
+    case ModerationAction::PERMA_BAN:
+        // BAN/PERMA_BAN: write to the BanManager so the BanCheck
+        // middleware on SessionCreateEndpoint rejects future
+        // reconnect attempts from this IPID/IP/HDID, AND destroy
+        // the active session so the current token is dead. Mirrors
+        // the AO2 packet behavior path exactly.
+        Log::log_print(WARNING, "NX: banning ipid=%s [content/%s]: %s", session.ipid.c_str(), channel,
+                       verdict.reason.c_str());
+        if (auto* bm = room().ban_manager()) {
+            BanEntry entry;
+            entry.ipid = session.ipid;
+            entry.ip = session.ip_address;
+            entry.hdid = session.hardware_id;
+            entry.reason = "[auto] content: " + verdict.reason;
+            entry.moderator = "ContentModerator";
+            entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+                                  std::chrono::system_clock::now().time_since_epoch())
+                                  .count();
+            entry.duration = (verdict.action == ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
+            bm->add_ban(std::move(entry));
+        }
+        server().destroy_session(session.client_id);
+        out.early_return = RestResponse::error(403, "Content moderation: " + verdict.reason);
+        return out;
+    }
+    // Unreachable — switch covers every enumerator. Defensive default.
+    out.pass_kind = ContentVerdictPass::Pass;
+    return out;
+}
+
 // Linker anchors defined in each endpoint TU.
 void nx_ep_server();
 void nx_ep_session_create();
