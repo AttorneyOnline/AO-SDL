@@ -1,6 +1,7 @@
 #include "net/nx/NXEndpoint.h"
 
 #include "AreaIdResolver.h"
+#include "moderation/ContentModerator.h"
 #include "net/EndpointRegistrar.h"
 #include "utils/GeneratedSchemas.h"
 
@@ -115,6 +116,29 @@ class AreaIcEndpoint : public NXEndpoint {
         int max_ic = room().max_ic_message_length;
         if (max_ic > 0 && static_cast<int>(action.message.size()) > max_ic)
             return RestResponse::error(400, "IC message too long");
+
+        // Content moderation — mirrors the OOC endpoint above and the
+        // AO2 packet handler path.
+        if (auto* cm = room().content_moderator()) {
+            if (cm->is_muted(req.session->ipid))
+                return RestResponse::error(403, "Muted by content moderation");
+            auto v = cm->check(req.session->ipid, "ic", action.message);
+            switch (v.action) {
+            case moderation::ModerationAction::NONE:
+            case moderation::ModerationAction::LOG:
+                break;
+            case moderation::ModerationAction::CENSOR:
+                action.message = "[filtered]";
+                break;
+            case moderation::ModerationAction::DROP:
+            case moderation::ModerationAction::MUTE:
+                return RestResponse::json(200, {{"accepted", false}, {"reason", "content"}});
+            case moderation::ModerationAction::KICK:
+            case moderation::ModerationAction::BAN:
+            case moderation::ModerationAction::PERMA_BAN:
+                return RestResponse::error(403, "Content moderation: " + v.reason);
+            }
+        }
 
         const auto& area_id = it->second;
 
