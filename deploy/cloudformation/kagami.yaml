@@ -512,7 +512,7 @@ Resources:
                           'api_key': '$CF_OPENAI_KEY',
                           'endpoint': 'https://api.openai.com/v1/moderations',
                           'model': 'omni-moderation-latest',
-                          'timeout_ms': 500,
+                          'timeout_ms': 3000,
                           'fail_open': True
                       },
                       'embeddings': {
@@ -536,11 +536,16 @@ Resources:
                           'ban_duration_seconds': 86400,
                           'weight_visual_noise': 0.5,
                           'weight_link_risk': 5.0,
-                          'weight_toxicity': 2.0,
+                          # Roleplay-friendly defaults. See inline floor
+                          # tuning comment in ContentModerator.cpp — the
+                          # per-axis floors already filter dramatic
+                          # in-character language, so weight=1.0 gives
+                          # single borderline messages a LOG level.
+                          'weight_toxicity': 1.0,
                           'weight_hate': 4.0,
                           'weight_sexual': 1.5,
                           'weight_sexual_minors': 100.0,
-                          'weight_violence': 1.5,
+                          'weight_violence': 1.0,
                           'weight_self_harm': 1.0,
                           'weight_semantic_echo': 2.0
                       },

@@ -507,14 +507,21 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                   }},
                  {"remote",
                   nlohmann::json{
-                      // Phase 2: wired later. Set api_key AND enabled=true
-                      // to activate once that code lands.
+                      // Remote classifier (OpenAI omni-moderation).
+                      // Opt-in: requires enabled=true AND a non-empty
+                      // api_key. An empty api_key automatically disables
+                      // the layer regardless of the enabled flag.
                       {"enabled", false},
                       {"provider", "openai"},
                       {"api_key", ""},
                       {"endpoint", "https://api.openai.com/v1/moderations"},
                       {"model", "omni-moderation-latest"},
-                      {"timeout_ms", 500},
+                      // 3s default leaves headroom for OpenAI's cold-
+                      // start TLS handshake (observed ~1.6s on fresh
+                      // connections from EC2). Keep-alive reuse drops
+                      // subsequent calls to ~200ms; dropping timeout
+                      // below ~2000 causes cold-start false failures.
+                      {"timeout_ms", 3000},
                       {"fail_open", true},
                   }},
                  {"embeddings",
@@ -541,11 +548,21 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"ban_duration_seconds", 24 * 60 * 60},
                       {"weight_visual_noise", 0.5},
                       {"weight_link_risk", 5.0},
-                      {"weight_toxicity", 2.0},
+                      // Toxicity and violence weights default to the
+                      // roleplay-friendly tuning (1.0). The per-axis
+                      // floors in ContentModerator.cpp
+                      // (kAxisFloorToxicity=0.85, kAxisFloorViolence=0.85)
+                      // already filter out dramatic in-character
+                      // language, so a 1.0 weight gives a single
+                      // genuinely-hostile message roughly 1.0 heat —
+                      // LOG level, needs repetition to escalate. General
+                      // chat servers that want stricter defaults can
+                      // raise these to 2.0-3.0 via config.
+                      {"weight_toxicity", 1.0},
                       {"weight_hate", 4.0},
                       {"weight_sexual", 1.5},
                       {"weight_sexual_minors", 100.0},
-                      {"weight_violence", 1.5},
+                      {"weight_violence", 1.0},
                       {"weight_self_harm", 1.0},
                       {"weight_semantic_echo", 2.0},
                   }},
