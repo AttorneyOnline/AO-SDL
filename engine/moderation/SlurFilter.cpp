@@ -346,8 +346,30 @@ void SlurFilter::load_wordlist(const std::vector<std::string>& raw) {
         // under this single-token design — that's intentional, multi-
         // word phrases are a Layer 2 problem (semantic similarity).
         auto toks = tokenize(norm);
-        if (!toks.empty())
-            fresh.insert(std::move(toks[0]));
+        if (toks.empty())
+            continue;
+        // Min-length guard: reject wordlist entries whose first
+        // normalized token is shorter than 3 characters. Two-letter
+        // tokens are extremely ambiguous — common abbreviations and
+        // pronouns ("ai", "it", "us", "eu", "is", "as") would false-
+        // positive on nearly every message. The 3-char floor is a
+        // hard safety rail independent of the operator's list.
+        //
+        // Real-world trigger: community slur lists sometimes include
+        // numeric/coded entries like "41%" (a transphobic dog whistle)
+        // that normalize via leet-digit fold (4->a, 1->i) to "ai".
+        // Without this guard, loading such an entry would put "ai"
+        // in the active wordlist and match every mention of
+        // "artificial intelligence". The entry stays in the source
+        // file as documentation / future phrase-matching, but the
+        // active matcher safely ignores it.
+        //
+        // Operators who genuinely want 2-letter matches (rare) can
+        // wrap the term in a longer surrounding token so the matcher
+        // picks up something unambiguous.
+        if (toks[0].size() < 3)
+            continue;
+        fresh.insert(std::move(toks[0]));
     }
     std::lock_guard lock(mu_);
     wordlist_ = std::move(fresh);

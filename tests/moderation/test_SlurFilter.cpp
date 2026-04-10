@@ -298,6 +298,68 @@ TEST(SlurFilterScan, SourceCodeReferencesClean) {
     }
 }
 
+// --- Minimum-length guard on load_wordlist ---------------------------
+
+TEST(SlurFilterLoad, RejectsShortTwoLetterTokens) {
+    // The 3-char floor blocks ambiguous 2-letter tokens from ever
+    // entering the active wordlist. "ai", "it", "us", "eu" are all
+    // common abbreviations that would false-positive on nearly every
+    // message if they snuck in.
+    SlurFilter f;
+    setup_filter(f, {"ai", "it", "us", "eu", "is", "as"});
+    EXPECT_EQ(f.wordlist_size(), 0u);
+    EXPECT_FALSE(f.is_active());
+}
+
+TEST(SlurFilterLoad, RejectsSingleCharTokens) {
+    SlurFilter f;
+    setup_filter(f, {"a", "i", "x"});
+    EXPECT_EQ(f.wordlist_size(), 0u);
+}
+
+TEST(SlurFilterLoad, AcceptsThreeLetterTokens) {
+    // Three characters is the floor — right at the boundary, loads OK.
+    SlurFilter f;
+    setup_filter(f, {"xyz"});
+    EXPECT_EQ(f.wordlist_size(), 1u);
+    EXPECT_EQ(f.scan("the xyz problem").score, 1.0);
+}
+
+TEST(SlurFilterLoad, NumericEntryDoesNotFireOnAI) {
+    // Regression: "41%" is a known transphobic dog whistle. Our
+    // single-token filter normalizes it via leet-digit fold
+    // (4 -> a, 1 -> i, % -> boundary) to the two-letter token "ai".
+    // Without the min-length guard, loading the entry would put
+    // "ai" in the active wordlist and match any message about
+    // artificial intelligence. The guard makes the entry safe to
+    // include in the source file as documentation / future phrase-
+    // matching without breaking mundane AI chat.
+    SlurFilter f;
+    setup_filter(f, {"41%"});
+    EXPECT_EQ(f.wordlist_size(), 0u);
+
+    // Verify the AI false-positive specifically does NOT fire.
+    auto r = f.scan("AI research is advancing quickly");
+    EXPECT_EQ(r.score, 0.0);
+    auto r2 = f.scan("the state of ai in 2026");
+    EXPECT_EQ(r2.score, 0.0);
+}
+
+TEST(SlurFilterLoad, MixedListKeepsValidEntries) {
+    // Mixed load: some entries pass the guard, some don't. The
+    // passing ones should still arrive in the wordlist; the failing
+    // ones should be silently dropped without disabling the layer.
+    SlurFilter f;
+    setup_filter(f, {"41%", "evilword", "ai", "badterm", "xy"});
+    EXPECT_EQ(f.wordlist_size(), 2u);
+    EXPECT_TRUE(f.is_active());
+    EXPECT_EQ(f.scan("hey evilword").score, 1.0);
+    EXPECT_EQ(f.scan("hey badterm").score, 1.0);
+    // But the rejected short entries still don't fire.
+    EXPECT_EQ(f.scan("talking about ai").score, 0.0);
+    EXPECT_EQ(f.scan("the xy plane").score, 0.0);
+}
+
 // --- parse_text_list + TextListFetcher parser ------------------------
 
 #include "moderation/TextListFetcher.h"
