@@ -58,9 +58,9 @@ int decode_utf8(std::string_view s, size_t i, uint32_t& out) {
 /// and "how many different scripts are mixed in one message?"
 enum class Script : uint8_t {
     OTHER = 0,
-    ASCII,      ///< Basic latin. Always common, always fine.
-    LATIN,      ///< Latin + latin extended, common.
-    CYRILLIC,   ///< Common. Mixing with Latin raises a flag.
+    ASCII,    ///< Basic latin. Always common, always fine.
+    LATIN,    ///< Latin + latin extended, common.
+    CYRILLIC, ///< Common. Mixing with Latin raises a flag.
     GREEK,
     HEBREW,
     ARABIC,
@@ -320,18 +320,16 @@ UnicodeClassification UnicodeClassifier::classify(std::string_view message) cons
     double score = 0.0;
 
     if (combining_ratio > cfg_.combining_mark_threshold) {
-        score += (combining_ratio - cfg_.combining_mark_threshold) /
-                 std::max(0.01, 1.0 - cfg_.combining_mark_threshold);
+        score +=
+            (combining_ratio - cfg_.combining_mark_threshold) / std::max(0.01, 1.0 - cfg_.combining_mark_threshold);
         out.reason += "zalgo ";
     }
     if (exotic_ratio > cfg_.exotic_script_threshold) {
-        score += (exotic_ratio - cfg_.exotic_script_threshold) /
-                 std::max(0.01, 1.0 - cfg_.exotic_script_threshold);
+        score += (exotic_ratio - cfg_.exotic_script_threshold) / std::max(0.01, 1.0 - cfg_.exotic_script_threshold);
         out.reason += "exotic_script ";
     }
     if (format_ratio > cfg_.format_char_threshold) {
-        score += (format_ratio - cfg_.format_char_threshold) /
-                 std::max(0.01, 1.0 - cfg_.format_char_threshold);
+        score += (format_ratio - cfg_.format_char_threshold) / std::max(0.01, 1.0 - cfg_.format_char_threshold);
         out.reason += "format_chars ";
     }
 
@@ -345,8 +343,7 @@ UnicodeClassification UnicodeClassifier::classify(std::string_view message) cons
 
     // Invalid UTF-8 contributes proportionally.
     if (invalid_bytes > 0) {
-        double ratio = static_cast<double>(invalid_bytes) /
-                       static_cast<double>(invalid_bytes + out.total_codepoints);
+        double ratio = static_cast<double>(invalid_bytes) / static_cast<double>(invalid_bytes + out.total_codepoints);
         score += ratio;
         out.reason += "invalid_utf8 ";
     }

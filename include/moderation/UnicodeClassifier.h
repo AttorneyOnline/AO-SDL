@@ -26,14 +26,14 @@ namespace moderation {
 
 /// Result of classifying a single message.
 struct UnicodeClassification {
-    double score = 0.0;         ///< Final score in [0, config.max_score].
-    int total_codepoints = 0;   ///< Parsed codepoint count (not bytes).
-    int combining_marks = 0;    ///< Count of Mn/Mc/Me category codepoints.
-    int format_chars = 0;       ///< Count of Cf (format) codepoints.
-    int private_use = 0;        ///< Count of Co (private-use area) codepoints.
-    int exotic_script = 0;      ///< Count of rare-script codepoints.
-    int script_count = 0;       ///< Number of distinct major scripts seen.
-    std::string reason;         ///< Human-readable summary ("zalgo", "cuneiform", etc.).
+    double score = 0.0;       ///< Final score in [0, config.max_score].
+    int total_codepoints = 0; ///< Parsed codepoint count (not bytes).
+    int combining_marks = 0;  ///< Count of Mn/Mc/Me category codepoints.
+    int format_chars = 0;     ///< Count of Cf (format) codepoints.
+    int private_use = 0;      ///< Count of Co (private-use area) codepoints.
+    int exotic_script = 0;    ///< Count of rare-script codepoints.
+    int script_count = 0;     ///< Number of distinct major scripts seen.
+    std::string reason;       ///< Human-readable summary ("zalgo", "cuneiform", etc.).
 };
 
 class UnicodeClassifier {

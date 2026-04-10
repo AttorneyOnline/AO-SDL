@@ -54,8 +54,7 @@ namespace moderation {
 ///   ipid    — client identifier.
 ///   action  — the sanction level.
 ///   reason  — human-readable reason to show the user or log.
-using ActionCallback =
-    std::function<void(const std::string& ipid, ModerationAction action, const std::string& reason)>;
+using ActionCallback = std::function<void(const std::string& ipid, ModerationAction action, const std::string& reason)>;
 
 class ContentModerator {
   public:
@@ -137,11 +136,11 @@ class ContentModerator {
     /// Used by the Prometheus collector to export gauges without
     /// blowing up cardinality with per-IPID labels.
     struct HeatStats {
-        size_t tracked_ipids = 0;  ///< Number of IPIDs with nonzero heat.
-        size_t muted_ipids = 0;    ///< Number of currently-active mutes.
-        double max_heat = 0.0;     ///< Highest current heat across all IPIDs.
-        double sum_heat = 0.0;     ///< Sum of current heat (mean = sum / tracked).
-        size_t above_censor = 0;   ///< Count of IPIDs >= censor_threshold.
+        size_t tracked_ipids = 0; ///< Number of IPIDs with nonzero heat.
+        size_t muted_ipids = 0;   ///< Number of currently-active mutes.
+        double max_heat = 0.0;    ///< Highest current heat across all IPIDs.
+        double sum_heat = 0.0;    ///< Sum of current heat (mean = sum / tracked).
+        size_t above_censor = 0;  ///< Count of IPIDs >= censor_threshold.
         size_t above_drop = 0;
         size_t above_mute = 0;
     };

@@ -49,8 +49,8 @@ class ModHeatCommand : public CommandHandler {
         if (do_reset) {
             bool changed = cm->reset_state(target_ipid);
             Log::log_print(INFO, "ModHeat: %s [%s] cleared heat+mute for IPID %s (changed=%d)",
-                           ctx.session.display_name.c_str(), ctx.session.ipid.c_str(),
-                           target_ipid.c_str(), changed ? 1 : 0);
+                           ctx.session.display_name.c_str(), ctx.session.ipid.c_str(), target_ipid.c_str(),
+                           changed ? 1 : 0);
             ctx.send_system_message("Heat and mute cleared for IPID " + target_ipid +
                                     (changed ? "." : " (no prior state)."));
             return;

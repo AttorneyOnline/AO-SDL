@@ -12,14 +12,12 @@ namespace moderation {
 namespace {
 
 int64_t now_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
 
 int64_t now_sec() {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-               std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
 
@@ -183,15 +181,15 @@ namespace {
 // If you're deploying kagami on a general chat server without
 // heavy roleplay, drop the classifier floors to 0.15-0.3 and
 // raise the heat weights for a stricter baseline.
-constexpr double kAxisFloorNoise = 0.0;           // rules-based, non-zero = real
-constexpr double kAxisFloorLinkRisk = 0.0;        // rules-based, non-zero = real
-constexpr double kAxisFloorHate = 0.3;            // identity-based hate — stricter than toxicity
-constexpr double kAxisFloorToxicity = 0.85;       // harassment — very high floor for roleplay
-constexpr double kAxisFloorSexual = 0.7;          // sexual content (adult) — 16+ audience
-constexpr double kAxisFloorViolence = 0.85;       // courtroom violence is canon
-constexpr double kAxisFloorSelfHarm = 0.5;        // moderate — catches grooming-adjacent content
-constexpr double kAxisFloorSexualMinors = 0.01;   // catastrophic, stricter
-constexpr double kAxisFloorSemanticEcho = 0.0;    // clustering is already >= 1.0 when it fires
+constexpr double kAxisFloorNoise = 0.0;         // rules-based, non-zero = real
+constexpr double kAxisFloorLinkRisk = 0.0;      // rules-based, non-zero = real
+constexpr double kAxisFloorHate = 0.3;          // identity-based hate — stricter than toxicity
+constexpr double kAxisFloorToxicity = 0.85;     // harassment — very high floor for roleplay
+constexpr double kAxisFloorSexual = 0.7;        // sexual content (adult) — 16+ audience
+constexpr double kAxisFloorViolence = 0.85;     // courtroom violence is canon
+constexpr double kAxisFloorSelfHarm = 0.5;      // moderate — catches grooming-adjacent content
+constexpr double kAxisFloorSexualMinors = 0.01; // catastrophic, stricter
+constexpr double kAxisFloorSemanticEcho = 0.0;  // clustering is already >= 1.0 when it fires
 
 } // namespace
 
@@ -254,14 +252,11 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     static auto& events_counter = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_events_total", "Moderation decisions emitted", {"action", "channel"});
     static auto& layer_ns_counter = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_layer_nanoseconds_total",
-        "Total nanoseconds spent in each moderation layer", {"layer"});
+        "kagami_moderation_layer_nanoseconds_total", "Total nanoseconds spent in each moderation layer", {"layer"});
     static auto& layer_calls_counter = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_layer_calls_total", "Times each moderation layer has been invoked",
-        {"layer"});
+        "kagami_moderation_layer_calls_total", "Times each moderation layer has been invoked", {"layer"});
     static auto& check_ns_counter = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_check_nanoseconds_total",
-        "Total nanoseconds spent in ContentModerator::check");
+        "kagami_moderation_check_nanoseconds_total", "Total nanoseconds spent in ContentModerator::check");
     static auto& check_calls_counter = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_checks_total", "Total ContentModerator::check invocations");
     // Per-axis fire counter. Increments when a given axis score
@@ -272,14 +267,12 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // begin with). Lets operators see "how often does hate fire"
     // without mining CloudWatch log events.
     static auto& axis_fires = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_axis_fires_total",
-        "Count of checks where a given axis scored above its visibility floor", {"axis"});
+        "kagami_moderation_axis_fires_total", "Count of checks where a given axis scored above its visibility floor",
+        {"axis"});
 
     const auto check_start = std::chrono::steady_clock::now();
     auto bump_layer = [&](const char* layer, std::chrono::steady_clock::time_point t0) {
-        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                      std::chrono::steady_clock::now() - t0)
-                      .count();
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
         layer_ns_counter.labels({layer}).inc(static_cast<double>(dt));
         layer_calls_counter.labels({layer}).inc();
     };
@@ -328,8 +321,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // incident.
     if (remote_.is_active()) {
         static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
-            "kagami_moderation_remote_errors_total",
-            "Remote classifier failures by cause", {"reason"});
+            "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
         auto t0 = std::chrono::steady_clock::now();
         auto rr = remote_.classify(std::string(message));
         if (rr.ok) {
@@ -371,10 +363,10 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             // Cardinality: error reason is already coarse-grained
             // (timeout/http/parse). Fall back to "other" for anything
             // unexpected to keep the label set bounded.
-            std::string reason = rr.http_status == 0 ? "transport"
+            std::string reason = rr.http_status == 0                               ? "transport"
                                  : (rr.http_status >= 400 && rr.http_status < 500) ? "http_4xx"
-                                 : (rr.http_status >= 500) ? "http_5xx"
-                                                            : "other";
+                                 : (rr.http_status >= 500)                         ? "http_5xx"
+                                                                                   : "other";
             remote_err_counter.labels({reason}).inc();
         }
         bump_layer("remote", t0);
@@ -431,8 +423,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         // Wall-clock timing for the whole check() including the early
         // return path (so dashboards see the full cost, not just the
         // action-bearing subset).
-        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                      std::chrono::steady_clock::now() - check_start)
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - check_start)
                       .count();
         check_ns_counter.get().inc(static_cast<uint64_t>(dt));
         check_calls_counter.get().inc();
@@ -543,8 +534,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // Wall-clock cost of the entire check(), including audit-log
     // fan-out. Useful for catching regressions after Phase 2/3 land.
     {
-        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                      std::chrono::steady_clock::now() - check_start)
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - check_start)
                       .count();
         // Unlabeled metrics: CounterFamily::get() returns the
         // default-label Counter instance.
@@ -580,10 +570,9 @@ ContentModerator::HeatStats ContentModerator::compute_heat_stats() {
 
 void register_moderator_metrics(ContentModerator& cm) {
     auto& reg = metrics::MetricsRegistry::instance();
-    auto& tracked_g = reg.gauge("kagami_moderation_heat_tracked_ipids",
-                                "Number of IPIDs with nonzero moderation heat");
-    auto& muted_g = reg.gauge("kagami_moderation_muted_ipids",
-                              "Number of IPIDs under an active content-moderation mute");
+    auto& tracked_g = reg.gauge("kagami_moderation_heat_tracked_ipids", "Number of IPIDs with nonzero moderation heat");
+    auto& muted_g =
+        reg.gauge("kagami_moderation_muted_ipids", "Number of IPIDs under an active content-moderation mute");
 
     reg.add_collector([&cm, &tracked_g, &muted_g] {
         auto stats = cm.compute_heat_stats();

@@ -211,8 +211,7 @@ int main(int /*argc*/, char* argv[]) {
 
         if (cm_cfg.enabled)
             Log::log_print(INFO, "ContentModerator: enabled (unicode=%s urls=%s remote=%s embeddings=%s)",
-                           cm_cfg.unicode.enabled ? "on" : "off",
-                           cm_cfg.urls.enabled ? "on" : "off",
+                           cm_cfg.unicode.enabled ? "on" : "off", cm_cfg.urls.enabled ? "on" : "off",
                            (cm_cfg.remote.enabled && !cm_cfg.remote.api_key.empty()) ? "on" : "off",
                            (cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) ? "on" : "off");
 
@@ -239,9 +238,8 @@ int main(int /*argc*/, char* argv[]) {
             else {
                 auto backend = moderation::make_embedding_backend(fetch.local_path);
                 if (backend && backend->is_ready()) {
-                    Log::log_print(INFO, "ContentModerator: embedding backend=%s dim=%d (%s)",
-                                   backend->name(), backend->dimension(),
-                                   fetch.downloaded ? "downloaded" : "cached");
+                    Log::log_print(INFO, "ContentModerator: embedding backend=%s dim=%d (%s)", backend->name(),
+                                   backend->dimension(), fetch.downloaded ? "downloaded" : "cached");
                     content_moderator.set_embedding_backend(std::move(backend));
                 }
                 else {

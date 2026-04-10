@@ -56,11 +56,6 @@ class HttpTransport : public RemoteClassifierTransport {
     }
 
   private:
-    std::mutex clients_mu_;
-    std::unordered_map<std::string, std::shared_ptr<http::Client>> clients_;
-  public:
-
-  private:
     /// Split a URL like "https://api.openai.com/v1/moderations" into
     /// {"https://api.openai.com", "/v1/moderations"}.
     static std::pair<std::string, std::string> split_base(const std::string& url) {
@@ -73,6 +68,9 @@ class HttpTransport : public RemoteClassifierTransport {
             return {url, "/"};
         return {url.substr(0, path_start), url.substr(path_start)};
     }
+
+    std::mutex clients_mu_;
+    std::unordered_map<std::string, std::shared_ptr<http::Client>> clients_;
 };
 
 } // namespace
@@ -117,9 +115,8 @@ RemoteClassifierResult RemoteClassifier::classify(const std::string& text) {
     const auto start = std::chrono::steady_clock::now();
     auto [status, resp_body] = transport_->post_json(cfg_.endpoint, cfg_.api_key, body, cfg_.timeout_ms);
     out.http_status = status;
-    out.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - start)
-                          .count();
+    out.duration_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
 
     if (status == 0) {
         out.error = resp_body;
@@ -182,8 +179,8 @@ bool parse_openai_response(const std::string& body, ModerationAxisScores& out, s
         out.violence = std::max(get("violence"), get("violence/graphic"));
         out.self_harm = std::max({get("self-harm"), get("self-harm/intent"), get("self-harm/instructions")});
         // Harassment is a superset of verbal toxicity for our purposes.
-        out.toxicity = std::max({get("harassment"), get("harassment/threatening"), get("illicit"),
-                                 get("illicit/violent")});
+        out.toxicity =
+            std::max({get("harassment"), get("harassment/threatening"), get("illicit"), get("illicit/violent")});
 
         return true;
     }

@@ -29,11 +29,11 @@ class Client;
 namespace moderation {
 
 struct RemoteClassifierResult {
-    bool ok = false;            ///< True on 2xx response with parseable body.
+    bool ok = false;             ///< True on 2xx response with parseable body.
     ModerationAxisScores scores; ///< Populated from response; zero if ok=false.
-    std::string error;          ///< Human-readable error on !ok.
-    int http_status = 0;        ///< Raw HTTP status, or 0 for transport failure.
-    int64_t duration_ms = 0;    ///< Wall-clock duration of the call.
+    std::string error;           ///< Human-readable error on !ok.
+    int http_status = 0;         ///< Raw HTTP status, or 0 for transport failure.
+    int64_t duration_ms = 0;     ///< Wall-clock duration of the call.
 };
 
 /// Trait-style transport so tests can swap in a mock without touching

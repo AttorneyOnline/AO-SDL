@@ -111,11 +111,11 @@ void MetricsCollector::start(http::Server& http) {
     // Spawn the collection thread (captures &http — http::Server outlives MetricsCollector)
     thread_ = std::jthread([this, &http, &uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players,
                             &area_info, &chars_taken, &event_publishes, &session_bytes_sent, &session_bytes_recv,
-                            &session_packets_sent, &session_packets_recv, &session_idle, &session_mod_heat, &http_open_conns,
-                            &http_work_queue, &http_result_queue, &http_active_workers, &http_worker_count,
-                            &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util, &poll_events,
-                            &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util, &ws_dispatch_rate,
-                            &ws_worker_util, &ws_worker_active, &ws_work_queue_depth, &lock_util,
+                            &session_packets_sent, &session_packets_recv, &session_idle, &session_mod_heat,
+                            &http_open_conns, &http_work_queue, &http_result_queue, &http_active_workers,
+                            &http_worker_count, &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util,
+                            &poll_events, &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util,
+                            &ws_dispatch_rate, &ws_worker_util, &ws_worker_active, &ws_work_queue_depth, &lock_util,
                             &reputation_cache_size, &firewall_rules_active, &asn_tracked, &auth_mode, &registered_user,
                             &reg](std::stop_token st) {
         uint64_t prev_worker_busy = 0, prev_worker_idle = 0;

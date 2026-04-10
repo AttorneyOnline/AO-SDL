@@ -33,11 +33,11 @@ namespace moderation {
 
 struct EmbeddingResult {
     bool ok = false;
-    std::vector<float> vector;  ///< Unit-normalized embedding vector (L2).
+    std::vector<float> vector; ///< Unit-normalized embedding vector (L2).
     std::string error;
-    int token_count = 0;        ///< # tokens after tokenization, 0 on failure.
-    int64_t tokenize_ns = 0;    ///< Nanoseconds spent in the tokenizer.
-    int64_t decode_ns = 0;      ///< Nanoseconds spent in llama_decode (model forward pass).
+    int token_count = 0;     ///< # tokens after tokenization, 0 on failure.
+    int64_t tokenize_ns = 0; ///< Nanoseconds spent in the tokenizer.
+    int64_t decode_ns = 0;   ///< Nanoseconds spent in llama_decode (model forward pass).
 };
 
 class EmbeddingBackend {

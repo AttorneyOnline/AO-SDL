@@ -67,7 +67,8 @@ TEST_F(ModerationHeatTest, DecaysByHalfOverHalfLife) {
 
 TEST_F(ModerationHeatTest, DecaysContinuouslyNotStepwise) {
     heat_.apply("a", 8.0);
-    advance_seconds(30.0); // one quarter of half-life... wait no, 30s is half of 60s = 1 half-life? No, half-life IS 60s.
+    advance_seconds(
+        30.0); // one quarter of half-life... wait no, 30s is half of 60s = 1 half-life? No, half-life IS 60s.
     // 30 / 60 = 0.5 half-lives → factor = 2^-0.5 ≈ 0.707
     double v = heat_.peek("a");
     EXPECT_NEAR(v, 8.0 * 0.7071, 0.05);

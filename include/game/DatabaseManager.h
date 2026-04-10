@@ -43,19 +43,19 @@ inline constexpr int DB_VERSION = 2;
 struct MuteEntry {
     int64_t id = 0;
     std::string ipid;
-    int64_t started_at = 0;  ///< seconds since epoch
-    int64_t expires_at = 0;  ///< seconds since epoch; 0 = active until lifted
+    int64_t started_at = 0; ///< seconds since epoch
+    int64_t expires_at = 0; ///< seconds since epoch; 0 = active until lifted
     std::string reason;
-    std::string moderator;   ///< "ContentModerator" or a human mod name
+    std::string moderator; ///< "ContentModerator" or a human mod name
 };
 
 /// Filter for querying the moderation audit trail.
 struct ModerationQuery {
-    std::optional<std::string> ipid;      ///< Exact IPID match.
-    std::optional<std::string> channel;   ///< "ic" or "ooc".
-    std::optional<std::string> action;    ///< Exact action name (e.g. "ban").
-    std::optional<int64_t> since_ms;      ///< Inclusive lower bound on timestamp_ms.
-    std::optional<int64_t> until_ms;      ///< Inclusive upper bound on timestamp_ms.
+    std::optional<std::string> ipid;    ///< Exact IPID match.
+    std::optional<std::string> channel; ///< "ic" or "ooc".
+    std::optional<std::string> action;  ///< Exact action name (e.g. "ban").
+    std::optional<int64_t> since_ms;    ///< Inclusive lower bound on timestamp_ms.
+    std::optional<int64_t> until_ms;    ///< Inclusive upper bound on timestamp_ms.
     int limit = 100;
 };
 

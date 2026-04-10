@@ -149,8 +149,7 @@ void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interact
                 std::string json = moderation::ModerationAuditLog::to_json_line(ev);
                 lk->push(severity_for(ev.action), format_timestamp(ev.timestamp_ms), json);
             });
-            Log::log_print(INFO, "ModerationAuditLog: Loki sink -> %s (label=%s)",
-                           cm_cfg.audit.loki_url.c_str(),
+            Log::log_print(INFO, "ModerationAuditLog: Loki sink -> %s (label=%s)", cm_cfg.audit.loki_url.c_str(),
                            cm_cfg.audit.loki_stream_label.c_str());
         }
 
@@ -173,8 +172,7 @@ void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interact
                 cw->push(severity_for(ev.action), format_timestamp(ev.timestamp_ms), json);
             });
             Log::log_print(INFO, "ModerationAuditLog: CloudWatch sink -> %s/%s",
-                           cm_cfg.audit.cloudwatch_log_group.c_str(),
-                           cm_cfg.audit.cloudwatch_log_stream.c_str());
+                           cm_cfg.audit.cloudwatch_log_group.c_str(), cm_cfg.audit.cloudwatch_log_stream.c_str());
         }
     }
 }
