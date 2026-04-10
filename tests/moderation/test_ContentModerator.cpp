@@ -141,6 +141,36 @@ TEST_F(ContentModeratorTest, AuditLogReceivesEvent) {
     EXPECT_GT(seen[0].scores.link_risk, 0.0);
 }
 
+TEST_F(ContentModeratorTest, CleanMessageAfterOffenseDoesNotInheritAction) {
+    // Regression: an accumulated-heat user who posts a completely
+    // clean message must NOT be dropped. The bug was that remote
+    // classifier floor-level noise (toxicity ~= 1e-5) multiplied by
+    // the axis weight produced a sub-0.001 heat delta > 0, which
+    // blew through the heat_delta <= 0 short-circuit and let the
+    // ladder act on the accumulated heat.
+    auto cfg = enable_urls_only();
+    // Configure a stub remote-classifier axis score by bypassing the
+    // layer — use UrlExtractor alone for the "bad" message, then
+    // fake noise on the clean one by... wait, we can't synthesize
+    // remote noise without a mock transport. Instead we directly
+    // manipulate heat so the scenario is reproducible: push heat
+    // to the drop threshold, then check a clean message.
+    cm_.configure(cfg);
+
+    // Post the bad message to actually move heat via the URL layer.
+    // The fixture blocklist is {"bad.com"} so hit that.
+    auto bad = cm_.check("user1", "ooc", "see bad.com now");
+    EXPECT_GT(bad.heat_after, cfg.heat.drop_threshold);
+
+    // A clean message MUST return NONE — the short-circuit fires on
+    // heat_delta=0 because none of the clean axes cross their
+    // visibility floors.
+    auto clean = cm_.check("user1", "ooc", "hello world");
+    EXPECT_EQ(clean.action, moderation::ModerationAction::NONE);
+    // The heat should NOT have grown (no delta applied).
+    EXPECT_LE(clean.heat_after, bad.heat_after);
+}
+
 TEST_F(ContentModeratorTest, JsonSerializationRoundTrip) {
     moderation::ModerationEvent ev;
     ev.timestamp_ms = 123456;

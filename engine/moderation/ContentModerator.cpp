@@ -142,12 +142,58 @@ double ContentModerator::current_heat(const std::string& ipid) {
     return heat_.peek(ipid);
 }
 
+namespace {
+
+// Per-axis visibility floors: an axis only contributes to the
+// per-message heat delta when its score crosses this threshold.
+// Chosen to match the dashboard axis_fires counter so "the axis
+// fired" and "the axis added heat" are always the same event.
+//
+// Rationale: remote classifiers (OpenAI omni-moderation) return
+// floor-level noise on every input — clean messages commonly see
+// toxicity ~= 1e-5, hate ~= 1e-6, etc. Without a floor, those
+// multiply by the axis weight to produce a sub-0.001 heat delta
+// that IS still > 0, which blows through the "heat_delta > 0"
+// short-circuit and lets the heat ladder act on accumulated heat
+// from previous offenses. The result: a user who said something
+// bad two minutes ago gets their innocuous "hello" dropped
+// because the remote classifier's noise floor pushes the delta
+// just above zero and the prior-offense heat is still high.
+//
+// With the floors, a clean message produces delta=0, triggers the
+// per-message short-circuit, and the message is broadcast
+// regardless of accumulated heat — which is the whole point of
+// the per-message filtering rule the user asked for.
+constexpr double kAxisFloorNoise = 0.0;           // rules-based, non-zero = real
+constexpr double kAxisFloorLinkRisk = 0.0;        // rules-based, non-zero = real
+constexpr double kAxisFloorClassifier = 0.15;     // OpenAI "fired" threshold
+constexpr double kAxisFloorSexualMinors = 0.01;   // catastrophic, stricter
+constexpr double kAxisFloorSemanticEcho = 0.0;    // clustering is already >= 1.0 when it fires
+
+} // namespace
+
 double ContentModerator::heat_delta_from(const ModerationAxisScores& s) const {
     const auto& h = cfg_.heat;
-    return s.visual_noise * h.weight_visual_noise + s.link_risk * h.weight_link_risk +
-           s.toxicity * h.weight_toxicity + s.hate * h.weight_hate + s.sexual * h.weight_sexual +
-           s.sexual_minors * h.weight_sexual_minors + s.violence * h.weight_violence +
-           s.self_harm * h.weight_self_harm + s.semantic_echo * h.weight_semantic_echo;
+    double d = 0.0;
+    if (s.visual_noise > kAxisFloorNoise)
+        d += s.visual_noise * h.weight_visual_noise;
+    if (s.link_risk > kAxisFloorLinkRisk)
+        d += s.link_risk * h.weight_link_risk;
+    if (s.toxicity > kAxisFloorClassifier)
+        d += s.toxicity * h.weight_toxicity;
+    if (s.hate > kAxisFloorClassifier)
+        d += s.hate * h.weight_hate;
+    if (s.sexual > kAxisFloorClassifier)
+        d += s.sexual * h.weight_sexual;
+    if (s.sexual_minors > kAxisFloorSexualMinors)
+        d += s.sexual_minors * h.weight_sexual_minors;
+    if (s.violence > kAxisFloorClassifier)
+        d += s.violence * h.weight_violence;
+    if (s.self_harm > kAxisFloorClassifier)
+        d += s.self_harm * h.weight_self_harm;
+    if (s.semantic_echo > kAxisFloorSemanticEcho)
+        d += s.semantic_echo * h.weight_semantic_echo;
+    return d;
 }
 
 std::string ContentModerator::format_reason(const ModerationVerdict& v) {
@@ -326,9 +372,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     }
 
     // --- Heat accumulation ------------------------------------------
-    v.heat_delta = heat_delta_from(v.scores);
-    v.heat_after = heat_.apply(ipid, v.heat_delta);
-
+    //
     // Per-message filtering semantics: a message with zero heat
     // contribution from its OWN content is NEVER filtered, regardless
     // of the user's accumulated heat or mute state. This avoids the
@@ -342,7 +386,22 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // broadcast unchanged. The same user posting a slur sees a KICK
     // because their heat climbs to the kick threshold on that single
     // new offense, not because of the prior hello.
+    //
+    // Critical subtlety: heat_delta_from() applies per-axis visibility
+    // floors (see kAxisFloor* constants) so a clean message with
+    // floor-level classifier noise (toxicity=1e-5 etc) produces
+    // delta=0 — matches the axis_fires metric model. Without the
+    // floors, remote classifier noise would push delta just above 0
+    // on every clean message and the short-circuit would never fire
+    // for users with accumulated heat.
+    v.heat_delta = heat_delta_from(v.scores);
+
     if (v.heat_delta <= 0.0) {
+        // No meaningful contribution from this message — peek the
+        // stored heat (which decays in place against the elapsed
+        // time) so the gauge reflects natural cooling, and return
+        // NONE without adding anything.
+        v.heat_after = heat_.peek(ipid);
         v.action = ModerationAction::NONE;
         events_counter.labels({to_string(v.action), std::string(channel)}).inc();
         // Wall-clock timing for the whole check() including the early
@@ -356,6 +415,8 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         return v;
     }
 
+    // Real content — apply the delta and determine action.
+    v.heat_after = heat_.apply(ipid, v.heat_delta);
     v.action = heat_.decide(v.heat_after);
     v.reason = format_reason(v);
 
