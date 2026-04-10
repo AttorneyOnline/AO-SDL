@@ -217,13 +217,9 @@ Parameters:
     Type: String
     Default: ''
     Description: >
-      Optional override for the kagami container image. Leave blank for
-      the CI-tracked public image at ghcr.io/attorneyonline/kagami:latest.
-      Set to e.g. 257922448991.dkr.ecr.us-west-2.amazonaws.com/kagami:dev
-      to validate a dev build on a fresh stack before merging it to
-      master. The instance role already has ECR read permissions so no
-      additional IAM changes are needed for ECR images in the same
-      account.
+      Optional container image override. Blank = ghcr.io/attorneyonline/kagami:latest.
+      Set to e.g. <acct>.dkr.ecr.<region>.amazonaws.com/kagami:dev to validate a
+      dev build. Instance role has ECR read so no extra IAM needed.
 
   UseSpotInstance:
     Type: String
@@ -326,15 +322,9 @@ Resources:
       LogGroupName: !Sub '/kagami/${AWS::StackName}'
       RetentionInDays: 7
 
-  # NOTE: Prior versions of this template created a CloudWatchUser
-  # IAM user + long-lived CloudWatchAccessKey and wrote its keys into
-  # kagami.json. That was removed because kagami's CloudWatchSink now
-  # uses the AWS Instance Metadata Service (IMDSv2) to fetch temporary
-  # credentials directly from the instance role below — which already
-  # has `logs:PutLogEvents` etc. on this log group. Zero long-lived
-  # credentials, zero config drift on stack recreate.
-
   # --- IAM Role ---
+  # (CloudWatchUser was removed — kagami uses IMDSv2 via the instance
+  # role below for CloudWatch Logs access.)
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -420,17 +410,10 @@ Resources:
 
               echo "=== Kagami CloudFormation Init ==="
 
-              # --- CF parameters as shell vars ---
+              # --- CF parameters exported for the Python generator below ---
+              # User-supplied values; read via os.environ inside the quoted
+              # heredoc so shell metacharacters can't break anything.
               CF_CONFIG_S3="${CfConfigS3URL}"
-              # --- CFN-substituted values (may contain special chars) ---
-              # These are exported so the Python generation block below can
-              # read them via os.environ without any shell-expansion of
-              # user-supplied content. CFN's Fn::Sub has already replaced
-              # the ${!CfXxx} placeholders with raw values by the time the
-              # shell reaches this line; from here on the shell-to-Python
-              # boundary is the only remaining injection surface, and the
-              # quoted heredoc around the Python block (<<'PYEOF') prevents
-              # any shell expansion inside the Python source.
               export CF_CONFIG_S3="${CfConfigS3URL}"
               export CF_DOMAIN="${CfDomain}"
               export CF_SERVER_NAME="${CfServerName}"
@@ -444,12 +427,7 @@ Resources:
               export CF_KAGAMI_IMAGE="${CfKagamiImage}"
               export CF_CW_REGION="${CfRegion}"
               export CF_CW_LOG_GROUP="${CfLogGroup}"
-              # CloudWatch credentials come from the EC2 instance role
-              # via IMDSv2, fetched by kagami's CloudWatchSink at
-              # runtime. No static access keys are passed through the
-              # bootstrap — leaving the access_key_id field empty in
-              # the generated kagami.json is what triggers the IMDS
-              # path in LogSinkSetup::init().
+              # CloudWatch creds come from IMDSv2 at runtime; no static keys here.
               export CF_CM_ENABLED="${CfCmEnabled}"
               export CF_OPENAI_KEY="${CfOpenAIKey}"
               export CF_EMBED_MODEL="${CfEmbedModel}"
@@ -510,207 +488,12 @@ Resources:
                   CF_GRAFANA_PASSWORD=$(python3 -c 'import json; print(json.load(open("kagami.json")).get("deploy",{}).get("grafana_password","changeme"))')
                   export CF_DOMAIN CF_GRAFANA_PASSWORD
               else
-              # Quoted heredoc delimiter ('PYEOF' in single quotes) tells
-              # bash to pass the body verbatim — no variable expansion, no
-              # command substitution. Python reads every user-supplied
-              # value via os.environ, which is a raw string from the
-              # exec(3) environment block and cannot be misinterpreted
-              # as Python source. This closes the shell-injection surface
-              # that an earlier version of this file had: a CFN parameter
-              # containing a single-quote would have previously escaped
-              # its own Python string literal and executed arbitrary
-              # Python as root during stack provisioning.
-              python3 <<'PYEOF'
-              import json, os
-              def env(k, default=''):
-                  v = os.environ.get(k, default)
-                  return v if v is not None else default
-              cm_enabled = env('CF_CM_ENABLED') == 'true'
-              openai_key = env('CF_OPENAI_KEY')
-              embed_model = env('CF_EMBED_MODEL')
-              slur_wordlist = env('CF_SLUR_WORDLIST')
-              slur_exceptions = env('CF_SLUR_EXCEPTIONS')
-              safe_hint_url = env('CF_SAFE_HINT_URL')
-              cfg = {
-                  'domain': env('CF_DOMAIN'),
-                  'server_name': env('CF_SERVER_NAME'),
-                  'server_description': env('CF_SERVER_DESC'),
-                  'bind_address': '0.0.0.0',
-                  'http_port': 8080,
-                  'ws_port': 27016,
-                  'wss_port': 27015,
-                  'cors_origin': '*',
-                  'max_players': int(env('CF_MAX_PLAYERS', '100')),
-                  'motd': env('CF_MOTD'),
-                  'asset_url': env('CF_ASSET_URL'),
-                  'mod_password': env('CF_MOD_PASSWORD'),
-                  'session_ttl_seconds': 300,
-                  'log_level': 'info',
-                  'log_file': '/logs/kagami.log',
-                  'log_file_level': 'verbose',
-                  'loki_url': 'http://127.0.0.1:3100',
-                  'metrics_enabled': True,
-                  'metrics_path': '/metrics',
-                  'advertiser': {
-                      'enabled': env('CF_ADVERTISE') == 'true',
-                      'url': 'https://servers.aceattorneyonline.com/servers',
-                      'ws_port': 80,
-                      'wss_port': 443
-                  },
-                  'deploy': {
-                      'tls': 'auto',
-                      'observability': True,
-                      'metrics_allow': '127.0.0.1 ::1',
-                      'image': 'ghcr.io/attorneyonline/kagami:latest',
-                      'grafana_user': 'admin',
-                      'grafana_password': env('CF_GRAFANA_PASSWORD')
-                  },
-                  'cloudwatch': {
-                      'region': env('CF_CW_REGION'),
-                      'log_group': env('CF_CW_LOG_GROUP'),
-                      'log_stream': 'server',
-                      # Empty credential fields trigger the IMDSv2
-                      # code path in CloudWatchSink, which pulls
-                      # temporary credentials from the instance role
-                      # on demand. The instance role (above) is
-                      # already granted logs:PutLogEvents /
-                      # CreateLogStream on this log group.
-                      'access_key_id': '',
-                      'secret_access_key': '',
-                      'flush_interval': 5,
-                      'log_level': 'info'
-                  },
-                  'reverse_proxy': {'enabled': False, 'trusted_proxies': [], 'header_priority': ['X-Forwarded-For','X-Real-IP'], 'proxy_protocol': False},
-                  'reputation': {'enabled': True, 'cache_ttl_hours': 24, 'cache_failure_ttl_minutes': 5, 'ip_api_enabled': True, 'abuseipdb_api_key': '', 'abuseipdb_daily_budget': 1000, 'auto_block_proxy': False, 'auto_block_datacenter': False},
-                  'asn_reputation': {'enabled': True, 'watch_threshold': 2, 'rate_limit_threshold': 3, 'block_threshold': 5, 'window_minutes': 60, 'auto_block_duration': '24h', 'whitelist_asns': [], 'whitelist_multiplier': 5},
-                  'spam_detection': {'enabled': True, 'echo_threshold': 3, 'echo_window_seconds': 60, 'burst_threshold': 20, 'burst_window_seconds': 30, 'join_spam_max_seconds': 5, 'name_pattern_threshold': 3, 'name_pattern_min_prefix': 4, 'name_pattern_window_seconds': 300, 'ghost_threshold': 5, 'hwid_reuse_threshold': 3},
-                  'content_moderation': {
-                      # Opt-in subsystem. When the CFN ContentModerationEnabled
-                      # flag is true, the unicode + URL layers come up enabled.
-                      # The remote classifier layer activates only when an API
-                      # key was provided (empty key = layer stays disabled).
-                      # Likewise for the embeddings layer and the HF model id.
-                      'enabled': cm_enabled,
-                      'check_ic': True,
-                      'check_ooc': True,
-                      'message_sample_length': 200,
-                      'unicode': {
-                          'enabled': cm_enabled,
-                          'combining_mark_threshold': 0.3,
-                          'exotic_script_threshold': 0.3,
-                          'format_char_threshold': 0.1,
-                          'max_score': 1.0
-                      },
-                      'urls': {
-                          'enabled': cm_enabled,
-                          'blocklist': [],
-                          'allowlist': [],
-                          'blocked_score': 1.0,
-                          'unknown_url_score': 0.0
-                      },
-                      'slurs': {
-                          # Layer 1c activates only when the subsystem is
-                          # on AND the operator provided a wordlist URL.
-                          # The fetch happens on a background thread in
-                          # main.cpp; until it completes the layer is
-                          # inert (is_active() returns false). A cache
-                          # file under cache_dir lets subsequent boots
-                          # survive S3 outages.
-                          'enabled': cm_enabled and len(slur_wordlist) > 0,
-                          'wordlist_url': slur_wordlist,
-                          'exceptions_url': slur_exceptions,
-                          'cache_dir': '/opt/kagami/moderation-cache',
-                          'match_score': 1.0
-                      },
-                      'remote': {
-                          'enabled': cm_enabled and len(openai_key) > 0,
-                          'provider': 'openai',
-                          'api_key': openai_key,
-                          'endpoint': 'https://api.openai.com/v1/moderations',
-                          'model': 'omni-moderation-latest',
-                          'timeout_ms': 3000,
-                          'fail_open': True
-                      },
-                      'safe_hint': {
-                          # Layer 2 shortcut — requires both the
-                          # embeddings layer AND a non-empty anchor
-                          # URL. Anchors are fetched and embedded at
-                          # startup on the same background thread as
-                          # the HF model download.
-                          'enabled': cm_enabled and len(safe_hint_url) > 0 and len(embed_model) > 0,
-                          'anchors_url': safe_hint_url,
-                          'cache_dir': '/opt/kagami/moderation-cache',
-                          'similarity_threshold': 0.7
-                      },
-                      'embeddings': {
-                          # Phase 3: inert unless both the subsystem is on
-                          # and a HuggingFace model id is provided.
-                          'enabled': cm_enabled and len(embed_model) > 0,
-                          'hf_model_id': embed_model,
-                          # Share the moderation_cache named volume with
-                          # slurs/safe_hint so HfModelFetcher's on-disk
-                          # cache survives container recreates. Without
-                          # this the GGUF is re-downloaded on every
-                          # deploy, which is both slow (hundreds of MB)
-                          # and a waste of HuggingFace bandwidth quota.
-                          'cache_dir': '/opt/kagami/moderation-cache',
-                          'ring_size': 500,
-                          'similarity_threshold': 0.9,
-                          'cluster_threshold': 3,
-                          'window_seconds': 60
-                      },
-                      'heat': {
-                          'decay_half_life_seconds': 600.0,
-                          'censor_threshold': 1.0,
-                          'drop_threshold': 3.0,
-                          'mute_threshold': 6.0,
-                          'kick_threshold': 10.0,
-                          'ban_threshold': 15.0,
-                          'perma_ban_threshold': 25.0,
-                          'mute_duration_seconds': 900,
-                          'ban_duration_seconds': 86400,
-                          'weight_visual_noise': 0.5,
-                          'weight_link_risk': 5.0,
-                          # 6.0 = mute_threshold → a single slur match
-                          # is an immediate mute. Lower to 3.0 for a
-                          # DROP-then-escalate policy.
-                          'weight_slurs': 6.0,
-                          # Roleplay-friendly defaults. See inline floor
-                          # tuning comment in ContentModerator.cpp — the
-                          # per-axis floors already filter dramatic
-                          # in-character language, so weight=1.0 gives
-                          # single borderline messages a LOG level.
-                          'weight_toxicity': 1.0,
-                          'weight_hate': 4.0,
-                          'weight_sexual': 1.5,
-                          'weight_sexual_minors': 100.0,
-                          'weight_violence': 1.0,
-                          'weight_self_harm': 1.0,
-                          'weight_semantic_echo': 2.0
-                      },
-                      'audit': {
-                          'stdout_enabled': False,
-                          'file_path': '/logs/kagami_mod_audit.jsonl',
-                          'loki_url': 'http://127.0.0.1:3100',
-                          'loki_stream_label': 'kagami_mod_audit',
-                          'cloudwatch_log_group': '',
-                          'cloudwatch_log_stream': '',
-                          'sqlite_enabled': True,
-                          'min_action': 'log'
-                      }
-                  },
-                  'firewall': {'enabled': True, 'helper_path': '/app/kagami-fw-helper', 'cleanup_on_shutdown': True},
-                  'rate_limits': {
-                      'session_create': {'rate': 2.0, 'burst': 5.0}, 'ws_frame': {'rate': 30.0, 'burst': 60.0}, 'ws_bytes': {'rate': 32768.0, 'burst': 65536.0},
-                      'ao:MS': {'rate': 5.0, 'burst': 10.0}, 'ao:CT': {'rate': 3.0, 'burst': 6.0}, 'ao:CC': {'rate': 2.0, 'burst': 4.0}, 'ao:MC': {'rate': 2.0, 'burst': 5.0}, 'ao:CH': {'rate': 2.0, 'burst': 5.0},
-                      'ao:HP': {'rate': 2.0, 'burst': 4.0}, 'ao:BN': {'rate': 2.0, 'burst': 4.0}, 'ao:RT': {'rate': 3.0, 'burst': 6.0}, 'ao:PE': {'rate': 2.0, 'burst': 5.0}, 'ao:EE': {'rate': 2.0, 'burst': 5.0}, 'ao:DE': {'rate': 2.0, 'burst': 5.0},
-                      'ao:ZZ': {'rate': 1.0, 'burst': 3.0}, 'ao:CASEA': {'rate': 0.5, 'burst': 2.0}, 'ao:SETCASE': {'rate': 1.0, 'burst': 3.0},
-                      'nx:ooc': {'rate': 3.0, 'burst': 6.0}, 'nx:ic': {'rate': 3.0, 'burst': 6.0}, 'nx:area_join': {'rate': 2.0, 'burst': 5.0}, 'nx:char_select': {'rate': 2.0, 'burst': 4.0}, 'nx:session_renew': {'rate': 1.0, 'burst': 3.0},
-                      'ws_handshake_deadline_sec': 10, 'ws_idle_timeout_sec': 120, 'ws_partial_frame_timeout_sec': 30, 'ws_max_frame_size': 65536
-                  }
-              }
-              json.dump(cfg, open('kagami.json','w'), indent=4)
-              PYEOF
+              # Download the kagami.json generator from S3 and run it.
+              # The script lives outside the template so UserData stays
+              # under EC2's 25600-byte limit. It reads the CF_* env vars
+              # exported above and writes kagami.json in the current dir.
+              aws s3 cp s3://kagami-deploy/cloudformation/generate-kagami-config.py /tmp/gen-kagami-config.py
+              python3 /tmp/gen-kagami-config.py
               fi
 
               # --- Generate .env ---
@@ -723,12 +506,7 @@ Resources:
               import os
               with open('.env', 'w') as f:
                   f.write(f"KAGAMI_DOMAIN={os.environ.get('CF_DOMAIN','')}\n")
-                  # KAGAMI_IMAGE respects the optional KagamiImage CFN
-                  # parameter (forwarded as CF_KAGAMI_IMAGE) so operators
-                  # can validate a dev image from ECR on a fresh stack
-                  # without touching the template. Empty = fall back to
-                  # the CI-tracked public GHCR image, which is the
-                  # default CI deploy flow.
+                  # KAGAMI_IMAGE: CFN KagamiImage param, or public GHCR default.
                   kagami_image = os.environ.get('CF_KAGAMI_IMAGE', '').strip() or 'ghcr.io/attorneyonline/kagami:latest'
                   f.write(f"KAGAMI_IMAGE={kagami_image}\n")
                   f.write("GRAFANA_ADMIN_USER=admin\n")
@@ -824,16 +602,7 @@ Resources:
                     - ./config:/app/config:ro
                     - ./kagami.db:/app/kagami.db
                     - kagami_logs:/logs
-                    # Persistent cache for moderation downloads (slur
-                    # wordlist, slur exceptions, safe-hint anchors, and
-                    # the HF embedding GGUF). Named volume so the
-                    # downloads survive container recreates on every
-                    # CI-triggered deploy — without this, every image
-                    # pull forces a fresh S3 fetch for the text lists
-                    # and a full re-download of the embedding model
-                    # (hundreds of MB). The directory is matched to the
-                    # *.cache_dir fields in the generated kagami.json
-                    # below.
+                    # Persistent cache for slur lists + HF embedding model.
                     - moderation_cache:/opt/kagami/moderation-cache
                 prometheus:
                   image: prom/prometheus:latest
@@ -999,14 +768,7 @@ Resources:
 
               # --- Fix ownership and start ---
               chown -R ubuntu:ubuntu /opt/kagami
-              # If the kagami image lives in a private ECR repo (dev
-              # validation flow — see the KagamiImage CFN param), the
-              # instance role already has ecr:GetAuthorizationToken
-              # via AmazonEC2ContainerRegistryReadOnly, but docker
-              # still needs a fresh login token before the pull. The
-              # image URI comes from the CF_KAGAMI_IMAGE env var set
-              # above (the CFN param value, or empty for the default
-              # GHCR image which needs no login).
+              # ECR login (only when KagamiImage is a *.dkr.ecr.* URI).
               if echo "$CF_KAGAMI_IMAGE" | grep -q 'dkr.ecr'; then
                   ECR_REGISTRY=$(echo "$CF_KAGAMI_IMAGE" | cut -d/ -f1)
                   ECR_REGION=$(echo "$ECR_REGISTRY" | sed -n 's/.*\.dkr\.ecr\.\([^.]*\)\.amazonaws\.com/\1/p')
