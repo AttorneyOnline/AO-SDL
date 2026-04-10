@@ -200,6 +200,43 @@ struct RemoteClassifierConfig {
     bool fail_open = true;
 };
 
+/// Layer 2 shortcut: embedding-similarity "safe hint" that bypasses
+/// the remote classifier on messages near a known-harmless anchor.
+///
+/// Not a standalone layer — it short-circuits the Layer 2 call when
+/// the message embeds close to any anchor. Requires the Layer 3
+/// embedding backend to be loaded; without it the shortcut is inert
+/// and every message goes to the remote classifier as usual.
+///
+/// The anchor list is operator-supplied, fetched from an https URL
+/// by TextListFetcher at startup in the same background thread that
+/// fetches the slur wordlist. An empty URL keeps the shortcut off.
+struct SafeHintConfig {
+    bool enabled = false;
+
+    /// https URL of the newline-delimited anchor list. Each non-
+    /// comment, non-blank line is one anchor phrase. Fetched once
+    /// at startup, cached to disk, then run through the embedding
+    /// backend to produce unit vectors.
+    std::string anchors_url;
+
+    /// Filesystem directory for the TextListFetcher cache file.
+    /// Shares the same directory as the slur wordlist cache by
+    /// default — both are small text lists.
+    std::string cache_dir = "/tmp/kagami-moderation";
+
+    /// Cosine similarity threshold above which the remote classifier
+    /// is skipped. Default 0.7 is a moderately aggressive cutoff:
+    /// tuned in staging, expected to cover most mundane chatter while
+    /// letting "close but off-topic" messages still reach Layer 2.
+    /// Raising it past 0.85 typically makes the shortcut useless
+    /// because only near-verbatim matches qualify; dropping below
+    /// 0.5 starts letting harassment through when it happens to
+    /// share vocabulary with a safe anchor (not a safety issue
+    /// because Layer 1 still runs, but it costs recall).
+    double similarity_threshold = 0.7;
+};
+
 /// Layer 3: local embeddings for cross-message spam clustering.
 ///
 /// Phase 1 declares this config shape but ContentModerator does NOT
@@ -292,6 +329,7 @@ struct ContentModerationConfig {
     UrlLayerConfig urls;
     SlurLayerConfig slurs;
     RemoteClassifierConfig remote;
+    SafeHintConfig safe_hint;
     EmbeddingsLayerConfig embeddings;
     HeatConfig heat;
     ModerationAuditSinkConfig audit;

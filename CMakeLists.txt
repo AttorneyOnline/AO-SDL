@@ -394,6 +394,7 @@ add_library(aoengine STATIC
     engine/moderation/ModerationAuditLog.cpp
     engine/moderation/ModerationHeat.cpp
     engine/moderation/RemoteClassifier.cpp
+    engine/moderation/SafeHintLayer.cpp
     engine/moderation/SemanticClusterer.cpp
     engine/moderation/SlurFilter.cpp
     engine/moderation/TextListFetcher.cpp

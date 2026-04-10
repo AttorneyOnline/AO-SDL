@@ -291,6 +291,12 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.remote.timeout_ms = value<int>("content_moderation/remote/timeout_ms");
         cfg.remote.fail_open = value<bool>("content_moderation/remote/fail_open");
 
+        // Safe-hint shortcut (Layer 2 optimization)
+        cfg.safe_hint.enabled = value<bool>("content_moderation/safe_hint/enabled");
+        cfg.safe_hint.anchors_url = value<std::string>("content_moderation/safe_hint/anchors_url");
+        cfg.safe_hint.cache_dir = value<std::string>("content_moderation/safe_hint/cache_dir");
+        cfg.safe_hint.similarity_threshold = value<double>("content_moderation/safe_hint/similarity_threshold");
+
         // Embeddings layer (Phase 3 wiring — config only in Phase 1)
         cfg.embeddings.enabled = value<bool>("content_moderation/embeddings/enabled");
         cfg.embeddings.hf_model_id = value<std::string>("content_moderation/embeddings/hf_model_id");
@@ -545,6 +551,19 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       // below ~2000 causes cold-start false failures.
                       {"timeout_ms", 3000},
                       {"fail_open", true},
+                  }},
+                 {"safe_hint",
+                  nlohmann::json{
+                      // Layer 2 shortcut. Requires the embeddings layer
+                      // backend to be loaded; otherwise inert. Anchors
+                      // are fetched from the operator-supplied URL at
+                      // startup in the same background thread as the
+                      // slur wordlist. A 0.7 threshold is calibrated
+                      // for bge-small-en-v1.5 — tune per-model.
+                      {"enabled", false},
+                      {"anchors_url", ""},
+                      {"cache_dir", "/tmp/kagami-moderation"},
+                      {"similarity_threshold", 0.7},
                   }},
                  {"embeddings",
                   nlohmann::json{

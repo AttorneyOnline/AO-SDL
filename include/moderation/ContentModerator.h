@@ -29,6 +29,7 @@
 #include "moderation/ModerationHeat.h"
 #include "moderation/ModerationTypes.h"
 #include "moderation/RemoteClassifier.h"
+#include "moderation/SafeHintLayer.h"
 #include "moderation/SemanticClusterer.h"
 #include "moderation/SlurFilter.h"
 #include "moderation/UnicodeClassifier.h"
@@ -103,6 +104,17 @@ class ContentModerator {
     /// Install the Layer 1c exception list (tokens to suppress). Same
     /// background-fetch pattern as set_slur_wordlist.
     void set_slur_exceptions(const std::vector<std::string>& raw);
+
+    /// Install the safe-hint anchor list. Computes embeddings via the
+    /// currently-installed embedding backend (must be ready) and
+    /// stores them internally. Called from main.cpp on the same
+    /// background thread that fetched the anchor list, AFTER the
+    /// HF model fetch completes.
+    ///
+    /// Returns the number of anchors that successfully embedded.
+    /// A zero return means the layer stays inert (embedding backend
+    /// not ready, or every anchor failed to embed).
+    size_t set_safe_hint_anchors(const std::vector<std::string>& raw);
 
     /// Decide what to do with a message. Called from the OOC and IC
     /// packet handlers before broadcast.
@@ -200,12 +212,23 @@ class ContentModerator {
     UrlExtractor urls_;
     SlurFilter slurs_;
     RemoteClassifier remote_;
+    SafeHintLayer safe_hint_;
     SemanticClusterer clusterer_;
     ModerationHeat heat_;
 
     ModerationAuditLog* audit_ = nullptr;
     DatabaseManager* db_ = nullptr;
     ActionCallback action_cb_;
+
+    /// Non-owning pointer to the embedding backend that
+    /// SemanticClusterer owns via unique_ptr. Cached here so the
+    /// SafeHintLayer can use the same backend without a second
+    /// ownership boundary. Set by set_embedding_backend() before it
+    /// forwards ownership to clusterer_; cleared to nullptr if the
+    /// backend is replaced with one that isn't is_ready(). Access
+    /// is thread-safe because the pointer itself is only mutated on
+    /// the startup path.
+    EmbeddingBackend* embedding_backend_ = nullptr;
 
     struct ActiveMute {
         int64_t expires_at = 0; ///< Seconds since epoch, 0 = never expires.

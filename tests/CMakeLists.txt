@@ -46,6 +46,7 @@ set(TEST_SOURCES
     moderation/test_UnicodeClassifier.cpp
     moderation/test_UrlExtractor.cpp
     moderation/test_SlurFilter.cpp
+    moderation/test_SafeHintLayer.cpp
     moderation/test_ModerationHeat.cpp
     moderation/test_ContentModerator.cpp
     moderation/test_RemoteClassifier.cpp
