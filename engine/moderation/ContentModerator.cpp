@@ -45,6 +45,7 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
         urls_.configure(new_cfg->urls);
         slurs_.configure(new_cfg->slurs);
         remote_.configure(new_cfg->remote);
+        safe_hint_.configure(new_cfg->safe_hint);
         clusterer_.configure(new_cfg->embeddings);
         heat_.configure(new_cfg->heat);
         db_snapshot = db_;
@@ -93,9 +94,34 @@ void ContentModerator::set_remote_transport(std::unique_ptr<RemoteClassifierTran
 }
 
 void ContentModerator::set_embedding_backend(std::unique_ptr<EmbeddingBackend> backend) {
+    // Cache a non-owning pointer before transferring ownership to the
+    // clusterer. SafeHintLayer needs access to the same backend for
+    // its query() path, and storing a second owning reference would
+    // duplicate the model in memory. The backend outlives the
+    // clusterer (and therefore outlives ContentModerator itself) so
+    // a raw pointer here is safe.
+    //
+    // If the passed-in backend isn't ready (make_embedding_backend()
+    // can return a NullEmbeddingBackend when llama.cpp is compiled
+    // out), clear the cache so SafeHintLayer reliably sees the
+    // no-backend state.
+    embedding_backend_ = (backend && backend->is_ready()) ? backend.get() : nullptr;
+
     // Note: SemanticClusterer takes its own mutex; we don't hold the
     // moderator mutex here to avoid nested-lock subtlety.
     clusterer_.set_backend(std::move(backend));
+}
+
+size_t ContentModerator::set_safe_hint_anchors(const std::vector<std::string>& raw) {
+    if (!embedding_backend_) {
+        Log::log_print(WARNING,
+                       "ContentModerator: set_safe_hint_anchors called before embedding backend is ready; "
+                       "safe-hint layer will stay inert");
+        return 0;
+    }
+    size_t loaded = safe_hint_.load_anchors(raw, *embedding_backend_);
+    Log::log_print(INFO, "ContentModerator: loaded %zu safe-hint anchors", loaded);
+    return loaded;
 }
 
 void ContentModerator::set_slur_wordlist(const std::vector<std::string>& raw) {
@@ -522,7 +548,49 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     //      abuser to O(bucket_size) regardless of their send rate.
     const double layer1_delta = heat_delta_from(v.scores, cfg->heat);
     const bool layer1_sufficient = layer1_delta >= cfg->heat.mute_threshold;
-    if (remote_.is_active() && !layer1_sufficient && remote_bucket_allow(ipid)) {
+
+    // --- Layer 2 shortcut: safe-hint embedding similarity -------------
+    // Before deciding whether to spend budget on the remote classifier,
+    // ask SafeHintLayer if the message is embedding-close to any
+    // operator-curated "obviously safe" anchor phrase. On a hit, we
+    // skip Layer 2 entirely — Layer 1 (which ran above) made the
+    // final decision, and the heat delta is whatever those layers
+    // contributed (usually zero for mundane chatter).
+    //
+    // This is a cost optimization, NOT a safety bypass: Layer 1 still
+    // ran against the same message above, so slurs / URLs / unicode
+    // noise still caught. The shortcut only removes the redundant
+    // "is this harmless?" classifier call for messages the embedding
+    // model already says look harmless.
+    //
+    // Ordering matters: we check this BEFORE the remote_bucket_allow
+    // call because we don't want safe-hint skips to consume token-
+    // bucket credit intended for actual classifier calls.
+    static auto& l2_skipped_counter = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_layer2_skipped_total", "Times Layer 2 (remote classifier) was skipped and why", {"reason"});
+
+    bool safe_hint_hit = false;
+    if (remote_.is_active() && !layer1_sufficient && safe_hint_.is_active() && embedding_backend_) {
+        auto t0 = std::chrono::steady_clock::now();
+        auto hint = safe_hint_.query(message, *embedding_backend_);
+        bump_layer("safe_hint", t0);
+        if (hint.is_safe) {
+            safe_hint_hit = true;
+            l2_skipped_counter.labels({"safe_hint"}).inc();
+        }
+    }
+    if (remote_.is_active() && layer1_sufficient)
+        l2_skipped_counter.labels({"layer1_sufficient"}).inc();
+
+    // Final decision branch: remote_bucket_allow() is the last gate.
+    // If it fails we also record the reason, otherwise the hot-abuser
+    // rate-limit case is invisible in dashboards.
+    bool should_call_remote = remote_.is_active() && !layer1_sufficient && !safe_hint_hit;
+    if (should_call_remote && !remote_bucket_allow(ipid)) {
+        l2_skipped_counter.labels({"rate_limit"}).inc();
+        should_call_remote = false;
+    }
+    if (should_call_remote) {
         static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
             "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
         auto t0 = std::chrono::steady_clock::now();
