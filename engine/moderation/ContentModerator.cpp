@@ -120,7 +120,7 @@ std::optional<ContentModerator::MuteInfo> ContentModerator::get_mute_info(const 
     MuteInfo info;
     info.reason = it->second.reason;
     info.expires_at = expires;
-    info.seconds_remaining = expires > 0 ? static_cast<int>(expires - now) : 0;
+    info.seconds_remaining = expires > 0 ? static_cast<int>(expires - now) : -1;
     return info;
 }
 

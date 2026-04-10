@@ -67,6 +67,8 @@ class ModHeatCommand : public CommandHandler {
                 msg += " (reason: " + mute->reason + ")";
             if (mute->seconds_remaining > 0)
                 msg += ", " + std::to_string(mute->seconds_remaining) + "s remaining";
+            else if (mute->seconds_remaining < 0)
+                msg += ", permanent";
         }
         else {
             msg += ", not muted";

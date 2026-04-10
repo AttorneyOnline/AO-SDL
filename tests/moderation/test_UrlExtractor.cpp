@@ -103,6 +103,26 @@ TEST(UrlExtractorTest, CaseInsensitiveBlocklist) {
     cfg.blocklist = {"scam"};
     UrlExtractor ex;
     ex.configure(cfg);
-    auto r = ex.extract("hit SCAM.tld for free");
+    // Use .com so the TLD matches the allowlist in url_regex() — a
+    // hypothetical `.tld` is not a real TLD and is deliberately
+    // rejected by the extractor to avoid false positives on source
+    // code references like `config.yml` or `node.js`.
+    auto r = ex.extract("hit SCAM.com for free");
     EXPECT_EQ(r.score, 1.0);
+}
+
+TEST(UrlExtractorTest, SourceCodeReferencesNotDetected) {
+    // Regression: the tightened bare-domain regex should NOT match
+    // common programming language extensions masquerading as
+    // domains. The old regex fired on `.js`, `.cc`, `.cpp`, etc.
+    UrlLayerConfig cfg = basic_config();
+    cfg.unknown_url_score = 0.5;
+    UrlExtractor ex;
+    ex.configure(cfg);
+
+    for (const auto& code : {"check main.cpp for the bug", "see node.js docs", "config.yml is broken",
+                             "in spam_detector.h:96", "edit test_runner.py", "the Cargo.toml file"}) {
+        auto r = ex.extract(code);
+        EXPECT_TRUE(r.urls.empty()) << "false positive on: " << code;
+    }
 }

@@ -1,7 +1,10 @@
 #include "moderation/ContentModerator.h"
+#include "moderation/RemoteClassifier.h"
 
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -29,6 +32,44 @@ ContentModerationConfig enable_unicode_only() {
     cfg.heat.weight_visual_noise = 1.0;
     return cfg;
 }
+
+/// Test transport that synthesizes an OpenAI response from caller-
+/// supplied per-axis scores. Lets ContentModerator tests exercise
+/// Layer 2 without touching the network. Mirrors the MockTransport
+/// pattern in test_RemoteClassifier.cpp.
+class SyntheticRemoteTransport : public moderation::RemoteClassifierTransport {
+  public:
+    struct Scores {
+        double toxicity = 0.0;
+        double hate = 0.0;
+        double sexual = 0.0;
+        double sexual_minors = 0.0;
+        double violence = 0.0;
+        double self_harm = 0.0;
+    };
+
+    explicit SyntheticRemoteTransport(Scores s) : scores_(s) {
+    }
+
+    std::pair<int, std::string> post_json(const std::string& /*url*/, const std::string& /*bearer*/,
+                                          const std::string& /*body*/, int /*timeout_ms*/) override {
+        // Hand-construct the minimal OpenAI omni-moderation response
+        // shape the parser expects.
+        std::string body = "{\"id\":\"test\",\"model\":\"omni\",\"results\":[{\"flagged\":true,\"categories\":{}";
+        body += ",\"category_scores\":{";
+        body += "\"harassment\":" + std::to_string(scores_.toxicity);
+        body += ",\"hate\":" + std::to_string(scores_.hate);
+        body += ",\"sexual\":" + std::to_string(scores_.sexual);
+        body += ",\"sexual/minors\":" + std::to_string(scores_.sexual_minors);
+        body += ",\"violence\":" + std::to_string(scores_.violence);
+        body += ",\"self-harm\":" + std::to_string(scores_.self_harm);
+        body += "}}]}";
+        return {200, body};
+    }
+
+  private:
+    Scores scores_;
+};
 
 ContentModerationConfig enable_urls_only() {
     ContentModerationConfig cfg;
@@ -164,22 +205,64 @@ TEST_F(ContentModeratorTest, RoleplayToxicityBelowFloorIsClean) {
     EXPECT_DOUBLE_EQ(v.heat_delta, 0.0);
 }
 
-TEST_F(ContentModeratorTest, ToxicityJustAboveFloorContributesHeat) {
-    // Verify the floor gate: a message with synthetic toxicity just
-    // above the 0.85 floor DOES contribute heat (so we haven't
-    // accidentally disabled the axis entirely). We can't synthesize
-    // remote scores without a mock transport, so this test uses the
-    // public heat_delta_from path indirectly by checking that two
-    // canonical lines with different "badness" ratings produce
-    // proportional heat — but since the fixture is rules-only, we
-    // can only assert the floor logic via the clean-case above.
-    //
-    // Left as a documented gap: a proper test of "toxicity 0.9
-    // fires but 0.8 does not" requires a mock transport that
-    // injects specific axis scores. The RemoteClassifierTest suite
-    // already has the MockTransport pattern; a follow-up can wire
-    // it into a ContentModerator test fixture.
-    SUCCEED();
+TEST_F(ContentModeratorTest, ToxicityBelowFloorDoesNotFire) {
+    // Synthetic remote transport: OpenAI returns toxicity=0.6
+    // (below our roleplay floor of 0.85). Expected: no heat added
+    // regardless of the weight, because the floor gates the sum.
+    ContentModerationConfig cfg;
+    cfg.enabled = true;
+    cfg.check_ooc = true;
+    cfg.check_ic = true;
+    cfg.remote.enabled = true;
+    cfg.remote.api_key = "sk-test";
+    cfg.heat.weight_toxicity = 1.0;
+    cfg.heat.censor_threshold = 0.5;
+    cm_.configure(cfg);
+    cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{0.6}));
+
+    auto v = cm_.check("user1", "ooc", "hello there");
+    EXPECT_EQ(v.action, moderation::ModerationAction::NONE);
+    EXPECT_DOUBLE_EQ(v.heat_delta, 0.0);
+}
+
+TEST_F(ContentModeratorTest, ToxicityAboveFloorFires) {
+    // Same setup but synthetic toxicity=0.9 (above 0.85 floor).
+    // Expected: heat_delta == 0.9 * 1.0 == 0.9, action == LOG
+    // (below the 1.0 censor threshold).
+    ContentModerationConfig cfg;
+    cfg.enabled = true;
+    cfg.check_ooc = true;
+    cfg.remote.enabled = true;
+    cfg.remote.api_key = "sk-test";
+    cfg.heat.weight_toxicity = 1.0;
+    cfg.heat.censor_threshold = 1.5;
+    cm_.configure(cfg);
+    cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{0.9}));
+
+    auto v = cm_.check("user1", "ooc", "hello there");
+    EXPECT_GT(v.heat_delta, 0.0);
+    EXPECT_NEAR(v.heat_delta, 0.9, 1e-6);
+    EXPECT_EQ(v.action, moderation::ModerationAction::LOG);
+}
+
+TEST_F(ContentModeratorTest, SexualMinorsPositiveScoreIsCatastrophic) {
+    // The sexual_minors axis has a catastrophic weight (100.0) so
+    // any positive signal above the 0.01 floor instantly crosses
+    // the perma_ban threshold. This regression protects the
+    // non-negotiable behavior against weight or floor changes.
+    ContentModerationConfig cfg;
+    cfg.enabled = true;
+    cfg.check_ooc = true;
+    cfg.remote.enabled = true;
+    cfg.remote.api_key = "sk-test";
+    cfg.heat.perma_ban_threshold = 25.0;
+    cm_.configure(cfg);
+    SyntheticRemoteTransport::Scores s;
+    s.sexual_minors = 0.5;
+    cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(s));
+
+    auto v = cm_.check("user1", "ooc", "anything");
+    EXPECT_EQ(v.action, moderation::ModerationAction::PERMA_BAN);
 }
 
 TEST_F(ContentModeratorTest, CleanMessageAfterOffenseDoesNotInheritAction) {
