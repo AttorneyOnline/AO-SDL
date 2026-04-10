@@ -388,6 +388,16 @@ add_library(aoengine STATIC
     engine/game/ServerList.cpp
     engine/game/Session.cpp
 
+    engine/moderation/ContentModerator.cpp
+    engine/moderation/EmbeddingBackend.cpp
+    engine/moderation/HfModelFetcher.cpp
+    engine/moderation/ModerationAuditLog.cpp
+    engine/moderation/ModerationHeat.cpp
+    engine/moderation/RemoteClassifier.cpp
+    engine/moderation/SemanticClusterer.cpp
+    engine/moderation/UnicodeClassifier.cpp
+    engine/moderation/UrlExtractor.cpp
+
     engine/asset/AssetLibrary.cpp
     engine/asset/formats/ApngDecoder.cpp
     engine/asset/AssetCache.cpp
@@ -493,6 +503,37 @@ else()
 endif()
 
 set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
+
+# --- Optional: llama.cpp for local embedding backend ---
+#
+# Off by default. When enabled, llama.cpp is pulled via FetchContent
+# and linked into aoengine. The moderation subsystem's Layer 3
+# (semantic spam clustering) uses it to compute embeddings from a
+# GGUF model that is downloaded from HuggingFace at startup.
+#
+# Disable by default because:
+#   - llama.cpp is ~50MB compiled and adds noticeable build time.
+#   - Most deployments will use OpenAI's remote moderation API instead.
+#   - When disabled, the code path gracefully degrades to a null
+#     backend that the rest of the moderation stack handles.
+option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" OFF)
+if(KAGAMI_WITH_LLAMA_CPP)
+    include(FetchContent)
+    set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+    set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(llama_cpp
+        GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
+        GIT_TAG b6000
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(llama_cpp)
+    target_link_libraries(aoengine PRIVATE llama)
+    target_compile_definitions(aoengine PRIVATE KAGAMI_WITH_LLAMA_CPP=1)
+    message(STATUS "Content moderation: llama.cpp embedding backend ENABLED")
+else()
+    message(STATUS "Content moderation: llama.cpp embedding backend disabled (use -DKAGAMI_WITH_LLAMA_CPP=ON to enable)")
+endif()
 
 target_include_directories(aoengine
     PUBLIC  include

@@ -8,6 +8,7 @@
 #include "game/CommandRegistry.h"
 #include "game/IPReputationService.h"
 #include "game/SpamDetector.h"
+#include "moderation/ContentModerator.h"
 #include "net/WebSocketServer.h"
 #include "utils/Crypto.h"
 #include "utils/Log.h"
@@ -308,6 +309,63 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
     if (max_ic > 0 && static_cast<int>(action.message.size()) > max_ic)
         return;
 
+    // Content moderation: mute enforcement + per-message scoring.
+    // Runs after length validation (cheapest filter first) but before
+    // any broadcast side-effects. Does nothing if no moderator is wired
+    // or the subsystem is disabled in config.
+    if (auto* cm = server.room().content_moderator()) {
+        if (cm->is_muted(session.ipid)) {
+            Log::log_print(INFO, "AO: IC from %s suppressed (muted)",
+                           format_client_id(session.client_id).c_str());
+            return;
+        }
+        auto verdict = cm->check(session.ipid, "ic", action.message);
+        switch (verdict.action) {
+        case moderation::ModerationAction::NONE:
+        case moderation::ModerationAction::LOG:
+            break;
+        case moderation::ModerationAction::CENSOR:
+            action.message = "[filtered]";
+            break;
+        case moderation::ModerationAction::DROP:
+        case moderation::ModerationAction::MUTE:
+            Log::log_print(INFO, "AO: IC from %s suppressed [content]: %s",
+                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            return;
+        case moderation::ModerationAction::KICK:
+            Log::log_print(WARNING, "AO: kicking %s for content: %s",
+                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
+            if (server.ws())
+                server.ws()->close_client_deferred(session.client_id);
+            return;
+        case moderation::ModerationAction::BAN:
+        case moderation::ModerationAction::PERMA_BAN:
+            Log::log_print(WARNING, "AO: banning %s for content: %s",
+                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            if (auto* bm = server.room().ban_manager()) {
+                BanEntry entry;
+                entry.ipid = session.ipid;
+                entry.ip = session.ip_address;
+                entry.hdid = session.hardware_id;
+                entry.reason = "[auto] content: " + verdict.reason;
+                entry.moderator = "ContentModerator";
+                entry.timestamp =
+                    std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN)
+                                     ? -2
+                                     : 24 * 60 * 60;
+                bm->add_ban(std::move(entry));
+            }
+            server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));
+            if (server.ws())
+                server.ws()->close_client_deferred(session.client_id);
+            return;
+        }
+    }
+
     // Broadcast showname update if changed
     if (!action.showname.empty() && session.display_name != action.showname) {
         server.broadcast_player_update(session.session_id, 2, action.showname);
@@ -397,6 +455,64 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     if (max_ooc > 0 && static_cast<int>(message.size()) > max_ooc)
         return;
 
+    // Content moderation: mute enforcement + per-message scoring.
+    // Mirrors the IC flow above. The ModerationHeat accumulator is
+    // cross-channel — a user's IC and OOC misbehavior share the same
+    // heat score, so a spree across both channels escalates as expected.
+    std::string forwarded_message = message;
+    if (auto* cm = server.room().content_moderator()) {
+        if (cm->is_muted(session.ipid)) {
+            Log::log_print(INFO, "AO: OOC from %s suppressed (muted)",
+                           format_client_id(session.client_id).c_str());
+            return;
+        }
+        auto verdict = cm->check(session.ipid, "ooc", message);
+        switch (verdict.action) {
+        case moderation::ModerationAction::NONE:
+        case moderation::ModerationAction::LOG:
+            break;
+        case moderation::ModerationAction::CENSOR:
+            forwarded_message = "[filtered]";
+            break;
+        case moderation::ModerationAction::DROP:
+        case moderation::ModerationAction::MUTE:
+            Log::log_print(INFO, "AO: OOC from %s suppressed [content]: %s",
+                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            return;
+        case moderation::ModerationAction::KICK:
+            Log::log_print(WARNING, "AO: kicking %s for content: %s",
+                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
+            if (server.ws())
+                server.ws()->close_client_deferred(session.client_id);
+            return;
+        case moderation::ModerationAction::BAN:
+        case moderation::ModerationAction::PERMA_BAN:
+            Log::log_print(WARNING, "AO: banning %s for content: %s",
+                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            if (auto* bm = server.room().ban_manager()) {
+                BanEntry entry;
+                entry.ipid = session.ipid;
+                entry.ip = session.ip_address;
+                entry.hdid = session.hardware_id;
+                entry.reason = "[auto] content: " + verdict.reason;
+                entry.moderator = "ContentModerator";
+                entry.timestamp =
+                    std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN)
+                                     ? -2
+                                     : 24 * 60 * 60;
+                bm->add_ban(std::move(entry));
+            }
+            server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));
+            if (server.ws())
+                server.ws()->close_client_deferred(session.client_id);
+            return;
+        }
+    }
+
     // Broadcast OOC name update if changed
     if (session.display_name != sender_name) {
         session.display_name = sender_name;
@@ -406,7 +522,7 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     OOCAction action;
     action.sender_id = session.client_id;
     action.name = sender_name;
-    action.message = message;
+    action.message = forwarded_message;
 
     server.room().handle_ooc(action);
 }

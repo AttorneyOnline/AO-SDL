@@ -5,6 +5,7 @@
 #include "game/FirewallManager.h"
 #include "game/IPReputationService.h"
 #include "game/SpamDetector.h"
+#include "moderation/ContentModerationConfig.h"
 #include "net/ReverseProxyConfig.h"
 #include "utils/Log.h"
 
@@ -241,6 +242,88 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return cfg;
     }
 
+    // -- Content Moderation --
+
+    moderation::ContentModerationConfig content_moderation_config() const {
+        moderation::ContentModerationConfig cfg;
+        cfg.enabled = value<bool>("content_moderation/enabled");
+        cfg.check_ic = value<bool>("content_moderation/check_ic");
+        cfg.check_ooc = value<bool>("content_moderation/check_ooc");
+        cfg.message_sample_length = value<int>("content_moderation/message_sample_length");
+
+        // Unicode layer
+        cfg.unicode.enabled = value<bool>("content_moderation/unicode/enabled");
+        cfg.unicode.combining_mark_threshold = value<double>("content_moderation/unicode/combining_mark_threshold");
+        cfg.unicode.exotic_script_threshold = value<double>("content_moderation/unicode/exotic_script_threshold");
+        cfg.unicode.format_char_threshold = value<double>("content_moderation/unicode/format_char_threshold");
+        cfg.unicode.max_score = value<double>("content_moderation/unicode/max_score");
+
+        // URL layer
+        cfg.urls.enabled = value<bool>("content_moderation/urls/enabled");
+        cfg.urls.blocked_score = value<double>("content_moderation/urls/blocked_score");
+        cfg.urls.unknown_url_score = value<double>("content_moderation/urls/unknown_url_score");
+        auto block_j = value<nlohmann::json>("content_moderation/urls/blocklist");
+        if (block_j.is_array()) {
+            for (auto& s : block_j)
+                if (s.is_string())
+                    cfg.urls.blocklist.push_back(s.get<std::string>());
+        }
+        auto allow_j = value<nlohmann::json>("content_moderation/urls/allowlist");
+        if (allow_j.is_array()) {
+            for (auto& s : allow_j)
+                if (s.is_string())
+                    cfg.urls.allowlist.push_back(s.get<std::string>());
+        }
+
+        // Remote classifier layer (Phase 2 wiring — config only in Phase 1)
+        cfg.remote.enabled = value<bool>("content_moderation/remote/enabled");
+        cfg.remote.provider = value<std::string>("content_moderation/remote/provider");
+        cfg.remote.api_key = value<std::string>("content_moderation/remote/api_key");
+        cfg.remote.endpoint = value<std::string>("content_moderation/remote/endpoint");
+        cfg.remote.model = value<std::string>("content_moderation/remote/model");
+        cfg.remote.timeout_ms = value<int>("content_moderation/remote/timeout_ms");
+        cfg.remote.fail_open = value<bool>("content_moderation/remote/fail_open");
+
+        // Embeddings layer (Phase 3 wiring — config only in Phase 1)
+        cfg.embeddings.enabled = value<bool>("content_moderation/embeddings/enabled");
+        cfg.embeddings.hf_model_id = value<std::string>("content_moderation/embeddings/hf_model_id");
+        cfg.embeddings.ring_size = value<int>("content_moderation/embeddings/ring_size");
+        cfg.embeddings.similarity_threshold = value<double>("content_moderation/embeddings/similarity_threshold");
+        cfg.embeddings.cluster_threshold = value<int>("content_moderation/embeddings/cluster_threshold");
+        cfg.embeddings.window_seconds = value<int>("content_moderation/embeddings/window_seconds");
+
+        // Heat ladder
+        cfg.heat.decay_half_life_seconds = value<double>("content_moderation/heat/decay_half_life_seconds");
+        cfg.heat.censor_threshold = value<double>("content_moderation/heat/censor_threshold");
+        cfg.heat.drop_threshold = value<double>("content_moderation/heat/drop_threshold");
+        cfg.heat.mute_threshold = value<double>("content_moderation/heat/mute_threshold");
+        cfg.heat.kick_threshold = value<double>("content_moderation/heat/kick_threshold");
+        cfg.heat.ban_threshold = value<double>("content_moderation/heat/ban_threshold");
+        cfg.heat.perma_ban_threshold = value<double>("content_moderation/heat/perma_ban_threshold");
+        cfg.heat.mute_duration_seconds = value<int>("content_moderation/heat/mute_duration_seconds");
+        cfg.heat.ban_duration_seconds = value<int>("content_moderation/heat/ban_duration_seconds");
+        cfg.heat.weight_visual_noise = value<double>("content_moderation/heat/weight_visual_noise");
+        cfg.heat.weight_link_risk = value<double>("content_moderation/heat/weight_link_risk");
+        cfg.heat.weight_toxicity = value<double>("content_moderation/heat/weight_toxicity");
+        cfg.heat.weight_hate = value<double>("content_moderation/heat/weight_hate");
+        cfg.heat.weight_sexual = value<double>("content_moderation/heat/weight_sexual");
+        cfg.heat.weight_sexual_minors = value<double>("content_moderation/heat/weight_sexual_minors");
+        cfg.heat.weight_violence = value<double>("content_moderation/heat/weight_violence");
+        cfg.heat.weight_self_harm = value<double>("content_moderation/heat/weight_self_harm");
+        cfg.heat.weight_semantic_echo = value<double>("content_moderation/heat/weight_semantic_echo");
+
+        // Audit sinks
+        cfg.audit.stdout_enabled = value<bool>("content_moderation/audit/stdout_enabled");
+        cfg.audit.file_path = value<std::string>("content_moderation/audit/file_path");
+        cfg.audit.loki_url = value<std::string>("content_moderation/audit/loki_url");
+        cfg.audit.loki_stream_label = value<std::string>("content_moderation/audit/loki_stream_label");
+        cfg.audit.cloudwatch_log_group = value<std::string>("content_moderation/audit/cloudwatch_log_group");
+        cfg.audit.cloudwatch_log_stream = value<std::string>("content_moderation/audit/cloudwatch_log_stream");
+        cfg.audit.sqlite_enabled = value<bool>("content_moderation/audit/sqlite_enabled");
+        cfg.audit.min_action = value<std::string>("content_moderation/audit/min_action");
+        return cfg;
+    }
+
     // -- Firewall --
 
     FirewallConfig firewall_config() const {
@@ -396,6 +479,87 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"enabled", false},
                  {"helper_path", ""},
                  {"cleanup_on_shutdown", true},
+             }},
+            {"content_moderation",
+             nlohmann::json{
+                 // Master kill switch. All layers are opt-in; even when
+                 // the subsystem is enabled each sub-layer has its own
+                 // flag. The defaults here produce zero behavior change.
+                 {"enabled", false},
+                 {"check_ic", true},
+                 {"check_ooc", true},
+                 {"message_sample_length", 200},
+                 {"unicode",
+                  nlohmann::json{
+                      {"enabled", false},
+                      {"combining_mark_threshold", 0.3},
+                      {"exotic_script_threshold", 0.3},
+                      {"format_char_threshold", 0.1},
+                      {"max_score", 1.0},
+                  }},
+                 {"urls",
+                  nlohmann::json{
+                      {"enabled", false},
+                      {"blocklist", nlohmann::json::array()},
+                      {"allowlist", nlohmann::json::array()},
+                      {"blocked_score", 1.0},
+                      {"unknown_url_score", 0.0},
+                  }},
+                 {"remote",
+                  nlohmann::json{
+                      // Phase 2: wired later. Set api_key AND enabled=true
+                      // to activate once that code lands.
+                      {"enabled", false},
+                      {"provider", "openai"},
+                      {"api_key", ""},
+                      {"endpoint", "https://api.openai.com/v1/moderations"},
+                      {"model", "omni-moderation-latest"},
+                      {"timeout_ms", 500},
+                      {"fail_open", true},
+                  }},
+                 {"embeddings",
+                  nlohmann::json{
+                      // Phase 3: wired later via llama.cpp. Empty model
+                      // id = layer inert. No model bundled with binary.
+                      {"enabled", false},
+                      {"hf_model_id", ""},
+                      {"ring_size", 500},
+                      {"similarity_threshold", 0.9},
+                      {"cluster_threshold", 3},
+                      {"window_seconds", 60},
+                  }},
+                 {"heat",
+                  nlohmann::json{
+                      {"decay_half_life_seconds", 600.0},
+                      {"censor_threshold", 1.0},
+                      {"drop_threshold", 3.0},
+                      {"mute_threshold", 6.0},
+                      {"kick_threshold", 10.0},
+                      {"ban_threshold", 15.0},
+                      {"perma_ban_threshold", 25.0},
+                      {"mute_duration_seconds", 15 * 60},
+                      {"ban_duration_seconds", 24 * 60 * 60},
+                      {"weight_visual_noise", 0.5},
+                      {"weight_link_risk", 5.0},
+                      {"weight_toxicity", 2.0},
+                      {"weight_hate", 4.0},
+                      {"weight_sexual", 1.5},
+                      {"weight_sexual_minors", 100.0},
+                      {"weight_violence", 1.5},
+                      {"weight_self_harm", 1.0},
+                      {"weight_semantic_echo", 2.0},
+                  }},
+                 {"audit",
+                  nlohmann::json{
+                      {"stdout_enabled", false},
+                      {"file_path", ""},
+                      {"loki_url", ""},
+                      {"loki_stream_label", "kagami_mod_audit"},
+                      {"cloudwatch_log_group", ""},
+                      {"cloudwatch_log_stream", ""},
+                      {"sqlite_enabled", true},
+                      {"min_action", "log"},
+                  }},
              }},
             {"rate_limits",
              nlohmann::json{

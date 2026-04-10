@@ -24,6 +24,11 @@ Metadata:
       - Label: { default: Observability }
         Parameters:
           - GrafanaPassword
+      - Label: { default: "Content Moderation (optional)" }
+        Parameters:
+          - ContentModerationEnabled
+          - OpenAIModerationApiKey
+          - EmbeddingsHuggingFaceModelId
       - Label: { default: Infrastructure }
         Parameters:
           - InstanceType
@@ -43,6 +48,9 @@ Metadata:
       AssetURL: { default: "Asset URL" }
       AdvertiserEnabled: { default: "List on master server?" }
       GrafanaPassword: { default: "Grafana Admin Password" }
+      ContentModerationEnabled: { default: "Enable content moderation?" }
+      OpenAIModerationApiKey: { default: "OpenAI moderation API key (optional)" }
+      EmbeddingsHuggingFaceModelId: { default: "HuggingFace embedding model id (optional)" }
       InstanceType: { default: "Instance Type" }
       UseSpotInstance: { default: "Use Spot Instance" }
       KeyPairName: { default: "SSH Key Pair" }
@@ -107,6 +115,41 @@ Parameters:
     NoEcho: true
     MinLength: 6
     Description: Password for the Grafana admin dashboard at /grafana/.
+
+  # --- Content Moderation (opt-in) ---
+  #
+  # Everything here is disabled by default. Enabling the subsystem alone
+  # doesn't call out to anything — each sub-layer (unicode rules, URL
+  # blocklist, remote classifier, embeddings) has its own enabled flag
+  # inside kagami.json. These CFN params just forward secrets safely;
+  # the actual layer on/off toggles live in the generated config.
+  ContentModerationEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Turn on the content moderation subsystem. When false, no moderation
+      layer runs and kagami_moderation_* metrics stay at zero. When true,
+      the unicode and URL layers are enabled in the generated config; the
+      remote classifier only activates if you also provide an API key.
+
+  OpenAIModerationApiKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: >
+      API key for OpenAI's omni-moderation-latest endpoint. Leave empty
+      to keep the remote classifier layer disabled. Kagami only uses this
+      key for moderation calls — it is NOT used for chat completions.
+
+  EmbeddingsHuggingFaceModelId:
+    Type: String
+    Default: ''
+    Description: >
+      HuggingFace model id for the local embeddings layer, e.g.
+      "sentence-transformers/all-MiniLM-L6-v2". Leave empty to keep the
+      embeddings layer disabled. When set, the embeddings layer will
+      fetch and load this model at startup (Phase 3 — not yet wired).
 
   InstanceType:
     Type: String
@@ -440,6 +483,78 @@ Resources:
                   'reputation': {'enabled': True, 'cache_ttl_hours': 24, 'cache_failure_ttl_minutes': 5, 'ip_api_enabled': True, 'abuseipdb_api_key': '', 'abuseipdb_daily_budget': 1000, 'auto_block_proxy': False, 'auto_block_datacenter': False},
                   'asn_reputation': {'enabled': True, 'watch_threshold': 2, 'rate_limit_threshold': 3, 'block_threshold': 5, 'window_minutes': 60, 'auto_block_duration': '24h', 'whitelist_asns': [], 'whitelist_multiplier': 5},
                   'spam_detection': {'enabled': True, 'echo_threshold': 3, 'echo_window_seconds': 60, 'burst_threshold': 20, 'burst_window_seconds': 30, 'join_spam_max_seconds': 5, 'name_pattern_threshold': 3, 'name_pattern_min_prefix': 4, 'name_pattern_window_seconds': 300, 'ghost_threshold': 5, 'hwid_reuse_threshold': 3},
+                  'content_moderation': {
+                      # Opt-in subsystem. When the CFN ContentModerationEnabled flag
+                      # is true, we turn on the unicode and URL layers by default.
+                      # The remote classifier layer only activates when an API key
+                      # was provided — empty key = layer remains disabled regardless.
+                      'enabled': '$CF_CM_ENABLED' == 'true',
+                      'check_ic': True,
+                      'check_ooc': True,
+                      'message_sample_length': 200,
+                      'unicode': {
+                          'enabled': '$CF_CM_ENABLED' == 'true',
+                          'combining_mark_threshold': 0.3,
+                          'exotic_script_threshold': 0.3,
+                          'format_char_threshold': 0.1,
+                          'max_score': 1.0
+                      },
+                      'urls': {
+                          'enabled': '$CF_CM_ENABLED' == 'true',
+                          'blocklist': [],
+                          'allowlist': [],
+                          'blocked_score': 1.0,
+                          'unknown_url_score': 0.0
+                      },
+                      'remote': {
+                          'enabled': '$CF_CM_ENABLED' == 'true' and len('$CF_OPENAI_KEY') > 0,
+                          'provider': 'openai',
+                          'api_key': '$CF_OPENAI_KEY',
+                          'endpoint': 'https://api.openai.com/v1/moderations',
+                          'model': 'omni-moderation-latest',
+                          'timeout_ms': 500,
+                          'fail_open': True
+                      },
+                      'embeddings': {
+                          # Phase 3: layer ignores enabled flag if model id is empty.
+                          'enabled': '$CF_CM_ENABLED' == 'true' and len('$CF_EMBED_MODEL') > 0,
+                          'hf_model_id': '$CF_EMBED_MODEL',
+                          'ring_size': 500,
+                          'similarity_threshold': 0.9,
+                          'cluster_threshold': 3,
+                          'window_seconds': 60
+                      },
+                      'heat': {
+                          'decay_half_life_seconds': 600.0,
+                          'censor_threshold': 1.0,
+                          'drop_threshold': 3.0,
+                          'mute_threshold': 6.0,
+                          'kick_threshold': 10.0,
+                          'ban_threshold': 15.0,
+                          'perma_ban_threshold': 25.0,
+                          'mute_duration_seconds': 900,
+                          'ban_duration_seconds': 86400,
+                          'weight_visual_noise': 0.5,
+                          'weight_link_risk': 5.0,
+                          'weight_toxicity': 2.0,
+                          'weight_hate': 4.0,
+                          'weight_sexual': 1.5,
+                          'weight_sexual_minors': 100.0,
+                          'weight_violence': 1.5,
+                          'weight_self_harm': 1.0,
+                          'weight_semantic_echo': 2.0
+                      },
+                      'audit': {
+                          'stdout_enabled': False,
+                          'file_path': '/logs/kagami_mod_audit.jsonl',
+                          'loki_url': '',
+                          'loki_stream_label': 'kagami_mod_audit',
+                          'cloudwatch_log_group': '',
+                          'cloudwatch_log_stream': '',
+                          'sqlite_enabled': True,
+                          'min_action': 'log'
+                      }
+                  },
                   'firewall': {'enabled': True, 'helper_path': '/app/kagami-fw-helper', 'cleanup_on_shutdown': True},
                   'rate_limits': {
                       'session_create': {'rate': 2.0, 'burst': 5.0}, 'ws_frame': {'rate': 30.0, 'burst': 60.0}, 'ws_bytes': {'rate': 32768.0, 'burst': 65536.0},
@@ -659,6 +774,9 @@ Resources:
               CfLogGroup: !Sub '/kagami/${AWS::StackName}'
               CfCwAccessKey: !Ref CloudWatchAccessKey
               CfCwSecretKey: !GetAtt CloudWatchAccessKey.SecretAccessKey
+              CfCmEnabled: !Ref ContentModerationEnabled
+              CfOpenAIKey: !Ref OpenAIModerationApiKey
+              CfEmbedModel: !Ref EmbeddingsHuggingFaceModelId
 
 # --- AMI Map (Ubuntu 24.04 LTS, arm64) ---
 Mappings:

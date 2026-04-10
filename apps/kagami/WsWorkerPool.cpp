@@ -3,6 +3,7 @@
 #include "ServerSettings.h"
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
+#include "moderation/ContentModerator.h"
 #include "net/RateLimiter.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketFrame.h"
@@ -176,6 +177,8 @@ void WsWorkerPool::start() {
                     asn->sweep();
                 if (auto* sd = room_.spam_detector())
                     sd->sweep();
+                if (auto* cm = room_.content_moderator())
+                    cm->sweep();
                 if (auto* fw = room_.firewall())
                     fw->sweep_expired();
             }

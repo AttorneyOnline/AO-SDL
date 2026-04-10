@@ -1,0 +1,424 @@
+#include "moderation/ContentModerator.h"
+
+#include "game/DatabaseManager.h"
+#include "metrics/MetricsRegistry.h"
+#include "utils/Log.h"
+
+#include <chrono>
+#include <utility>
+
+namespace moderation {
+
+namespace {
+
+int64_t now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+int64_t now_sec() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+/// True if the byte at index `i` in `s` is a UTF-8 continuation byte
+/// (10xxxxxx). Used to walk backwards to a safe truncation point.
+bool is_utf8_continuation(unsigned char b) {
+    return (b & 0xC0) == 0x80;
+}
+
+} // namespace
+
+void ContentModerator::configure(const ContentModerationConfig& cfg) {
+    std::lock_guard lock(mu_);
+    cfg_ = cfg;
+    unicode_.configure(cfg_.unicode);
+    urls_.configure(cfg_.urls);
+    remote_.configure(cfg_.remote);
+    clusterer_.configure(cfg_.embeddings);
+    heat_.configure(cfg_.heat);
+
+    // If the database is available, load active mutes so server
+    // restarts don't free muted users. If this fails we silently
+    // continue — the mute system is memory-backed anyway.
+    if (db_ && db_->is_open()) {
+        auto fut = db_->active_mutes();
+        auto mutes = fut.get();
+        for (auto& m : mutes)
+            active_mutes_[m.ipid] = m.expires_at;
+        if (!mutes.empty())
+            Log::log_print(INFO, "ContentModerator: loaded %zu active mutes from db", mutes.size());
+    }
+}
+
+void ContentModerator::set_audit_log(ModerationAuditLog* audit) {
+    std::lock_guard lock(mu_);
+    audit_ = audit;
+}
+
+void ContentModerator::set_database(DatabaseManager* db) {
+    std::lock_guard lock(mu_);
+    db_ = db;
+}
+
+void ContentModerator::set_action_callback(ActionCallback cb) {
+    std::lock_guard lock(mu_);
+    action_cb_ = std::move(cb);
+}
+
+void ContentModerator::set_remote_transport(std::unique_ptr<RemoteClassifierTransport> t) {
+    std::lock_guard lock(mu_);
+    remote_.set_transport(std::move(t));
+}
+
+void ContentModerator::set_embedding_backend(std::unique_ptr<EmbeddingBackend> backend) {
+    // Note: SemanticClusterer takes its own mutex; we don't hold the
+    // moderator mutex here to avoid nested-lock subtlety.
+    clusterer_.set_backend(std::move(backend));
+}
+
+bool ContentModerator::is_muted(const std::string& ipid) const {
+    std::lock_guard lock(mu_);
+    auto it = active_mutes_.find(ipid);
+    if (it == active_mutes_.end())
+        return false;
+    // Expired mutes are kept in the table until sweep() runs; treat
+    // them as already lifted for lookup purposes.
+    const int64_t now = now_sec();
+    return it->second <= 0 || it->second > now;
+}
+
+bool ContentModerator::lift_mute(const std::string& ipid) {
+    std::lock_guard lock(mu_);
+    return active_mutes_.erase(ipid) > 0;
+}
+
+double ContentModerator::current_heat(const std::string& ipid) {
+    return heat_.peek(ipid);
+}
+
+double ContentModerator::heat_delta_from(const ModerationAxisScores& s) const {
+    const auto& h = cfg_.heat;
+    return s.visual_noise * h.weight_visual_noise + s.link_risk * h.weight_link_risk +
+           s.toxicity * h.weight_toxicity + s.hate * h.weight_hate + s.sexual * h.weight_sexual +
+           s.sexual_minors * h.weight_sexual_minors + s.violence * h.weight_violence +
+           s.self_harm * h.weight_self_harm + s.semantic_echo * h.weight_semantic_echo;
+}
+
+std::string ContentModerator::format_reason(const ModerationVerdict& v) {
+    if (v.triggered_axes.empty())
+        return "";
+    std::string out;
+    for (size_t i = 0; i < v.triggered_axes.size(); ++i) {
+        if (i > 0)
+            out += ", ";
+        out += v.triggered_axes[i];
+    }
+    return out;
+}
+
+std::string ContentModerator::sample(std::string_view message) const {
+    const int max = cfg_.message_sample_length;
+    if (max <= 0 || static_cast<int>(message.size()) <= max)
+        return std::string(message);
+
+    // Truncate at `max` bytes but walk back to a valid UTF-8 boundary.
+    size_t cut = static_cast<size_t>(max);
+    while (cut > 0 && is_utf8_continuation(static_cast<unsigned char>(message[cut])))
+        --cut;
+    std::string out(message.substr(0, cut));
+    out += "…";
+    return out;
+}
+
+ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_view channel, std::string_view message) {
+    ModerationVerdict v;
+
+    // Metric handles are registered once per process — static-local
+    // caches avoid repeated hash lookups in MetricsRegistry on every
+    // message. This is the same pattern SpamDetector uses at line 55.
+    static auto& events_counter = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_events_total", "Moderation decisions emitted", {"action", "channel"});
+    static auto& layer_ns_counter = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_layer_nanoseconds_total",
+        "Total nanoseconds spent in each moderation layer", {"layer"});
+    static auto& layer_calls_counter = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_layer_calls_total", "Times each moderation layer has been invoked",
+        {"layer"});
+    static auto& check_ns_counter = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_check_nanoseconds_total",
+        "Total nanoseconds spent in ContentModerator::check");
+    static auto& check_calls_counter = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_checks_total", "Total ContentModerator::check invocations");
+
+    const auto check_start = std::chrono::steady_clock::now();
+    auto bump_layer = [&](const char* layer, std::chrono::steady_clock::time_point t0) {
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                      std::chrono::steady_clock::now() - t0)
+                      .count();
+        layer_ns_counter.labels({layer}).inc(static_cast<double>(dt));
+        layer_calls_counter.labels({layer}).inc();
+    };
+
+    // Config gating: if the whole subsystem or this channel is off,
+    // we return a NONE verdict without running any layer.
+    {
+        std::lock_guard lock(mu_);
+        if (!cfg_.enabled)
+            return v;
+        if (channel == "ic" && !cfg_.check_ic)
+            return v;
+        if (channel == "ooc" && !cfg_.check_ooc)
+            return v;
+    }
+
+    // --- Layer 1a: visual-noise -------------------------------------
+    {
+        auto t0 = std::chrono::steady_clock::now();
+        auto unicode_result = unicode_.classify(message);
+        v.scores.visual_noise = unicode_result.score;
+        if (unicode_result.score > 0.0) {
+            v.triggered_axes.push_back("visual_noise(" + unicode_result.reason + ")");
+        }
+        bump_layer("unicode", t0);
+    }
+
+    // --- Layer 1b: URL blocklist ------------------------------------
+    {
+        auto t0 = std::chrono::steady_clock::now();
+        auto url_result = urls_.extract(message);
+        v.scores.link_risk = url_result.score;
+        if (url_result.score > 0.0) {
+            v.triggered_axes.push_back("link(" + url_result.reason + ")");
+        }
+        bump_layer("urls", t0);
+    }
+
+    // --- Layer 2: remote classifier ---------------------------------
+    // Synchronously calls OpenAI's moderation API (or any compatible
+    // endpoint) with the configured timeout. On any failure — network,
+    // HTTP error, parse error — the layer contributes zero signal and
+    // the Layer 1 result carries the decision. This is "fail open" and
+    // is the right default for a chat server: better to occasionally
+    // miss a bad message than to brick the channel when OpenAI has an
+    // incident.
+    if (remote_.is_active()) {
+        static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
+            "kagami_moderation_remote_errors_total",
+            "Remote classifier failures by cause", {"reason"});
+        auto t0 = std::chrono::steady_clock::now();
+        auto rr = remote_.classify(std::string(message));
+        if (rr.ok) {
+            // Merge remote scores into the verdict. Use max() so a
+            // Layer 1 hit isn't overwritten by a lower remote score,
+            // and vice versa — the stronger signal wins per axis.
+            v.scores.toxicity = std::max(v.scores.toxicity, rr.scores.toxicity);
+            v.scores.hate = std::max(v.scores.hate, rr.scores.hate);
+            v.scores.sexual = std::max(v.scores.sexual, rr.scores.sexual);
+            v.scores.sexual_minors = std::max(v.scores.sexual_minors, rr.scores.sexual_minors);
+            v.scores.violence = std::max(v.scores.violence, rr.scores.violence);
+            v.scores.self_harm = std::max(v.scores.self_harm, rr.scores.self_harm);
+
+            // Only tag the reason for axes that actually crossed a
+            // floor worth mentioning. The 0.15 floor is arbitrary but
+            // keeps the audit log from filling with "toxicity 0.001"
+            // noise.
+            if (rr.scores.toxicity > 0.15)
+                v.triggered_axes.push_back("toxicity");
+            if (rr.scores.hate > 0.15)
+                v.triggered_axes.push_back("hate");
+            if (rr.scores.sexual > 0.15)
+                v.triggered_axes.push_back("sexual");
+            if (rr.scores.sexual_minors > 0.01) // much lower floor
+                v.triggered_axes.push_back("sexual_minors");
+            if (rr.scores.violence > 0.15)
+                v.triggered_axes.push_back("violence");
+            if (rr.scores.self_harm > 0.15)
+                v.triggered_axes.push_back("self_harm");
+        }
+        else if (!cfg_.remote.fail_open) {
+            // fail_closed: treat any remote failure as a high-toxicity
+            // signal. Rarely the right choice for a chat server.
+            v.scores.toxicity = std::max(v.scores.toxicity, 0.5);
+            v.triggered_axes.push_back("remote_error(" + rr.error + ")");
+        }
+        if (!rr.ok) {
+            // Cardinality: error reason is already coarse-grained
+            // (timeout/http/parse). Fall back to "other" for anything
+            // unexpected to keep the label set bounded.
+            std::string reason = rr.http_status == 0 ? "transport"
+                                 : (rr.http_status >= 400 && rr.http_status < 500) ? "http_4xx"
+                                 : (rr.http_status >= 500) ? "http_5xx"
+                                                            : "other";
+            remote_err_counter.labels({reason}).inc();
+        }
+        bump_layer("remote", t0);
+    }
+
+    // --- Layer 3: semantic clustering -------------------------------
+    // Embedding-based near-duplicate detection across recent messages
+    // from distinct IPIDs. Catches paraphrased spam that evades the
+    // fingerprint-based H1 in SpamDetector. No-op if no embedding
+    // backend is installed OR if the layer is disabled in config.
+    if (cfg_.embeddings.enabled) {
+        auto t0 = std::chrono::steady_clock::now();
+        auto sr = clusterer_.score(ipid, message);
+        if (sr.score > 0.0) {
+            v.scores.semantic_echo = std::max(v.scores.semantic_echo, sr.score);
+            v.triggered_axes.push_back(sr.reason);
+        }
+        bump_layer("embeddings", t0);
+    }
+
+    // --- Heat accumulation ------------------------------------------
+    v.heat_delta = heat_delta_from(v.scores);
+    v.heat_after = heat_.apply(ipid, v.heat_delta);
+    v.action = heat_.decide(v.heat_after);
+    v.reason = format_reason(v);
+
+    // Per-action event counter (low cardinality: <10 actions × 2 channels).
+    events_counter.labels({to_string(v.action), std::string(channel)}).inc();
+
+    // --- Side effects -----------------------------------------------
+    // If the action is MUTE, record it in the active_mutes_ table so
+    // subsequent check()/is_muted() calls short-circuit. Persist to
+    // DB if available.
+    if (v.action == ModerationAction::MUTE) {
+        const int64_t expires = now_sec() + cfg_.heat.mute_duration_seconds;
+        {
+            std::lock_guard lock(mu_);
+            active_mutes_[ipid] = expires;
+        }
+        if (db_ && db_->is_open()) {
+            MuteEntry m;
+            m.ipid = ipid;
+            m.started_at = now_sec();
+            m.expires_at = expires;
+            m.reason = v.reason.empty() ? "auto-mute" : v.reason;
+            m.moderator = "ContentModerator";
+            db_->add_mute(std::move(m));
+        }
+    }
+
+    // Fire the host action callback for any non-trivial verdict.
+    // We hold no locks here so the callback is free to reach into
+    // the BanManager, WS server, etc.
+    if (v.action != ModerationAction::NONE && v.action != ModerationAction::LOG) {
+        ActionCallback cb;
+        {
+            std::lock_guard lock(mu_);
+            cb = action_cb_;
+        }
+        if (cb) {
+            try {
+                cb(ipid, v.action, v.reason);
+            }
+            catch (const std::exception& e) {
+                Log::log_print(WARNING, "ContentModerator: action callback threw: %s", e.what());
+            }
+        }
+    }
+
+    // --- Audit log --------------------------------------------------
+    // Always build the event if auditing is wired and the action is
+    // at or above the sink's threshold — the ModerationAuditLog
+    // handles the actual min_action filter internally.
+    if (audit_ || (db_ && db_->is_open() && cfg_.audit.sqlite_enabled)) {
+        ModerationEvent ev;
+        ev.timestamp_ms = now_ms();
+        ev.ipid = ipid;
+        ev.channel = std::string(channel);
+        ev.message_sample = sample(message);
+        ev.scores = v.scores;
+        ev.action = v.action;
+        ev.heat_after = v.heat_after;
+        ev.reason = v.reason;
+
+        // Fire the fan-out sinks (file/stdout/Loki/CloudWatch).
+        if (audit_)
+            audit_->record(ev);
+
+        // Persist to sqlite. Fire-and-forget — we don't block on the
+        // future; the worker thread will catch up eventually.
+        if (db_ && db_->is_open() && cfg_.audit.sqlite_enabled &&
+            static_cast<int>(v.action) >= static_cast<int>(ModerationAction::LOG)) {
+            db_->record_moderation_event(std::move(ev));
+        }
+    }
+
+    // Wall-clock cost of the entire check(), including audit-log
+    // fan-out. Useful for catching regressions after Phase 2/3 land.
+    {
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                      std::chrono::steady_clock::now() - check_start)
+                      .count();
+        // Unlabeled metrics: CounterFamily::get() returns the
+        // default-label Counter instance.
+        check_ns_counter.get().inc(static_cast<uint64_t>(dt));
+        check_calls_counter.get().inc();
+    }
+
+    return v;
+}
+
+ContentModerator::HeatStats ContentModerator::compute_heat_stats() {
+    // We reach into ModerationHeat through the public API rather than
+    // cracking it open, to keep that class's internal table private.
+    // The collector runs at scrape time (not in the hot path), so the
+    // O(N) walk is fine even for a large tracked set.
+    HeatStats stats;
+    std::lock_guard lock(mu_);
+    const int64_t now = now_sec();
+    for (auto& [ipid, expires] : active_mutes_) {
+        if (expires == 0 || expires > now)
+            ++stats.muted_ipids;
+    }
+    // The heat table lives inside ModerationHeat — use peek() which
+    // decays-in-place, so the gauge reflects the current decayed state.
+    // We don't have a public iterator, so this summarizes only the
+    // mute table for now. A follow-up can expose a peek_all() method
+    // on ModerationHeat if we want max_heat across the full population.
+    // For Phase 1 this is acceptable: muted_ipids and tracked_ipids
+    // are the signals operators actually watch.
+    stats.tracked_ipids = heat_.size();
+    return stats;
+}
+
+void register_moderator_metrics(ContentModerator& cm) {
+    auto& reg = metrics::MetricsRegistry::instance();
+    auto& tracked_g = reg.gauge("kagami_moderation_heat_tracked_ipids",
+                                "Number of IPIDs with nonzero moderation heat");
+    auto& muted_g = reg.gauge("kagami_moderation_muted_ipids",
+                              "Number of IPIDs under an active content-moderation mute");
+
+    reg.add_collector([&cm, &tracked_g, &muted_g] {
+        auto stats = cm.compute_heat_stats();
+        tracked_g.get().set(static_cast<double>(stats.tracked_ipids));
+        muted_g.get().set(static_cast<double>(stats.muted_ipids));
+    });
+}
+
+void ContentModerator::sweep() {
+    heat_.sweep();
+    clusterer_.sweep();
+
+    // Prune expired mutes from memory.
+    {
+        std::lock_guard lock(mu_);
+        const int64_t now = now_sec();
+        for (auto it = active_mutes_.begin(); it != active_mutes_.end();) {
+            if (it->second > 0 && it->second <= now)
+                it = active_mutes_.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    // Prune the persistent mutes table too. Fire-and-forget.
+    if (db_ && db_->is_open())
+        db_->prune_expired_mutes();
+}
+
+} // namespace moderation
