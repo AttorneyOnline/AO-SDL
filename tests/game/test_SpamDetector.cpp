@@ -98,8 +98,8 @@ TEST_F(SpamDetectorTest, FewConnectionsNotBurst) {
     // Use names without trailing digits (to avoid H5) and unique HWIDs (to avoid H7)
     const char* names[] = {"Alice", "Bob", "Charlie", "Diana"};
     for (int i = 0; i < 4; ++i) {
-        auto v = sd_.on_connection("ip" + std::to_string(i), "ip" + std::to_string(i), 100,
-                                   "hwid" + std::to_string(i), names[i]);
+        auto v = sd_.on_connection("ip" + std::to_string(i), "ip" + std::to_string(i), 100, "hwid" + std::to_string(i),
+                                   names[i]);
         EXPECT_FALSE(v.is_spam);
     }
 }
@@ -107,8 +107,8 @@ TEST_F(SpamDetectorTest, FewConnectionsNotBurst) {
 TEST_F(SpamDetectorTest, ManyConnectionsIsBurst) {
     SpamVerdict last;
     for (int i = 0; i < 6; ++i) {
-        last = sd_.on_connection("ip" + std::to_string(i), "ip" + std::to_string(i), 100,
-                                 "hwid" + std::to_string(i), "user");
+        last = sd_.on_connection("ip" + std::to_string(i), "ip" + std::to_string(i), 100, "hwid" + std::to_string(i),
+                                 "user");
     }
     // At threshold=5, the 5th connection should trigger
     EXPECT_TRUE(last.is_spam);
