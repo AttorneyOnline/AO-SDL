@@ -302,6 +302,11 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
     action.blipname = f(26);
     action.slide = fb(27);
 
+    // Enforce IC message length limit
+    int max_ic = server.room().max_ic_message_length;
+    if (max_ic > 0 && static_cast<int>(action.message.size()) > max_ic)
+        return;
+
     // Broadcast showname update if changed
     if (!action.showname.empty() && session.display_name != action.showname) {
         server.broadcast_player_update(session.session_id, 2, action.showname);
@@ -385,6 +390,11 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
             return;
         }
     }
+
+    // Enforce OOC message length limit
+    int max_ooc = server.room().max_ooc_message_length;
+    if (max_ooc > 0 && static_cast<int>(message.size()) > max_ooc)
+        return;
 
     // Broadcast OOC name update if changed
     if (session.display_name != sender_name) {

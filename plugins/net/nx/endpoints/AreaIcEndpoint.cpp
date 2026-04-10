@@ -112,6 +112,10 @@ class AreaIcEndpoint : public NXEndpoint {
 
         auto action = flatten_ic_message(body, req.session);
 
+        int max_ic = room().max_ic_message_length;
+        if (max_ic > 0 && static_cast<int>(action.message.size()) > max_ic)
+            return RestResponse::error(400, "IC message too long");
+
         const auto& area_id = it->second;
 
         if (area_id == "*") {

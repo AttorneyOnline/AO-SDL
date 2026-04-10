@@ -44,6 +44,10 @@ class AreaOocEndpoint : public NXEndpoint {
         action.name = body.value("name", std::string{});
         action.message = body.value("message", std::string{});
 
+        int max_ooc = room().max_ooc_message_length;
+        if (max_ooc > 0 && static_cast<int>(action.message.size()) > max_ooc)
+            return RestResponse::error(400, "OOC message too long");
+
         const auto& area_id = it->second;
 
         if (area_id == "*") {

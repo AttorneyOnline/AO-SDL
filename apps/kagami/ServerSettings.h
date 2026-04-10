@@ -85,6 +85,17 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return std::max(0, value<int>("session_ttl_seconds"));
     }
 
+    // -- Message limits --
+
+    /// Maximum length of an IC (in-character) message in characters. 0 = no limit.
+    int max_ic_message_length() const {
+        return std::max(0, value<int>("max_ic_message_length"));
+    }
+    /// Maximum length of an OOC (out-of-character) message in characters. 0 = no limit.
+    int max_ooc_message_length() const {
+        return std::max(0, value<int>("max_ooc_message_length"));
+    }
+
     // -- Rate limiting --
 
     /// Raw rate_limits JSON object for configuring the RateLimiter.
@@ -302,6 +313,8 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"asset_url", ""},
             {"mod_password", ""},
             {"session_ttl_seconds", 300},
+            {"max_ic_message_length", 256},
+            {"max_ooc_message_length", 256},
             {"cors_origin", "https://web.aceattorneyonline.com"},
             {"log_level", "verbose"},
             {"log_file", ""},

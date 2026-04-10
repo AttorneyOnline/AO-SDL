@@ -151,6 +151,11 @@ class GameRoom {
     /// Asset URL sent to clients (ASS packet). Empty = none.
     std::string asset_url;
 
+    /// Maximum IC message length in characters. 0 = no limit.
+    int max_ic_message_length = 256;
+    /// Maximum OOC message length in characters. 0 = no limit.
+    int max_ooc_message_length = 256;
+
     /// Moderator password for simple auth. Empty = auth disabled.
     std::string mod_password;
 
