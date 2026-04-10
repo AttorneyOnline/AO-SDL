@@ -609,6 +609,25 @@ int main(int /*argc*/, char* argv[]) {
     ws.stop();
     http.stop();
 
+    // Detach the content moderator from the room BEFORE we let the
+    // function unwind. Reason: `room` is declared earlier in main()
+    // than `content_moderator`, so stack-unwinding order destroys
+    // `content_moderator` first — leaving `room` holding a dangling
+    // raw pointer through its own destructor and any chained
+    // destructors. In practice nothing in `room`'s destructor reaches
+    // for the moderator today, but the safety is invisible to the
+    // type system and a future maintainer adding moderator-touching
+    // teardown logic to GameRoom (or any of its dependents) would
+    // create a use-after-free with no compile-time warning.
+    //
+    // Sever the pointer here, in a deterministic place where the
+    // moderator is provably still alive (we hold the shared_ptr),
+    // so that by the time room destructs there's no stale handle
+    // left behind. The detached background fetch threads (HF model,
+    // slur wordlist, safe-hint anchors) keep their own shared_ptr
+    // copies and continue running until they complete on their own.
+    room.set_content_moderator(nullptr);
+
     // Sync runtime state back to settings before persisting.
     cfg.set_value("mod_password", std::any(room.mod_password));
     cfg.set_value("server_description", std::any(room.server_description));
