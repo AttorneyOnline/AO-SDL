@@ -33,14 +33,35 @@ bool contains_ci(std::string_view haystack, std::string_view needle) {
 /// Regex for http(s)://... URLs and bare domain-like tokens.
 /// Constructed once on first use; std::regex is expensive to build
 /// but cheap to match repeatedly.
+///
+/// Bare-domain rules:
+///   - At least one dot
+///   - TLD = 2-24 ASCII letters
+///   - Preceding label = 2+ chars (prevents "a.js", "b.cc" false-
+///     positives on common filenames; real domains almost always
+///     have multi-char labels, and the few 1-char label cases are
+///     rare enough that a false-negative is better than false-
+///     positives on every `node.js`, `main.cpp`, `config.yml`
+///     source-code reference in OOC chat)
+///   - Explicit TLD allowlist of common 2-4 letter TLDs OR any
+///     6+ letter TLD. This blocks the longtail of programming
+///     language file extensions (.cpp, .hpp, .rs, .py, .js, .ts,
+///     .go, .kt, etc.) that would otherwise match the generic
+///     "2-24 ASCII letters" rule.
+///
+/// Note: this is still heuristic — a determined attacker can post
+/// "example.com" without any URL markup and get picked up. The
+/// goal is "catch casual spam/phishing URLs with few false
+/// positives on source-code discussion", not "bulletproof URL
+/// detection". The allowlist/blocklist config handles the
+/// remaining policy.
 const std::regex& url_regex() {
-    // Matches:
-    //   - http(s)://anything-up-to-whitespace
-    //   - bare domains of the form foo.bar(.baz)? followed by optional path
-    // The bare-domain regex deliberately requires at least one dot and
-    // a TLD of 2-24 ASCII letters, so we don't match things like "hi.u".
-    static const std::regex re(R"((https?://[^\s<>"']+|(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,24}(?:/[^\s<>"']*)?))",
-                               std::regex::ECMAScript | std::regex::icase);
+    static const std::regex re(
+        R"((https?://[^\s<>"']+|)"
+        R"((?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)*[a-zA-Z0-9][-a-zA-Z0-9]{1,}\.)"
+        R"((?:com|org|net|edu|gov|io|co|ru|ly|cc|me|tv|app|dev|xyz|info|biz|uk|us|de|fr|jp|cn|ca|au|nz|br|in|eu|[a-zA-Z]{6,})\b)"
+        R"((?:/[^\s<>"']*)?))",
+        std::regex::ECMAScript | std::regex::icase);
     return re;
 }
 

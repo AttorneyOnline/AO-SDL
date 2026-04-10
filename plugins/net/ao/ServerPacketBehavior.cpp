@@ -54,6 +54,8 @@ void send_mod_notice(AOServer& server, ServerSession& session, moderation::Conte
         if (auto info = cm.get_mute_info(session.ipid)) {
             if (info->seconds_remaining > 0)
                 msg += " (" + std::to_string(info->seconds_remaining) + "s remaining)";
+            else if (info->seconds_remaining < 0)
+                msg += " (permanent)";
         }
     }
     server.send(session.client_id, AOPacket("CT", {"Server", msg, "1"}));

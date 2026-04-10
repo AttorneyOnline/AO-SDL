@@ -104,8 +104,14 @@ class ContentModerator {
     /// Populated by get_mute_info(); empty optional means not muted.
     struct MuteInfo {
         std::string reason;
-        int64_t expires_at = 0;    ///< Seconds since epoch; 0 = never.
-        int seconds_remaining = 0; ///< Computed at call time; 0 if never expires.
+        int64_t expires_at = 0; ///< Seconds since epoch; 0 = permanent (lifted manually only).
+        /// Seconds until expiry, or -1 for a permanent mute. Callers
+        /// should NOT render 0 as "expired" — a permanent mute has
+        /// seconds_remaining == -1, not 0. A temporary mute that's
+        /// exactly at its expiry instant produces seconds_remaining
+        /// == 0 for the single call where that happens; by the next
+        /// call is_muted/get_mute_info will report not-muted.
+        int seconds_remaining = -1;
     };
 
     /// True if the given IPID is currently under an active mute.

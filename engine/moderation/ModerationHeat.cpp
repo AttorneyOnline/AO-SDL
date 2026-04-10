@@ -34,6 +34,14 @@ void ModerationHeat::decay_locked(Entry& entry, int64_t now_ms) const {
     const double half_life = std::max(1.0, cfg_.decay_half_life_seconds);
     const double factor = std::exp(-dt * std::numbers::ln2 / half_life);
     entry.heat *= factor;
+    // Hard-zero floor: exponential decay approaches but never reaches
+    // zero. Without this floor a once-flagged IPID stays in LOG state
+    // forever (heat ~= 1e-30), which leaves a permanent trail in the
+    // gauge and delays the sweep() prune. 1e-6 is well below the
+    // censor threshold (1.0) so snapping to zero can't affect action
+    // decisions — it just keeps the numbers clean.
+    if (entry.heat < 1e-6)
+        entry.heat = 0.0;
     entry.last_update_ms = now_ms;
 }
 
