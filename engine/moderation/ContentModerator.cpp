@@ -46,8 +46,12 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
     if (db_ && db_->is_open()) {
         auto fut = db_->active_mutes();
         auto mutes = fut.get();
-        for (auto& m : mutes)
-            active_mutes_[m.ipid] = m.expires_at;
+        for (auto& m : mutes) {
+            ActiveMute am;
+            am.expires_at = m.expires_at;
+            am.reason = m.reason;
+            active_mutes_[m.ipid] = std::move(am);
+        }
         if (!mutes.empty())
             Log::log_print(INFO, "ContentModerator: loaded %zu active mutes from db", mutes.size());
     }
@@ -87,12 +91,51 @@ bool ContentModerator::is_muted(const std::string& ipid) const {
     // Expired mutes are kept in the table until sweep() runs; treat
     // them as already lifted for lookup purposes.
     const int64_t now = now_sec();
-    return it->second <= 0 || it->second > now;
+    return it->second.expires_at <= 0 || it->second.expires_at > now;
+}
+
+std::optional<ContentModerator::MuteInfo> ContentModerator::get_mute_info(const std::string& ipid) const {
+    std::lock_guard lock(mu_);
+    auto it = active_mutes_.find(ipid);
+    if (it == active_mutes_.end())
+        return std::nullopt;
+
+    const int64_t now = now_sec();
+    const int64_t expires = it->second.expires_at;
+    if (expires > 0 && expires <= now)
+        return std::nullopt; // expired
+
+    MuteInfo info;
+    info.reason = it->second.reason;
+    info.expires_at = expires;
+    info.seconds_remaining = expires > 0 ? static_cast<int>(expires - now) : 0;
+    return info;
 }
 
 bool ContentModerator::lift_mute(const std::string& ipid) {
     std::lock_guard lock(mu_);
     return active_mutes_.erase(ipid) > 0;
+}
+
+bool ContentModerator::reset_state(const std::string& ipid) {
+    // Three operations happen here:
+    //   1. Erase the in-memory mute entry (active_mutes_)
+    //   2. Reset the heat accumulator to zero
+    //   3. Delete persistent mute rows from the mutes table
+    //
+    // The two internal mutexes (ContentModerator::mu_ and
+    // ModerationHeat::mu_) must not be held simultaneously — they
+    // aren't usually contended, but this is cheap insurance against
+    // future lock-order bugs.
+    bool changed = false;
+    {
+        std::lock_guard lock(mu_);
+        changed = active_mutes_.erase(ipid) > 0;
+    }
+    heat_.reset(ipid);
+    if (db_ && db_->is_open())
+        db_->delete_mutes_by_ipid(ipid);
+    return changed || heat_.peek(ipid) == 0.0;
 }
 
 double ContentModerator::current_heat(const std::string& ipid) {
@@ -152,6 +195,16 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         "Total nanoseconds spent in ContentModerator::check");
     static auto& check_calls_counter = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_checks_total", "Total ContentModerator::check invocations");
+    // Per-axis fire counter. Increments when a given axis score
+    // crosses a small visibility floor (0.15 for classifier axes,
+    // 0.001 for sexual_minors which is catastrophic-weighted, 0.0
+    // for the rules-based visual_noise/link_risk/semantic_echo
+    // which only contribute when they have non-zero scores to
+    // begin with). Lets operators see "how often does hate fire"
+    // without mining CloudWatch log events.
+    static auto& axis_fires = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_axis_fires_total",
+        "Count of checks where a given axis scored above its visibility floor", {"axis"});
 
     const auto check_start = std::chrono::steady_clock::now();
     auto bump_layer = [&](const char* layer, std::chrono::steady_clock::time_point t0) {
@@ -275,11 +328,60 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // --- Heat accumulation ------------------------------------------
     v.heat_delta = heat_delta_from(v.scores);
     v.heat_after = heat_.apply(ipid, v.heat_delta);
+
+    // Per-message filtering semantics: a message with zero heat
+    // contribution from its OWN content is NEVER filtered, regardless
+    // of the user's accumulated heat or mute state. This avoids the
+    // anti-pattern where one bad message causes every subsequent
+    // innocuous message from the same user to get dropped for the
+    // entire mute duration. The heat ladder only applies to messages
+    // that themselves have offending content — the user's history
+    // still determines how *severe* the response to those messages is.
+    //
+    // A user with heat 10 who posts "hello world" sees their message
+    // broadcast unchanged. The same user posting a slur sees a KICK
+    // because their heat climbs to the kick threshold on that single
+    // new offense, not because of the prior hello.
+    if (v.heat_delta <= 0.0) {
+        v.action = ModerationAction::NONE;
+        events_counter.labels({to_string(v.action), std::string(channel)}).inc();
+        // Wall-clock timing for the whole check() including the early
+        // return path (so dashboards see the full cost, not just the
+        // action-bearing subset).
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                      std::chrono::steady_clock::now() - check_start)
+                      .count();
+        check_ns_counter.get().inc(static_cast<uint64_t>(dt));
+        check_calls_counter.get().inc();
+        return v;
+    }
+
     v.action = heat_.decide(v.heat_after);
     v.reason = format_reason(v);
 
     // Per-action event counter (low cardinality: <10 actions × 2 channels).
     events_counter.labels({to_string(v.action), std::string(channel)}).inc();
+
+    // Per-axis fires. Floor values chosen to keep counters meaningful
+    // without double-counting trivial noise.
+    if (v.scores.visual_noise > 0.0)
+        axis_fires.labels({"visual_noise"}).inc();
+    if (v.scores.link_risk > 0.0)
+        axis_fires.labels({"link_risk"}).inc();
+    if (v.scores.toxicity > 0.15)
+        axis_fires.labels({"toxicity"}).inc();
+    if (v.scores.hate > 0.15)
+        axis_fires.labels({"hate"}).inc();
+    if (v.scores.sexual > 0.15)
+        axis_fires.labels({"sexual"}).inc();
+    if (v.scores.sexual_minors > 0.001)
+        axis_fires.labels({"sexual_minors"}).inc();
+    if (v.scores.violence > 0.15)
+        axis_fires.labels({"violence"}).inc();
+    if (v.scores.self_harm > 0.15)
+        axis_fires.labels({"self_harm"}).inc();
+    if (v.scores.semantic_echo > 0.0)
+        axis_fires.labels({"semantic_echo"}).inc();
 
     // --- Side effects -----------------------------------------------
     // If the action is MUTE, record it in the active_mutes_ table so
@@ -287,16 +389,20 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // DB if available.
     if (v.action == ModerationAction::MUTE) {
         const int64_t expires = now_sec() + cfg_.heat.mute_duration_seconds;
+        const std::string mute_reason = v.reason.empty() ? "auto-mute" : v.reason;
         {
             std::lock_guard lock(mu_);
-            active_mutes_[ipid] = expires;
+            ActiveMute am;
+            am.expires_at = expires;
+            am.reason = mute_reason;
+            active_mutes_[ipid] = std::move(am);
         }
         if (db_ && db_->is_open()) {
             MuteEntry m;
             m.ipid = ipid;
             m.started_at = now_sec();
             m.expires_at = expires;
-            m.reason = v.reason.empty() ? "auto-mute" : v.reason;
+            m.reason = mute_reason;
             m.moderator = "ContentModerator";
             db_->add_mute(std::move(m));
         }
@@ -371,8 +477,8 @@ ContentModerator::HeatStats ContentModerator::compute_heat_stats() {
     HeatStats stats;
     std::lock_guard lock(mu_);
     const int64_t now = now_sec();
-    for (auto& [ipid, expires] : active_mutes_) {
-        if (expires == 0 || expires > now)
+    for (auto& [ipid, mute] : active_mutes_) {
+        if (mute.expires_at == 0 || mute.expires_at > now)
             ++stats.muted_ipids;
     }
     // The heat table lives inside ModerationHeat — use peek() which
@@ -409,7 +515,7 @@ void ContentModerator::sweep() {
         std::lock_guard lock(mu_);
         const int64_t now = now_sec();
         for (auto it = active_mutes_.begin(); it != active_mutes_.end();) {
-            if (it->second > 0 && it->second <= now)
+            if (it->second.expires_at > 0 && it->second.expires_at <= now)
                 it = active_mutes_.erase(it);
             else
                 ++it;

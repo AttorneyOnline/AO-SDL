@@ -63,7 +63,7 @@ class SessionCreateEndpoint : public NXEndpoint {
         sanitize(client_version, 32);
         sanitize(hdid, 128);
 
-        auto info = server().create_session(hdid, client_name, client_version);
+        auto info = server().create_session(hdid, client_name, client_version, req.remote_addr);
 
         auto roles = nlohmann::json::array({"player"});
         if (info.moderator)

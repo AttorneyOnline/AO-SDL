@@ -120,8 +120,6 @@ class AreaIcEndpoint : public NXEndpoint {
         // Content moderation — mirrors the OOC endpoint above and the
         // AO2 packet handler path.
         if (auto* cm = room().content_moderator()) {
-            if (cm->is_muted(req.session->ipid))
-                return RestResponse::error(403, "Muted by content moderation");
             auto v = cm->check(req.session->ipid, "ic", action.message);
             switch (v.action) {
             case moderation::ModerationAction::NONE:

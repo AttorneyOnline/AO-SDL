@@ -184,6 +184,10 @@ class DatabaseManager {
     /// Delete expired mute rows. Returns number of rows removed.
     std::future<int> prune_expired_mutes();
 
+    /// Delete all mute rows for a specific IPID (moderator command).
+    /// Returns number of rows removed.
+    std::future<int> delete_mutes_by_ipid(std::string ipid);
+
   private:
     sqlite3* db_ = nullptr;         ///< Only accessed from worker thread.
     std::atomic<bool> open_{false}; ///< Set after successful open().

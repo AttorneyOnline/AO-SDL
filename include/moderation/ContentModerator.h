@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -100,13 +101,30 @@ class ContentModerator {
     /// @param message   the raw message text (UTF-8)
     ModerationVerdict check(const std::string& ipid, std::string_view channel, std::string_view message);
 
+    /// Information about an active mute — reason and remaining time.
+    /// Populated by get_mute_info(); empty optional means not muted.
+    struct MuteInfo {
+        std::string reason;
+        int64_t expires_at = 0;    ///< Seconds since epoch; 0 = never.
+        int seconds_remaining = 0; ///< Computed at call time; 0 if never expires.
+    };
+
     /// True if the given IPID is currently under an active mute.
     /// Packet handlers should call this BEFORE check() to enforce
     /// mutes from prior offenses without running the Layer 1 scan.
     bool is_muted(const std::string& ipid) const;
 
+    /// Return mute metadata for reporting to the user. Returns an
+    /// empty optional if the IPID is not currently muted.
+    std::optional<MuteInfo> get_mute_info(const std::string& ipid) const;
+
     /// Manually lift a mute. Returns true if the IPID was muted.
     bool lift_mute(const std::string& ipid);
+
+    /// Reset the heat accumulator for an IPID AND lift any active
+    /// mute. Intended for the `/modheat reset` moderator command.
+    /// Returns true if any state was cleared.
+    bool reset_state(const std::string& ipid);
 
     /// Periodic housekeeping: prune decayed heat entries and expired
     /// mutes. Call every 30s from the same sweep loop as SpamDetector.
@@ -151,10 +169,15 @@ class ContentModerator {
     DatabaseManager* db_ = nullptr;
     ActionCallback action_cb_;
 
+    struct ActiveMute {
+        int64_t expires_at = 0; ///< Seconds since epoch, 0 = never expires.
+        std::string reason;     ///< Human-readable reason from the verdict.
+    };
+
     mutable std::mutex mu_;
-    /// ipid -> expires_at (seconds since epoch, 0 = never). In-memory
-    /// mirror of the mutes table. Loaded on configure() from db if set.
-    std::unordered_map<std::string, int64_t> active_mutes_;
+    /// ipid -> mute state. In-memory mirror of the mutes table.
+    /// Loaded on configure() from db if set.
+    std::unordered_map<std::string, ActiveMute> active_mutes_;
 };
 
 /// Register the Prometheus metric collectors for a ContentModerator

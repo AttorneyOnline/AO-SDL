@@ -7,7 +7,10 @@
 #include <algorithm>
 #include <chrono>
 #include <exception>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace moderation {
@@ -18,25 +21,44 @@ class HttpTransport : public RemoteClassifierTransport {
   public:
     std::pair<int, std::string> post_json(const std::string& url, const std::string& bearer_token,
                                           const std::string& body, int timeout_ms) override {
-        // Parse scheme://host from URL so we can construct a cached
-        // httplib Client. For simplicity we rebuild the client per call;
-        // a future optimization can cache by base URL.
+        // Reuse the http::Client per base URL so the TLS handshake
+        // only happens on the first call. Without this, a fresh
+        // client per request costs 1-2 seconds on arm64 (mostly TLS
+        // setup + OpenAI's DNS/LB warmup), which blows through any
+        // reasonable per-call timeout.
         auto split = split_base(url);
         if (split.first.empty()) {
             return {0, "malformed url: " + url};
         }
-        http::Client client(split.first);
-        client.set_connection_timeout(timeout_ms / 1000, (timeout_ms % 1000) * 1000);
-        client.set_read_timeout(timeout_ms / 1000, (timeout_ms % 1000) * 1000);
+
+        std::shared_ptr<http::Client> client;
+        {
+            std::lock_guard lock(clients_mu_);
+            auto& slot = clients_[split.first];
+            if (!slot) {
+                slot = std::make_shared<http::Client>(split.first);
+                // Keep-alive is httplib default; the client persists
+                // between calls while this HttpTransport lives.
+                slot->set_keep_alive(true);
+            }
+            client = slot;
+        }
+        client->set_connection_timeout(timeout_ms / 1000, (timeout_ms % 1000) * 1000);
+        client->set_read_timeout(timeout_ms / 1000, (timeout_ms % 1000) * 1000);
 
         http::Headers headers = {
             {"Authorization", "Bearer " + bearer_token},
         };
-        auto result = client.Post(split.second, headers, body, "application/json");
+        auto result = client->Post(split.second, headers, body, "application/json");
         if (!result)
-            return {0, "transport failure"};
+            return {0, "transport failure: " + http::to_string(result.error())};
         return {result->status, result->body};
     }
+
+  private:
+    std::mutex clients_mu_;
+    std::unordered_map<std::string, std::shared_ptr<http::Client>> clients_;
+  public:
 
   private:
     /// Split a URL like "https://api.openai.com/v1/moderations" into

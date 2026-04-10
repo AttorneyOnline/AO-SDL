@@ -32,6 +32,7 @@ void ao_cmd_setperms();
 void ao_cmd_status();
 void ao_cmd_testimony();
 void ao_cmd_unban();
+void ao_cmd_modheat();
 
 void ao_register_commands() {
     ao_cmd_adduser();
@@ -63,4 +64,5 @@ void ao_register_commands() {
     ao_cmd_status();
     ao_cmd_testimony();
     ao_cmd_unban();
+    ao_cmd_modheat();
 }
