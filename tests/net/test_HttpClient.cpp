@@ -239,6 +239,105 @@ TEST_F(HttpClientServerTest, StreamingGet) {
     EXPECT_EQ(received, std::string(8192, 'A'));
 }
 
+// Regression test for issue #128: the streaming Get(path, ResponseHandler,
+// ContentReceiver) overload used to silently drop the ResponseHandler,
+// causing callers that relied on the callback to see status=0 and
+// misreport every successful fetch as a transport failure. This test
+// asserts the ResponseHandler is actually invoked with the real response
+// before any body bytes reach the content_receiver.
+TEST_F(HttpClientServerTest, StreamingGetInvokesResponseHandler) {
+    server_.Get("/with-handler", [](const http::Request&, http::Response& res) {
+        res.set_content("body-bytes", "text/plain");
+        res.set_header("X-Test-Header", "header-value");
+    });
+    start();
+
+    int handler_calls = 0;
+    int status_from_handler = 0;
+    std::string header_from_handler;
+    std::string received;
+
+    auto cli = client();
+    auto res = cli.Get(
+        "/with-handler",
+        [&](const http::Response& response) -> bool {
+            ++handler_calls;
+            status_from_handler = response.status;
+            header_from_handler = response.get_header_value("X-Test-Header");
+            return true;
+        },
+        [&received](const char* data, size_t len) -> bool {
+            received.append(data, len);
+            return true;
+        });
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(handler_calls, 1) << "ResponseHandler must be invoked exactly once";
+    EXPECT_EQ(status_from_handler, 200) << "ResponseHandler should see the real status code";
+    EXPECT_EQ(header_from_handler, "header-value") << "ResponseHandler should see response headers";
+    EXPECT_EQ(received, "body-bytes");
+}
+
+// Regression test for issue #128: when the ResponseHandler returns false,
+// the request is aborted (body is not delivered, socket is closed, result
+// carries Error::Canceled). Matches cpp-httplib semantics.
+TEST_F(HttpClientServerTest, StreamingGetResponseHandlerAbort) {
+    server_.Get("/should-abort",
+                [](const http::Request&, http::Response& res) { res.set_content("never-delivered", "text/plain"); });
+    start();
+
+    std::string received;
+    auto cli = client();
+    auto res = cli.Get(
+        "/should-abort",
+        [](const http::Response&) -> bool {
+            return false; // Abort the request before body streaming.
+        },
+        [&received](const char* data, size_t len) -> bool {
+            received.append(data, len);
+            return true;
+        });
+
+    EXPECT_TRUE(received.empty()) << "body must not be streamed when handler aborts";
+    EXPECT_FALSE(static_cast<bool>(res)) << "aborted request should not report success";
+    EXPECT_EQ(res.error(), http::Error::Canceled);
+}
+
+// Regression test for issue #128: the Get overload with explicit Headers
+// AND a ResponseHandler was one of the broken variants. Verifies both
+// custom request headers reach the server AND the ResponseHandler still
+// fires on the response path.
+TEST_F(HttpClientServerTest, StreamingGetWithHeadersInvokesResponseHandler) {
+    std::string seen_request_header;
+    server_.Get("/with-req-hdr", [&seen_request_header](const http::Request& req, http::Response& res) {
+        seen_request_header = req.get_header_value("X-Client-Hdr");
+        res.set_content("ok", "text/plain");
+    });
+    start();
+
+    int handler_calls = 0;
+    std::string received;
+    http::Headers req_headers = {{"X-Client-Hdr", "hello"}};
+
+    auto cli = client();
+    auto res = cli.Get(
+        "/with-req-hdr", req_headers,
+        [&](const http::Response& response) -> bool {
+            ++handler_calls;
+            EXPECT_EQ(response.status, 200);
+            return true;
+        },
+        [&received](const char* data, size_t len) -> bool {
+            received.append(data, len);
+            return true;
+        });
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(handler_calls, 1);
+    EXPECT_EQ(seen_request_header, "hello");
+    EXPECT_EQ(received, "ok");
+}
+
 TEST_F(HttpClientServerTest, AllHttpMethods) {
     server_.Put("/res", [](const http::Request&, http::Response& res) { res.status = 200; });
     server_.Patch("/res", [](const http::Request&, http::Response& res) { res.status = 200; });
