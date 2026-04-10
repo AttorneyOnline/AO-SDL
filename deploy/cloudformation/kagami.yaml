@@ -37,6 +37,7 @@ Metadata:
           - InstanceType
           - UseSpotInstance
           - KeyPairName
+          - KagamiImage
       - Label: { default: "DNS (optional)" }
         Parameters:
           - HostedZoneId
@@ -59,6 +60,7 @@ Metadata:
       SafeHintAnchorsURL: { default: "Safe-hint anchor list URL (optional)" }
       InstanceType: { default: "Instance Type" }
       UseSpotInstance: { default: "Use Spot Instance" }
+      KagamiImage: { default: "Kagami container image (override)" }
       KeyPairName: { default: "SSH Key Pair" }
       HostedZoneId: { default: "Route53 Hosted Zone ID (auto-manages DNS)" }
 
@@ -210,6 +212,18 @@ Parameters:
     Description: >
       Graviton (arm64) instances. t4g.small is recommended for game server
       + observability. t4g.nano works for game-only.
+
+  KagamiImage:
+    Type: String
+    Default: ''
+    Description: >
+      Optional override for the kagami container image. Leave blank for
+      the CI-tracked public image at ghcr.io/attorneyonline/kagami:latest.
+      Set to e.g. 257922448991.dkr.ecr.us-west-2.amazonaws.com/kagami:dev
+      to validate a dev build on a fresh stack before merging it to
+      master. The instance role already has ECR read permissions so no
+      additional IAM changes are needed for ECR images in the same
+      account.
 
   UseSpotInstance:
     Type: String
@@ -427,6 +441,7 @@ Resources:
               export CF_MOD_PASSWORD="${CfModPassword}"
               export CF_ADVERTISE="${CfAdvertiserEnabled}"
               export CF_GRAFANA_PASSWORD="${CfGrafanaPassword}"
+              export CF_KAGAMI_IMAGE="${CfKagamiImage}"
               export CF_CW_REGION="${CfRegion}"
               export CF_CW_LOG_GROUP="${CfLogGroup}"
               # CloudWatch credentials come from the EC2 instance role
@@ -708,7 +723,14 @@ Resources:
               import os
               with open('.env', 'w') as f:
                   f.write(f"KAGAMI_DOMAIN={os.environ.get('CF_DOMAIN','')}\n")
-                  f.write("KAGAMI_IMAGE=ghcr.io/attorneyonline/kagami:latest\n")
+                  # KAGAMI_IMAGE respects the optional KagamiImage CFN
+                  # parameter (forwarded as CF_KAGAMI_IMAGE) so operators
+                  # can validate a dev image from ECR on a fresh stack
+                  # without touching the template. Empty = fall back to
+                  # the CI-tracked public GHCR image, which is the
+                  # default CI deploy flow.
+                  kagami_image = os.environ.get('CF_KAGAMI_IMAGE', '').strip() or 'ghcr.io/attorneyonline/kagami:latest'
+                  f.write(f"KAGAMI_IMAGE={kagami_image}\n")
                   f.write("GRAFANA_ADMIN_USER=admin\n")
                   f.write(f"GRAFANA_ADMIN_PASSWORD={os.environ.get('CF_GRAFANA_PASSWORD','changeme')}\n")
               ENVEOF
@@ -977,6 +999,20 @@ Resources:
 
               # --- Fix ownership and start ---
               chown -R ubuntu:ubuntu /opt/kagami
+              # If the kagami image lives in a private ECR repo (dev
+              # validation flow — see the KagamiImage CFN param), the
+              # instance role already has ecr:GetAuthorizationToken
+              # via AmazonEC2ContainerRegistryReadOnly, but docker
+              # still needs a fresh login token before the pull. The
+              # image URI comes from the CF_KAGAMI_IMAGE env var set
+              # above (the CFN param value, or empty for the default
+              # GHCR image which needs no login).
+              if echo "$CF_KAGAMI_IMAGE" | grep -q 'dkr.ecr'; then
+                  ECR_REGISTRY=$(echo "$CF_KAGAMI_IMAGE" | cut -d/ -f1)
+                  ECR_REGION=$(echo "$ECR_REGISTRY" | sed -n 's/.*\.dkr\.ecr\.\([^.]*\)\.amazonaws\.com/\1/p')
+                  aws ecr get-login-password --region "$ECR_REGION" | \
+                      sudo -u ubuntu docker login --username AWS --password-stdin "$ECR_REGISTRY"
+              fi
               sudo -u ubuntu docker compose pull
               sudo -u ubuntu docker compose up -d
 
@@ -993,6 +1029,7 @@ Resources:
               CfGrafanaPassword: !Ref GrafanaPassword
               CfRegion: !Ref AWS::Region
               CfLogGroup: !Sub '/kagami/${AWS::StackName}'
+              CfKagamiImage: !Ref KagamiImage
               CfCmEnabled: !Ref ContentModerationEnabled
               CfOpenAIKey: !Ref OpenAIModerationApiKey
               CfEmbedModel: !Ref EmbeddingsHuggingFaceModelId
