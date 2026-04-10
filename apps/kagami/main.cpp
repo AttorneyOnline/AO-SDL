@@ -169,12 +169,20 @@ int main(int /*argc*/, char* argv[]) {
     // initialized by log_sinks.init() when configured. The sqlite sink (if
     // enabled) also writes rows to the moderation_events table, which is
     // queryable via DatabaseManager::query_moderation_events().
-    moderation::ContentModerator content_moderator;
+    // Heap-allocate via shared_ptr so the background fetch threads
+    // (HF model + slur wordlist + safe-hint anchors below) can capture
+    // it by value. The previous design captured a stack-local by
+    // reference and .detach()ed, which was a use-after-free if main()
+    // ever returned while a fetch was still in flight — a HF model
+    // download can take minutes on first boot. The shared_ptr lets the
+    // moderator outlive main() until the last fetch thread drops its
+    // reference, eliminating the race entirely.
+    auto content_moderator = std::make_shared<moderation::ContentModerator>();
     {
         auto cm_cfg = cfg.content_moderation_config();
-        content_moderator.configure(cm_cfg);
-        content_moderator.set_database(&db);
-        content_moderator.set_audit_log(&mod_audit_log);
+        content_moderator->configure(cm_cfg);
+        content_moderator->set_database(&db);
+        content_moderator->set_audit_log(&mod_audit_log);
 
         // Parse min_action string once to avoid string compares per event.
         auto parse_action = [](const std::string& s) -> moderation::ModerationAction {
@@ -224,7 +232,7 @@ int main(int /*argc*/, char* argv[]) {
         // which is useful for dashboards that want to show a flatline
         // rather than a missing series.
         if (cfg.metrics_enabled())
-            moderation::register_moderator_metrics(content_moderator);
+            moderation::register_moderator_metrics(*content_moderator);
 
         // Phase 3: local embeddings layer. Completely optional — only
         // runs when the layer is enabled AND a HuggingFace model id is
@@ -252,8 +260,12 @@ int main(int /*argc*/, char* argv[]) {
             const bool safe_hint_on = cm_cfg.enabled && cm_cfg.safe_hint.enabled && !cm_cfg.safe_hint.anchors_url.empty();
             Log::log_print(INFO, "ContentModerator: scheduling embedding model load (%s)",
                            cm_cfg.embeddings.hf_model_id.c_str());
+            // Capture the shared_ptr by value (NOT by reference) so the
+            // moderator survives even if main() unwinds before the fetch
+            // completes. The detached thread keeps a reference until
+            // the lambda returns.
             std::thread([hf_id = cm_cfg.embeddings.hf_model_id, cache_dir, safe_hint_cache,
-                         safe_hint_url = cm_cfg.safe_hint.anchors_url, safe_hint_on, &content_moderator]() mutable {
+                         safe_hint_url = cm_cfg.safe_hint.anchors_url, safe_hint_on, content_moderator]() mutable {
                 auto fetch = moderation::resolve_hf_model(hf_id, cache_dir);
                 if (!fetch.ok) {
                     Log::log_print(WARNING, "ContentModerator: embedding fetch failed (%s); layer stays inert",
@@ -264,7 +276,7 @@ int main(int /*argc*/, char* argv[]) {
                 if (backend && backend->is_ready()) {
                     Log::log_print(INFO, "ContentModerator: embedding backend=%s dim=%d (%s)", backend->name(),
                                    backend->dimension(), fetch.downloaded ? "downloaded" : "cached");
-                    content_moderator.set_embedding_backend(std::move(backend));
+                    content_moderator->set_embedding_backend(std::move(backend));
                 }
                 else {
                     Log::log_print(WARNING, "ContentModerator: embedding backend not ready — "
@@ -285,7 +297,7 @@ int main(int /*argc*/, char* argv[]) {
                                    safe_hint_url.c_str());
                     auto anchors = moderation::fetch_text_list(safe_hint_url, safe_hint_cache, "safe_anchors.txt");
                     if (anchors.ok) {
-                        size_t loaded = content_moderator.set_safe_hint_anchors(anchors.entries);
+                        size_t loaded = content_moderator->set_safe_hint_anchors(anchors.entries);
                         Log::log_print(INFO, "ContentModerator: safe-hint layer armed (%zu/%zu anchors embedded, %s)",
                                        loaded, anchors.entries.size(),
                                        anchors.from_cache ? "cached" : (anchors.downloaded ? "fresh" : "?"));
@@ -316,10 +328,10 @@ int main(int /*argc*/, char* argv[]) {
             Log::log_print(INFO, "ContentModerator: scheduling slur wordlist fetch (%s)",
                            cm_cfg.slurs.wordlist_url.c_str());
             std::thread([wordlist_url = cm_cfg.slurs.wordlist_url, exceptions_url = cm_cfg.slurs.exceptions_url,
-                         cache_dir = slur_cache, &content_moderator]() mutable {
+                         cache_dir = slur_cache, content_moderator]() mutable {
                 auto wordlist = moderation::fetch_text_list(wordlist_url, cache_dir, "slurs.txt");
                 if (wordlist.ok) {
-                    content_moderator.set_slur_wordlist(wordlist.entries);
+                    content_moderator->set_slur_wordlist(wordlist.entries);
                     Log::log_print(INFO, "ContentModerator: slur wordlist loaded (%zu entries, %s)",
                                    wordlist.entries.size(),
                                    wordlist.from_cache ? "cached" : (wordlist.downloaded ? "fresh" : "?"));
@@ -331,7 +343,7 @@ int main(int /*argc*/, char* argv[]) {
                 if (!exceptions_url.empty()) {
                     auto exc = moderation::fetch_text_list(exceptions_url, cache_dir, "slur_exceptions.txt");
                     if (exc.ok) {
-                        content_moderator.set_slur_exceptions(exc.entries);
+                        content_moderator->set_slur_exceptions(exc.entries);
                         Log::log_print(INFO, "ContentModerator: slur exceptions loaded (%zu entries, %s)",
                                        exc.entries.size(),
                                        exc.from_cache ? "cached" : (exc.downloaded ? "fresh" : "?"));
@@ -345,7 +357,7 @@ int main(int /*argc*/, char* argv[]) {
             }).detach();
         }
 
-        room.set_content_moderator(&content_moderator);
+        room.set_content_moderator(content_moderator.get());
     }
 
     // --- Firewall Manager ---
