@@ -82,9 +82,9 @@ void send_mod_notice(AOServer& server, ServerSession& session, moderation::Conte
 /// `"AO: kicking %s for content: %s"` format (no channel) so
 /// existing greps for `"for content:"` keep matching.
 enum class ContentVerdictOutcome {
-    Pass,    // NONE / LOG: continue broadcasting unchanged
-    Censor,  // CENSOR: caller should swap the message to "[filtered]" and continue
-    Stop,    // DROP / MUTE / KICK / BAN / PERMA_BAN: caller should return immediately
+    Pass,   // NONE / LOG: continue broadcasting unchanged
+    Censor, // CENSOR: caller should swap the message to "[filtered]" and continue
+    Stop,   // DROP / MUTE / KICK / BAN / PERMA_BAN: caller should return immediately
 };
 
 ContentVerdictOutcome apply_content_verdict(AOServer& server, ServerSession& session, moderation::ContentModerator& cm,
@@ -130,9 +130,9 @@ ContentVerdictOutcome apply_content_verdict(AOServer& server, ServerSession& ses
             entry.hdid = session.hardware_id;
             entry.reason = "[auto] content: " + verdict.reason;
             entry.moderator = "ContentModerator";
-            entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-                                  std::chrono::system_clock::now().time_since_epoch())
-                                  .count();
+            entry.timestamp =
+                std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
             entry.duration = (verdict.action == ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
             bm->add_ban(std::move(entry));
         }

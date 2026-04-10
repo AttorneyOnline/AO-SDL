@@ -60,7 +60,7 @@
 namespace moderation {
 
 struct SafeHintResult {
-    bool is_safe = false;      ///< True iff max_similarity >= threshold.
+    bool is_safe = false;        ///< True iff max_similarity >= threshold.
     double max_similarity = 0.0; ///< [0, 1] cosine against nearest anchor.
     int best_anchor_index = -1;  ///< Index of the matching anchor, -1 on miss.
 };

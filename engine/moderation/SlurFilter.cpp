@@ -85,23 +85,23 @@ uint32_t decode_utf8(std::string_view s, size_t& i) {
 /// overwhelming majority of decoration attacks without pulling in a
 /// full Unicode property database.
 bool is_combining_mark(uint32_t cp) {
-    return (cp >= 0x0300 && cp <= 0x036F)    // Combining Diacritical Marks
-           || (cp >= 0x20D0 && cp <= 0x20FF) // Combining Marks for Symbols
-           || (cp >= 0xFE20 && cp <= 0xFE2F) // Combining Half Marks
-           || (cp >= 0x1AB0 && cp <= 0x1AFF) // Combining Diacritical Marks Extended
-           || (cp >= 0x1DC0 && cp <= 0x1DFF);// Combining Diacritical Marks Supplement
+    return (cp >= 0x0300 && cp <= 0x036F)     // Combining Diacritical Marks
+           || (cp >= 0x20D0 && cp <= 0x20FF)  // Combining Marks for Symbols
+           || (cp >= 0xFE20 && cp <= 0xFE2F)  // Combining Half Marks
+           || (cp >= 0x1AB0 && cp <= 0x1AFF)  // Combining Diacritical Marks Extended
+           || (cp >= 0x1DC0 && cp <= 0x1DFF); // Combining Diacritical Marks Supplement
 }
 
 /// True if @p cp is a zero-width or invisible character that we
 /// should drop entirely (not even leave a boundary).
 bool is_zero_width(uint32_t cp) {
-    return cp == 0x200B   // ZERO WIDTH SPACE
-           || cp == 0x200C // ZERO WIDTH NON-JOINER
-           || cp == 0x200D // ZERO WIDTH JOINER
-           || cp == 0x2060 // WORD JOINER
-           || cp == 0xFEFF // BOM / ZERO WIDTH NO-BREAK SPACE
-           || cp == 0x180E // MONGOLIAN VOWEL SEPARATOR (deprecated)
-           || cp == 0x00AD;// SOFT HYPHEN
+    return cp == 0x200B     // ZERO WIDTH SPACE
+           || cp == 0x200C  // ZERO WIDTH NON-JOINER
+           || cp == 0x200D  // ZERO WIDTH JOINER
+           || cp == 0x2060  // WORD JOINER
+           || cp == 0xFEFF  // BOM / ZERO WIDTH NO-BREAK SPACE
+           || cp == 0x180E  // MONGOLIAN VOWEL SEPARATOR (deprecated)
+           || cp == 0x00AD; // SOFT HYPHEN
 }
 
 /// Fold a code point to an ASCII character, returning 0 if there is
@@ -119,24 +119,69 @@ char fold_confusable(uint32_t cp) {
     // containing accented Latin text still normalize to ASCII tokens
     // so the wordlist can match them.
     switch (cp) {
-    case 0x00C0: case 0x00C1: case 0x00C2: case 0x00C3: case 0x00C4: case 0x00C5:
-    case 0x00E0: case 0x00E1: case 0x00E2: case 0x00E3: case 0x00E4: case 0x00E5:
+    case 0x00C0:
+    case 0x00C1:
+    case 0x00C2:
+    case 0x00C3:
+    case 0x00C4:
+    case 0x00C5:
+    case 0x00E0:
+    case 0x00E1:
+    case 0x00E2:
+    case 0x00E3:
+    case 0x00E4:
+    case 0x00E5:
         return 'a';
-    case 0x00C8: case 0x00C9: case 0x00CA: case 0x00CB:
-    case 0x00E8: case 0x00E9: case 0x00EA: case 0x00EB:
+    case 0x00C8:
+    case 0x00C9:
+    case 0x00CA:
+    case 0x00CB:
+    case 0x00E8:
+    case 0x00E9:
+    case 0x00EA:
+    case 0x00EB:
         return 'e';
-    case 0x00CC: case 0x00CD: case 0x00CE: case 0x00CF:
-    case 0x00EC: case 0x00ED: case 0x00EE: case 0x00EF:
+    case 0x00CC:
+    case 0x00CD:
+    case 0x00CE:
+    case 0x00CF:
+    case 0x00EC:
+    case 0x00ED:
+    case 0x00EE:
+    case 0x00EF:
         return 'i';
-    case 0x00D2: case 0x00D3: case 0x00D4: case 0x00D5: case 0x00D6: case 0x00D8:
-    case 0x00F2: case 0x00F3: case 0x00F4: case 0x00F5: case 0x00F6: case 0x00F8:
+    case 0x00D2:
+    case 0x00D3:
+    case 0x00D4:
+    case 0x00D5:
+    case 0x00D6:
+    case 0x00D8:
+    case 0x00F2:
+    case 0x00F3:
+    case 0x00F4:
+    case 0x00F5:
+    case 0x00F6:
+    case 0x00F8:
         return 'o';
-    case 0x00D9: case 0x00DA: case 0x00DB: case 0x00DC:
-    case 0x00F9: case 0x00FA: case 0x00FB: case 0x00FC:
+    case 0x00D9:
+    case 0x00DA:
+    case 0x00DB:
+    case 0x00DC:
+    case 0x00F9:
+    case 0x00FA:
+    case 0x00FB:
+    case 0x00FC:
         return 'u';
-    case 0x00D1: case 0x00F1: return 'n';
-    case 0x00C7: case 0x00E7: return 'c';
-    case 0x00DD: case 0x00FD: case 0x00FF: return 'y';
+    case 0x00D1:
+    case 0x00F1:
+        return 'n';
+    case 0x00C7:
+    case 0x00E7:
+        return 'c';
+    case 0x00DD:
+    case 0x00FD:
+    case 0x00FF:
+        return 'y';
     }
 
     // Cyrillic ↔ Latin homoglyphs — the single biggest evasion class.
@@ -144,39 +189,68 @@ char fold_confusable(uint32_t cp) {
     // fonts and the attacker can type them with a Russian keyboard
     // layout in half a second.
     switch (cp) {
-    case 0x0430: return 'a'; // а
-    case 0x0435: return 'e'; // е
-    case 0x0456: return 'i'; // і (Ukrainian)
-    case 0x043E: return 'o'; // о
-    case 0x0440: return 'p'; // р
-    case 0x0441: return 'c'; // с
-    case 0x0443: return 'y'; // у
-    case 0x0445: return 'x'; // х
-    case 0x043A: return 'k'; // к
-    case 0x043C: return 'm'; // м
-    case 0x0410: return 'a'; // А
-    case 0x0412: return 'b'; // В
-    case 0x0415: return 'e'; // Е
-    case 0x041A: return 'k'; // К
-    case 0x041C: return 'm'; // М
-    case 0x041D: return 'h'; // Н
-    case 0x041E: return 'o'; // О
-    case 0x0420: return 'p'; // Р
-    case 0x0421: return 'c'; // С
-    case 0x0422: return 't'; // Т
-    case 0x0425: return 'x'; // Х
+    case 0x0430:
+        return 'a'; // а
+    case 0x0435:
+        return 'e'; // е
+    case 0x0456:
+        return 'i'; // і (Ukrainian)
+    case 0x043E:
+        return 'o'; // о
+    case 0x0440:
+        return 'p'; // р
+    case 0x0441:
+        return 'c'; // с
+    case 0x0443:
+        return 'y'; // у
+    case 0x0445:
+        return 'x'; // х
+    case 0x043A:
+        return 'k'; // к
+    case 0x043C:
+        return 'm'; // м
+    case 0x0410:
+        return 'a'; // А
+    case 0x0412:
+        return 'b'; // В
+    case 0x0415:
+        return 'e'; // Е
+    case 0x041A:
+        return 'k'; // К
+    case 0x041C:
+        return 'm'; // М
+    case 0x041D:
+        return 'h'; // Н
+    case 0x041E:
+        return 'o'; // О
+    case 0x0420:
+        return 'p'; // Р
+    case 0x0421:
+        return 'c'; // С
+    case 0x0422:
+        return 't'; // Т
+    case 0x0425:
+        return 'x'; // Х
     }
 
     // Greek letters commonly used as Latin homoglyphs.
     switch (cp) {
-    case 0x03B1: return 'a'; // α
-    case 0x03BF: return 'o'; // ο
-    case 0x03B5: return 'e'; // ε
-    case 0x03BD: return 'v'; // ν
-    case 0x03C1: return 'p'; // ρ
-    case 0x03BA: return 'k'; // κ
-    case 0x03B9: return 'i'; // ι
-    case 0x03C7: return 'x'; // χ
+    case 0x03B1:
+        return 'a'; // α
+    case 0x03BF:
+        return 'o'; // ο
+    case 0x03B5:
+        return 'e'; // ε
+    case 0x03BD:
+        return 'v'; // ν
+    case 0x03C1:
+        return 'p'; // ρ
+    case 0x03BA:
+        return 'k'; // κ
+    case 0x03B9:
+        return 'i'; // ι
+    case 0x03C7:
+        return 'x'; // χ
     }
 
     return 0;
@@ -188,14 +262,22 @@ char fold_confusable(uint32_t cp) {
 /// (and are later tokenized as digit characters).
 char fold_leet_digit(char c) {
     switch (c) {
-    case '0': return 'o';
-    case '1': return 'i';
-    case '3': return 'e';
-    case '4': return 'a';
-    case '5': return 's';
-    case '7': return 't';
-    case '9': return 'g';
-    default: return c;
+    case '0':
+        return 'o';
+    case '1':
+        return 'i';
+    case '3':
+        return 'e';
+    case '4':
+        return 'a';
+    case '5':
+        return 's';
+    case '7':
+        return 't';
+    case '9':
+        return 'g';
+    default:
+        return c;
     }
 }
 

@@ -63,9 +63,9 @@
 namespace moderation {
 
 struct SlurMatchResult {
-    double score = 0.0;                   ///< 0 if no match, match_score if any token hit.
-    std::vector<std::string> matched;     ///< Normalized tokens that fired. For audit log only.
-    std::string reason;                   ///< Human-readable summary. "slur(3 matches)" etc.
+    double score = 0.0;               ///< 0 if no match, match_score if any token hit.
+    std::vector<std::string> matched; ///< Normalized tokens that fired. For audit log only.
+    std::string reason;               ///< Human-readable summary. "slur(3 matches)" etc.
 };
 
 class SlurFilter {

@@ -114,9 +114,8 @@ void ContentModerator::set_embedding_backend(std::unique_ptr<EmbeddingBackend> b
 
 size_t ContentModerator::set_safe_hint_anchors(const std::vector<std::string>& raw) {
     if (!embedding_backend_) {
-        Log::log_print(WARNING,
-                       "ContentModerator: set_safe_hint_anchors called before embedding backend is ready; "
-                       "safe-hint layer will stay inert");
+        Log::log_print(WARNING, "ContentModerator: set_safe_hint_anchors called before embedding backend is ready; "
+                                "safe-hint layer will stay inert");
         return 0;
     }
     size_t loaded = safe_hint_.load_anchors(raw, *embedding_backend_);

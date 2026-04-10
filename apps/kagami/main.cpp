@@ -257,7 +257,8 @@ int main(int /*argc*/, char* argv[]) {
             auto safe_hint_cache = cm_cfg.safe_hint.cache_dir.empty()
                                        ? (std::filesystem::path(argv[0]).parent_path() / "safe_hints").string()
                                        : cm_cfg.safe_hint.cache_dir;
-            const bool safe_hint_on = cm_cfg.enabled && cm_cfg.safe_hint.enabled && !cm_cfg.safe_hint.anchors_url.empty();
+            const bool safe_hint_on =
+                cm_cfg.enabled && cm_cfg.safe_hint.enabled && !cm_cfg.safe_hint.anchors_url.empty();
             Log::log_print(INFO, "ContentModerator: scheduling embedding model load (%s)",
                            cm_cfg.embeddings.hf_model_id.c_str());
             // Capture the shared_ptr by value (NOT by reference) so the

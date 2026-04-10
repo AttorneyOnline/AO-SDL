@@ -223,8 +223,7 @@ TextListFetchResult fetch_text_list(const std::string& url, const std::string& c
         }
         else {
             // Non-fatal — we still have the bytes, just couldn't cache.
-            Log::log_print(WARNING, "TextListFetcher: cannot write cache %s (continuing)",
-                           cache_path.string().c_str());
+            Log::log_print(WARNING, "TextListFetcher: cannot write cache %s (continuing)", cache_path.string().c_str());
         }
         out.entries = parse_text_list(body);
         out.downloaded = true;
