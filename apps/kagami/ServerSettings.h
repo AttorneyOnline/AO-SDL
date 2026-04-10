@@ -275,6 +275,13 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                     cfg.urls.allowlist.push_back(s.get<std::string>());
         }
 
+        // Slur wordlist layer (Layer 1c)
+        cfg.slurs.enabled = value<bool>("content_moderation/slurs/enabled");
+        cfg.slurs.wordlist_url = value<std::string>("content_moderation/slurs/wordlist_url");
+        cfg.slurs.exceptions_url = value<std::string>("content_moderation/slurs/exceptions_url");
+        cfg.slurs.cache_dir = value<std::string>("content_moderation/slurs/cache_dir");
+        cfg.slurs.match_score = value<double>("content_moderation/slurs/match_score");
+
         // Remote classifier layer (Phase 2 wiring — config only in Phase 1)
         cfg.remote.enabled = value<bool>("content_moderation/remote/enabled");
         cfg.remote.provider = value<std::string>("content_moderation/remote/provider");
@@ -304,6 +311,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.heat.ban_duration_seconds = value<int>("content_moderation/heat/ban_duration_seconds");
         cfg.heat.weight_visual_noise = value<double>("content_moderation/heat/weight_visual_noise");
         cfg.heat.weight_link_risk = value<double>("content_moderation/heat/weight_link_risk");
+        cfg.heat.weight_slurs = value<double>("content_moderation/heat/weight_slurs");
         cfg.heat.weight_toxicity = value<double>("content_moderation/heat/weight_toxicity");
         cfg.heat.weight_hate = value<double>("content_moderation/heat/weight_hate");
         cfg.heat.weight_sexual = value<double>("content_moderation/heat/weight_sexual");
@@ -505,6 +513,20 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"blocked_score", 1.0},
                       {"unknown_url_score", 0.0},
                   }},
+                 {"slurs",
+                  nlohmann::json{
+                      // Layer 1c: word-boundary wordlist with
+                      // Scunthorpe-safe matching. Inert by default:
+                      // an empty wordlist_url keeps SlurFilter quiet
+                      // even if enabled=true. Operators supply both
+                      // URLs via CFN parameters, or leave blank to
+                      // skip the layer entirely.
+                      {"enabled", false},
+                      {"wordlist_url", ""},
+                      {"exceptions_url", ""},
+                      {"cache_dir", "/tmp/kagami-moderation"},
+                      {"match_score", 1.0},
+                  }},
                  {"remote",
                   nlohmann::json{
                       // Remote classifier (OpenAI omni-moderation).
@@ -548,6 +570,11 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"ban_duration_seconds", 24 * 60 * 60},
                       {"weight_visual_noise", 0.5},
                       {"weight_link_risk", 5.0},
+                      // 6.0 × match_score 1.0 = 6.0, which is
+                      // mute_threshold — a single wordlist hit is
+                      // an instant mute. See HeatConfig::weight_slurs
+                      // inline docs for tuning options.
+                      {"weight_slurs", 6.0},
                       // Toxicity and violence weights default to the
                       // roleplay-friendly tuning (1.0). The per-axis
                       // floors in ContentModerator.cpp

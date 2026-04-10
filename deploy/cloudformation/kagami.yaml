@@ -29,6 +29,8 @@ Metadata:
           - ContentModerationEnabled
           - OpenAIModerationApiKey
           - EmbeddingsHuggingFaceModelId
+          - SlurWordlistURL
+          - SlurAllowlistURL
       - Label: { default: Infrastructure }
         Parameters:
           - InstanceType
@@ -51,6 +53,8 @@ Metadata:
       ContentModerationEnabled: { default: "Enable content moderation?" }
       OpenAIModerationApiKey: { default: "OpenAI moderation API key (optional)" }
       EmbeddingsHuggingFaceModelId: { default: "HuggingFace embedding model id (optional)" }
+      SlurWordlistURL: { default: "Slur wordlist URL (optional)" }
+      SlurAllowlistURL: { default: "Slur exception list URL (optional)" }
       InstanceType: { default: "Instance Type" }
       UseSpotInstance: { default: "Use Spot Instance" }
       KeyPairName: { default: "SSH Key Pair" }
@@ -150,6 +154,34 @@ Parameters:
       "sentence-transformers/all-MiniLM-L6-v2". Leave empty to keep the
       embeddings layer disabled. When set, the embeddings layer will
       fetch and load this model at startup (Phase 3 — not yet wired).
+
+  SlurWordlistURL:
+    Type: String
+    Default: ''
+    Description: >
+      https URL of a newline-delimited slur wordlist for the Layer 1c
+      word-boundary matcher. Leave empty to keep the layer inert. The
+      wordlist is fetched once at startup, cached to disk, and matched
+      against messages via a Scunthorpe-safe normalizer. Scope: extremist
+      hate speech only — profanity and crudeness are expected to fall
+      through to the remote classifier. A recommended public wordlist
+      is published at
+      https://kagami-deploy.s3.us-west-2.amazonaws.com/moderation/slurs.txt
+      — review the contents before deploying, as this is a matter of
+      community policy and every server will want different tradeoffs.
+
+  SlurAllowlistURL:
+    Type: String
+    Default: ''
+    Description: >
+      https URL of a newline-delimited exception list. Tokens on this
+      list are never reported as slur matches even if they appear in
+      the wordlist, which is how we handle Scunthorpe-style false
+      positives (country names, city names, reclaimed language used
+      in-group). Fetched at startup with the same semantics as the
+      wordlist URL. A recommended list is at
+      https://kagami-deploy.s3.us-west-2.amazonaws.com/moderation/slur_exceptions.txt
+      — again, review before using.
 
   InstanceType:
     Type: String
@@ -398,6 +430,8 @@ Resources:
               export CF_CM_ENABLED="${CfCmEnabled}"
               export CF_OPENAI_KEY="${CfOpenAIKey}"
               export CF_EMBED_MODEL="${CfEmbedModel}"
+              export CF_SLUR_WORDLIST="${CfSlurWordlist}"
+              export CF_SLUR_EXCEPTIONS="${CfSlurExceptions}"
 
               # --- Install AWS CLI (for S3 config download) ---
               if ! command -v aws &>/dev/null; then
@@ -470,6 +504,8 @@ Resources:
               cm_enabled = env('CF_CM_ENABLED') == 'true'
               openai_key = env('CF_OPENAI_KEY')
               embed_model = env('CF_EMBED_MODEL')
+              slur_wordlist = env('CF_SLUR_WORDLIST')
+              slur_exceptions = env('CF_SLUR_EXCEPTIONS')
               cfg = {
                   'domain': env('CF_DOMAIN'),
                   'server_name': env('CF_SERVER_NAME'),
@@ -541,6 +577,20 @@ Resources:
                           'blocked_score': 1.0,
                           'unknown_url_score': 0.0
                       },
+                      'slurs': {
+                          # Layer 1c activates only when the subsystem is
+                          # on AND the operator provided a wordlist URL.
+                          # The fetch happens on a background thread in
+                          # main.cpp; until it completes the layer is
+                          # inert (is_active() returns false). A cache
+                          # file under cache_dir lets subsequent boots
+                          # survive S3 outages.
+                          'enabled': cm_enabled and len(slur_wordlist) > 0,
+                          'wordlist_url': slur_wordlist,
+                          'exceptions_url': slur_exceptions,
+                          'cache_dir': '/opt/kagami/moderation-cache',
+                          'match_score': 1.0
+                      },
                       'remote': {
                           'enabled': cm_enabled and len(openai_key) > 0,
                           'provider': 'openai',
@@ -572,6 +622,10 @@ Resources:
                           'ban_duration_seconds': 86400,
                           'weight_visual_noise': 0.5,
                           'weight_link_risk': 5.0,
+                          # 6.0 = mute_threshold → a single slur match
+                          # is an immediate mute. Lower to 3.0 for a
+                          # DROP-then-escalate policy.
+                          'weight_slurs': 6.0,
                           # Roleplay-friendly defaults. See inline floor
                           # tuning comment in ContentModerator.cpp — the
                           # per-axis floors already filter dramatic
@@ -898,6 +952,8 @@ Resources:
               CfCmEnabled: !Ref ContentModerationEnabled
               CfOpenAIKey: !Ref OpenAIModerationApiKey
               CfEmbedModel: !Ref EmbeddingsHuggingFaceModelId
+              CfSlurWordlist: !Ref SlurWordlistURL
+              CfSlurExceptions: !Ref SlurAllowlistURL
 
 # --- AMI Map (Ubuntu 24.04 LTS, arm64) ---
 Mappings:

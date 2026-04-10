@@ -21,6 +21,7 @@
 #include "moderation/EmbeddingBackend.h"
 #include "moderation/HfModelFetcher.h"
 #include "moderation/ModerationAuditLog.h"
+#include "moderation/TextListFetcher.h"
 #include "net/EndpointFactory.h"
 #include "net/Http.h"
 #include "net/PlatformServerSocket.h"
@@ -210,8 +211,9 @@ int main(int /*argc*/, char* argv[]) {
         }
 
         if (cm_cfg.enabled)
-            Log::log_print(INFO, "ContentModerator: enabled (unicode=%s urls=%s remote=%s embeddings=%s)",
+            Log::log_print(INFO, "ContentModerator: enabled (unicode=%s urls=%s slurs=%s remote=%s embeddings=%s)",
                            cm_cfg.unicode.enabled ? "on" : "off", cm_cfg.urls.enabled ? "on" : "off",
+                           (cm_cfg.slurs.enabled && !cm_cfg.slurs.wordlist_url.empty()) ? "pending" : "off",
                            (cm_cfg.remote.enabled && !cm_cfg.remote.api_key.empty()) ? "on" : "off",
                            (cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) ? "on" : "off");
 
@@ -260,6 +262,53 @@ int main(int /*argc*/, char* argv[]) {
                 else {
                     Log::log_print(WARNING, "ContentModerator: embedding backend not ready — "
                                             "was kagami built with -DKAGAMI_WITH_LLAMA_CPP=ON?");
+                }
+            }).detach();
+        }
+
+        // --- Layer 1c: slur wordlist fetch ------------------------------
+        // Same background-thread pattern as the HF model fetch: main()
+        // doesn't block on the network round-trip, and the filter stays
+        // inert until the list lands. A fresh boot with no cache and a
+        // dead S3 URL just leaves SlurFilter::is_active() false — Layer
+        // 1c silently disables itself and the other layers continue.
+        //
+        // Two fetches run back-to-back on the same thread (not in
+        // parallel) because they share the cache_dir and we want their
+        // log lines serialized for readability. The exception list is
+        // small enough (<1 KB) that the extra 200ms is irrelevant.
+        if (cm_cfg.enabled && cm_cfg.slurs.enabled && !cm_cfg.slurs.wordlist_url.empty()) {
+            auto slur_cache = cm_cfg.slurs.cache_dir.empty()
+                                  ? (std::filesystem::path(argv[0]).parent_path() / "slurs").string()
+                                  : cm_cfg.slurs.cache_dir;
+            Log::log_print(INFO, "ContentModerator: scheduling slur wordlist fetch (%s)",
+                           cm_cfg.slurs.wordlist_url.c_str());
+            std::thread([wordlist_url = cm_cfg.slurs.wordlist_url, exceptions_url = cm_cfg.slurs.exceptions_url,
+                         cache_dir = slur_cache, &content_moderator]() mutable {
+                auto wordlist = moderation::fetch_text_list(wordlist_url, cache_dir, "slurs.txt");
+                if (wordlist.ok) {
+                    content_moderator.set_slur_wordlist(wordlist.entries);
+                    Log::log_print(INFO, "ContentModerator: slur wordlist loaded (%zu entries, %s)",
+                                   wordlist.entries.size(),
+                                   wordlist.from_cache ? "cached" : (wordlist.downloaded ? "fresh" : "?"));
+                }
+                else {
+                    Log::log_print(WARNING, "ContentModerator: slur wordlist fetch failed (%s); layer stays inert",
+                                   wordlist.error.c_str());
+                }
+                if (!exceptions_url.empty()) {
+                    auto exc = moderation::fetch_text_list(exceptions_url, cache_dir, "slur_exceptions.txt");
+                    if (exc.ok) {
+                        content_moderator.set_slur_exceptions(exc.entries);
+                        Log::log_print(INFO, "ContentModerator: slur exceptions loaded (%zu entries, %s)",
+                                       exc.entries.size(),
+                                       exc.from_cache ? "cached" : (exc.downloaded ? "fresh" : "?"));
+                    }
+                    else {
+                        Log::log_print(WARNING,
+                                       "ContentModerator: slur exceptions fetch failed (%s); no exceptions active",
+                                       exc.error.c_str());
+                    }
                 }
             }).detach();
         }

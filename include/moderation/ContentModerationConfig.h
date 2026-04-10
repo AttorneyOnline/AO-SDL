@@ -57,6 +57,12 @@ struct HeatConfig {
     // separating drama from real hostility).
     double weight_visual_noise = 0.5;
     double weight_link_risk = 5.0;
+    /// Slur wordlist hits (Layer 1c). Default 6.0 means a single
+    /// match crosses the 6.0 mute_threshold immediately — a first
+    /// offense on a curated extremist-hate wordlist is MUTE on sight,
+    /// no warnings. Lower to 3.0 for a "DROP the message, escalate
+    /// on repeat" policy, or raise to 10.0 for an instant kick.
+    double weight_slurs = 6.0;
     double weight_toxicity = 1.0; // roleplay-friendly; use 2.0 for general chat
     double weight_hate = 4.0;     // identity-based hate is never context-sensitive
     double weight_sexual = 1.5;
@@ -121,6 +127,45 @@ struct UrlLayerConfig {
     /// blocklist. Lets you optionally penalize links in general.
     /// 0.0 = don't penalize unknown URLs.
     double unknown_url_score = 0.0;
+};
+
+/// Layer 1c: operator-supplied slur wordlist with Scunthorpe-safe
+/// word-boundary matching.
+///
+/// This layer exists because OpenAI's hate axis has a categorical
+/// recall problem on common casual slurs — see the tuning comment
+/// in ContentModerator.cpp for the scores we've measured. An
+/// explicit wordlist fills the gap cheaply.
+///
+/// The wordlist is NOT shipped in the repo. Operators supply an
+/// https URL and TextListFetcher pulls it at startup into a disk
+/// cache. An empty URL leaves the layer inert regardless of `enabled`.
+/// The same pattern applies to the exception list (words that would
+/// otherwise trigger a false positive — reclaimed community language,
+/// country/city names that normalize to a wordlist entry, etc).
+struct SlurLayerConfig {
+    bool enabled = false;
+
+    /// https URL of the newline-delimited wordlist. Comments (# prefix)
+    /// and blank lines are ignored. Empty URL = layer stays inert.
+    std::string wordlist_url;
+
+    /// https URL of the exception list. Empty = no exceptions; every
+    /// wordlist hit fires.
+    std::string exceptions_url;
+
+    /// Filesystem directory for the cache files. TextListFetcher
+    /// falls back to the cache if the URL is unreachable on startup,
+    /// so Layer 1c survives a transient S3 outage.
+    std::string cache_dir = "/tmp/kagami-moderation";
+
+    /// Per-match score contributed to the slurs axis. Combined with
+    /// `weight_slurs` in HeatConfig, the default 1.0 × 6.0 weight
+    /// puts a single match right at the mute threshold — so a first
+    /// offense crosses the ladder to MUTE immediately. Lower this
+    /// (or the weight) if you want a "one warning, then action"
+    /// behavior instead.
+    double match_score = 1.0;
 };
 
 /// Layer 2: remote classifier (e.g. OpenAI omni-moderation).
@@ -245,6 +290,7 @@ struct ContentModerationConfig {
 
     UnicodeLayerConfig unicode;
     UrlLayerConfig urls;
+    SlurLayerConfig slurs;
     RemoteClassifierConfig remote;
     EmbeddingsLayerConfig embeddings;
     HeatConfig heat;
