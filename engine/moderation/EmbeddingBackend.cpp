@@ -13,6 +13,7 @@
 #ifdef KAGAMI_WITH_LLAMA_CPP
 #include "llama.h"
 
+#include <cmath>
 #include <mutex>
 #include <vector>
 

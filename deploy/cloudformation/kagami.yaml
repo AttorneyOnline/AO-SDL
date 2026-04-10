@@ -722,6 +722,8 @@ Resources:
               mkdir -p grafana/provisioning/dashboards grafana/provisioning/datasources
               curl -fsSL $CBASE/grafana/provisioning/dashboards/kagami-overview.json \
                   -o grafana/provisioning/dashboards/kagami-overview.json || true
+              curl -fsSL $CBASE/grafana/provisioning/dashboards/kagami-moderation.json \
+                  -o grafana/provisioning/dashboards/kagami-moderation.json || true
               # Dashboard provider config
               cat > grafana/provisioning/dashboards/default.yaml <<'DASHPROV'
               apiVersion: 1
