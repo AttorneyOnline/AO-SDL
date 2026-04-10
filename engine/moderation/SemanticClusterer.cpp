@@ -1,10 +1,11 @@
 #include "moderation/SemanticClusterer.h"
 
 #include "metrics/MetricsRegistry.h"
-#include "utils/Log.h"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
+#include <cmath>
 #include <utility>
 
 namespace moderation {
@@ -31,11 +32,32 @@ int64_t SemanticClusterer::now_ms() const {
 }
 
 double SemanticClusterer::cosine(const std::vector<float>& a, const std::vector<float>& b) {
+    // Precondition: both vectors are L2-normalized on insertion
+    // (EmbeddingBackend implementations are contractually required
+    // to return unit-length vectors). Under that precondition a
+    // plain dot product equals cosine similarity. This function
+    // does NOT normalize on each call — doing so per-comparison
+    // would double the per-check cost without changing the math
+    // if the precondition holds.
+    //
+    // In debug builds we sample-check the invariant on both
+    // operands; a drift from unit length in either one indicates
+    // a backend bug (missing normalization) or numerical rounding
+    // accumulating beyond what the cluster threshold tolerates.
     if (a.size() != b.size() || a.empty())
         return 0.0;
     double dot = 0.0;
     for (size_t i = 0; i < a.size(); ++i)
         dot += static_cast<double>(a[i]) * static_cast<double>(b[i]);
+#ifndef NDEBUG
+    double na = 0.0, nb = 0.0;
+    for (size_t i = 0; i < a.size(); ++i) {
+        na += static_cast<double>(a[i]) * static_cast<double>(a[i]);
+        nb += static_cast<double>(b[i]) * static_cast<double>(b[i]);
+    }
+    assert(std::abs(na - 1.0) < 0.01 && "SemanticClusterer: left operand not L2-normalized");
+    assert(std::abs(nb - 1.0) < 0.01 && "SemanticClusterer: right operand not L2-normalized");
+#endif
     return dot;
 }
 
@@ -136,13 +158,16 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
     // Fire the signal only when we've seen the near-dupe from at
     // least cluster_threshold distinct IPIDs. Single-source echoes
     // are already handled by SpamDetector H1.
+    //
+    // The score is a flat 1.0 whenever the threshold is crossed —
+    // earlier versions had a `1.0 + excess * 0.2` clamp that was
+    // dead math because excess is always >= 0 in this branch and
+    // the clamp ceiling is 1.0. The cluster signal either fires or
+    // doesn't; we don't model "more distinct IPIDs = stronger
+    // signal" because the heat accumulator already escalates the
+    // response as the user repeats the pattern.
     if (r.distinct_ipids + 1 >= cfg_.cluster_threshold) {
-        const double excess = static_cast<double>(r.distinct_ipids + 1 - cfg_.cluster_threshold);
-        r.score = std::clamp(1.0 + excess * 0.2, 0.0, 1.0);
-        // clamp() above always returns 1.0 for excess>=0; the nudge is
-        // only meaningful in future if we raise the ceiling above 1.0.
-        if (r.distinct_ipids + 1 == cfg_.cluster_threshold)
-            r.score = 1.0;
+        r.score = 1.0;
         r.reason = "semantic_cluster(" + std::to_string(r.distinct_ipids + 1) + "_ipids)";
         cluster_fires.get().inc();
     }
