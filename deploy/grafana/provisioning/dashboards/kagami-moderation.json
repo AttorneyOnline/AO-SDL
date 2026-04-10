@@ -1,0 +1,219 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "refresh": "15s",
+  "liveNow": true,
+  "schemaVersion": 39,
+  "tags": ["kagami", "moderation"],
+  "templating": {
+    "list": []
+  },
+  "title": "Kagami — Content Moderation",
+  "uid": "kagami-moderation",
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Action mix (rate over 5m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "description": "Rate of moderation decisions by action across both channels. A ladder climbing through log → censor → drop → mute → kick → ban corresponds to escalating heat; most traffic should sit on 'none' or 'log'.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (action) (rate(kagami_moderation_events_total[5m]))",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } },
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Channel breakdown (rate over 5m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "description": "IC vs OOC split. Most moderation events should land on OOC for typical chat servers; a spike in IC events usually means a courtroom is being flooded.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(kagami_moderation_events_total[5m]))",
+          "legendFormat": "{{channel}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 3,
+      "title": "Tracked IPIDs with heat",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "description": "Count of clients currently accumulating moderation heat. A spike here tends to precede enforcement actions.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "kagami_moderation_heat_tracked_ipids", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "orange", "value": 20 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active mutes",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+      "description": "IPIDs currently under an auto-mute. Should drop to zero within mute_duration_seconds of the last offense.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "kagami_moderation_muted_ipids", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Mean check latency (ns)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "description": "Average time spent in ContentModerator::check() including all enabled layers and audit log fan-out. Watch for drift after enabling Layer 2 (remote) or Layer 3 (embeddings).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(kagami_moderation_check_nanoseconds_total[5m]) / rate(kagami_moderation_checks_total[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ns" } }
+    },
+    {
+      "id": 6,
+      "title": "Remote classifier error rate",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "description": "Count of non-2xx responses from the OpenAI moderation endpoint in the last 15 minutes, grouped by cause. With fail_open=true, errors are silently absorbed and this is the only way to notice.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(increase(kagami_moderation_remote_errors_total[15m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Per-layer mean latency (ns)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "description": "How long each moderation layer takes per invocation. unicode and urls are sub-millisecond; remote is ~100ms when enabled; embeddings varies by model size.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (layer) (rate(kagami_moderation_layer_nanoseconds_total[5m])) / sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ns" } }
+    },
+    {
+      "id": 8,
+      "title": "Layer call rate (5m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "description": "How often each layer runs. Layers short-circuit when config disables them, so this panel is also a deployment sanity check: if the remote layer has zero calls despite being enabled, check the API key.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (layer) (rate(kagami_moderation_layer_calls_total[5m]))",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 9,
+      "title": "Recent moderation events (CloudWatch)",
+      "type": "logs",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 20 },
+      "description": "JSON-structured moderation events shipped to CloudWatch. Set the CloudWatch log group in kagami.json under content_moderation.audit.cloudwatch_log_group. Filter syntax is CloudWatch Logs Insights — adjust the `fields` line to surface additional axes.",
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryMode": "Logs",
+          "region": "default",
+          "logGroups": [
+            {
+              "name": "/kagami/kagami-staging"
+            }
+          ],
+          "expression": "fields @timestamp, @message\n| filter @logStream like /moderation/\n| sort @timestamp desc\n| limit 200"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 10,
+      "title": "Action ladder heatmap",
+      "type": "heatmap",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
+      "description": "Distribution of moderation actions over time. A bar climbing up the action axis (more severe actions over time) indicates heat escalation.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (action) (increase(kagami_moderation_events_total[1m]))",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

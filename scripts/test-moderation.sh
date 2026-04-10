@@ -88,10 +88,11 @@ echo "[1/6] Clean message (should score zero)"
 post_ooc "$TOKEN" "Lobby" "hello everyone, nice weather today"
 
 # --- 2. Visual-noise test (zalgo) ---
-# Combining marks on every base letter.
+# Combining marks on every base letter. Built with printf so bash
+# ANSI-C escapes actually evaluate — inside double quotes they wouldn't.
 # Layer: unicode_classifier
 echo "[2/6] Zalgo visual-noise test"
-ZALGO="h$'\xcc\x80\xcc\x81\xcc\x82\xcc\x83'ello$'\xcc\x80\xcc\x81\xcc\x82\xcc\x83' everyone"
+ZALGO=$(printf 'h\xcc\x80\xcc\x81\xcc\x82\xcc\x83ello\xcc\x80\xcc\x81\xcc\x82\xcc\x83 everyone')
 post_ooc "$TOKEN" "Lobby" "$ZALGO"
 
 # --- 3. URL blocklist (requires operator-configured blocklist) ---
@@ -107,7 +108,7 @@ post_ooc "$TOKEN" "Lobby" "you're all a bunch of clowns, honestly"
 
 # --- 5. Exotic unicode (cuneiform blast) ---
 echo "[5/6] Exotic unicode (cuneiform)"
-CUNEIFORM=$'\xf0\x92\x80\x80\xf0\x92\x80\x80\xf0\x92\x80\x80\xf0\x92\x80\x80\xf0\x92\x80\x80\xf0\x92\x80\x80'
+CUNEIFORM=$(printf '\xf0\x92\x80\x80%.0s' 1 2 3 4 5 6)
 post_ooc "$TOKEN" "Lobby" "$CUNEIFORM"
 
 # --- 6. Normal chatter (should stay zero) ---
