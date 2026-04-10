@@ -453,7 +453,7 @@ Resources:
                   'log_level': 'info',
                   'log_file': '/logs/kagami.log',
                   'log_file_level': 'verbose',
-                  'loki_url': '',
+                  'loki_url': 'http://127.0.0.1:3100',
                   'metrics_enabled': True,
                   'metrics_path': '/metrics',
                   'advertiser': {
@@ -547,7 +547,7 @@ Resources:
                       'audit': {
                           'stdout_enabled': False,
                           'file_path': '/logs/kagami_mod_audit.jsonl',
-                          'loki_url': '',
+                          'loki_url': 'http://127.0.0.1:3100',
                           'loki_stream_label': 'kagami_mod_audit',
                           'cloudwatch_log_group': '',
                           'cloudwatch_log_stream': '',
@@ -675,6 +675,18 @@ Resources:
                     - prometheus_data:/prometheus
                   command: ['--config.file=/etc/prometheus/prometheus.yml','--storage.tsdb.retention.time=24h','--storage.tsdb.retention.size=1GB','--web.external-url=/prometheus/','--web.route-prefix=/prometheus/','--web.listen-address=127.0.0.1:9090']
                   depends_on: [kagami]
+                loki:
+                  image: grafana/loki:latest
+                  restart: unless-stopped
+                  # Loki listens on 3100, bound to loopback only so it's
+                  # reachable from kagami + grafana on the host network
+                  # but NOT from the public internet (Caddy doesn't
+                  # forward 3100 externally).
+                  network_mode: host
+                  volumes:
+                    - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+                    - loki_data:/loki
+                  command: ['-config.file=/etc/loki/local-config.yaml']
                 grafana:
                   image: grafana/grafana:latest
                   restart: unless-stopped
@@ -699,7 +711,50 @@ Resources:
                 kagami_logs:
                 prometheus_data:
                 grafana_data:
+                loki_data:
               COMPOSE
+
+              # --- Loki config ---
+              # Minimal single-process Loki with filesystem storage.
+              # Retention is 7 days to match the CloudWatch log group;
+              # ingestion tuned for low-latency (1s) not throughput.
+              mkdir -p loki
+              cat > loki/loki-config.yaml <<'LOKI'
+              auth_enabled: false
+              server:
+                http_listen_address: 127.0.0.1
+                http_listen_port: 3100
+                grpc_listen_address: 127.0.0.1
+                grpc_listen_port: 9096
+                log_level: warn
+              common:
+                path_prefix: /loki
+                storage:
+                  filesystem:
+                    chunks_directory: /loki/chunks
+                    rules_directory: /loki/rules
+                replication_factor: 1
+                ring:
+                  instance_addr: 127.0.0.1
+                  kvstore:
+                    store: inmemory
+              schema_config:
+                configs:
+                  - from: 2025-01-01
+                    store: tsdb
+                    object_store: filesystem
+                    schema: v13
+                    index:
+                      prefix: index_
+                      period: 24h
+              limits_config:
+                reject_old_samples: true
+                reject_old_samples_max_age: 168h
+                max_query_series: 5000
+              table_manager:
+                retention_deletes_enabled: true
+                retention_period: 168h
+              LOKI
 
               # --- Prometheus config ---
               cat > prometheus/prometheus.yml <<'PROM'
@@ -755,6 +810,22 @@ Resources:
                     authType: default
                     defaultRegion: us-west-2
               CWPROV
+              # Loki datasource. Kagami application logs push here via
+              # the `loki_url` config knob, and the moderation audit log
+              # has its own dedicated stream (job=kagami_mod_audit) for
+              # low-latency live tailing of mod events — the CloudWatch
+              # audit stream stays as the queryable archive-of-record.
+              cat > grafana/provisioning/datasources/loki.yaml <<'LOKIPROV'
+              apiVersion: 1
+              datasources:
+                - name: Loki
+                  type: loki
+                  uid: loki
+                  access: proxy
+                  url: http://127.0.0.1:3100
+                  jsonData:
+                    maxLines: 1000
+              LOKIPROV
 
               # --- Fix ownership and start ---
               chown -R ubuntu:ubuntu /opt/kagami

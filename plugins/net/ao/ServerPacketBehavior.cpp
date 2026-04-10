@@ -16,6 +16,51 @@
 
 #include <chrono>
 
+namespace {
+
+/// Build a user-facing explanation of a moderation verdict and send it
+/// as a Server CT message. Runs for DROP/MUTE/CENSOR actions so the
+/// client sees why their message didn't go through (or, for CENSOR,
+/// why it went through modified). KICK/BAN use their own KK/KB packets
+/// and are handled separately.
+///
+/// For MUTE, looks up the active mute entry so we can report the
+/// remaining duration — that's the information operators keep asking
+/// for after the per-message filter landed: "why was my message
+/// filtered and how long am I in the penalty box".
+void send_mod_notice(AOServer& server, ServerSession& session, moderation::ContentModerator& cm,
+                     const moderation::ModerationVerdict& verdict) {
+    std::string msg = "[Content moderation] ";
+    switch (verdict.action) {
+    case moderation::ModerationAction::CENSOR:
+        msg += "your message was filtered";
+        break;
+    case moderation::ModerationAction::DROP:
+        msg += "your message was blocked";
+        break;
+    case moderation::ModerationAction::MUTE:
+        msg += "you have been muted";
+        break;
+    default:
+        return; // no notice for NONE/LOG/KICK/BAN
+    }
+    if (!verdict.reason.empty())
+        msg += ": " + verdict.reason;
+
+    // For MUTE, append the remaining duration so the user knows when
+    // the penalty lifts. get_mute_info returns the live expiry pulled
+    // from the active_mutes_ table (which check() just populated).
+    if (verdict.action == moderation::ModerationAction::MUTE) {
+        if (auto info = cm.get_mute_info(session.ipid)) {
+            if (info->seconds_remaining > 0)
+                msg += " (" + std::to_string(info->seconds_remaining) + "s remaining)";
+        }
+    }
+    server.send(session.client_id, AOPacket("CT", {"Server", msg, "1"}));
+}
+
+} // namespace
+
 /// Build an LE (evidence list) packet for an area.
 static AOPacket build_evidence_packet(const AreaState& area) {
     std::vector<std::string> items;
@@ -325,9 +370,11 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
             break;
         case moderation::ModerationAction::CENSOR:
             action.message = "[filtered]";
+            send_mod_notice(server, session, *cm, verdict);
             break;
         case moderation::ModerationAction::DROP:
         case moderation::ModerationAction::MUTE:
+            send_mod_notice(server, session, *cm, verdict);
             Log::log_print(INFO, "AO: IC from %s suppressed [content]: %s",
                            format_client_id(session.client_id).c_str(), verdict.reason.c_str());
             return;
@@ -467,9 +514,11 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
             break;
         case moderation::ModerationAction::CENSOR:
             forwarded_message = "[filtered]";
+            send_mod_notice(server, session, *cm, verdict);
             break;
         case moderation::ModerationAction::DROP:
         case moderation::ModerationAction::MUTE:
+            send_mod_notice(server, session, *cm, verdict);
             Log::log_print(INFO, "AO: OOC from %s suppressed [content]: %s",
                            format_client_id(session.client_id).c_str(), verdict.reason.c_str());
             return;
