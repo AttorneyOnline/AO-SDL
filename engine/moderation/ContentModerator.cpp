@@ -30,20 +30,34 @@ bool is_utf8_continuation(unsigned char b) {
 } // namespace
 
 void ContentModerator::configure(const ContentModerationConfig& cfg) {
-    std::lock_guard lock(mu_);
-    cfg_ = cfg;
-    unicode_.configure(cfg_.unicode);
-    urls_.configure(cfg_.urls);
-    remote_.configure(cfg_.remote);
-    clusterer_.configure(cfg_.embeddings);
-    heat_.configure(cfg_.heat);
+    // Apply config to sub-components under the lock, then release
+    // it BEFORE awaiting the database future. Holding mu_ while
+    // calling db_->active_mutes().get() blocks indefinitely if the
+    // DB worker thread ever needs to call back into code that takes
+    // mu_ — a latent deadlock that's trivial to avoid.
+    DatabaseManager* db_snapshot = nullptr;
+    {
+        std::lock_guard lock(mu_);
+        cfg_ = cfg;
+        unicode_.configure(cfg_.unicode);
+        urls_.configure(cfg_.urls);
+        remote_.configure(cfg_.remote);
+        clusterer_.configure(cfg_.embeddings);
+        heat_.configure(cfg_.heat);
+        db_snapshot = db_;
+        // Clear existing mute state before reloading from DB so a
+        // runtime reconfigure doesn't leak stale entries from a
+        // previous config incarnation.
+        active_mutes_.clear();
+    }
 
     // If the database is available, load active mutes so server
     // restarts don't free muted users. If this fails we silently
     // continue — the mute system is memory-backed anyway.
-    if (db_ && db_->is_open()) {
-        auto fut = db_->active_mutes();
+    if (db_snapshot && db_snapshot->is_open()) {
+        auto fut = db_snapshot->active_mutes();
         auto mutes = fut.get();
+        std::lock_guard lock(mu_);
         for (auto& m : mutes) {
             ActiveMute am;
             am.expires_at = m.expires_at;
@@ -116,24 +130,54 @@ bool ContentModerator::lift_mute(const std::string& ipid) {
 }
 
 bool ContentModerator::reset_state(const std::string& ipid) {
-    // Three operations happen here:
-    //   1. Erase the in-memory mute entry (active_mutes_)
-    //   2. Reset the heat accumulator to zero
-    //   3. Delete persistent mute rows from the mutes table
+    // Four operations happen here:
+    //   1. Snapshot the pre-reset heat value (for the return bool
+    //      and the audit log payload)
+    //   2. Erase the in-memory mute entry (active_mutes_)
+    //   3. Reset the heat accumulator to zero
+    //   4. Delete persistent mute rows from the mutes table
+    //   5. Record an audit event so there's a mod-action trail
     //
     // The two internal mutexes (ContentModerator::mu_ and
     // ModerationHeat::mu_) must not be held simultaneously — they
     // aren't usually contended, but this is cheap insurance against
     // future lock-order bugs.
-    bool changed = false;
+    const double prior_heat = heat_.peek(ipid);
+    bool had_mute = false;
     {
         std::lock_guard lock(mu_);
-        changed = active_mutes_.erase(ipid) > 0;
+        had_mute = active_mutes_.erase(ipid) > 0;
     }
     heat_.reset(ipid);
-    if (db_ && db_->is_open())
-        db_->delete_mutes_by_ipid(ipid);
-    return changed || heat_.peek(ipid) == 0.0;
+    DatabaseManager* db_snapshot = nullptr;
+    ModerationAuditLog* audit_snapshot = nullptr;
+    {
+        std::lock_guard lock(mu_);
+        db_snapshot = db_;
+        audit_snapshot = audit_;
+    }
+    if (db_snapshot && db_snapshot->is_open())
+        db_snapshot->delete_mutes_by_ipid(ipid);
+
+    // Audit event for the mod-reset action — /modheat reset is a
+    // privileged operation and the audit log is the source of truth
+    // for who cleared whose state. Without this event the mute and
+    // heat just silently vanish with no trail.
+    if (audit_snapshot && (had_mute || prior_heat > 0.0)) {
+        ModerationEvent ev;
+        ev.timestamp_ms = now_ms();
+        ev.ipid = ipid;
+        ev.channel = "mod_action";
+        ev.message_sample = "/modheat reset";
+        ev.action = ModerationAction::LOG;
+        ev.heat_after = 0.0;
+        ev.reason = "heat=" + std::to_string(prior_heat) + (had_mute ? " mute=yes" : " mute=no");
+        audit_snapshot->record(ev);
+    }
+
+    // True iff something was actually cleared. Callers use this to
+    // differentiate "you just cleared state" from "nothing to clear".
+    return had_mute || prior_heat > 0.0;
 }
 
 double ContentModerator::current_heat(const std::string& ipid) {
@@ -265,10 +309,45 @@ std::string ContentModerator::sample(std::string_view message) const {
     if (max <= 0 || static_cast<int>(message.size()) <= max)
         return std::string(message);
 
-    // Truncate at `max` bytes but walk back to a valid UTF-8 boundary.
+    // Truncate at `max` bytes, then walk back to a complete UTF-8
+    // sequence boundary. Two cases to handle:
+    //   (1) cut lands inside a continuation byte — walk back until
+    //       we find a lead byte (or ASCII byte).
+    //   (2) cut lands on a lead byte whose full multi-byte sequence
+    //       is longer than the remaining bytes — also walk back,
+    //       dropping the truncated lead.
+    // Naive walk-back only handled (1). If the buffer ends mid-lead
+    // we'd have emitted an invalid sequence into the audit sample,
+    // which then gets fed back through json::dump and produces
+    // either a decode exception or a U+FFFD replacement — neither
+    // is desirable in the audit log's message_sample field.
     size_t cut = static_cast<size_t>(max);
     while (cut > 0 && is_utf8_continuation(static_cast<unsigned char>(message[cut])))
         --cut;
+    // `cut` now points at a lead or ASCII byte (or cut==0). If it's
+    // a multi-byte lead, verify the FULL sequence fits; if not,
+    // drop it and walk back once more to the previous boundary.
+    if (cut > 0 && cut < message.size()) {
+        auto lead = static_cast<unsigned char>(message[cut]);
+        int seq_len = 0;
+        if (lead < 0x80)
+            seq_len = 1;
+        else if ((lead & 0xE0) == 0xC0)
+            seq_len = 2;
+        else if ((lead & 0xF0) == 0xE0)
+            seq_len = 3;
+        else if ((lead & 0xF8) == 0xF0)
+            seq_len = 4;
+        if (seq_len == 0 || cut + seq_len > message.size()) {
+            // Truncated sequence at the boundary — drop this byte
+            // and all its preceding continuations so the trailing
+            // bytes are a clean, complete UTF-8 prefix.
+            if (cut > 0)
+                --cut;
+            while (cut > 0 && is_utf8_continuation(static_cast<unsigned char>(message[cut])))
+                --cut;
+        }
+    }
     std::string out(message.substr(0, cut));
     out += "…";
     return out;

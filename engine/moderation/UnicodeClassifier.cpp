@@ -12,6 +12,15 @@ namespace {
 /// Decode the next UTF-8 codepoint at `s[i]`. On success, writes the
 /// codepoint to @p out and returns the number of bytes consumed.
 /// On decode failure, returns 0 and leaves @p out untouched.
+///
+/// **Strict mode**: this decoder rejects overlong encodings (e.g.
+/// `C0 80` for U+0000), unpaired surrogates (U+D800..U+DFFF), and
+/// codepoints above U+10FFFF. These are EXACTLY the filter-bypass
+/// tricks this layer is supposed to catch — a slur encoded as a
+/// 3-byte overlong sequence would render correctly in most UIs
+/// while slipping through any downstream substring check. We treat
+/// malformed UTF-8 as invalid bytes (score contribution), same as
+/// the caller does for lone continuations.
 int decode_utf8(std::string_view s, size_t i, uint32_t& out) {
     if (i >= s.size())
         return 0;
@@ -26,7 +35,10 @@ int decode_utf8(std::string_view s, size_t i, uint32_t& out) {
         auto b1 = static_cast<uint8_t>(s[i + 1]);
         if ((b1 & 0xC0) != 0x80)
             return 0;
-        out = ((b0 & 0x1Fu) << 6) | (b1 & 0x3Fu);
+        uint32_t cp = ((b0 & 0x1Fu) << 6) | (b1 & 0x3Fu);
+        if (cp < 0x80) // overlong 2-byte
+            return 0;
+        out = cp;
         return 2;
     }
     if ((b0 & 0xF0) == 0xE0) {
@@ -36,7 +48,12 @@ int decode_utf8(std::string_view s, size_t i, uint32_t& out) {
         auto b2 = static_cast<uint8_t>(s[i + 2]);
         if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80)
             return 0;
-        out = ((b0 & 0x0Fu) << 12) | ((b1 & 0x3Fu) << 6) | (b2 & 0x3Fu);
+        uint32_t cp = ((b0 & 0x0Fu) << 12) | ((b1 & 0x3Fu) << 6) | (b2 & 0x3Fu);
+        if (cp < 0x800) // overlong 3-byte (includes U+0000..U+07FF)
+            return 0;
+        if (cp >= 0xD800 && cp <= 0xDFFF) // surrogate half, never valid in UTF-8
+            return 0;
+        out = cp;
         return 3;
     }
     if ((b0 & 0xF8) == 0xF0) {
@@ -47,7 +64,12 @@ int decode_utf8(std::string_view s, size_t i, uint32_t& out) {
         auto b3 = static_cast<uint8_t>(s[i + 3]);
         if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80)
             return 0;
-        out = ((b0 & 0x07u) << 18) | ((b1 & 0x3Fu) << 12) | ((b2 & 0x3Fu) << 6) | (b3 & 0x3Fu);
+        uint32_t cp = ((b0 & 0x07u) << 18) | ((b1 & 0x3Fu) << 12) | ((b2 & 0x3Fu) << 6) | (b3 & 0x3Fu);
+        if (cp < 0x10000) // overlong 4-byte
+            return 0;
+        if (cp > 0x10FFFF) // above Unicode range
+            return 0;
+        out = cp;
         return 4;
     }
     return 0;

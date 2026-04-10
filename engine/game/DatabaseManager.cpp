@@ -229,22 +229,38 @@ bool DatabaseManager::migrate() {
 
     Log::log_print(INFO, "DatabaseManager: migrating from schema v%d to v%d", version, DB_VERSION);
 
+    // Wrap the migration in BEGIN IMMEDIATE / COMMIT so partial
+    // state never lands on disk if a step fails halfway through.
+    // Each `case` below advances user_version as a transactional
+    // step; if any step fails the outer ROLLBACK undoes everything.
+    // The DDL in create_tables() is all `CREATE IF NOT EXISTS` so
+    // it's idempotent on a reopen after rollback.
+    if (!exec("BEGIN IMMEDIATE"))
+        return false;
+    auto rollback_on_failure = [this](bool ok) {
+        if (!ok)
+            exec("ROLLBACK");
+        return ok;
+    };
+
     switch (version) {
     case 0:
         if (!exec("PRAGMA user_version = 1"))
-            return false;
+            return rollback_on_failure(false);
         [[fallthrough]];
     case 1:
         // v1 → v2: moderation_events and mutes. create_tables() runs
         // CREATE IF NOT EXISTS unconditionally every open(), so there
         // is nothing to do here beyond bumping user_version.
         if (!exec("PRAGMA user_version = 2"))
-            return false;
+            return rollback_on_failure(false);
         [[fallthrough]];
     default:
         break;
     }
 
+    if (!exec("COMMIT"))
+        return rollback_on_failure(false);
     return true;
 }
 
