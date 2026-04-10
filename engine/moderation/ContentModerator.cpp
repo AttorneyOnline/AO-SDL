@@ -146,8 +146,9 @@ namespace {
 
 // Per-axis visibility floors: an axis only contributes to the
 // per-message heat delta when its score crosses this threshold.
-// Chosen to match the dashboard axis_fires counter so "the axis
-// fired" and "the axis added heat" are always the same event.
+// Chosen to match the dashboard axis_fires counter and the verdict
+// reason labels so "the axis fired", "the axis added heat", and
+// "the reason string mentions this axis" are always the same event.
 //
 // Rationale: remote classifiers (OpenAI omni-moderation) return
 // floor-level noise on every input — clean messages commonly see
@@ -155,18 +156,40 @@ namespace {
 // multiply by the axis weight to produce a sub-0.001 heat delta
 // that IS still > 0, which blows through the "heat_delta > 0"
 // short-circuit and lets the heat ladder act on accumulated heat
-// from previous offenses. The result: a user who said something
-// bad two minutes ago gets their innocuous "hello" dropped
-// because the remote classifier's noise floor pushes the delta
-// just above zero and the prior-offense heat is still high.
+// from previous offenses.
 //
-// With the floors, a clean message produces delta=0, triggers the
-// per-message short-circuit, and the message is broadcast
-// regardless of accumulated heat — which is the whole point of
-// the per-message filtering rule the user asked for.
+// Floor tuning for kagami (roleplay-heavy Ace Attorney server):
+//
+//   Toxicity/harassment floor is DELIBERATELY VERY HIGH (0.85).
+//   OpenAI's harassment axis scores canonical courtroom dialogue
+//   in surprising places:
+//     - "Do you have cotton between your ears, spiky boy?" → 0.65
+//     - "You killed her! I know you did!"                 → 0.4-0.5
+//     - "Objection! You're nothing but a liar!"           → 0.3-0.4
+//     - "You pathetic little worm"                        → 0.6-0.7
+//   All of those are normal Ace Attorney cross-examination and
+//   should never fire moderation. Real sustained abuse scores
+//   ~0.9+ and still catches at this floor.
+//
+//   Violence gets the same treatment — courtroom accusations
+//   ("he killed her with a knife") score in the 0.4-0.6 range
+//   and are expected in-character.
+//
+//   Hate stays relatively strict (0.3) because identity-based
+//   slurs are never roleplay. Sexual/minors is catastrophic.
+//   Self-harm floor is moderate because even in-character, the
+//   axis needs to catch grooming-adjacent content.
+//
+// If you're deploying kagami on a general chat server without
+// heavy roleplay, drop the classifier floors to 0.15-0.3 and
+// raise the heat weights for a stricter baseline.
 constexpr double kAxisFloorNoise = 0.0;           // rules-based, non-zero = real
 constexpr double kAxisFloorLinkRisk = 0.0;        // rules-based, non-zero = real
-constexpr double kAxisFloorClassifier = 0.15;     // OpenAI "fired" threshold
+constexpr double kAxisFloorHate = 0.3;            // identity-based hate — stricter than toxicity
+constexpr double kAxisFloorToxicity = 0.85;       // harassment — very high floor for roleplay
+constexpr double kAxisFloorSexual = 0.7;          // sexual content (adult) — 16+ audience
+constexpr double kAxisFloorViolence = 0.85;       // courtroom violence is canon
+constexpr double kAxisFloorSelfHarm = 0.5;        // moderate — catches grooming-adjacent content
 constexpr double kAxisFloorSexualMinors = 0.01;   // catastrophic, stricter
 constexpr double kAxisFloorSemanticEcho = 0.0;    // clustering is already >= 1.0 when it fires
 
@@ -179,17 +202,17 @@ double ContentModerator::heat_delta_from(const ModerationAxisScores& s) const {
         d += s.visual_noise * h.weight_visual_noise;
     if (s.link_risk > kAxisFloorLinkRisk)
         d += s.link_risk * h.weight_link_risk;
-    if (s.toxicity > kAxisFloorClassifier)
+    if (s.toxicity > kAxisFloorToxicity)
         d += s.toxicity * h.weight_toxicity;
-    if (s.hate > kAxisFloorClassifier)
+    if (s.hate > kAxisFloorHate)
         d += s.hate * h.weight_hate;
-    if (s.sexual > kAxisFloorClassifier)
+    if (s.sexual > kAxisFloorSexual)
         d += s.sexual * h.weight_sexual;
     if (s.sexual_minors > kAxisFloorSexualMinors)
         d += s.sexual_minors * h.weight_sexual_minors;
-    if (s.violence > kAxisFloorClassifier)
+    if (s.violence > kAxisFloorViolence)
         d += s.violence * h.weight_violence;
-    if (s.self_harm > kAxisFloorClassifier)
+    if (s.self_harm > kAxisFloorSelfHarm)
         d += s.self_harm * h.weight_self_harm;
     if (s.semantic_echo > kAxisFloorSemanticEcho)
         d += s.semantic_echo * h.weight_semantic_echo;
@@ -320,22 +343,23 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             v.scores.violence = std::max(v.scores.violence, rr.scores.violence);
             v.scores.self_harm = std::max(v.scores.self_harm, rr.scores.self_harm);
 
-            // Only tag the reason for axes that actually crossed a
-            // floor worth mentioning. The 0.15 floor is arbitrary but
-            // keeps the audit log from filling with "toxicity 0.001"
-            // noise.
-            if (rr.scores.toxicity > 0.15)
-                v.triggered_axes.push_back("toxicity");
-            if (rr.scores.hate > 0.15)
-                v.triggered_axes.push_back("hate");
-            if (rr.scores.sexual > 0.15)
-                v.triggered_axes.push_back("sexual");
-            if (rr.scores.sexual_minors > 0.01) // much lower floor
-                v.triggered_axes.push_back("sexual_minors");
-            if (rr.scores.violence > 0.15)
-                v.triggered_axes.push_back("violence");
-            if (rr.scores.self_harm > 0.15)
-                v.triggered_axes.push_back("self_harm");
+            // Only tag the reason for axes that actually crossed
+            // their per-axis visibility floor. Using the same
+            // constants as heat_delta_from() guarantees "axis
+            // contributed heat" and "axis appears in reason string"
+            // are the same event.
+            if (rr.scores.toxicity > kAxisFloorToxicity)
+                v.triggered_axes.emplace_back("toxicity");
+            if (rr.scores.hate > kAxisFloorHate)
+                v.triggered_axes.emplace_back("hate");
+            if (rr.scores.sexual > kAxisFloorSexual)
+                v.triggered_axes.emplace_back("sexual");
+            if (rr.scores.sexual_minors > kAxisFloorSexualMinors)
+                v.triggered_axes.emplace_back("sexual_minors");
+            if (rr.scores.violence > kAxisFloorViolence)
+                v.triggered_axes.emplace_back("violence");
+            if (rr.scores.self_harm > kAxisFloorSelfHarm)
+                v.triggered_axes.emplace_back("self_harm");
         }
         else if (!cfg_.remote.fail_open) {
             // fail_closed: treat any remote failure as a high-toxicity
@@ -423,25 +447,26 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // Per-action event counter (low cardinality: <10 actions × 2 channels).
     events_counter.labels({to_string(v.action), std::string(channel)}).inc();
 
-    // Per-axis fires. Floor values chosen to keep counters meaningful
-    // without double-counting trivial noise.
-    if (v.scores.visual_noise > 0.0)
+    // Per-axis fires. Uses the same per-axis floors as
+    // heat_delta_from() so "fired" and "added heat" are always
+    // the same event in the dashboards.
+    if (v.scores.visual_noise > kAxisFloorNoise)
         axis_fires.labels({"visual_noise"}).inc();
-    if (v.scores.link_risk > 0.0)
+    if (v.scores.link_risk > kAxisFloorLinkRisk)
         axis_fires.labels({"link_risk"}).inc();
-    if (v.scores.toxicity > 0.15)
+    if (v.scores.toxicity > kAxisFloorToxicity)
         axis_fires.labels({"toxicity"}).inc();
-    if (v.scores.hate > 0.15)
+    if (v.scores.hate > kAxisFloorHate)
         axis_fires.labels({"hate"}).inc();
-    if (v.scores.sexual > 0.15)
+    if (v.scores.sexual > kAxisFloorSexual)
         axis_fires.labels({"sexual"}).inc();
-    if (v.scores.sexual_minors > 0.001)
+    if (v.scores.sexual_minors > kAxisFloorSexualMinors)
         axis_fires.labels({"sexual_minors"}).inc();
-    if (v.scores.violence > 0.15)
+    if (v.scores.violence > kAxisFloorViolence)
         axis_fires.labels({"violence"}).inc();
-    if (v.scores.self_harm > 0.15)
+    if (v.scores.self_harm > kAxisFloorSelfHarm)
         axis_fires.labels({"self_harm"}).inc();
-    if (v.scores.semantic_echo > 0.0)
+    if (v.scores.semantic_echo > kAxisFloorSemanticEcho)
         axis_fires.labels({"semantic_echo"}).inc();
 
     // --- Side effects -----------------------------------------------
