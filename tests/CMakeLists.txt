@@ -87,6 +87,7 @@ set(TEST_SOURCES
     render/test_MeshAsset.cpp
     configuration/test_IConfiguration.cpp
     configuration/test_JsonConfiguration.cpp
+    configuration/test_ServerSettings.cpp
     net/test_WebSocketCommon.cpp
     net/test_WebSocketServer.cpp
     net/test_NXMessage.cpp

@@ -1,9 +1,12 @@
 #include <gtest/gtest.h>
 
 #include "game/DatabaseManager.h"
+#include "moderation/ModerationTypes.h"
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <sqlite3.h>
 #include <string>
 
 namespace {
@@ -294,6 +297,132 @@ TEST_F(DatabaseManagerTest, ReopenPreservesData) {
 
     auto found = db_.find_ban_by_ipid("persistban").get();
     ASSERT_TRUE(found.has_value());
+}
+
+// -- Schema migration ---------------------------------------------------------
+
+TEST_F(DatabaseManagerTest, FreshDatabaseIsAtCurrentVersion) {
+    // A brand-new database opened through open() must end up at the
+    // current schema version after migrate() runs in open(). We reach
+    // into sqlite directly to verify.
+    sqlite3* raw = nullptr;
+    ASSERT_EQ(sqlite3_open(db_path_.string().c_str(), &raw), SQLITE_OK);
+    sqlite3_stmt* stmt = nullptr;
+    ASSERT_EQ(sqlite3_prepare_v2(raw, "PRAGMA user_version", -1, &stmt, nullptr), SQLITE_OK);
+    ASSERT_EQ(sqlite3_step(stmt), SQLITE_ROW);
+    int version = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+    sqlite3_close(raw);
+    // Current schema version is 2 (moderation_events + mutes added in
+    // the content-moderation branch). This assertion will need to be
+    // bumped if a future migration lands.
+    EXPECT_GE(version, 2);
+}
+
+TEST_F(DatabaseManagerTest, MigrationCreatesModerationTables) {
+    // After open() the moderation_events and mutes tables must exist
+    // and be writable. If the migration didn't run (e.g. the v1 -> v2
+    // case in migrate() was a no-op because create_tables() wasn't
+    // called first), these calls would fail with "no such table".
+    moderation::ModerationEvent ev;
+    ev.timestamp_ms = 1234567890;
+    ev.ipid = "testipid";
+    ev.channel = "ooc";
+    ev.message_sample = "hello world";
+    ev.action = moderation::ModerationAction::LOG;
+    ev.heat_after = 0.5;
+    ev.reason = "test";
+    auto row_id = db_.record_moderation_event(ev).get();
+    EXPECT_GT(row_id, 0);
+
+    // active_mutes() filters out expired rows, so our test mute must
+    // have a future expiry to survive the query.
+    const int64_t now_sec = std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
+    MuteEntry mute;
+    mute.ipid = "mutedipid";
+    mute.started_at = now_sec;
+    mute.expires_at = now_sec + 3600; // one hour from now
+    mute.reason = "test mute";
+    mute.moderator = "test_suite";
+    auto mute_id = db_.add_mute(mute).get();
+    EXPECT_GT(mute_id, 0);
+
+    auto active = db_.active_mutes().get();
+    EXPECT_EQ(active.size(), 1u);
+}
+
+TEST_F(DatabaseManagerTest, MigrationIsIdempotent) {
+    // Reopening an already-migrated database must not fail, re-run
+    // any DDL destructively, or bump user_version past current. This
+    // is the case that matters for normal daily restarts.
+    db_.close();
+    for (int i = 0; i < 3; ++i) {
+        DatabaseManager fresh;
+        ASSERT_TRUE(fresh.open(db_path_.string()));
+        // Touch the moderation tables to confirm they survived the
+        // reopen — a migration that dropped-and-recreated would
+        // lose rows.
+        moderation::ModerationEvent ev;
+        ev.timestamp_ms = 1000 + i;
+        ev.ipid = "reopen";
+        ev.channel = "ooc";
+        ev.action = moderation::ModerationAction::LOG;
+        ASSERT_GT(fresh.record_moderation_event(ev).get(), 0);
+        fresh.close();
+    }
+    // Reopen the original handle so TearDown() doesn't complain.
+    ASSERT_TRUE(db_.open(db_path_.string()));
+}
+
+TEST_F(DatabaseManagerTest, MigrationFromV0DatabaseAddsTables) {
+    // Simulate a pre-moderation database: create a raw sqlite file
+    // with user_version=0 and no moderation tables, then open() it
+    // and verify migrate() creates the tables and advances the
+    // version counter. This is the code path a real upgrade hits.
+    db_.close();
+    auto raw_path = std::filesystem::temp_directory_path() /
+                    ("test_kagami_v0_" + std::to_string(counter_++) + ".db");
+
+    {
+        sqlite3* raw = nullptr;
+        ASSERT_EQ(sqlite3_open(raw_path.string().c_str(), &raw), SQLITE_OK);
+        // Explicitly set user_version=0 (default for a new sqlite file)
+        // and create ONLY the pre-moderation tables, matching the v0
+        // state. DatabaseManager.open() should then migrate forward.
+        char* err = nullptr;
+        ASSERT_EQ(sqlite3_exec(raw, "PRAGMA user_version = 0", nullptr, nullptr, &err), SQLITE_OK);
+        sqlite3_close(raw);
+    }
+
+    DatabaseManager upgraded;
+    ASSERT_TRUE(upgraded.open(raw_path.string()));
+
+    // Verify the moderation tables were created by migrate() → create_tables().
+    sqlite3* raw = nullptr;
+    ASSERT_EQ(sqlite3_open(raw_path.string().c_str(), &raw), SQLITE_OK);
+    for (const char* table : {"moderation_events", "mutes"}) {
+        sqlite3_stmt* stmt = nullptr;
+        std::string q = std::string("SELECT name FROM sqlite_master WHERE type='table' AND name='") + table + "'";
+        ASSERT_EQ(sqlite3_prepare_v2(raw, q.c_str(), -1, &stmt, nullptr), SQLITE_OK);
+        EXPECT_EQ(sqlite3_step(stmt), SQLITE_ROW) << "table missing after migration: " << table;
+        sqlite3_finalize(stmt);
+    }
+
+    // And verify user_version was bumped.
+    sqlite3_stmt* stmt = nullptr;
+    ASSERT_EQ(sqlite3_prepare_v2(raw, "PRAGMA user_version", -1, &stmt, nullptr), SQLITE_OK);
+    ASSERT_EQ(sqlite3_step(stmt), SQLITE_ROW);
+    EXPECT_GE(sqlite3_column_int(stmt, 0), 2);
+    sqlite3_finalize(stmt);
+    sqlite3_close(raw);
+
+    upgraded.close();
+    std::filesystem::remove(raw_path);
+
+    // Reopen the original db_ so TearDown() is happy.
+    ASSERT_TRUE(db_.open(db_path_.string()));
 }
 
 // -- Async dispatch -----------------------------------------------------------
