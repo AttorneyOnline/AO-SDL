@@ -47,7 +47,9 @@ TEST(SlurFilterNormalize, StripsCombiningMarks) {
     // The input is UTF-8: 'a' (0x61), then 0xCC 0x81 (the combining mark).
     EXPECT_EQ(SlurFilter::normalize("a\xCC\x81"), "a");
     // A zalgo-y "word" with 3 stacked combining marks.
-    EXPECT_EQ(SlurFilter::normalize("h\xCC\x80""e\xCC\x81\xCC\x82llo"), "hello");
+    EXPECT_EQ(SlurFilter::normalize("h\xCC\x80"
+                                    "e\xCC\x81\xCC\x82llo"),
+              "hello");
 }
 
 TEST(SlurFilterNormalize, StripsZeroWidth) {
@@ -60,7 +62,9 @@ TEST(SlurFilterNormalize, StripsZeroWidth) {
 
 TEST(SlurFilterNormalize, FoldsCyrillicHomoglyphs) {
     // Cyrillic "а" (U+0430, UTF-8: D0 B0) + regular "bc" → "abc"
-    EXPECT_EQ(SlurFilter::normalize("\xD0\xB0""bc"), "abc");
+    EXPECT_EQ(SlurFilter::normalize("\xD0\xB0"
+                                    "bc"),
+              "abc");
     // "evilword" with every Latin e/i/o replaced by Cyrillic
     // homoglyphs: е U+0435 (D0 B5), і U+0456 (D1 96), о U+043E (D0 BE).
     // Input letter sequence: [е][v][і][l][w][о][r][d]
@@ -90,7 +94,8 @@ TEST(SlurFilterNormalize, CollapsesRepeats) {
 TEST(SlurFilterNormalize, NonAsciiBecomesBoundary) {
     // Japanese "bad単語" has "単語" as unmappable → should become
     // " " and break the token.
-    auto norm = SlurFilter::normalize("bad\xE5\x8D\x98\xE8\xAA\x9E""word");
+    auto norm = SlurFilter::normalize("bad\xE5\x8D\x98\xE8\xAA\x9E"
+                                      "word");
     auto toks = SlurFilter::tokenize(norm);
     ASSERT_EQ(toks.size(), 2u);
     EXPECT_EQ(toks[0], "bad");
@@ -373,13 +378,12 @@ TEST(TextListParse, BasicLines) {
 }
 
 TEST(TextListParse, SkipsCommentsAndBlanks) {
-    auto entries = moderation::parse_text_list(
-        "# this is a comment\n"
-        "\n"
-        "foo\n"
-        "   \n"
-        "# another comment\n"
-        "bar\n");
+    auto entries = moderation::parse_text_list("# this is a comment\n"
+                                               "\n"
+                                               "foo\n"
+                                               "   \n"
+                                               "# another comment\n"
+                                               "bar\n");
     ASSERT_EQ(entries.size(), 2u);
     EXPECT_EQ(entries[0], "foo");
     EXPECT_EQ(entries[1], "bar");
@@ -401,7 +405,8 @@ TEST(TextListParse, HandlesCRLF) {
 
 TEST(TextListParse, StripsBOM) {
     // UTF-8 BOM EF BB BF prepended.
-    auto entries = moderation::parse_text_list("\xEF\xBB\xBF""foo\nbar\n");
+    auto entries = moderation::parse_text_list("\xEF\xBB\xBF"
+                                               "foo\nbar\n");
     ASSERT_EQ(entries.size(), 2u);
     EXPECT_EQ(entries[0], "foo");
 }

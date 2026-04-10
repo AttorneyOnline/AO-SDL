@@ -41,7 +41,15 @@ jobs:
 
           - name: macOS
             os: macos-latest
-            cmake_args: -DCMAKE_BUILD_TYPE=Release
+            # Disable llama.cpp on macOS CI: GGML's ARM CPU backend
+            # uses i8mm intrinsics (vmmlaq_s32) that fail to compile
+            # on the macos-latest Apple Silicon runner because the
+            # default toolchain isn't configured with i8mm enabled
+            # for the build target. Production deploys are Linux —
+            # this job is a build-verify only, the embeddings layer
+            # is exercised by the Linux job. Skipping llama.cpp here
+            # also drops ~5min from the macOS configure+build time.
+            cmake_args: -DCMAKE_BUILD_TYPE=Release -DKAGAMI_WITH_LLAMA_CPP=OFF
             xcode: '26.3'
 
           - name: Windows
