@@ -516,7 +516,7 @@ set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 #   - Most deployments will use OpenAI's remote moderation API instead.
 #   - When disabled, the code path gracefully degrades to a null
 #     backend that the rest of the moderation stack handles.
-option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" OFF)
+option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" ON)
 if(KAGAMI_WITH_LLAMA_CPP)
     include(FetchContent)
     set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
