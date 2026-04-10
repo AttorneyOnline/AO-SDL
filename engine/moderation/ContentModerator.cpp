@@ -30,20 +30,22 @@ bool is_utf8_continuation(unsigned char b) {
 } // namespace
 
 void ContentModerator::configure(const ContentModerationConfig& cfg) {
-    // Apply config to sub-components under the lock, then release
-    // it BEFORE awaiting the database future. Holding mu_ while
-    // calling db_->active_mutes().get() blocks indefinitely if the
-    // DB worker thread ever needs to call back into code that takes
-    // mu_ — a latent deadlock that's trivial to avoid.
+    // Build the new config as a shared_ptr<const> so concurrent
+    // check() calls can safely hold a reference to it even if a
+    // subsequent reconfigure replaces the pointer. The sub-component
+    // configure() calls under the lock still race-free because
+    // configure() is expected to be called only at startup or from
+    // the REPL — the cost of the lock on the cold path is negligible.
+    auto new_cfg = std::make_shared<const ContentModerationConfig>(cfg);
     DatabaseManager* db_snapshot = nullptr;
     {
         std::lock_guard lock(mu_);
-        cfg_ = cfg;
-        unicode_.configure(cfg_.unicode);
-        urls_.configure(cfg_.urls);
-        remote_.configure(cfg_.remote);
-        clusterer_.configure(cfg_.embeddings);
-        heat_.configure(cfg_.heat);
+        cfg_ = new_cfg;
+        unicode_.configure(new_cfg->unicode);
+        urls_.configure(new_cfg->urls);
+        remote_.configure(new_cfg->remote);
+        clusterer_.configure(new_cfg->embeddings);
+        heat_.configure(new_cfg->heat);
         db_snapshot = db_;
         // Clear existing mute state before reloading from DB so a
         // runtime reconfigure doesn't leak stale entries from a
@@ -256,9 +258,21 @@ namespace {
 // If you're deploying kagami on a general chat server without
 // heavy roleplay, drop the classifier floors to 0.15-0.3 and
 // raise the heat weights for a stricter baseline.
-constexpr double kAxisFloorNoise = 0.0;         // rules-based, non-zero = real
-constexpr double kAxisFloorLinkRisk = 0.0;      // rules-based, non-zero = real
-constexpr double kAxisFloorHate = 0.3;          // identity-based hate — stricter than toxicity
+constexpr double kAxisFloorNoise = 0.0;    // rules-based, non-zero = real
+constexpr double kAxisFloorLinkRisk = 0.0; // rules-based, non-zero = real
+/// OpenAI's hate axis is high-precision but low-recall: confident slurs
+/// like "gas the jews" score 0.9+, but common casual slurs ("tranny",
+/// "heil hitler", racial epithets used casually) often score in the
+/// 0.1-0.3 range because the axis is narrowly tuned to "clearly
+/// identity-targeted". A 0.3 floor lets those through.
+///
+/// 0.1 catches essentially every hate-axis signal OpenAI returns,
+/// and because the axis is narrowly defined, false positives on
+/// non-hate content are rare. Roleplay content (Ace Attorney cross-
+/// examination, dramatic accusations) doesn't trigger the hate
+/// axis at all — it lives on the harassment axis, which we keep
+/// high (0.85) for roleplay tolerance.
+constexpr double kAxisFloorHate = 0.1;
 constexpr double kAxisFloorToxicity = 0.85;     // harassment — very high floor for roleplay
 constexpr double kAxisFloorSexual = 0.7;        // sexual content (adult) — 16+ audience
 constexpr double kAxisFloorViolence = 0.85;     // courtroom violence is canon
@@ -268,8 +282,12 @@ constexpr double kAxisFloorSemanticEcho = 0.0;  // clustering is already >= 1.0 
 
 } // namespace
 
-double ContentModerator::heat_delta_from(const ModerationAxisScores& s) const {
-    const auto& h = cfg_.heat;
+std::shared_ptr<const ContentModerationConfig> ContentModerator::cfg_snapshot() const {
+    std::lock_guard lock(mu_);
+    return cfg_;
+}
+
+double ContentModerator::heat_delta_from(const ModerationAxisScores& s, const HeatConfig& h) {
     double d = 0.0;
     if (s.visual_noise > kAxisFloorNoise)
         d += s.visual_noise * h.weight_visual_noise;
@@ -304,8 +322,8 @@ std::string ContentModerator::format_reason(const ModerationVerdict& v) {
     return out;
 }
 
-std::string ContentModerator::sample(std::string_view message) const {
-    const int max = cfg_.message_sample_length;
+std::string ContentModerator::sample(std::string_view message, int max_bytes) {
+    const int max = max_bytes;
     if (max <= 0 || static_cast<int>(message.size()) <= max)
         return std::string(message);
 
@@ -387,17 +405,26 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         layer_calls_counter.labels({layer}).inc();
     };
 
+    // Capture a cfg snapshot at the top of check() and use it for
+    // every config read through the rest of the call. This is the
+    // data-race fix: a concurrent configure() can swap cfg_ to a
+    // new shared_ptr without invalidating our local — we keep
+    // ownership of the old config until our call returns. All
+    // downstream `cfg->field` reads are lock-free.
+    auto cfg = cfg_snapshot();
+    if (!cfg) {
+        // configure() has never been called — treat as disabled.
+        return v;
+    }
+
     // Config gating: if the whole subsystem or this channel is off,
     // we return a NONE verdict without running any layer.
-    {
-        std::lock_guard lock(mu_);
-        if (!cfg_.enabled)
-            return v;
-        if (channel == "ic" && !cfg_.check_ic)
-            return v;
-        if (channel == "ooc" && !cfg_.check_ooc)
-            return v;
-    }
+    if (!cfg->enabled)
+        return v;
+    if (channel == "ic" && !cfg->check_ic)
+        return v;
+    if (channel == "ooc" && !cfg->check_ooc)
+        return v;
 
     // --- Layer 1a: visual-noise -------------------------------------
     {
@@ -445,8 +472,8 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     //      bucket width before Layer 2 short-circuits; Layer 1 still
     //      runs on every message. This bounds the API cost per
     //      abuser to O(bucket_size) regardless of their send rate.
-    const double layer1_delta = heat_delta_from(v.scores);
-    const bool layer1_sufficient = layer1_delta >= cfg_.heat.mute_threshold;
+    const double layer1_delta = heat_delta_from(v.scores, cfg->heat);
+    const bool layer1_sufficient = layer1_delta >= cfg->heat.mute_threshold;
     if (remote_.is_active() && !layer1_sufficient && remote_bucket_allow(ipid)) {
         static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
             "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
@@ -481,7 +508,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             if (rr.scores.self_harm > kAxisFloorSelfHarm)
                 v.triggered_axes.emplace_back("self_harm");
         }
-        else if (!cfg_.remote.fail_open) {
+        else if (!cfg->remote.fail_open) {
             // fail_closed: treat any remote failure as a high-toxicity
             // signal. Rarely the right choice for a chat server.
             v.scores.toxicity = std::max(v.scores.toxicity, 0.5);
@@ -505,7 +532,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // from distinct IPIDs. Catches paraphrased spam that evades the
     // fingerprint-based H1 in SpamDetector. No-op if no embedding
     // backend is installed OR if the layer is disabled in config.
-    if (cfg_.embeddings.enabled) {
+    if (cfg->embeddings.enabled) {
         auto t0 = std::chrono::steady_clock::now();
         auto sr = clusterer_.score(ipid, message);
         if (sr.score > 0.0) {
@@ -538,7 +565,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // floors, remote classifier noise would push delta just above 0
     // on every clean message and the short-circuit would never fire
     // for users with accumulated heat.
-    v.heat_delta = heat_delta_from(v.scores);
+    v.heat_delta = heat_delta_from(v.scores, cfg->heat);
 
     if (v.heat_delta <= 0.0) {
         // No meaningful contribution from this message — peek the
@@ -593,7 +620,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // subsequent check()/is_muted() calls short-circuit. Persist to
     // DB if available.
     if (v.action == ModerationAction::MUTE) {
-        const int64_t expires = now_sec() + cfg_.heat.mute_duration_seconds;
+        const int64_t expires = now_sec() + cfg->heat.mute_duration_seconds;
         const std::string mute_reason = v.reason.empty() ? "auto-mute" : v.reason;
         {
             std::lock_guard lock(mu_);
@@ -636,12 +663,12 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // Always build the event if auditing is wired and the action is
     // at or above the sink's threshold — the ModerationAuditLog
     // handles the actual min_action filter internally.
-    if (audit_ || (db_ && db_->is_open() && cfg_.audit.sqlite_enabled)) {
+    if (audit_ || (db_ && db_->is_open() && cfg->audit.sqlite_enabled)) {
         ModerationEvent ev;
         ev.timestamp_ms = now_ms();
         ev.ipid = ipid;
         ev.channel = std::string(channel);
-        ev.message_sample = sample(message);
+        ev.message_sample = sample(message, cfg->message_sample_length);
         ev.scores = v.scores;
         ev.action = v.action;
         ev.heat_after = v.heat_after;
@@ -653,7 +680,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
 
         // Persist to sqlite. Fire-and-forget — we don't block on the
         // future; the worker thread will catch up eventually.
-        if (db_ && db_->is_open() && cfg_.audit.sqlite_enabled &&
+        if (db_ && db_->is_open() && cfg->audit.sqlite_enabled &&
             static_cast<int>(v.action) >= static_cast<int>(ModerationAction::LOG)) {
             db_->record_moderation_event(std::move(ev));
         }
