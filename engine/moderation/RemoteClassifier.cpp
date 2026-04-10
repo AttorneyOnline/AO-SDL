@@ -106,11 +106,31 @@ RemoteClassifierResult RemoteClassifier::classify(const std::string& text) {
     // Build the JSON body. OpenAI's omni-moderation endpoint accepts
     // `input` as a string or array of strings. We send a single string
     // to keep token budgets predictable.
-    nlohmann::json body_json{
-        {"model", cfg_.model},
-        {"input", text},
-    };
-    const std::string body = body_json.dump();
+    //
+    // nlohmann::json::dump throws nlohmann::json::type_error on invalid
+    // UTF-8 by default. If an attacker sends a malformed-byte message
+    // and dump() escapes through the top of classify(), it hits the
+    // packet handler without the fail-open contract doing anything.
+    // Wrap the dump and fall back to a "scores all zero, not ok"
+    // result so the caller treats this as a transport failure.
+    std::string body;
+    try {
+        nlohmann::json body_json{
+            {"model", cfg_.model},
+            {"input", text},
+        };
+        // dump(-1, ' ', ensure_ascii=false, error_handler=replace)
+        // replaces invalid UTF-8 sequences with U+FFFD instead of
+        // throwing, which preserves the fail-open contract: the
+        // classifier still sees *something* for weird input and
+        // returns whatever score it assigns, rather than the whole
+        // pipeline collapsing to "transport failure".
+        body = body_json.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    }
+    catch (const std::exception& e) {
+        out.error = std::string("json encode failed: ") + e.what();
+        return out;
+    }
 
     const auto start = std::chrono::steady_clock::now();
     auto [status, resp_body] = transport_->post_json(cfg_.endpoint, cfg_.api_key, body, cfg_.timeout_ms);

@@ -603,6 +603,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                  {"ao:SETCASE", nlohmann::json{{"rate", 1.0}, {"burst", 3.0}}},
                  // AONX REST endpoints
                  {"nx:ooc", nlohmann::json{{"rate", 3.0}, {"burst", 6.0}}},
+                 {"nx:ic", nlohmann::json{{"rate", 3.0}, {"burst", 6.0}}},
                  {"nx:area_join", nlohmann::json{{"rate", 2.0}, {"burst", 5.0}}},
                  {"nx:char_select", nlohmann::json{{"rate", 2.0}, {"burst", 4.0}}},
                  {"nx:session_renew", nlohmann::json{{"rate", 1.0}, {"burst", 3.0}}},
