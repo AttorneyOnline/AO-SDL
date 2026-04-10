@@ -35,6 +35,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -154,16 +155,36 @@ class ContentModerator {
 
   private:
     /// Convert per-axis scores to a heat delta using HeatConfig weights.
-    double heat_delta_from(const ModerationAxisScores& scores) const;
+    /// Takes the weight vector explicitly so the caller's cfg snapshot
+    /// (captured under mu_ at check() entry) is the single source of
+    /// truth for the whole call — no data race on cfg_ reads.
+    static double heat_delta_from(const ModerationAxisScores& scores, const HeatConfig& h);
 
     /// Format a human-readable reason string from triggered axes.
     static std::string format_reason(const ModerationVerdict& v);
 
-    /// Truncate a message to config.message_sample_length for the
-    /// audit log, respecting UTF-8 boundaries.
-    std::string sample(std::string_view message) const;
+    /// Truncate a message to the given byte length, respecting UTF-8
+    /// boundaries. Free of cfg_ so it's safe to call from any thread.
+    static std::string sample(std::string_view message, int max_bytes);
 
-    ContentModerationConfig cfg_;
+    /// Atomic-ish snapshot of cfg_. Holds mu_ only long enough to copy
+    /// the shared_ptr — callers get a stable view of the config for
+    /// the duration of their call, and a concurrent configure() can
+    /// swap in a new pointer without invalidating it.
+    std::shared_ptr<const ContentModerationConfig> cfg_snapshot() const;
+
+    /// Active config as a shared_ptr<const> under atomic swap. check()
+    /// does a single atomic load at entry into a local shared_ptr and
+    /// reads fields through it for the lifetime of the call; configure()
+    /// builds a new ContentModerationConfig, atomically swaps the
+    /// pointer, and the old config stays alive for any in-flight check()
+    /// calls that already captured it.
+    ///
+    /// This pattern lets concurrent check() calls run entirely lock-
+    /// free over cfg_ while configure() remains safe to call at
+    /// runtime. Without it, every cfg_.field read from a check() on
+    /// one thread would race a configure() on another.
+    std::shared_ptr<const ContentModerationConfig> cfg_;
     UnicodeClassifier unicode_;
     UrlExtractor urls_;
     RemoteClassifier remote_;
