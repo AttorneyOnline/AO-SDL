@@ -149,8 +149,7 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
 
     // Spam detector: register connection (H2 burst, H5 name pattern, H7 HWID reuse)
     if (auto* sd = server.room().spam_detector()) {
-        sd->on_connection(session.ipid, client_ip, client_asn, session.hardware_id,
-                          "" /* username not known yet */);
+        sd->on_connection(session.ipid, client_ip, client_asn, session.hardware_id, "" /* username not known yet */);
         sd->record_join_time(session.ipid);
     }
 
@@ -375,20 +374,20 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
         case moderation::ModerationAction::DROP:
         case moderation::ModerationAction::MUTE:
             send_mod_notice(server, session, *cm, verdict);
-            Log::log_print(INFO, "AO: IC from %s suppressed [content]: %s",
-                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            Log::log_print(INFO, "AO: IC from %s suppressed [content]: %s", format_client_id(session.client_id).c_str(),
+                           verdict.reason.c_str());
             return;
         case moderation::ModerationAction::KICK:
-            Log::log_print(WARNING, "AO: kicking %s for content: %s",
-                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            Log::log_print(WARNING, "AO: kicking %s for content: %s", format_client_id(session.client_id).c_str(),
+                           verdict.reason.c_str());
             server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
             if (server.ws())
                 server.ws()->close_client_deferred(session.client_id);
             return;
         case moderation::ModerationAction::BAN:
         case moderation::ModerationAction::PERMA_BAN:
-            Log::log_print(WARNING, "AO: banning %s for content: %s",
-                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            Log::log_print(WARNING, "AO: banning %s for content: %s", format_client_id(session.client_id).c_str(),
+                           verdict.reason.c_str());
             if (auto* bm = server.room().ban_manager()) {
                 BanEntry entry;
                 entry.ipid = session.ipid;
@@ -396,13 +395,10 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
                 entry.hdid = session.hardware_id;
                 entry.reason = "[auto] content: " + verdict.reason;
                 entry.moderator = "ContentModerator";
-                entry.timestamp =
-                    std::chrono::duration_cast<std::chrono::seconds>(
-                        std::chrono::system_clock::now().time_since_epoch())
-                        .count();
-                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN)
-                                     ? -2
-                                     : 24 * 60 * 60;
+                entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+                                      std::chrono::system_clock::now().time_since_epoch())
+                                      .count();
+                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
                 bm->add_ban(std::move(entry));
             }
             server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));
@@ -523,16 +519,16 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
                            format_client_id(session.client_id).c_str(), verdict.reason.c_str());
             return;
         case moderation::ModerationAction::KICK:
-            Log::log_print(WARNING, "AO: kicking %s for content: %s",
-                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            Log::log_print(WARNING, "AO: kicking %s for content: %s", format_client_id(session.client_id).c_str(),
+                           verdict.reason.c_str());
             server.send(session.client_id, AOPacket("KK", {"Content moderation: " + verdict.reason}));
             if (server.ws())
                 server.ws()->close_client_deferred(session.client_id);
             return;
         case moderation::ModerationAction::BAN:
         case moderation::ModerationAction::PERMA_BAN:
-            Log::log_print(WARNING, "AO: banning %s for content: %s",
-                           format_client_id(session.client_id).c_str(), verdict.reason.c_str());
+            Log::log_print(WARNING, "AO: banning %s for content: %s", format_client_id(session.client_id).c_str(),
+                           verdict.reason.c_str());
             if (auto* bm = server.room().ban_manager()) {
                 BanEntry entry;
                 entry.ipid = session.ipid;
@@ -540,13 +536,10 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
                 entry.hdid = session.hardware_id;
                 entry.reason = "[auto] content: " + verdict.reason;
                 entry.moderator = "ContentModerator";
-                entry.timestamp =
-                    std::chrono::duration_cast<std::chrono::seconds>(
-                        std::chrono::system_clock::now().time_since_epoch())
-                        .count();
-                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN)
-                                     ? -2
-                                     : 24 * 60 * 60;
+                entry.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+                                      std::chrono::system_clock::now().time_since_epoch())
+                                      .count();
+                entry.duration = (verdict.action == moderation::ModerationAction::PERMA_BAN) ? -2 : 24 * 60 * 60;
                 bm->add_ban(std::move(entry));
             }
             server.send(session.client_id, AOPacket("KB", {"Content moderation: " + verdict.reason}));

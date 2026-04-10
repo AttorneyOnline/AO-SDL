@@ -656,8 +656,7 @@ std::future<int64_t> DatabaseManager::record_moderation_event(moderation::Modera
     });
 }
 
-std::future<std::vector<moderation::ModerationEvent>>
-DatabaseManager::query_moderation_events(ModerationQuery query) {
+std::future<std::vector<moderation::ModerationEvent>> DatabaseManager::query_moderation_events(ModerationQuery query) {
     return dispatch([this, query = std::move(query)]() -> std::vector<moderation::ModerationEvent> {
         std::vector<moderation::ModerationEvent> result;
         if (!db_)

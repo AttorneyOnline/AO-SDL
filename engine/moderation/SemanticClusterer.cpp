@@ -26,8 +26,7 @@ void SemanticClusterer::set_backend(std::unique_ptr<EmbeddingBackend> backend) {
 int64_t SemanticClusterer::now_ms() const {
     if (clock_)
         return clock_();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
 
@@ -53,8 +52,7 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
     // Metric families. Static locals so registration happens once per
     // process and the hot path is just an atomic increment.
     static auto& embed_tokens = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_embedding_tokens_total",
-        "Total tokens processed by the embedding backend");
+        "kagami_moderation_embedding_tokens_total", "Total tokens processed by the embedding backend");
     static auto& embed_tokenize_ns = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_embedding_tokenize_nanoseconds_total",
         "Wall-clock nanoseconds spent tokenizing inputs for the embedding backend");
@@ -62,8 +60,7 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
         "kagami_moderation_embedding_decode_nanoseconds_total",
         "Wall-clock nanoseconds spent in llama_decode (model forward pass) for embeddings");
     static auto& embed_errors = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_embedding_errors_total",
-        "Embedding backend failures by reason", {"reason"});
+        "kagami_moderation_embedding_errors_total", "Embedding backend failures by reason", {"reason"});
     static auto& cluster_fires = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_semantic_cluster_fires_total",
         "Times the semantic cluster detector crossed the cluster_threshold");
@@ -88,11 +85,11 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
 
     auto er = backend->embed(message);
     if (!er.ok || er.vector.empty()) {
-        const std::string reason = er.error.empty() ? "unknown"
-                                   : er.error.find("empty") != std::string::npos ? "empty_text"
+        const std::string reason = er.error.empty()                                 ? "unknown"
+                                   : er.error.find("empty") != std::string::npos    ? "empty_text"
                                    : er.error.find("tokenize") != std::string::npos ? "tokenize"
-                                   : er.error.find("decode") != std::string::npos ? "decode"
-                                                                                   : "other";
+                                   : er.error.find("decode") != std::string::npos   ? "decode"
+                                                                                    : "other";
         embed_errors.labels({reason}).inc();
         return r;
     }

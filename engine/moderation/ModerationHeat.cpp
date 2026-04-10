@@ -15,8 +15,7 @@ void ModerationHeat::configure(const HeatConfig& cfg) {
 int64_t ModerationHeat::now_ms() const {
     if (clock_)
         return clock_();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
 

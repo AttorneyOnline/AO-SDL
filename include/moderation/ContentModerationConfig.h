@@ -57,14 +57,14 @@ struct HeatConfig {
     // separating drama from real hostility).
     double weight_visual_noise = 0.5;
     double weight_link_risk = 5.0;
-    double weight_toxicity = 1.0;   // roleplay-friendly; use 2.0 for general chat
-    double weight_hate = 4.0;        // identity-based hate is never context-sensitive
+    double weight_toxicity = 1.0; // roleplay-friendly; use 2.0 for general chat
+    double weight_hate = 4.0;     // identity-based hate is never context-sensitive
     double weight_sexual = 1.5;
     /// Sexual content involving minors is non-negotiable: a weight high
     /// enough that any positive signal instantly crosses the perma-ban
     /// threshold. Kept as a config knob so test fixtures can override.
     double weight_sexual_minors = 100.0;
-    double weight_violence = 1.0;    // courtroom violence is canon; use 1.5+ for general chat
+    double weight_violence = 1.0; // courtroom violence is canon; use 1.5+ for general chat
     double weight_self_harm = 1.0;
     double weight_semantic_echo = 2.0;
 

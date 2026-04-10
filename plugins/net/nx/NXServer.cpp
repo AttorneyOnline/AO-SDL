@@ -50,8 +50,7 @@ NXServer::NXServer(GameRoom& room) : room_(room) {
 }
 
 NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const std::string& client_name,
-                                               const std::string& client_version,
-                                               const std::string& remote_addr) {
+                                               const std::string& client_version, const std::string& remote_addr) {
     uint64_t id = next_rest_id_++;
     auto token = generate_token();
 

@@ -30,7 +30,7 @@ namespace moderation {
 
 struct HfFetchResult {
     bool ok = false;
-    std::string local_path;  ///< Filesystem path to the loaded .gguf file.
+    std::string local_path; ///< Filesystem path to the loaded .gguf file.
     std::string error;
     bool downloaded = false; ///< True if a network fetch happened; false for cache hits.
 };

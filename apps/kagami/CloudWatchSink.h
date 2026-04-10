@@ -161,8 +161,7 @@ class CloudWatchSink {
             //
             // We only attempt the auto-create once per batch to avoid
             // infinite loops if CreateLogStream itself fails.
-            if (result && result->status == 400 &&
-                err_body.find("ResourceNotFoundException") != std::string::npos &&
+            if (result && result->status == 400 && err_body.find("ResourceNotFoundException") != std::string::npos &&
                 !stream_created_) {
                 stream_created_ = true; // attempt this only once
                 if (create_log_stream()) {

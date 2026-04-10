@@ -24,11 +24,9 @@ bool contains_ci(std::string_view haystack, std::string_view needle) {
         return false;
     if (needle.size() > haystack.size())
         return false;
-    auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(),
-                          [](char a, char b) {
-                              return std::tolower(static_cast<unsigned char>(a)) ==
-                                     std::tolower(static_cast<unsigned char>(b));
-                          });
+    auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](char a, char b) {
+        return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+    });
     return it != haystack.end();
 }
 
@@ -41,9 +39,8 @@ const std::regex& url_regex() {
     //   - bare domains of the form foo.bar(.baz)? followed by optional path
     // The bare-domain regex deliberately requires at least one dot and
     // a TLD of 2-24 ASCII letters, so we don't match things like "hi.u".
-    static const std::regex re(
-        R"((https?://[^\s<>"']+|(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,24}(?:/[^\s<>"']*)?))",
-        std::regex::ECMAScript | std::regex::icase);
+    static const std::regex re(R"((https?://[^\s<>"']+|(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,24}(?:/[^\s<>"']*)?))",
+                               std::regex::ECMAScript | std::regex::icase);
     return re;
 }
 

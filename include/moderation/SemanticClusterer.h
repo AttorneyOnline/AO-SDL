@@ -30,10 +30,10 @@
 namespace moderation {
 
 struct SemanticClusterResult {
-    double score = 0.0;        ///< 0-1 signal (cluster_count_above / cluster_threshold clamped to 1).
-    int matched_count = 0;      ///< Total recent messages above similarity threshold.
-    int distinct_ipids = 0;     ///< Count of distinct IPIDs in the match set.
-    std::string reason;         ///< Short description for audit log.
+    double score = 0.0;     ///< 0-1 signal (cluster_count_above / cluster_threshold clamped to 1).
+    int matched_count = 0;  ///< Total recent messages above similarity threshold.
+    int distinct_ipids = 0; ///< Count of distinct IPIDs in the match set.
+    std::string reason;     ///< Short description for audit log.
 };
 
 class SemanticClusterer {

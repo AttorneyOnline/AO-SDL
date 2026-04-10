@@ -120,8 +120,8 @@ TEST(RemoteClassifierTest, TransportFailureReturnsNotOk) {
 TEST(RemoteClassifierTest, BodyContainsModelAndInput) {
     RemoteClassifier rc;
     rc.configure(active_config());
-    auto transport = std::make_unique<MockTransport>(std::make_pair(200,
-        R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})"));
+    auto transport = std::make_unique<MockTransport>(
+        std::make_pair(200, R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})"));
     auto* transport_ref = transport.get();
     rc.set_transport(std::move(transport));
 
