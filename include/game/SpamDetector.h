@@ -93,8 +93,7 @@ class SpamDetector {
     /// H1/H3: Check a message (OOC or IC global). Returns verdict.
     /// Called from CT/MS packet handlers. `ip` is the raw client IP,
     /// recorded for auto-ban callbacks on multi-IP heuristics.
-    SpamVerdict check_message(const std::string& ipid, const std::string& ip, uint32_t asn,
-                              const std::string& message);
+    SpamVerdict check_message(const std::string& ipid, const std::string& ip, uint32_t asn, const std::string& message);
 
     /// H2/H5/H7: Register a new connection.
     /// Called from HI packet handler. `ip` is the raw client IP,
