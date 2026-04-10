@@ -48,18 +48,23 @@ struct HeatConfig {
     int ban_duration_seconds = 24 * 60 * 60;
 
     // Per-axis weight. Multiply axis score in [0,1] by weight to get
-    // heat contribution. Tune these from the moderation_events table
-    // once you have real traffic.
+    // heat contribution. Defaults are tuned for a roleplay-heavy
+    // audience (Ace Attorney courtroom drama) where harassment-axis
+    // language is expected in-character — the per-axis visibility
+    // floors in ContentModerator.cpp filter sub-floor noise before
+    // these weights apply, so lowering the toxicity weight here
+    // doesn't make kagami soft on actual abuse (the floor handles
+    // separating drama from real hostility).
     double weight_visual_noise = 0.5;
     double weight_link_risk = 5.0;
-    double weight_toxicity = 2.0;
-    double weight_hate = 4.0;
+    double weight_toxicity = 1.0;   // roleplay-friendly; use 2.0 for general chat
+    double weight_hate = 4.0;        // identity-based hate is never context-sensitive
     double weight_sexual = 1.5;
     /// Sexual content involving minors is non-negotiable: a weight high
     /// enough that any positive signal instantly crosses the perma-ban
     /// threshold. Kept as a config knob so test fixtures can override.
     double weight_sexual_minors = 100.0;
-    double weight_violence = 1.5;
+    double weight_violence = 1.0;    // courtroom violence is canon; use 1.5+ for general chat
     double weight_self_harm = 1.0;
     double weight_semantic_echo = 2.0;
 
