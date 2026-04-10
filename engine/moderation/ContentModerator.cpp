@@ -141,6 +141,37 @@ double ContentModerator::current_heat(const std::string& ipid) {
 }
 
 namespace {
+// Token bucket tunables for the per-IPID remote-classifier rate
+// limit. Burst 10 means a client can fire 10 remote calls back-to-
+// back before throttling kicks in; refill 2/sec matches the default
+// rate limit for the ao:CT (OOC chat) action family, so a well-
+// behaved client on the default rate limits will never hit this.
+constexpr double kRemoteBurst = 10.0;
+constexpr double kRemoteRefillPerSec = 2.0;
+} // namespace
+
+bool ContentModerator::remote_bucket_allow(const std::string& ipid) {
+    std::lock_guard lock(mu_);
+    const int64_t now =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    auto& bucket = remote_buckets_[ipid];
+    if (bucket.last_refill_ms == 0) {
+        bucket.tokens = kRemoteBurst;
+        bucket.last_refill_ms = now;
+    }
+    else {
+        const double dt_sec = static_cast<double>(now - bucket.last_refill_ms) / 1000.0;
+        bucket.tokens = std::min(kRemoteBurst, bucket.tokens + dt_sec * kRemoteRefillPerSec);
+        bucket.last_refill_ms = now;
+    }
+    if (bucket.tokens < 1.0)
+        return false;
+    bucket.tokens -= 1.0;
+    return true;
+}
+
+namespace {
 
 // Per-axis visibility floors: an axis only contributes to the
 // per-message heat delta when its score crosses this threshold.
@@ -319,7 +350,25 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // is the right default for a chat server: better to occasionally
     // miss a bad message than to brick the channel when OpenAI has an
     // incident.
-    if (remote_.is_active()) {
+    //
+    // Two short-circuits prevent wasted API calls:
+    //
+    //   1. Layer-1 sufficient: if the rules-based layers have already
+    //      produced enough heat delta to cross the mute threshold,
+    //      the remote classifier has nothing to add — the decision is
+    //      already made, calling OpenAI is a guaranteed waste of
+    //      quota. We still run remote for lower-severity Layer 1
+    //      hits because the classifier may escalate them.
+    //
+    //   2. Per-IPID token bucket: each IPID gets a small bucket
+    //      (burst=10, refill=2/sec by default) of remote calls. A
+    //      malicious client posting 100 msg/s can burn at most the
+    //      bucket width before Layer 2 short-circuits; Layer 1 still
+    //      runs on every message. This bounds the API cost per
+    //      abuser to O(bucket_size) regardless of their send rate.
+    const double layer1_delta = heat_delta_from(v.scores);
+    const bool layer1_sufficient = layer1_delta >= cfg_.heat.mute_threshold;
+    if (remote_.is_active() && !layer1_sufficient && remote_bucket_allow(ipid)) {
         static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
             "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
         auto t0 = std::chrono::steady_clock::now();

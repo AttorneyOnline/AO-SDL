@@ -173,10 +173,27 @@ class ContentModerator {
         std::string reason;     ///< Human-readable reason from the verdict.
     };
 
+    /// Per-IPID token bucket state for Layer 2 rate limiting. Every
+    /// remote classifier call consumes one token; tokens refill at
+    /// `kRemoteRefillPerSec` with a burst cap of `kRemoteBurst`.
+    /// Bounds OpenAI API cost per abusing client to O(burst) regardless
+    /// of how fast they send messages — Layer 1 still runs.
+    struct RemoteBucket {
+        double tokens = 0.0;
+        int64_t last_refill_ms = 0;
+    };
+
+    /// Atomically consume one token from the remote classifier bucket
+    /// for @p ipid. Returns true if the call is allowed.
+    bool remote_bucket_allow(const std::string& ipid);
+
     mutable std::mutex mu_;
     /// ipid -> mute state. In-memory mirror of the mutes table.
     /// Loaded on configure() from db if set.
     std::unordered_map<std::string, ActiveMute> active_mutes_;
+    /// ipid -> remote classifier token bucket. Pruned by sweep() when
+    /// the IPID hasn't made a call in sweep_idle_seconds.
+    std::unordered_map<std::string, RemoteBucket> remote_buckets_;
 };
 
 /// Register the Prometheus metric collectors for a ContentModerator

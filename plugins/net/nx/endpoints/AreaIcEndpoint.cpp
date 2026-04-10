@@ -99,6 +99,13 @@ class AreaIcEndpoint : public NXEndpoint {
     }
 
     RestResponse handle(const RestRequest& req) override {
+        // Symmetric with AreaOocEndpoint — IC is now the cheapest DoS
+        // path to burn remote classifier quota if left unrated. Uses
+        // the same token bucket family name (nx:ic) so operators can
+        // tune it the same way they tune nx:ooc.
+        if (rate_limiter() && !rate_limiter()->allow("nx:ic", req.session->ipid))
+            return RestResponse::error(429, "Too many IC messages");
+
         auto it = req.path_params.find("area_id");
         if (it == req.path_params.end())
             return RestResponse::error(400, "Missing area_id");
