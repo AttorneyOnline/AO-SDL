@@ -68,6 +68,7 @@ set(TEST_SOURCES
     utils/test_JsonSchema.cpp
     utils/test_UTF8.cpp
     utils/test_Crypto.cpp
+    utils/test_ImdsCredentialProvider.cpp
     utils/test_PBKDF2.cpp
     utils/test_Log.cpp
     utils/test_Metrics.cpp
