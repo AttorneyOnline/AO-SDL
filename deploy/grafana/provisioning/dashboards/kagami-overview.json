@@ -416,7 +416,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (method) (irate(kagami_http_requests_total{instance=~\"$instance\"}[2s]))",
+          "expr": "sum by (method) (irate(kagami_http_requests_total{instance=~\"$instance\"}[$__rate_interval]))",
           "legendFormat": "{{method}}",
           "refId": "A"
         }
@@ -445,7 +445,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (status) (irate(kagami_http_requests_total{instance=~\"$instance\"}[2s]))",
+          "expr": "sum by (status) (irate(kagami_http_requests_total{instance=~\"$instance\"}[$__rate_interval]))",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -474,12 +474,12 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_http_request_bytes_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_http_request_bytes_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "request bytes/s",
           "refId": "A"
         },
         {
-          "expr": "irate(kagami_http_response_bytes_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_http_response_bytes_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "response bytes/s",
           "refId": "B"
         }
@@ -548,12 +548,12 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_ws_bytes_in_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_ws_bytes_out_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "tx",
           "refId": "B"
         }
@@ -582,12 +582,12 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ws_frames_in_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_ws_frames_in_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_ws_frames_out_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_ws_frames_out_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "tx",
           "refId": "B"
         }
@@ -616,7 +616,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_sse_events_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_sse_events_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "{{event}}",
           "refId": "A"
         }
@@ -923,7 +923,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (section) (irate(kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\"}[2s]))",
+          "expr": "sum by (section) (irate(kagami_http_worker_section_nanoseconds_total{instance=~\"$instance\"}[$__rate_interval]))",
           "legendFormat": "{{section}}",
           "refId": "A"
         }
@@ -1028,7 +1028,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_http_poll_events_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_http_poll_events_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "events/s",
           "refId": "A"
         }
@@ -1091,7 +1091,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_http_poll_section_nanoseconds_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_http_poll_section_nanoseconds_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "{{section}}",
           "refId": "A"
         }
@@ -1120,7 +1120,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_completed|send_completed\"}[5s])",
+          "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_completed|send_completed\"}[$__rate_interval])",
           "legendFormat": "{{server}} {{op}}/s",
           "refId": "A"
         }
@@ -1149,7 +1149,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_enobufs|send_errors|send_partial|sqe_full\"}[5s])",
+          "expr": "irate(kagami_io_uring_ops_total{instance=~\"$instance\",op=~\"recv_enobufs|send_errors|send_partial|sqe_full\"}[$__rate_interval])",
           "legendFormat": "{{server}} {{op}}/s",
           "refId": "A"
         }
@@ -1189,12 +1189,12 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_tcp_bytes_received_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_tcp_bytes_received_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "rx",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_tcp_bytes_sent_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_tcp_bytes_sent_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "tx",
           "refId": "B"
         }
@@ -1223,12 +1223,12 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_tcp_connections_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_tcp_connections_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "connections/s",
           "refId": "A"
         },
         {
-          "expr": "rate(kagami_tcp_retransmits_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_tcp_retransmits_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "retransmits/s",
           "refId": "B"
         }
@@ -1286,7 +1286,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_cow_copy_bytes_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_cow_copy_bytes_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "HAMT copy rate",
           "refId": "A"
         }
@@ -1837,7 +1837,7 @@
       },
       "targets": [
         {
-          "expr": "rate(kagami_ratelimit_rejected_total{instance=~\"$instance\"}[5s])",
+          "expr": "rate(kagami_ratelimit_rejected_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "{{action}}",
           "refId": "A"
         }
@@ -2091,7 +2091,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_sessions_expired_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_sessions_expired_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "expired/s",
           "refId": "A"
         }
@@ -2120,7 +2120,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_ao_errors_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_ao_errors_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "errors/s",
           "refId": "A"
         }
@@ -2149,7 +2149,7 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_ws_handshake_failures_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_ws_handshake_failures_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "failures/s",
           "refId": "A"
         },
@@ -2183,12 +2183,12 @@
       },
       "targets": [
         {
-          "expr": "irate(kagami_sse_replays_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_sse_replays_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "replays/s",
           "refId": "A"
         },
         {
-          "expr": "irate(kagami_sse_dead_clients_total{instance=~\"$instance\"}[2s])",
+          "expr": "irate(kagami_sse_dead_clients_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "dead clients/s",
           "refId": "B"
         }

@@ -30,8 +30,6 @@ static auto& ws_handshake_failures_ =
     metrics::MetricsRegistry::instance().counter("kagami_ws_handshake_failures_total", "WebSocket handshake failures");
 static auto& ws_send_failures_ = metrics::MetricsRegistry::instance().counter(
     "kagami_ws_send_failures_total", "WebSocket send failures (dropped clients)");
-static auto& ws_connections_ =
-    metrics::MetricsRegistry::instance().gauge("kagami_ws_connections", "Active WebSocket connections");
 
 WebSocketServer::WebSocketServer(std::unique_ptr<IServerSocket> listener) : listener_(std::move(listener)) {
 }
@@ -613,7 +611,6 @@ bool WebSocketServer::perform_server_handshake(ClientConnection& client) {
     client.socket->send(reinterpret_cast<const uint8_t*>(response.data()), response.size());
     client.handshake_complete = true;
     handshaked_count_.fetch_add(1, std::memory_order_relaxed);
-    ws_connections_.get().set(static_cast<double>(handshaked_count_.load(std::memory_order_relaxed)));
     return true;
 }
 
@@ -862,5 +859,4 @@ void WebSocketServer::remove_client(ClientId id) {
     clients_.erase(it);
     if (was_handshaked)
         handshaked_count_.fetch_sub(1, std::memory_order_relaxed);
-    ws_connections_.get().set(static_cast<double>(handshaked_count_.load(std::memory_order_relaxed)));
 }
