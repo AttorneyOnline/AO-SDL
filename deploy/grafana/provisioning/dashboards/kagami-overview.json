@@ -1503,6 +1503,12 @@
           "format": "table",
           "instant": true,
           "refId": "pkts_in"
+        },
+        {
+          "expr": "kagami_session_moderation_heat{instance=~\"$instance\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "heat"
         }
       ],
       "transformations": [
@@ -1517,7 +1523,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "session_id|display_name 1|protocol 1|area 1|character 1|ip 1|login 1|hdid 1|client 1|Value #idle|Value #bytes_out|Value #bytes_in|Value #pkts_out|Value #pkts_in"
+              "pattern": "session_id|display_name 1|protocol 1|area 1|character 1|ip 1|login 1|hdid 1|client 1|Value #idle|Value #bytes_out|Value #bytes_in|Value #pkts_out|Value #pkts_in|Value #heat"
             }
           }
         },
@@ -1537,7 +1543,8 @@
               "Value #bytes_out": "bytes_out",
               "Value #bytes_in": "bytes_in",
               "Value #pkts_out": "pkts_out",
-              "Value #pkts_in": "pkts_in"
+              "Value #pkts_in": "pkts_in",
+              "Value #heat": "heat"
             },
             "indexByName": {
               "session_id": 0,
@@ -1551,7 +1558,8 @@
               "bytes_in": 8,
               "pkts_out": 9,
               "pkts_in": 10,
-              "idle": 11
+              "idle": 11,
+              "heat": 12
             }
           }
         }
@@ -1592,6 +1600,59 @@
               {
                 "id": "unit",
                 "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heat"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "red",
+                      "value": 6
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -2729,5 +2790,5 @@
       "id": 1009
     }
   ],
-  "version": 10
+  "version": 11
 }

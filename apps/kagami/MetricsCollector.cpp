@@ -8,6 +8,7 @@
 #include "game/GameRoom.h"
 #include "metrics/MetricsRegistry.h"
 #include "metrics/ProcessMetrics.h"
+#include "moderation/ContentModerator.h"
 #include "net/Http.h"
 #include "net/RestRouter.h"
 #include "net/WebSocketServer.h"
@@ -59,6 +60,15 @@ void MetricsCollector::start(http::Server& http) {
     auto& session_idle =
         reg.gauge("kagami_session_idle_seconds", "Seconds since last activity",
                   {"session_id", "display_name", "protocol", "area", "character", "ip", "login", "hdid", "client"});
+    // Per-session content moderation heat. Populated from
+    // ContentModerator::current_heat(ipid) at collection time. Zero
+    // for sessions with no heat, missing for sessions before the
+    // moderator has seen them. Rendered as a column in the Active
+    // Sessions dashboard panel so moderators can eyeball who is
+    // trending toward auto-action.
+    auto& session_mod_heat =
+        reg.gauge("kagami_session_moderation_heat", "Current moderation heat for this session",
+                  {"session_id", "display_name", "protocol", "area", "character", "ip", "login", "hdid", "client"});
     auto& http_open_conns = reg.gauge("kagami_http_open_connections", "Currently open TCP connections");
     auto& http_work_queue = reg.gauge("kagami_http_work_queue_depth", "Pending requests in worker queue");
     auto& http_result_queue = reg.gauge("kagami_http_result_queue_depth", "Pending results awaiting poll thread");
@@ -101,7 +111,7 @@ void MetricsCollector::start(http::Server& http) {
     // Spawn the collection thread (captures &http — http::Server outlives MetricsCollector)
     thread_ = std::jthread([this, &http, &uptime, &rss, &sessions_g, &sessions_joined, &sessions_mods, &area_players,
                             &area_info, &chars_taken, &event_publishes, &session_bytes_sent, &session_bytes_recv,
-                            &session_packets_sent, &session_packets_recv, &session_idle, &http_open_conns,
+                            &session_packets_sent, &session_packets_recv, &session_idle, &session_mod_heat, &http_open_conns,
                             &http_work_queue, &http_result_queue, &http_active_workers, &http_worker_count,
                             &http_worker_util, &http_worker_util_per, &cow_copy_bytes, &poll_util, &poll_events,
                             &poll_section_ns, &worker_section_ns, &io_uring_stats, &ws_poll_util, &ws_dispatch_rate,
@@ -306,6 +316,7 @@ void MetricsCollector::start(http::Server& http) {
             session_packets_sent.clear();
             session_packets_recv.clear();
             session_idle.clear();
+            session_mod_heat.clear();
 
             snap.sessions.for_each([&](const uint64_t&, const GameRoom::SessionPtr& s) {
                 std::string char_name = (s->character_id >= 0 && s->character_id < (int)room_.characters.size())
@@ -333,6 +344,8 @@ void MetricsCollector::start(http::Server& http) {
                     static_cast<double>(s->packets_received.load(std::memory_order_relaxed)));
                 session_idle.labels(labels).set(static_cast<double>(
                     std::chrono::duration_cast<std::chrono::seconds>(now - s->last_activity()).count()));
+                if (auto* cm = room_.content_moderator())
+                    session_mod_heat.labels(labels).set(cm->current_heat(s->ipid));
             });
 
             for (auto& cs : EventManager::instance().snapshot_channel_stats())
