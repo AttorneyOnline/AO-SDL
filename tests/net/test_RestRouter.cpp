@@ -14,10 +14,10 @@
 
 #include "net/Http.h"
 
+#include <chrono>
 #include <filesystem>
 #include <set>
 #include <thread>
-#include <unistd.h>
 
 // -- Test helpers ------------------------------------------------------------
 
@@ -2250,7 +2250,12 @@ class NXContentVerdictTest : public NXEndpointTest {
         // Spin up an in-memory DB + BanManager and wire them into
         // the room so apply_content_verdict's add_ban() call lands
         // somewhere observable.
-        db_path_ = std::filesystem::temp_directory_path() / ("test_nx_verdict_" + std::to_string(::getpid()) + ".db");
+        // Per-test unique filename via steady_clock nanoseconds.
+        // Avoids the platform-split between POSIX getpid() (in
+        // <unistd.h>) and the MSVC equivalent (_getpid() in
+        // <process.h>) — std::chrono is the same on every platform.
+        const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+        db_path_ = std::filesystem::temp_directory_path() / ("test_nx_verdict_" + std::to_string(unique) + ".db");
         ASSERT_TRUE(db_.open(db_path_.string()));
         ban_manager_.set_db(&db_);
         ban_manager_.load_from_db();
