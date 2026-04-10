@@ -124,8 +124,8 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
         // The return code drives metric bucketing and error replies to the
         // client below.
         const std::string peer_label = format_client_id(client_id) + " " + client_addr;
-        const auto result =
-            ao_packet::safe_dispatch(packet_str, peer_label, [this, client_id](AOPacket& pkt) { dispatch(client_id, pkt); });
+        const auto result = ao_packet::safe_dispatch(packet_str, peer_label,
+                                                     [this, client_id](AOPacket& pkt) { dispatch(client_id, pkt); });
 
         switch (result) {
         case ao_packet::DispatchResult::Ok:
