@@ -154,18 +154,31 @@ class CloudWatchSink {
             int status = result ? result->status : 0;
             std::string err_body = result ? result->body.substr(0, 500) : "connection failed";
 
-            // If the stream doesn't exist, try to create it once and retry.
+            // If the stream doesn't exist, try to create it and retry.
             // This happens on first-use of new log streams (e.g. the
-            // moderation audit stream created at kagami boot) where the
-            // group exists but the stream has never been written to.
+            // moderation audit stream created at kagami boot) where
+            // the group exists but the stream has never been written.
             //
-            // We only attempt the auto-create once per batch to avoid
-            // infinite loops if CreateLogStream itself fails.
+            // Retry policy:
+            //
+            //   - ResourceNotFoundException → call CreateLogStream, then
+            //     re-sign + retry PutLogEvents. Only mark stream_created_
+            //     to true on actual SUCCESS so a transient network error
+            //     during create doesn't lock us out forever. If the
+            //     create fails, the next flush cycle will try again,
+            //     with simple backoff via the create_attempts counter
+            //     (caps at 10 attempts total before giving up).
+            //
+            //   - Any other 4xx/5xx → logged but not retried; the batch
+            //     is dropped. CloudWatch Logs drops bad batches anyway
+            //     (oversized, bad timestamps, etc) and we don't want to
+            //     retry quota-limit failures indefinitely.
             if (result && result->status == 400 && err_body.find("ResourceNotFoundException") != std::string::npos &&
-                !stream_created_) {
-                stream_created_ = true; // attempt this only once
+                !stream_created_ && create_attempts_ < 10) {
+                ++create_attempts_;
                 if (create_log_stream()) {
-                    // Retry the PutLogEvents call with fresh sigv4 headers.
+                    // Re-sign because SigV4 signatures are single-use
+                    // and carry a timestamp.
                     auto retry_signed = aws::sign(req, config_.credentials, config_.region, "logs");
                     http::Headers retry_headers = {
                         {"X-Amz-Target", "Logs_20140328.PutLogEvents"},
@@ -175,6 +188,10 @@ class CloudWatchSink {
                     };
                     auto retry = client_.Post("/", retry_headers, body_str, "application/x-amz-json-1.1");
                     if (retry && retry->status == 200) {
+                        // Only latch on success — transient failures
+                        // leave stream_created_ false so the next
+                        // batch can try again.
+                        stream_created_ = true;
                         std::fprintf(stderr, "[CloudWatch] auto-created stream %s and recovered\n",
                                      config_.log_stream.c_str());
                         return;
@@ -232,11 +249,18 @@ class CloudWatchSink {
     std::mutex buffer_mutex_;
     std::vector<BufferedEvent> buffer_;
 
-    /// One-shot guard on auto-creating the log stream on first 404.
-    /// Set to true as soon as we try, regardless of success — if the
-    /// create fails we don't want to hammer CreateLogStream on every
-    /// flush interval.
+    /// Latched to true only on a SUCCESSFUL CreateLogStream + retry
+    /// round-trip. A transient failure during the create leaves this
+    /// false so the next flush cycle can try again.
     bool stream_created_ = false;
+    /// Hard cap on create attempts. Protects against a permanent
+    /// IAM / quota / config failure turning into an API-hammering
+    /// retry loop on every flush. Once we've tried 10 times and
+    /// every attempt has failed, stop trying and let the events
+    /// drop. 10 attempts × 5s flush interval = 50 seconds of retries
+    /// before giving up, which is enough to absorb a short CloudWatch
+    /// blip but not a persistent misconfiguration.
+    int create_attempts_ = 0;
 
     std::jthread flush_thread_;
 };
