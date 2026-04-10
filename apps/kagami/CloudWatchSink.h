@@ -151,11 +151,79 @@ class CloudWatchSink {
 
         auto result = client_.Post("/", headers, body_str, "application/x-amz-json-1.1");
         if (!result || result->status != 200) {
-            // Log to stderr directly — avoid re-entrant logging
             int status = result ? result->status : 0;
             std::string err_body = result ? result->body.substr(0, 500) : "connection failed";
+
+            // If the stream doesn't exist, try to create it once and retry.
+            // This happens on first-use of new log streams (e.g. the
+            // moderation audit stream created at kagami boot) where the
+            // group exists but the stream has never been written to.
+            //
+            // We only attempt the auto-create once per batch to avoid
+            // infinite loops if CreateLogStream itself fails.
+            if (result && result->status == 400 &&
+                err_body.find("ResourceNotFoundException") != std::string::npos &&
+                !stream_created_) {
+                stream_created_ = true; // attempt this only once
+                if (create_log_stream()) {
+                    // Retry the PutLogEvents call with fresh sigv4 headers.
+                    auto retry_signed = aws::sign(req, config_.credentials, config_.region, "logs");
+                    http::Headers retry_headers = {
+                        {"X-Amz-Target", "Logs_20140328.PutLogEvents"},
+                        {"X-Amz-Date", retry_signed.x_amz_date},
+                        {"X-Amz-Content-Sha256", retry_signed.x_amz_content_sha256},
+                        {"Authorization", retry_signed.authorization},
+                    };
+                    auto retry = client_.Post("/", retry_headers, body_str, "application/x-amz-json-1.1");
+                    if (retry && retry->status == 200) {
+                        std::fprintf(stderr, "[CloudWatch] auto-created stream %s and recovered\n",
+                                     config_.log_stream.c_str());
+                        return;
+                    }
+                    status = retry ? retry->status : 0;
+                    err_body = retry ? retry->body.substr(0, 500) : "connection failed";
+                }
+            }
             std::fprintf(stderr, "[CloudWatch] PutLogEvents failed: status=%d %s\n", status, err_body.c_str());
         }
+    }
+
+    /// Attempt to create our log stream via the CreateLogStream API.
+    /// Returns true on 200 OK or if the stream already exists.
+    bool create_log_stream() {
+        nlohmann::json body = {
+            {"logGroupName", config_.log_group},
+            {"logStreamName", config_.log_stream},
+        };
+        std::string body_str = body.dump();
+
+        aws::SignableRequest req;
+        req.method = "POST";
+        req.uri = "/";
+        req.headers["host"] = host_;
+        req.headers["x-amz-target"] = "Logs_20140328.CreateLogStream";
+        req.body = body_str;
+
+        auto signed_headers = aws::sign(req, config_.credentials, config_.region, "logs");
+        http::Headers headers = {
+            {"X-Amz-Target", "Logs_20140328.CreateLogStream"},
+            {"X-Amz-Date", signed_headers.x_amz_date},
+            {"X-Amz-Content-Sha256", signed_headers.x_amz_content_sha256},
+            {"Authorization", signed_headers.authorization},
+        };
+        auto result = client_.Post("/", headers, body_str, "application/x-amz-json-1.1");
+        if (!result) {
+            std::fprintf(stderr, "[CloudWatch] CreateLogStream transport failure\n");
+            return false;
+        }
+        if (result->status == 200)
+            return true;
+        // ResourceAlreadyExistsException is fine — someone else created it.
+        if (result->body.find("ResourceAlreadyExistsException") != std::string::npos)
+            return true;
+        std::fprintf(stderr, "[CloudWatch] CreateLogStream failed: status=%d %s\n", result->status,
+                     result->body.substr(0, 500).c_str());
+        return false;
     }
 
     Config config_;
@@ -164,6 +232,12 @@ class CloudWatchSink {
 
     std::mutex buffer_mutex_;
     std::vector<BufferedEvent> buffer_;
+
+    /// One-shot guard on auto-creating the log stream on first 404.
+    /// Set to true as soon as we try, regardless of success — if the
+    /// create fails we don't want to hammer CreateLogStream on every
+    /// flush interval.
+    bool stream_created_ = false;
 
     std::jthread flush_thread_;
 };
