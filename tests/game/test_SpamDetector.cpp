@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
 #include <string>
 
 namespace {
@@ -34,60 +35,60 @@ class SpamDetectorTest : public ::testing::Test {
 // -- H1: Message echo ---------------------------------------------------------
 
 TEST_F(SpamDetectorTest, SingleMessageNotSpam) {
-    auto v = sd_.check_message("aaa", 100, "hello world");
+    auto v = sd_.check_message("aaa", "aaa", 100, "hello world");
     EXPECT_FALSE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, SameMessageFromTwoIPsNotSpam) {
-    sd_.check_message("aaa", 100, "hello");
-    auto v = sd_.check_message("bbb", 100, "hello");
+    sd_.check_message("aaa", "aaa", 100, "hello");
+    auto v = sd_.check_message("bbb", "bbb", 100, "hello");
     EXPECT_FALSE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, SameMessageFromThreeIPsIsSpam) {
-    sd_.check_message("aaa", 100, "NESM0GGED");
-    sd_.check_message("bbb", 100, "NESM0GGED");
-    auto v = sd_.check_message("ccc", 100, "NESM0GGED");
+    sd_.check_message("aaa", "aaa", 100, "NESM0GGED");
+    sd_.check_message("bbb", "bbb", 100, "NESM0GGED");
+    auto v = sd_.check_message("ccc", "ccc", 100, "NESM0GGED");
     EXPECT_TRUE(v.is_spam);
     EXPECT_EQ(v.heuristic, "echo");
 }
 
 TEST_F(SpamDetectorTest, EchoDetectionIsCaseInsensitive) {
-    sd_.check_message("aaa", 100, "Spam Message");
-    sd_.check_message("bbb", 100, "spam message");
-    auto v = sd_.check_message("ccc", 100, "SPAM MESSAGE");
+    sd_.check_message("aaa", "aaa", 100, "Spam Message");
+    sd_.check_message("bbb", "bbb", 100, "spam message");
+    auto v = sd_.check_message("ccc", "ccc", 100, "SPAM MESSAGE");
     EXPECT_TRUE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, EchoDetectionCollapsesWhitespace) {
-    sd_.check_message("aaa", 100, "hello   world");
-    sd_.check_message("bbb", 100, "hello world");
-    auto v = sd_.check_message("ccc", 100, "hello    world");
+    sd_.check_message("aaa", "aaa", 100, "hello   world");
+    sd_.check_message("bbb", "bbb", 100, "hello world");
+    auto v = sd_.check_message("ccc", "ccc", 100, "hello    world");
     EXPECT_TRUE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, DifferentMessagesNotEcho) {
-    sd_.check_message("aaa", 100, "message one");
-    sd_.check_message("bbb", 100, "message two");
-    auto v = sd_.check_message("ccc", 100, "message three");
+    sd_.check_message("aaa", "aaa", 100, "message one");
+    sd_.check_message("bbb", "bbb", 100, "message two");
+    auto v = sd_.check_message("ccc", "ccc", 100, "message three");
     EXPECT_FALSE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, SameIPMultipleTimesDoesNotTriggerEcho) {
-    sd_.check_message("aaa", 100, "repeated");
-    sd_.check_message("aaa", 100, "repeated");
-    auto v = sd_.check_message("aaa", 100, "repeated");
+    sd_.check_message("aaa", "aaa", 100, "repeated");
+    sd_.check_message("aaa", "aaa", 100, "repeated");
+    auto v = sd_.check_message("aaa", "aaa", 100, "repeated");
     EXPECT_FALSE(v.is_spam); // Only 1 unique IPID
 }
 
 TEST_F(SpamDetectorTest, EchoAlertOnlyFiresOnce) {
-    sd_.check_message("aaa", 100, "spam");
-    sd_.check_message("bbb", 100, "spam");
-    auto v1 = sd_.check_message("ccc", 100, "spam");
+    sd_.check_message("aaa", "aaa", 100, "spam");
+    sd_.check_message("bbb", "bbb", 100, "spam");
+    auto v1 = sd_.check_message("ccc", "ccc", 100, "spam");
     EXPECT_TRUE(v1.is_spam);
 
     // Fourth IP with same message should NOT re-trigger
-    auto v2 = sd_.check_message("ddd", 100, "spam");
+    auto v2 = sd_.check_message("ddd", "ddd", 100, "spam");
     EXPECT_FALSE(v2.is_spam);
 }
 
@@ -97,7 +98,7 @@ TEST_F(SpamDetectorTest, FewConnectionsNotBurst) {
     // Use names without trailing digits (to avoid H5) and unique HWIDs (to avoid H7)
     const char* names[] = {"Alice", "Bob", "Charlie", "Diana"};
     for (int i = 0; i < 4; ++i) {
-        auto v = sd_.on_connection("ip" + std::to_string(i), 100, "hwid" + std::to_string(i), names[i]);
+        auto v = sd_.on_connection("ip" + std::to_string(i), "ip" + std::to_string(i), 100, "hwid" + std::to_string(i), names[i]);
         EXPECT_FALSE(v.is_spam);
     }
 }
@@ -105,7 +106,7 @@ TEST_F(SpamDetectorTest, FewConnectionsNotBurst) {
 TEST_F(SpamDetectorTest, ManyConnectionsIsBurst) {
     SpamVerdict last;
     for (int i = 0; i < 6; ++i) {
-        last = sd_.on_connection("ip" + std::to_string(i), 100, "hwid" + std::to_string(i), "user");
+        last = sd_.on_connection("ip" + std::to_string(i), "ip" + std::to_string(i), 100, "hwid" + std::to_string(i), "user");
     }
     // At threshold=5, the 5th connection should trigger
     EXPECT_TRUE(last.is_spam);
@@ -121,9 +122,9 @@ TEST_F(SpamDetectorTest, JoinAndSpamDetected) {
     sd_.record_join_time("ccc");
 
     // All send the same message immediately (within 5s of joining)
-    sd_.check_message("aaa", 100, "buy cheap proxies");
-    sd_.check_message("bbb", 100, "buy cheap proxies");
-    auto v = sd_.check_message("ccc", 100, "buy cheap proxies");
+    sd_.check_message("aaa", "aaa", 100, "buy cheap proxies");
+    sd_.check_message("bbb", "bbb", 100, "buy cheap proxies");
+    auto v = sd_.check_message("ccc", "ccc", 100, "buy cheap proxies");
 
     // Should be detected as either echo or join_spam
     EXPECT_TRUE(v.is_spam);
@@ -132,43 +133,43 @@ TEST_F(SpamDetectorTest, JoinAndSpamDetected) {
 // -- H5: Name pattern ---------------------------------------------------------
 
 TEST_F(SpamDetectorTest, UniqueNamesNotPattern) {
-    sd_.on_connection("a", 100, "h1", "Alice");
-    sd_.on_connection("b", 100, "h2", "Bob");
-    auto v = sd_.on_connection("c", 100, "h3", "Charlie");
+    sd_.on_connection("a", "a", 100, "h1", "Alice");
+    sd_.on_connection("b", "b", 100, "h2", "Bob");
+    auto v = sd_.on_connection("c", "c", 100, "h3", "Charlie");
     EXPECT_FALSE(v.is_spam) << "Different names should not trigger";
 }
 
 TEST_F(SpamDetectorTest, NumberedNamesDetected) {
-    sd_.on_connection("a", 100, "h1", "TuskNail2638");
-    sd_.on_connection("b", 100, "h2", "TuskNail822");
-    auto v = sd_.on_connection("c", 100, "h3", "TuskNail5029");
+    sd_.on_connection("a", "a", 100, "h1", "TuskNail2638");
+    sd_.on_connection("b", "b", 100, "h2", "TuskNail822");
+    auto v = sd_.on_connection("c", "c", 100, "h3", "TuskNail5029");
     EXPECT_TRUE(v.is_spam);
     EXPECT_EQ(v.heuristic, "name_pattern");
 }
 
 TEST_F(SpamDetectorTest, ShortPrefixIgnored) {
     // Prefix "Bot" is only 3 chars, below min_prefix=4
-    sd_.on_connection("a", 100, "h1", "Bot1");
-    sd_.on_connection("b", 100, "h2", "Bot2");
-    auto v = sd_.on_connection("c", 100, "h3", "Bot3");
+    sd_.on_connection("a", "a", 100, "h1", "Bot1");
+    sd_.on_connection("b", "b", 100, "h2", "Bot2");
+    auto v = sd_.on_connection("c", "c", 100, "h3", "Bot3");
     EXPECT_FALSE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, NamesWithoutTrailingDigitsIgnored) {
-    sd_.on_connection("a", 100, "h1", "Phoenix");
-    sd_.on_connection("b", 100, "h2", "Phoenix");
-    auto v = sd_.on_connection("c", 100, "h3", "Phoenix");
+    sd_.on_connection("a", "a", 100, "h1", "Phoenix");
+    sd_.on_connection("b", "b", 100, "h2", "Phoenix");
+    auto v = sd_.on_connection("c", "c", 100, "h3", "Phoenix");
     // "Phoenix" has no trailing digits — extract_prefix returns ""
     EXPECT_FALSE(v.is_spam);
 }
 
 TEST_F(SpamDetectorTest, NamePatternAlertOnlyOnce) {
-    sd_.on_connection("a", 100, "h1", "Raider100");
-    sd_.on_connection("b", 100, "h2", "Raider200");
-    auto v1 = sd_.on_connection("c", 100, "h3", "Raider300");
+    sd_.on_connection("a", "a", 100, "h1", "Raider100");
+    sd_.on_connection("b", "b", 100, "h2", "Raider200");
+    auto v1 = sd_.on_connection("c", "c", 100, "h3", "Raider300");
     EXPECT_TRUE(v1.is_spam);
 
-    auto v2 = sd_.on_connection("d", 100, "h4", "Raider400");
+    auto v2 = sd_.on_connection("d", "d", 100, "h4", "Raider400");
     // Should not re-alert for the same prefix
     // (heuristic may or may not fire again depending on implementation —
     //  the alert flag prevents duplicate alerts for same prefix)
@@ -202,24 +203,24 @@ TEST_F(SpamDetectorTest, GhostConnectionsDetected) {
 // -- H7: HWID reuse -----------------------------------------------------------
 
 TEST_F(SpamDetectorTest, SameHWIDFromOneIPNotReuse) {
-    sd_.on_connection("aaa", 100, "SAME_HWID", "user1");
-    sd_.on_connection("aaa", 100, "SAME_HWID", "user2");
+    sd_.on_connection("aaa", "aaa", 100, "SAME_HWID", "user1");
+    sd_.on_connection("aaa", "aaa", 100, "SAME_HWID", "user2");
     // Same IPID — only 1 unique
 }
 
 TEST_F(SpamDetectorTest, SameHWIDFromThreeIPsIsReuse) {
     // Use non-pattern usernames (no trailing digits) to avoid triggering H5
-    sd_.on_connection("aaa", 100, "SAME_HWID", "Alice");
-    sd_.on_connection("bbb", 100, "SAME_HWID", "Bob");
-    auto v = sd_.on_connection("ccc", 100, "SAME_HWID", "Charlie");
+    sd_.on_connection("aaa", "aaa", 100, "SAME_HWID", "Alice");
+    sd_.on_connection("bbb", "bbb", 100, "SAME_HWID", "Bob");
+    auto v = sd_.on_connection("ccc", "ccc", 100, "SAME_HWID", "Charlie");
     EXPECT_TRUE(v.is_spam);
     EXPECT_EQ(v.heuristic, "hwid_reuse");
 }
 
 TEST_F(SpamDetectorTest, EmptyHWIDIgnored) {
-    sd_.on_connection("aaa", 100, "", "user1");
-    sd_.on_connection("bbb", 100, "", "user2");
-    auto v = sd_.on_connection("ccc", 100, "", "user3");
+    sd_.on_connection("aaa", "aaa", 100, "", "user1");
+    sd_.on_connection("bbb", "bbb", 100, "", "user2");
+    auto v = sd_.on_connection("ccc", "ccc", 100, "", "user3");
     // Empty HWID should not trigger reuse detection
     EXPECT_NE(v.heuristic, "hwid_reuse");
 }
@@ -227,8 +228,8 @@ TEST_F(SpamDetectorTest, EmptyHWIDIgnored) {
 // -- Sweep --------------------------------------------------------------------
 
 TEST_F(SpamDetectorTest, SweepDoesNotCrash) {
-    sd_.check_message("aaa", 100, "test");
-    sd_.on_connection("bbb", 200, "hwid", "user");
+    sd_.check_message("aaa", "aaa", 100, "test");
+    sd_.on_connection("bbb", "bbb", 200, "hwid", "user");
     sd_.on_disconnect("1.2.3.4", false);
     sd_.sweep();
     // Just verify no crash or assertion failure
@@ -245,9 +246,9 @@ TEST_F(SpamDetectorTest, CallbackInvokedOnSpam) {
         last_heuristic = v.heuristic;
     });
 
-    sd_.check_message("aaa", 100, "spam");
-    sd_.check_message("bbb", 100, "spam");
-    sd_.check_message("ccc", 100, "spam");
+    sd_.check_message("aaa", "aaa", 100, "spam");
+    sd_.check_message("bbb", "bbb", 100, "spam");
+    sd_.check_message("ccc", "ccc", 100, "spam");
 
     EXPECT_GE(callback_count, 1);
     EXPECT_EQ(last_heuristic, "echo");
@@ -260,8 +261,71 @@ TEST_F(SpamDetectorTest, DisabledReturnsNoSpam) {
     cfg.enabled = false;
     sd_.configure(cfg);
 
-    sd_.check_message("aaa", 100, "spam");
-    sd_.check_message("bbb", 100, "spam");
-    auto v = sd_.check_message("ccc", 100, "spam");
+    sd_.check_message("aaa", "aaa", 100, "spam");
+    sd_.check_message("bbb", "bbb", 100, "spam");
+    auto v = sd_.check_message("ccc", "ccc", 100, "spam");
     EXPECT_FALSE(v.is_spam);
+}
+
+// -- Participants population (for auto-ban) -----------------------------------
+
+TEST_F(SpamDetectorTest, EchoVerdictPopulatesAllParticipants) {
+    sd_.check_message("ipid1", "10.0.0.1", 100, "spam");
+    sd_.check_message("ipid2", "10.0.0.2", 100, "spam");
+    auto v = sd_.check_message("ipid3", "10.0.0.3", 100, "spam");
+
+    ASSERT_TRUE(v.is_spam);
+    EXPECT_EQ(v.heuristic, "echo");
+    EXPECT_EQ(v.participants.size(), 3u);
+
+    // All three (ipid, ip) pairs should be present
+    std::set<std::string> ipids;
+    std::set<std::string> ips;
+    for (auto& [pid, pip] : v.participants) {
+        ipids.insert(pid);
+        ips.insert(pip);
+    }
+    EXPECT_TRUE(ipids.count("ipid1"));
+    EXPECT_TRUE(ipids.count("ipid2"));
+    EXPECT_TRUE(ipids.count("ipid3"));
+    EXPECT_TRUE(ips.count("10.0.0.1"));
+    EXPECT_TRUE(ips.count("10.0.0.2"));
+    EXPECT_TRUE(ips.count("10.0.0.3"));
+}
+
+TEST_F(SpamDetectorTest, NamePatternVerdictPopulatesAllParticipants) {
+    sd_.on_connection("ipid1", "10.0.0.1", 100, "h1", "TWKTWK100");
+    sd_.on_connection("ipid2", "10.0.0.2", 100, "h2", "TWKTWK200");
+    auto v = sd_.on_connection("ipid3", "10.0.0.3", 100, "h3", "TWKTWK300");
+
+    ASSERT_TRUE(v.is_spam);
+    EXPECT_EQ(v.heuristic, "name_pattern");
+    EXPECT_EQ(v.participants.size(), 3u);
+}
+
+TEST_F(SpamDetectorTest, BurstVerdictHasNoParticipants) {
+    // H2 is a global counter, no per-IP cluster to ban.
+    SpamVerdict last;
+    for (int i = 0; i < 6; ++i) {
+        last = sd_.on_connection("ip" + std::to_string(i), "10.0.0." + std::to_string(i), 100,
+                                 "hwid" + std::to_string(i), "user");
+    }
+    ASSERT_TRUE(last.is_spam);
+    EXPECT_EQ(last.heuristic, "burst");
+    EXPECT_TRUE(last.participants.empty());
+}
+
+TEST_F(SpamDetectorTest, ParticipantsSkippedForMissingIP) {
+    // If IP wasn't recorded (e.g., legacy caller passed empty string),
+    // that participant should be excluded from the list but detection still fires.
+    sd_.check_message("ipid1", "", 100, "spam");
+    sd_.check_message("ipid2", "10.0.0.2", 100, "spam");
+    auto v = sd_.check_message("ipid3", "10.0.0.3", 100, "spam");
+
+    ASSERT_TRUE(v.is_spam);
+    // ipid1 is in the unique_ipids set but has no IP — should be excluded.
+    EXPECT_EQ(v.participants.size(), 2u);
+    for (auto& [pid, pip] : v.participants) {
+        EXPECT_FALSE(pip.empty());
+    }
 }

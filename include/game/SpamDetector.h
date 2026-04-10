@@ -30,6 +30,12 @@ struct SpamVerdict {
     bool is_spam = false;
     std::string heuristic; ///< Which heuristic triggered (e.g. "echo", "burst")
     std::string detail;    ///< Human-readable description
+
+    /// All (ipid, ip) pairs that participated in the detected pattern.
+    /// Populated only for multi-IP heuristics (echo, join_spam, name_pattern)
+    /// where banning the whole cluster is appropriate. Empty for single-origin
+    /// or global heuristics (burst, ghost, hwid_reuse).
+    std::vector<std::pair<std::string, std::string>> participants;
 };
 
 /// Configuration for the spam detector.
@@ -85,12 +91,15 @@ class SpamDetector {
     void set_callback(SpamCallback callback);
 
     /// H1/H3: Check a message (OOC or IC global). Returns verdict.
-    /// Called from CT/MS packet handlers.
-    SpamVerdict check_message(const std::string& ipid, uint32_t asn, const std::string& message);
+    /// Called from CT/MS packet handlers. `ip` is the raw client IP,
+    /// recorded for auto-ban callbacks on multi-IP heuristics.
+    SpamVerdict check_message(const std::string& ipid, const std::string& ip, uint32_t asn,
+                              const std::string& message);
 
     /// H2/H5/H7: Register a new connection.
-    /// Called from HI packet handler.
-    SpamVerdict on_connection(const std::string& ipid, uint32_t asn, const std::string& hwid,
+    /// Called from HI packet handler. `ip` is the raw client IP,
+    /// recorded for auto-ban callbacks on multi-IP heuristics.
+    SpamVerdict on_connection(const std::string& ipid, const std::string& ip, uint32_t asn, const std::string& hwid,
                               const std::string& username);
 
     /// H6: Register a disconnection. If the client never sent HI, counts as ghost.
@@ -107,6 +116,11 @@ class SpamDetector {
     SpamDetectorConfig config_;
     SpamCallback callback_;
     mutable std::mutex mutex_;
+
+    /// IPID → IP mapping, populated on every check_message/on_connection call.
+    /// Used to resolve participants back to raw IPs for auto-ban. Since IPID is
+    /// a hash of IP, the mapping is 1:1 — no collision handling needed.
+    std::unordered_map<std::string, std::string> ipid_to_ip_;
 
     // --- H1: Message echo ---
     struct MessageRecord {

@@ -103,7 +103,8 @@ void AOPacketHI::handle_server(AOServer& server, ServerSession& session) {
 
     // Spam detector: register connection (H2 burst, H5 name pattern, H7 HWID reuse)
     if (auto* sd = server.room().spam_detector()) {
-        sd->on_connection(session.ipid, client_asn, session.hardware_id, "" /* username not known yet */);
+        sd->on_connection(session.ipid, client_ip, client_asn, session.hardware_id,
+                          "" /* username not known yet */);
         sd->record_join_time(session.ipid);
     }
 
@@ -374,15 +375,15 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     if (auto* sd = server.room().spam_detector()) {
         // Look up ASN from reputation cache for this session
         uint32_t asn = 0;
+        std::string client_ip;
+        if (server.ws())
+            client_ip = server.ws()->get_client_addr(session.client_id);
         if (auto* rep = server.room().reputation_service()) {
-            if (server.ws()) {
-                std::string ip = server.ws()->get_client_addr(session.client_id);
-                if (auto cached = rep->find_cached(ip))
-                    asn = cached->asn;
-            }
+            if (auto cached = rep->find_cached(client_ip))
+                asn = cached->asn;
         }
 
-        auto verdict = sd->check_message(session.ipid, asn, message);
+        auto verdict = sd->check_message(session.ipid, client_ip, asn, message);
         if (verdict.is_spam) {
             // Suppress the spam message — don't broadcast it
             Log::log_print(INFO, "AO: OOC from %s suppressed [%s]: %s", format_client_id(session.client_id).c_str(),

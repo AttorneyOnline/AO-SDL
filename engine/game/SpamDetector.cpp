@@ -76,7 +76,8 @@ void SpamDetector::set_callback(SpamCallback callback) {
 
 // -- H1/H3: Message check ----------------------------------------------------
 
-SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, const std::string& message) {
+SpamVerdict SpamDetector::check_message(const std::string& ipid, const std::string& ip, uint32_t asn,
+                                        const std::string& message) {
     if (!config_.enabled)
         return {};
 
@@ -88,6 +89,10 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
 
     {
         std::lock_guard lock(mutex_);
+
+        // Record IPID → IP mapping so auto-ban can resolve participants.
+        if (!ip.empty())
+            ipid_to_ip_[ipid] = ip;
 
         // Record in ring buffer
         if (!message_ring_.empty()) {
@@ -115,6 +120,14 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
             verdict.heuristic = "echo";
             verdict.detail = "Same message from " + std::to_string(unique_count) + " distinct IPs within " +
                              std::to_string(config_.echo_window_seconds) + "s";
+
+            // Collect all participants (ipid, ip) for auto-ban callback.
+            verdict.participants.reserve(cluster.unique_ipids.size());
+            for (auto& pid : cluster.unique_ipids) {
+                auto it = ipid_to_ip_.find(pid);
+                if (it != ipid_to_ip_.end() && !it->second.empty())
+                    verdict.participants.emplace_back(pid, it->second);
+            }
 
             Log::log_print(WARNING, "SpamDetector [H1 echo]: %s — %d unique IPs, fingerprint=%zu",
                            verdict.detail.c_str(), unique_count, fp);
@@ -146,6 +159,14 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
                         verdict.detail = std::to_string(fast_joiners) + " IPs sent same message within " +
                                          std::to_string(config_.join_spam_max_seconds) + "s of joining";
 
+                        // Collect participants (same IPIDs as echo — fast-joiners subset)
+                        verdict.participants.reserve(cluster.unique_ipids.size());
+                        for (auto& pid : cluster.unique_ipids) {
+                            auto it = ipid_to_ip_.find(pid);
+                            if (it != ipid_to_ip_.end() && !it->second.empty())
+                                verdict.participants.emplace_back(pid, it->second);
+                        }
+
                         Log::log_print(WARNING, "SpamDetector [H3 join-spam]: %s", verdict.detail.c_str());
                         cb = callback_;
                     }
@@ -162,8 +183,8 @@ SpamVerdict SpamDetector::check_message(const std::string& ipid, uint32_t asn, c
 
 // -- H2/H5/H7: Connection registration ---------------------------------------
 
-SpamVerdict SpamDetector::on_connection(const std::string& ipid, uint32_t asn, const std::string& hwid,
-                                        const std::string& username) {
+SpamVerdict SpamDetector::on_connection(const std::string& ipid, const std::string& ip, uint32_t asn,
+                                        const std::string& hwid, const std::string& username) {
     if (!config_.enabled)
         return {};
 
@@ -173,6 +194,10 @@ SpamVerdict SpamDetector::on_connection(const std::string& ipid, uint32_t asn, c
 
     {
         std::lock_guard lock(mutex_);
+
+        // Record IPID → IP mapping so auto-ban can resolve participants.
+        if (!ip.empty())
+            ipid_to_ip_[ipid] = ip;
 
         // H2: Connection burst tracking
         connection_times_.push_back(now);
@@ -217,6 +242,14 @@ SpamVerdict SpamDetector::on_connection(const std::string& ipid, uint32_t asn, c
                         verdict.heuristic = "name_pattern";
                         verdict.detail =
                             "Username prefix \"" + prefix + "\" from " + std::to_string(unique_count) + " distinct IPs";
+
+                        // Collect all IPIDs that shared this username prefix.
+                        verdict.participants.reserve(pc.unique_ipids.size());
+                        for (auto& pid : pc.unique_ipids) {
+                            auto it = ipid_to_ip_.find(pid);
+                            if (it != ipid_to_ip_.end() && !it->second.empty())
+                                verdict.participants.emplace_back(pid, it->second);
+                        }
 
                         Log::log_print(WARNING, "SpamDetector [H5 name-pattern]: %s", verdict.detail.c_str());
                         cb = callback_;
@@ -330,6 +363,20 @@ void SpamDetector::sweep() {
     for (auto it = hwid_map_.begin(); it != hwid_map_.end();) {
         if (it->second.last_seen < hwid_cutoff)
             it = hwid_map_.erase(it);
+        else
+            ++it;
+    }
+
+    // Prune IPID → IP map. Only keep entries that are still referenced by
+    // an active fingerprint or prefix cluster; everything else is stale.
+    std::unordered_set<std::string> live_ipids;
+    for (auto& [_, cluster] : fingerprint_clusters_)
+        live_ipids.insert(cluster.unique_ipids.begin(), cluster.unique_ipids.end());
+    for (auto& [_, pc] : prefix_clusters_)
+        live_ipids.insert(pc.unique_ipids.begin(), pc.unique_ipids.end());
+    for (auto it = ipid_to_ip_.begin(); it != ipid_to_ip_.end();) {
+        if (live_ipids.find(it->first) == live_ipids.end())
+            it = ipid_to_ip_.erase(it);
         else
             ++it;
     }

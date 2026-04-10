@@ -27,6 +27,7 @@
 #include "net/nx/NXEndpoint.h"
 #include "utils/Log.h"
 
+#include <chrono>
 #include <csignal>
 #include <filesystem>
 #include <iostream>
@@ -142,17 +143,6 @@ int main(int /*argc*/, char* argv[]) {
     spam_detector.configure(cfg.spam_detection_config());
     room.set_spam_detector(&spam_detector);
 
-    // Wire spam detector → ASN reputation reporting
-    spam_detector.set_callback(
-        [&asn_reputation, &reputation](const std::string& /*ipid*/, uint32_t asn, const SpamVerdict& verdict) {
-            if (asn == 0)
-                return;
-            // Look up AS org from reputation cache if available
-            std::string as_org;
-            // Report the abuse event to ASN reputation
-            asn_reputation.report_abuse(asn, verdict.detail, as_org, verdict.heuristic + ": " + verdict.detail);
-        });
-
     // --- Firewall Manager ---
     FirewallManager firewall;
     firewall.configure(cfg.firewall_config());
@@ -166,6 +156,58 @@ int main(int /*argc*/, char* argv[]) {
     ban_manager.set_firewall(&firewall);
     ban_manager.load_from_db();
     room.set_ban_manager(&ban_manager);
+
+    // Wire spam detector → ASN reputation reporting + auto-ban on multi-IP heuristics.
+    //
+    // H1 (echo), H3 (join_spam), H5 (name_pattern) are unambiguous coordinated
+    // attacks with negligible false-positive risk: a threshold of 3+ distinct
+    // IPs means no single human could plausibly trigger them. For these we
+    // issue a 24h IP ban on every participant, which propagates to nftables
+    // via the firewall integration — all active bot sessions go silent within
+    // milliseconds and reinforcement traffic is dropped at the kernel level.
+    //
+    // H2 (burst), H6 (ghost), H7 (hwid_reuse) are single-signal heuristics with
+    // plausible benign explanations (rush events, health checks, shared devices),
+    // so those only report to ASN reputation — no auto-ban.
+    spam_detector.set_callback([&asn_reputation, &ban_manager](const std::string& /*ipid*/, uint32_t asn,
+                                                               const SpamVerdict& verdict) {
+        // Report to ASN reputation (existing behavior)
+        if (asn != 0) {
+            std::string as_org;
+            asn_reputation.report_abuse(asn, verdict.detail, as_org, verdict.heuristic + ": " + verdict.detail);
+        }
+
+        // Auto-ban the whole participant cluster for multi-IP indefensible spam.
+        const bool auto_ban_heuristic =
+            (verdict.heuristic == "echo" || verdict.heuristic == "join_spam" || verdict.heuristic == "name_pattern");
+        if (!auto_ban_heuristic || verdict.participants.empty())
+            return;
+
+        const int64_t now_sec =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        const int64_t ban_duration = 24 * 3600; // 24h
+        const std::string reason = "[auto] " + verdict.heuristic + ": " + verdict.detail;
+
+        for (auto& [pid, pip] : verdict.participants) {
+            // Skip if already banned (idempotent — add_ban overwrites, but
+            // avoiding the firewall churn is cleaner).
+            if (ban_manager.find_ban(pid))
+                continue;
+
+            BanEntry entry;
+            entry.ipid = pid;
+            entry.ip = pip;
+            entry.reason = reason;
+            entry.moderator = "SpamDetector";
+            entry.timestamp = now_sec;
+            entry.duration = ban_duration;
+            ban_manager.add_ban(std::move(entry));
+        }
+
+        Log::log_print(WARNING, "SpamDetector: auto-banned %zu IPs for %s (%s)", verdict.participants.size(),
+                       verdict.heuristic.c_str(), verdict.detail.c_str());
+    });
 
     // Wire ASN reputation escalation → firewall blocking
     asn_reputation.set_status_callback([&firewall](uint32_t asn, ASNReputationEntry::Status /*old_status*/,
