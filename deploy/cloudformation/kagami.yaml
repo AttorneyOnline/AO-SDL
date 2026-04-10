@@ -424,7 +424,7 @@ Resources:
               # These are exported so the Python generation block below can
               # read them via os.environ without any shell-expansion of
               # user-supplied content. CFN's Fn::Sub has already replaced
-              # the ${CfXxx} placeholders with raw values by the time the
+              # the ${!CfXxx} placeholders with raw values by the time the
               # shell reaches this line; from here on the shell-to-Python
               # boundary is the only remaining injection surface, and the
               # quoted heredoc around the Python block (<<'PYEOF') prevents
@@ -634,6 +634,13 @@ Resources:
                           # and a HuggingFace model id is provided.
                           'enabled': cm_enabled and len(embed_model) > 0,
                           'hf_model_id': embed_model,
+                          # Share the moderation_cache named volume with
+                          # slurs/safe_hint so HfModelFetcher's on-disk
+                          # cache survives container recreates. Without
+                          # this the GGUF is re-downloaded on every
+                          # deploy, which is both slow (hundreds of MB)
+                          # and a waste of HuggingFace bandwidth quota.
+                          'cache_dir': '/opt/kagami/moderation-cache',
                           'ring_size': 500,
                           'similarity_threshold': 0.9,
                           'cluster_threshold': 3,
@@ -797,6 +804,17 @@ Resources:
                     - ./config:/app/config:ro
                     - ./kagami.db:/app/kagami.db
                     - kagami_logs:/logs
+                    # Persistent cache for moderation downloads (slur
+                    # wordlist, slur exceptions, safe-hint anchors, and
+                    # the HF embedding GGUF). Named volume so the
+                    # downloads survive container recreates on every
+                    # CI-triggered deploy — without this, every image
+                    # pull forces a fresh S3 fetch for the text lists
+                    # and a full re-download of the embedding model
+                    # (hundreds of MB). The directory is matched to the
+                    # *.cache_dir fields in the generated kagami.json
+                    # below.
+                    - moderation_cache:/opt/kagami/moderation-cache
                 prometheus:
                   image: prom/prometheus:latest
                   restart: unless-stopped
@@ -840,6 +858,7 @@ Resources:
                 caddy_data:
                 caddy_config:
                 kagami_logs:
+                moderation_cache:
                 prometheus_data:
                 grafana_data:
                 loki_data:

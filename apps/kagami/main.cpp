@@ -32,8 +32,10 @@
 #include "net/nx/NXEndpoint.h"
 #include "utils/Log.h"
 
+#include <array>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -57,6 +59,49 @@ static std::string config_path(const char* argv0) {
     auto bin_dir = std::filesystem::path(argv0).parent_path();
     return (bin_dir / "kagami.json").string();
 }
+
+namespace {
+
+/// Retry a fetch callable with bounded exponential backoff.
+///
+/// Used by the content moderation bring-up code to work around transient
+/// boot-time network failures observed on staging (libcurl returning
+/// http=0 at T+0 of process start — DNS/TLS resolves cleanly seconds
+/// later). Any fetch function whose result has a `bool ok` and a
+/// `std::string error` can be wrapped.
+///
+/// Retries only kick in when ok == false. `TextListFetcher` and
+/// `HfModelFetcher` both return ok=true whenever they successfully
+/// satisfy the request from disk cache, so a populated cache short-
+/// circuits the retry loop on the first attempt and this helper is
+/// effectively a no-op on warm boots. The retry budget is therefore a
+/// first-ever-boot concern, not a per-boot cost.
+///
+/// Sleep schedule: 2s, 5s, 10s, 30s, 60s — 5 retries, ~107s ceiling.
+/// Tuned for "give the network a chance to come up" rather than "retry
+/// a genuinely broken upstream forever." If all attempts fail the layer
+/// stays inert and a clear warning is emitted; the caller does not
+/// block startup and the server continues to run with the failed layer
+/// disabled.
+template <typename FetchFn>
+auto retry_with_backoff(const char* what, FetchFn fetch) -> decltype(fetch()) {
+    using namespace std::chrono_literals;
+    constexpr std::array<std::chrono::seconds, 5> kBackoff{{2s, 5s, 10s, 30s, 60s}};
+    auto result = fetch();
+    for (std::size_t i = 0; !result.ok && i < kBackoff.size(); ++i) {
+        Log::log_print(WARNING, "%s: attempt %zu failed (%s); retrying in %ds", what, i + 1, result.error.c_str(),
+                       static_cast<int>(kBackoff[i].count()));
+        std::this_thread::sleep_for(kBackoff[i]);
+        if (stop_src.stop_requested()) {
+            Log::log_print(INFO, "%s: stop requested; abandoning retries", what);
+            return result;
+        }
+        result = fetch();
+    }
+    return result;
+}
+
+} // namespace
 
 int main(int /*argc*/, char* argv[]) {
     std::signal(SIGINT, signal_handler);
@@ -253,7 +298,14 @@ int main(int /*argc*/, char* argv[]) {
         // approach trades "Layer 3 comes up immediately" for "no
         // deadline the load has to meet".
         if (cm_cfg.enabled && cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) {
-            auto cache_dir = (std::filesystem::path(argv[0]).parent_path() / "models").string();
+            // Model cache dir: prefer the operator-configured path so a
+            // bind-mounted volume on the deploy side persists the GGUF
+            // across container recreates (otherwise every CI-triggered
+            // deploy re-downloads the model). Fall back to <binary_dir>/
+            // models for dev/test runs that don't set one.
+            auto cache_dir = cm_cfg.embeddings.cache_dir.empty()
+                                 ? (std::filesystem::path(argv[0]).parent_path() / "models").string()
+                                 : cm_cfg.embeddings.cache_dir;
             auto safe_hint_cache = cm_cfg.safe_hint.cache_dir.empty()
                                        ? (std::filesystem::path(argv[0]).parent_path() / "safe_hints").string()
                                        : cm_cfg.safe_hint.cache_dir;
@@ -267,7 +319,8 @@ int main(int /*argc*/, char* argv[]) {
             // the lambda returns.
             std::thread([hf_id = cm_cfg.embeddings.hf_model_id, cache_dir, safe_hint_cache,
                          safe_hint_url = cm_cfg.safe_hint.anchors_url, safe_hint_on, content_moderator]() mutable {
-                auto fetch = moderation::resolve_hf_model(hf_id, cache_dir);
+                auto fetch = retry_with_backoff("ContentModerator: embedding model fetch",
+                                                [&] { return moderation::resolve_hf_model(hf_id, cache_dir); });
                 if (!fetch.ok) {
                     Log::log_print(WARNING, "ContentModerator: embedding fetch failed (%s); layer stays inert",
                                    fetch.error.c_str());
@@ -296,7 +349,9 @@ int main(int /*argc*/, char* argv[]) {
                 if (safe_hint_on) {
                     Log::log_print(INFO, "ContentModerator: scheduling safe-hint anchor fetch (%s)",
                                    safe_hint_url.c_str());
-                    auto anchors = moderation::fetch_text_list(safe_hint_url, safe_hint_cache, "safe_anchors.txt");
+                    auto anchors = retry_with_backoff("ContentModerator: safe-hint anchor fetch", [&] {
+                        return moderation::fetch_text_list(safe_hint_url, safe_hint_cache, "safe_anchors.txt");
+                    });
                     if (anchors.ok) {
                         size_t loaded = content_moderator->set_safe_hint_anchors(anchors.entries);
                         Log::log_print(INFO, "ContentModerator: safe-hint layer armed (%zu/%zu anchors embedded, %s)",
@@ -330,7 +385,9 @@ int main(int /*argc*/, char* argv[]) {
                            cm_cfg.slurs.wordlist_url.c_str());
             std::thread([wordlist_url = cm_cfg.slurs.wordlist_url, exceptions_url = cm_cfg.slurs.exceptions_url,
                          cache_dir = slur_cache, content_moderator]() mutable {
-                auto wordlist = moderation::fetch_text_list(wordlist_url, cache_dir, "slurs.txt");
+                auto wordlist = retry_with_backoff("ContentModerator: slur wordlist fetch", [&] {
+                    return moderation::fetch_text_list(wordlist_url, cache_dir, "slurs.txt");
+                });
                 if (wordlist.ok) {
                     content_moderator->set_slur_wordlist(wordlist.entries);
                     Log::log_print(INFO, "ContentModerator: slur wordlist loaded (%zu entries, %s)",
@@ -342,7 +399,9 @@ int main(int /*argc*/, char* argv[]) {
                                    wordlist.error.c_str());
                 }
                 if (!exceptions_url.empty()) {
-                    auto exc = moderation::fetch_text_list(exceptions_url, cache_dir, "slur_exceptions.txt");
+                    auto exc = retry_with_backoff("ContentModerator: slur exceptions fetch", [&] {
+                        return moderation::fetch_text_list(exceptions_url, cache_dir, "slur_exceptions.txt");
+                    });
                     if (exc.ok) {
                         content_moderator->set_slur_exceptions(exc.entries);
                         Log::log_print(INFO, "ContentModerator: slur exceptions loaded (%zu entries, %s)",
