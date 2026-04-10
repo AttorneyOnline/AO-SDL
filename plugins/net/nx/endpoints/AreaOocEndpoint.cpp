@@ -1,6 +1,7 @@
 #include "net/nx/NXEndpoint.h"
 
 #include "AreaIdResolver.h"
+#include "moderation/ContentModerator.h"
 #include "net/EndpointRegistrar.h"
 #include "utils/GeneratedSchemas.h"
 
@@ -47,6 +48,31 @@ class AreaOocEndpoint : public NXEndpoint {
         int max_ooc = room().max_ooc_message_length;
         if (max_ooc > 0 && static_cast<int>(action.message.size()) > max_ooc)
             return RestResponse::error(400, "OOC message too long");
+
+        // Content moderation — mirrors the AO2 packet handler path.
+        // Returns an HTTP error for non-broadcast outcomes so the
+        // client sees the same semantic signal as an AO2 client does
+        // via suppressed broadcast.
+        if (auto* cm = room().content_moderator()) {
+            if (cm->is_muted(req.session->ipid))
+                return RestResponse::error(403, "Muted by content moderation");
+            auto v = cm->check(req.session->ipid, "ooc", action.message);
+            switch (v.action) {
+            case moderation::ModerationAction::NONE:
+            case moderation::ModerationAction::LOG:
+                break;
+            case moderation::ModerationAction::CENSOR:
+                action.message = "[filtered]";
+                break;
+            case moderation::ModerationAction::DROP:
+            case moderation::ModerationAction::MUTE:
+                return RestResponse::json(200, {{"accepted", false}, {"reason", "content"}});
+            case moderation::ModerationAction::KICK:
+            case moderation::ModerationAction::BAN:
+            case moderation::ModerationAction::PERMA_BAN:
+                return RestResponse::error(403, "Content moderation: " + v.reason);
+            }
+        }
 
         const auto& area_id = it->second;
 

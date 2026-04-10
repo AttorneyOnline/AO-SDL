@@ -47,7 +47,10 @@ FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl3t64 liburing2 ca-certificates nftables libcap2-bin \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/*
+# libgomp1 is required by llama.cpp (OpenMP) when KAGAMI_WITH_LLAMA_CPP=ON.
+# Can be dropped from the runtime image if the embeddings layer is removed.
 
 WORKDIR /app
 COPY --from=build /src/build/apps/kagami/kagami .
