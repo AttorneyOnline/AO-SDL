@@ -1,6 +1,44 @@
 #include "PacketTypes.h"
 
+#include "utils/Log.h"
+
 #include <algorithm>
+#include <charconv>
+#include <string_view>
+
+// ---------------------------------------------------------------------------
+// safe_stoi — non-throwing integer parser for wire protocol fields.
+//
+// `std::stoi` throws `std::invalid_argument` on non-numeric input and
+// `std::out_of_range` on overflow, neither of which is appropriate when
+// parsing untrusted client data. A single bad numeric field (see the webAO
+// `NaN` in the `sfx_delay` slot of MS) would otherwise escape the packet
+// constructor, bubble up through `AOPacket::deserialize`, and — if any
+// caller forgets to wrap the call in try/catch — terminate a worker thread.
+//
+// This helper uses `std::from_chars` (which never throws and never allocates)
+// and returns `default_value` on empty input, non-numeric content, trailing
+// garbage, or out-of-range values. A DEBUG log line records the bad value
+// so operators can diagnose misbehaving clients via log-level toggle without
+// dropping the surrounding packet.
+//
+// Field names are passed as string literals for the log message; callers
+// should use the canonical AO field index (e.g. "MS[9]" for sfx_delay).
+// ---------------------------------------------------------------------------
+static int safe_stoi(std::string_view field, const char* field_name = "?", int default_value = 0) {
+    if (field.empty())
+        return default_value;
+    int value = 0;
+    const char* begin = field.data();
+    const char* end = field.data() + field.size();
+    auto [ptr, ec] = std::from_chars(begin, end, value);
+    if (ec != std::errc{} || ptr != end) {
+        Log::log_print(DEBUG, "AO: non-numeric field %s=\"%.*s\" (using %d)", field_name,
+                       static_cast<int>(field.size()), field.data(), default_value);
+        return default_value;
+    }
+    return value;
+}
 
 // AO protocol encoding: special characters must be escaped in field values.
 static std::string ao_encode(const std::string& s) {
@@ -89,7 +127,7 @@ AOPacketIDClient::AOPacketIDClient(const std::vector<std::string>& fields) : AOP
     // 3 fields = server→client: player_number, software, version
     // 2 fields = client→server: software, version
     if (fields.size() >= 3) {
-        player_number = std::stoi(fields[0]);
+        player_number = safe_stoi(fields[0], "ID[0]");
         software = fields[1];
         version = fields[2];
     }
@@ -116,8 +154,8 @@ PacketRegistrar AOPacketPN::registrar("PN", [](const auto& f) { return std::make
 
 AOPacketPN::AOPacketPN(const std::vector<std::string>& fields) : AOPacket("PN", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        current_players = std::stoi(fields[0]);
-        max_players = std::stoi(fields[1]);
+        current_players = safe_stoi(fields[0], "PN[0]");
+        max_players = safe_stoi(fields[1], "PN[1]");
         server_description = fields.size() > 2 ? ao_decode(fields[2]) : "";
     }
 }
@@ -155,9 +193,9 @@ PacketRegistrar AOPacketSI::registrar("SI", [](const auto& f) { return std::make
 
 AOPacketSI::AOPacketSI(const std::vector<std::string>& fields) : AOPacket("SI", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        character_count = std::stoi(fields[0]);
-        evidence_count = std::stoi(fields[1]);
-        music_count = std::stoi(fields[2]);
+        character_count = safe_stoi(fields[0], "SI[0]");
+        evidence_count = safe_stoi(fields[1], "SI[1]");
+        music_count = safe_stoi(fields[2], "SI[2]");
     }
 }
 
@@ -317,21 +355,23 @@ AOPacketMS::AOPacketMS(const ICMessageData& d)
 AOPacketMS::AOPacketMS(const std::vector<std::string>& fields) : AOPacket("MS", fields) {
     if (fields.size() >= MIN_FIELDS) {
         // "chat" means use default desk behavior based on position
-        desk_mod = (fields[0] == "chat") ? -1 : std::stoi(fields[0]);
+        desk_mod = (fields[0] == "chat") ? -1 : safe_stoi(fields[0], "MS[0]");
         pre_emote = ao_decode(fields[1]);
         character = ao_decode(fields[2]);
         emote = ao_decode(fields[3]);
         message = ao_decode(fields[4]);
         side = ao_decode(fields[5]);
         sfx_name = ao_decode(fields[6]);
-        emote_mod = std::stoi(fields[7]);
-        char_id = std::stoi(fields[8]);
-        sfx_delay = std::stoi(fields[9]);
-        objection_mod = std::stoi(fields[10]);
+        emote_mod = safe_stoi(fields[7], "MS[7]");
+        char_id = safe_stoi(fields[8], "MS[8]");
+        // sfx_delay: webAO has been observed sending "NaN" here when the
+        // char.ini's [SoundT] block is malformed. safe_stoi recovers with 0.
+        sfx_delay = safe_stoi(fields[9], "MS[9]");
+        objection_mod = safe_stoi(fields[10], "MS[10]");
         // fields[11] = evidence_id (skipped)
         flip = fields[12] == "1";
         realization = fields[13] == "1";
-        text_color = std::stoi(fields[14]);
+        text_color = safe_stoi(fields[14], "MS[14]");
 
         // Showname (optional field 15)
         showname = fields.size() > 15 ? ao_decode(fields[15]) : character;
@@ -384,15 +424,15 @@ AOPacketMC::AOPacketMC(const std::string& name, int char_id, const std::string& 
 AOPacketMC::AOPacketMC(const std::vector<std::string>& fields) : AOPacket("MC", fields) {
     if (fields.size() >= MIN_FIELDS) {
         name = ao_decode(fields[0]);
-        char_id = std::stoi(fields[1]);
+        char_id = safe_stoi(fields[1], "MC[1]");
         if (fields.size() > 2)
             showname = ao_decode(fields[2]);
         if (fields.size() > 3)
-            looping = std::stoi(fields[3]);
+            looping = safe_stoi(fields[3], "MC[3]");
         if (fields.size() > 4)
-            channel = std::stoi(fields[4]);
+            channel = safe_stoi(fields[4], "MC[4]");
         if (fields.size() > 5)
-            effect_flags = std::stoi(fields[5]);
+            effect_flags = safe_stoi(fields[5], "MC[5]");
     }
 }
 
@@ -404,7 +444,7 @@ PacketRegistrar AOPacketARUP::registrar("ARUP", [](const auto& f) { return std::
 
 AOPacketARUP::AOPacketARUP(const std::vector<std::string>& fields) : AOPacket("ARUP", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        arup_type = std::stoi(fields[0]);
+        arup_type = safe_stoi(fields[0], "ARUP[0]");
         for (auto it = fields.begin() + 1; it != fields.end(); ++it)
             values.push_back(ao_decode(*it));
     }
@@ -431,7 +471,7 @@ PacketRegistrar AOPacketPV::registrar("PV", [](const auto& f) { return std::make
 
 AOPacketPV::AOPacketPV(const std::vector<std::string>& fields) : AOPacket("PV", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        char_id = std::stoi(fields[2]);
+        char_id = safe_stoi(fields[2], "PV[2]");
     }
 }
 
@@ -471,8 +511,8 @@ PacketRegistrar AOPacketHP::registrar("HP", [](const auto& f) { return std::make
 
 AOPacketHP::AOPacketHP(const std::vector<std::string>& fields) : AOPacket("HP", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        side = std::stoi(fields[0]);
-        value = std::stoi(fields[1]);
+        side = safe_stoi(fields[0], "HP[0]");
+        value = safe_stoi(fields[1], "HP[1]");
     }
 }
 
@@ -484,10 +524,18 @@ PacketRegistrar AOPacketTI::registrar("TI", [](const auto& f) { return std::make
 
 AOPacketTI::AOPacketTI(const std::vector<std::string>& fields) : AOPacket("TI", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        timer_id = std::stoi(fields[0]);
-        action = std::stoi(fields[1]);
-        if (fields.size() > 2)
-            time_ms = std::stoll(fields[2]);
+        timer_id = safe_stoi(fields[0], "TI[0]");
+        action = safe_stoi(fields[1], "TI[1]");
+        if (fields.size() > 2) {
+            // time_ms is int64 — use std::from_chars directly to avoid
+            // truncating the value through safe_stoi's int path.
+            long long parsed = 0;
+            auto [p, ec] = std::from_chars(fields[2].data(), fields[2].data() + fields[2].size(), parsed);
+            if (ec == std::errc{} && p == fields[2].data() + fields[2].size())
+                time_ms = parsed;
+            else
+                Log::log_print(DEBUG, "AO: non-numeric field TI[2]=\"%s\" (using 0)", fields[2].c_str());
+        }
     }
 }
 
@@ -509,8 +557,8 @@ PacketRegistrar AOPacketPR::registrar("PR", [](const auto& f) { return std::make
 
 AOPacketPR::AOPacketPR(const std::vector<std::string>& fields) : AOPacket("PR", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        player_id = std::stoi(fields[0]);
-        update_type = std::stoi(fields[1]);
+        player_id = safe_stoi(fields[0], "PR[0]");
+        update_type = safe_stoi(fields[1], "PR[1]");
     }
 }
 
@@ -522,8 +570,8 @@ PacketRegistrar AOPacketPU::registrar("PU", [](const auto& f) { return std::make
 
 AOPacketPU::AOPacketPU(const std::vector<std::string>& fields) : AOPacket("PU", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        player_id = std::stoi(fields[0]);
-        data_type = std::stoi(fields[1]);
+        player_id = safe_stoi(fields[0], "PU[0]");
+        data_type = safe_stoi(fields[1], "PU[1]");
         data = ao_decode(fields[2]);
     }
 }
@@ -567,12 +615,7 @@ PacketRegistrar AOPacketMA::registrar("MA", [](const auto& f) { return std::make
 AOPacketMA::AOPacketMA(const std::vector<std::string>& fields) : AOPacket("MA", fields) {
     if (fields.size() >= MIN_FIELDS) {
         target_ipid = fields[0];
-        try {
-            duration = std::stoi(fields[1]);
-        }
-        catch (...) {
-            duration = 0;
-        }
+        duration = safe_stoi(fields[1], "MA[1]");
         reason = fields.size() > 2 ? ao_decode(fields[2]) : "No reason given";
     }
 }
@@ -610,12 +653,7 @@ PacketRegistrar AOPacketEE::registrar("EE", [](const auto& f) { return std::make
 
 AOPacketEE::AOPacketEE(const std::vector<std::string>& fields) : AOPacket("EE", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        try {
-            ev_id = std::stoi(fields[0]);
-        }
-        catch (...) {
-            ev_id = -1;
-        }
+        ev_id = safe_stoi(fields[0], "EE[0]", -1);
         ev_name = ao_decode(fields[1]);
         ev_description = ao_decode(fields[2]);
         ev_image = ao_decode(fields[3]);
@@ -630,12 +668,7 @@ PacketRegistrar AOPacketDE::registrar("DE", [](const auto& f) { return std::make
 
 AOPacketDE::AOPacketDE(const std::vector<std::string>& fields) : AOPacket("DE", fields) {
     if (fields.size() >= MIN_FIELDS) {
-        try {
-            ev_id = std::stoi(fields[0]);
-        }
-        catch (...) {
-            ev_id = -1;
-        }
+        ev_id = safe_stoi(fields[0], "DE[0]", -1);
     }
 }
 

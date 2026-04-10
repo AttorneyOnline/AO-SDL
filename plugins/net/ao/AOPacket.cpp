@@ -70,3 +70,43 @@ void AOPacket::handle(AOClient& cli) {
 void AOPacket::handle_server(AOServer& /*server*/, ServerSession& /*session*/) {
     Log::log_print(DEBUG, "Unhandled server packet %s", header.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// ao_packet::log_bad_packet
+// ---------------------------------------------------------------------------
+
+namespace ao_packet {
+
+// Cap the logged packet preview. MS can legitimately reach ~500 bytes, but a
+// hostile client could send arbitrarily long garbage; we refuse to pay the log
+// bandwidth for them. 256 bytes covers every well-formed packet type comfortably.
+static constexpr size_t MAX_LOG_PREVIEW = 256;
+
+// Strip non-printable bytes so log sinks (journald, CloudWatch, terminals)
+// can't be confused by embedded control chars, ANSI escapes, or binary blobs
+// in hostile payloads.
+static std::string redact_for_log(const std::string& wire) {
+    std::string out;
+    const size_t limit = std::min(wire.size(), MAX_LOG_PREVIEW);
+    out.reserve(limit + 3);
+    for (size_t i = 0; i < limit; ++i) {
+        const unsigned char c = static_cast<unsigned char>(wire[i]);
+        out += (c >= 32 && c < 127) ? static_cast<char>(c) : '?';
+    }
+    if (wire.size() > MAX_LOG_PREVIEW)
+        out += "...";
+    return out;
+}
+
+void log_bad_packet(std::string_view peer_label, const std::string& wire, std::string_view reason) {
+    // log_print is printf-style; copy the views into std::string so we can
+    // pass stable C strings without worrying about string_view's non-null-
+    // terminated contract.
+    const std::string peer(peer_label);
+    const std::string reason_str(reason);
+    const std::string preview = redact_for_log(wire);
+    Log::log_print(WARNING, "AO: malformed packet from [%s]: %s — wire=%s", peer.c_str(), reason_str.c_str(),
+                   preview.c_str());
+}
+
+} // namespace ao_packet

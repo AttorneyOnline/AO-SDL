@@ -209,3 +209,42 @@ TEST(AOPacketMS, DeserializeRoundTrip) {
     ASSERT_NE(pkt, nullptr);
     EXPECT_EQ(pkt->serialize(), "MS#1#objecting#Phoenix#normal#Hello#def#sfx#1#42#0#0#0#0#0#0#%");
 }
+
+// Regression: webAO parses a malformed [SoundT] block in char.ini as
+// `parseInt("02 = 03 = ...") === NaN`, so the MS packet ships the literal
+// string "NaN" in field 9 (sfx_delay). Before the safe_stoi refactor, the
+// AOPacketMS constructor hit `std::stoi("NaN")` and threw, and because
+// AOServer::on_client_message called AOPacket::deserialize *outside* its
+// try/catch, the exception tore through the worker thread and crashed the
+// whole kagami process. Both halves of that defense are now covered:
+//   1. AOPacketMS constructor recovers gracefully from non-numeric fields
+//      (sfx_delay defaults to 0 — see safe_stoi in PacketTypes.cpp).
+//   2. ao_packet::safe_dispatch catches any exception that still escapes
+//      (see test_AOPacket.cpp::AOPacketSafeDispatch).
+TEST(AOPacketMS, DeserializeWebaoNaNSfxDelayDoesNotThrow) {
+    auto& ch = EventManager::instance().get_channel<ICMessageEvent>();
+    drain(ch);
+
+    AOClient cli;
+    cli.conn_state = CONNECTED;
+
+    constexpr const char* webao_wire =
+        "MS#1#-#neuro#/normal#test#def#02  = 03  = 04  = 05  = 06  = 07  = 08  = 0#0#40#NaN#0#0#0#0#0##-1#0#0#0#0#-#-#-#0#||#%";
+
+    // Constructor must not throw even though field 9 ("NaN") is non-numeric.
+    // safe_stoi in PacketTypes.cpp recovers with 0.
+    std::unique_ptr<AOPacket> pkt;
+    ASSERT_NO_THROW(pkt = AOPacket::deserialize(webao_wire));
+    ASSERT_NE(pkt, nullptr);
+    EXPECT_EQ(pkt->get_header(), "MS");
+
+    // Dispatching to a client must also succeed and publish a valid IC event
+    // with the fields that parsed cleanly.
+    pkt->handle(cli);
+    auto ev = ch.get_event();
+    ASSERT_TRUE(ev.has_value());
+    EXPECT_EQ(ev->get_character(), "neuro");
+    EXPECT_EQ(ev->get_emote(), "/normal");
+    EXPECT_EQ(ev->get_char_id(), 40);
+    drain(ch);
+}

@@ -118,23 +118,27 @@ void AOServer::on_client_message(uint64_t client_id, const std::string& raw) {
         Log::log_print(VERBOSE, "AO [%s %s] <<< %s", format_client_id(client_id).c_str(), client_addr.c_str(),
                        packet_str.c_str());
 
-        auto packet = AOPacket::deserialize(packet_str);
-        if (packet) {
-            try {
-                dispatch(client_id, *packet);
-            }
-            catch (const std::exception& e) {
-                ao_errors_.labels({"dispatch"}).inc();
-                Log::log_print(WARNING, "AO: error handling packet from %s: %s", format_client_id(client_id).c_str(),
-                               e.what());
-                // Send error to client before disconnect
-                send(client_id, AOPacket("CT", {"Server", "[ERROR] " + std::string(e.what()), "1"}));
-            }
-        }
-        else {
+        // All exception handling — parse errors, handler bugs, bad numeric
+        // fields — is centralized inside safe_dispatch. Never call
+        // AOPacket::deserialize + handle_server() directly; see AOPacket.h.
+        // The return code drives metric bucketing and error replies to the
+        // client below.
+        const std::string peer_label = format_client_id(client_id) + " " + client_addr;
+        const auto result =
+            ao_packet::safe_dispatch(packet_str, peer_label, [this, client_id](AOPacket& pkt) { dispatch(client_id, pkt); });
+
+        switch (result) {
+        case ao_packet::DispatchResult::Ok:
+            break;
+        case ao_packet::DispatchResult::ParseFailed:
+        case ao_packet::DispatchResult::InvalidPacket:
             ao_errors_.labels({"parse"}).inc();
-            Log::log_print(WARNING, "AO: malformed packet from %s", format_client_id(client_id).c_str());
             send(client_id, AOPacket("CT", {"Server", "[ERROR] Malformed packet — could not parse", "1"}));
+            break;
+        case ao_packet::DispatchResult::HandlerFailed:
+            ao_errors_.labels({"dispatch"}).inc();
+            send(client_id, AOPacket("CT", {"Server", "[ERROR] Internal error handling packet", "1"}));
+            break;
         }
     }
 }
