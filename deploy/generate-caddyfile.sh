@@ -67,6 +67,7 @@ cat <<'EOF'
 	@websocket {
 		header Connection *Upgrade*
 		header Upgrade    websocket
+		not path /grafana*
 	}
 EOF
 
@@ -131,6 +132,7 @@ http://{\$KAGAMI_DOMAIN} {
 	@websocket {
 		header Connection *Upgrade*
 		header Upgrade    websocket
+		not path /grafana*
 	}
 	handle @websocket {
 		reverse_proxy 127.0.0.1:${WS_PORT}
