@@ -312,25 +312,13 @@ Resources:
       LogGroupName: !Sub '/kagami/${AWS::StackName}'
       RetentionInDays: 7
 
-  CloudWatchUser:
-    Type: AWS::IAM::User
-    Properties:
-      Policies:
-        - PolicyName: KagamiCloudWatchLogs
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:PutLogEvents
-                  - logs:CreateLogStream
-                  - logs:DescribeLogStreams
-                Resource: !GetAtt LogGroup.Arn
-
-  CloudWatchAccessKey:
-    Type: AWS::IAM::AccessKey
-    Properties:
-      UserName: !Ref CloudWatchUser
+  # NOTE: Prior versions of this template created a CloudWatchUser
+  # IAM user + long-lived CloudWatchAccessKey and wrote its keys into
+  # kagami.json. That was removed because kagami's CloudWatchSink now
+  # uses the AWS Instance Metadata Service (IMDSv2) to fetch temporary
+  # credentials directly from the instance role below — which already
+  # has `logs:PutLogEvents` etc. on this log group. Zero long-lived
+  # credentials, zero config drift on stack recreate.
 
   # --- IAM Role ---
   InstanceRole:
@@ -441,8 +429,12 @@ Resources:
               export CF_GRAFANA_PASSWORD="${CfGrafanaPassword}"
               export CF_CW_REGION="${CfRegion}"
               export CF_CW_LOG_GROUP="${CfLogGroup}"
-              export CF_CW_ACCESS_KEY="${CfCwAccessKey}"
-              export CF_CW_SECRET_KEY="${CfCwSecretKey}"
+              # CloudWatch credentials come from the EC2 instance role
+              # via IMDSv2, fetched by kagami's CloudWatchSink at
+              # runtime. No static access keys are passed through the
+              # bootstrap — leaving the access_key_id field empty in
+              # the generated kagami.json is what triggers the IMDS
+              # path in LogSinkSetup::init().
               export CF_CM_ENABLED="${CfCmEnabled}"
               export CF_OPENAI_KEY="${CfOpenAIKey}"
               export CF_EMBED_MODEL="${CfEmbedModel}"
@@ -562,8 +554,14 @@ Resources:
                       'region': env('CF_CW_REGION'),
                       'log_group': env('CF_CW_LOG_GROUP'),
                       'log_stream': 'server',
-                      'access_key_id': env('CF_CW_ACCESS_KEY'),
-                      'secret_access_key': env('CF_CW_SECRET_KEY'),
+                      # Empty credential fields trigger the IMDSv2
+                      # code path in CloudWatchSink, which pulls
+                      # temporary credentials from the instance role
+                      # on demand. The instance role (above) is
+                      # already granted logs:PutLogEvents /
+                      # CreateLogStream on this log group.
+                      'access_key_id': '',
+                      'secret_access_key': '',
                       'flush_interval': 5,
                       'log_level': 'info'
                   },
@@ -995,8 +993,6 @@ Resources:
               CfGrafanaPassword: !Ref GrafanaPassword
               CfRegion: !Ref AWS::Region
               CfLogGroup: !Sub '/kagami/${AWS::StackName}'
-              CfCwAccessKey: !Ref CloudWatchAccessKey
-              CfCwSecretKey: !GetAtt CloudWatchAccessKey.SecretAccessKey
               CfCmEnabled: !Ref ContentModerationEnabled
               CfOpenAIKey: !Ref OpenAIModerationApiKey
               CfEmbedModel: !Ref EmbeddingsHuggingFaceModelId

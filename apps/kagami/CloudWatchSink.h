@@ -14,6 +14,8 @@
 #include <json.hpp>
 
 #include <chrono>
+#include <exception>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -21,11 +23,28 @@
 
 class CloudWatchSink {
   public:
+    /// Callable that returns a currently-valid `aws::Credentials` for
+    /// signing each outgoing CloudWatch request. Called once per
+    /// PutLogEvents / CreateLogStream call, so a provider backed by
+    /// IMDS can transparently rotate temporary credentials on
+    /// expiration without any coordination from the sink.
+    ///
+    /// The provider is allowed to throw — the sink catches the
+    /// exception, logs it, and drops the current batch. A chronic
+    /// provider failure therefore degrades gracefully to "no log
+    /// shipping" rather than crashing the flush thread.
+    using CredentialsProvider = std::function<aws::Credentials()>;
+
     struct Config {
         std::string region;
         std::string log_group;
         std::string log_stream;
-        aws::Credentials credentials;
+        /// Credentials source. See `CredentialsProvider` above.
+        /// Construct with a lambda capturing static keys for a
+        /// legacy static-credentials deploy, or with a lambda that
+        /// calls `aws::ImdsCredentialProvider::get()` for a
+        /// zero-config EC2 instance-role deploy.
+        CredentialsProvider credentials_provider;
         int flush_interval_seconds = 5;
     };
 
@@ -127,6 +146,20 @@ class CloudWatchSink {
 
         std::string body_str = body.dump();
 
+        // Fetch credentials just-in-time. For IMDS-backed providers
+        // this can throw (IMDS unreachable, role missing, parse
+        // error) — we treat that as "drop this batch, try again next
+        // flush" rather than letting the exception tear down the
+        // flush thread.
+        aws::Credentials creds;
+        try {
+            creds = config_.credentials_provider();
+        }
+        catch (const std::exception& e) {
+            std::fprintf(stderr, "[CloudWatch] credentials provider failed: %s\n", e.what());
+            return;
+        }
+
         // Sign the request.
         // Note: do NOT include content-type in the signable headers — httplib's
         // Post() adds its own Content-Type from the content_type parameter, and
@@ -139,15 +172,22 @@ class CloudWatchSink {
         req.headers["x-amz-target"] = "Logs_20140328.PutLogEvents";
         req.body = body_str;
 
-        auto signed_headers = aws::sign(req, config_.credentials, config_.region, "logs");
+        auto signed_headers = aws::sign(req, creds, config_.region, "logs");
 
-        // Send via http::Client
+        // Send via http::Client. When the credentials carry a session
+        // token (temporary creds via IMDS/STS), AWS requires the
+        // x-amz-security-token header on the outgoing request — the
+        // signer echoes the value in `x_amz_security_token` and we
+        // unconditionally forward it; a static-key request leaves
+        // that string empty and the header is elided.
         http::Headers headers = {
             {"X-Amz-Target", "Logs_20140328.PutLogEvents"},
             {"X-Amz-Date", signed_headers.x_amz_date},
             {"X-Amz-Content-Sha256", signed_headers.x_amz_content_sha256},
             {"Authorization", signed_headers.authorization},
         };
+        if (!signed_headers.x_amz_security_token.empty())
+            headers.emplace("X-Amz-Security-Token", signed_headers.x_amz_security_token);
 
         auto result = client_.Post("/", headers, body_str, "application/x-amz-json-1.1");
         if (!result || result->status != 200) {
@@ -178,14 +218,28 @@ class CloudWatchSink {
                 ++create_attempts_;
                 if (create_log_stream()) {
                     // Re-sign because SigV4 signatures are single-use
-                    // and carry a timestamp.
-                    auto retry_signed = aws::sign(req, config_.credentials, config_.region, "logs");
+                    // and carry a timestamp. Re-fetching the creds
+                    // here (rather than reusing the ones we grabbed
+                    // at the top of send_batch) is intentional — if
+                    // the IMDS cache rolled over between the two
+                    // calls we want to sign with the fresh pair.
+                    aws::Credentials retry_creds;
+                    try {
+                        retry_creds = config_.credentials_provider();
+                    }
+                    catch (const std::exception& e) {
+                        std::fprintf(stderr, "[CloudWatch] credentials provider failed on retry: %s\n", e.what());
+                        return;
+                    }
+                    auto retry_signed = aws::sign(req, retry_creds, config_.region, "logs");
                     http::Headers retry_headers = {
                         {"X-Amz-Target", "Logs_20140328.PutLogEvents"},
                         {"X-Amz-Date", retry_signed.x_amz_date},
                         {"X-Amz-Content-Sha256", retry_signed.x_amz_content_sha256},
                         {"Authorization", retry_signed.authorization},
                     };
+                    if (!retry_signed.x_amz_security_token.empty())
+                        retry_headers.emplace("X-Amz-Security-Token", retry_signed.x_amz_security_token);
                     auto retry = client_.Post("/", retry_headers, body_str, "application/x-amz-json-1.1");
                     if (retry && retry->status == 200) {
                         // Only latch on success — transient failures
@@ -220,13 +274,23 @@ class CloudWatchSink {
         req.headers["x-amz-target"] = "Logs_20140328.CreateLogStream";
         req.body = body_str;
 
-        auto signed_headers = aws::sign(req, config_.credentials, config_.region, "logs");
+        aws::Credentials creds;
+        try {
+            creds = config_.credentials_provider();
+        }
+        catch (const std::exception& e) {
+            std::fprintf(stderr, "[CloudWatch] CreateLogStream credentials provider failed: %s\n", e.what());
+            return false;
+        }
+        auto signed_headers = aws::sign(req, creds, config_.region, "logs");
         http::Headers headers = {
             {"X-Amz-Target", "Logs_20140328.CreateLogStream"},
             {"X-Amz-Date", signed_headers.x_amz_date},
             {"X-Amz-Content-Sha256", signed_headers.x_amz_content_sha256},
             {"Authorization", signed_headers.authorization},
         };
+        if (!signed_headers.x_amz_security_token.empty())
+            headers.emplace("X-Amz-Security-Token", signed_headers.x_amz_security_token);
         auto result = client_.Post("/", headers, body_str, "application/x-amz-json-1.1");
         if (!result) {
             std::fprintf(stderr, "[CloudWatch] CreateLogStream transport failure\n");

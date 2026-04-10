@@ -5,15 +5,65 @@
 #include "TerminalUI.h"
 
 #include "moderation/ModerationAuditLog.h"
+#include "utils/ImdsCredentialProvider.h"
 #include "utils/Log.h"
 
 #include <chrono>
 #include <ctime>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 
 LogSinkSetup::LogSinkSetup() = default;
 LogSinkSetup::~LogSinkSetup() = default;
+
+namespace {
+
+/// Build a CloudWatchSink credentials provider callback.
+///
+/// Two modes:
+///
+///  1. **Static** — operator supplied a non-empty
+///     `cloudwatch.access_key_id` in kagami.json. This is the legacy
+///     path, used for dev environments and any deploy where the
+///     process doesn't run on an EC2 instance with an attached role.
+///     The returned callback captures the static keys and returns
+///     them unchanged on every call.
+///
+///  2. **IMDS** — `access_key_id` is empty. The returned callback
+///     forwards to a shared `ImdsCredentialProvider` which fetches
+///     temporary credentials from the EC2 instance metadata service
+///     and caches them until just before expiration.
+///
+/// The `ImdsCredentialProvider` is allocated via `shared_ptr` so
+/// multiple CloudWatchSink instances (application logs + moderation
+/// audit log) share a single cache. On an EC2 instance this means
+/// exactly one IMDS round-trip per ~6-hour credential lifetime, not
+/// one per sink.
+///
+/// Returns nullptr-equivalent (empty std::function) callers must
+/// never invoke. Current call sites guard on `region` / `log_group`
+/// already, so a malformed config disables the sink entirely before
+/// the provider matters.
+CloudWatchSink::CredentialsProvider
+make_credentials_provider(const std::string& access_key_id, const std::string& secret_access_key,
+                          const std::shared_ptr<aws::ImdsCredentialProvider>& imds) {
+    if (!access_key_id.empty()) {
+        aws::Credentials static_creds;
+        static_creds.access_key_id = access_key_id;
+        static_creds.secret_access_key = secret_access_key;
+        // session_token intentionally left empty — static IAM user
+        // keys never carry one. If the operator is passing
+        // temporary creds via config, they belong in a separate
+        // config path (not yet needed).
+        return [creds = std::move(static_creds)]() { return creds; };
+    }
+    // Zero-config path: ImdsCredentialProvider::get() throws on
+    // failure and the sink catches the exception at the call site.
+    return [imds]() { return imds->get(); };
+}
+
+} // namespace
 
 namespace {
 
@@ -89,19 +139,28 @@ void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interact
 
     // CloudWatch log sink
     if (!cfg.cloudwatch_region().empty() && !cfg.cloudwatch_log_group().empty()) {
+        // Create the IMDS provider lazily — only if at least one
+        // CloudWatch sink (main or moderation audit) is going to
+        // use it. We share a single provider across both sinks so
+        // the IMDS cache is hit exactly once per ~6h rotation
+        // instead of once per sink.
+        if (!imds_provider_ && cfg.cloudwatch_access_key_id().empty())
+            imds_provider_ = std::make_shared<aws::ImdsCredentialProvider>();
+
         CloudWatchSink::Config cw_cfg;
         cw_cfg.region = cfg.cloudwatch_region();
         cw_cfg.log_group = cfg.cloudwatch_log_group();
         cw_cfg.log_stream = cfg.cloudwatch_log_stream();
-        cw_cfg.credentials.access_key_id = cfg.cloudwatch_access_key_id();
-        cw_cfg.credentials.secret_access_key = cfg.cloudwatch_secret_access_key();
+        cw_cfg.credentials_provider = make_credentials_provider(cfg.cloudwatch_access_key_id(),
+                                                                cfg.cloudwatch_secret_access_key(), imds_provider_);
         cw_cfg.flush_interval_seconds = cfg.cloudwatch_flush_interval();
 
         if (cw_cfg.log_stream.empty())
             cw_cfg.log_stream = cfg.server_name();
 
-        Log::log_print(INFO, "CloudWatch: group=%s stream=%s region=%s", cw_cfg.log_group.c_str(),
-                       cw_cfg.log_stream.c_str(), cw_cfg.region.c_str());
+        Log::log_print(INFO, "CloudWatch: group=%s stream=%s region=%s (creds=%s)", cw_cfg.log_group.c_str(),
+                       cw_cfg.log_stream.c_str(), cw_cfg.region.c_str(),
+                       cfg.cloudwatch_access_key_id().empty() ? "imds" : "static");
 
         cw_sink_ = std::make_unique<CloudWatchSink>(std::move(cw_cfg));
         Log::add_sink(
@@ -157,13 +216,19 @@ void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interact
         // + region but with its own log_group / log_stream so audit
         // events don't mix with server logs.
         if (!cm_cfg.audit.cloudwatch_log_group.empty() && !cfg.cloudwatch_region().empty()) {
+            // Same IMDS-sharing pattern as the main sink above — if
+            // the operator wired IMDS for application logs we
+            // reuse the same provider for the audit stream.
+            if (!imds_provider_ && cfg.cloudwatch_access_key_id().empty())
+                imds_provider_ = std::make_shared<aws::ImdsCredentialProvider>();
+
             CloudWatchSink::Config cwcfg;
             cwcfg.region = cfg.cloudwatch_region();
             cwcfg.log_group = cm_cfg.audit.cloudwatch_log_group;
             cwcfg.log_stream =
                 cm_cfg.audit.cloudwatch_log_stream.empty() ? "moderation" : cm_cfg.audit.cloudwatch_log_stream;
-            cwcfg.credentials.access_key_id = cfg.cloudwatch_access_key_id();
-            cwcfg.credentials.secret_access_key = cfg.cloudwatch_secret_access_key();
+            cwcfg.credentials_provider = make_credentials_provider(cfg.cloudwatch_access_key_id(),
+                                                                   cfg.cloudwatch_secret_access_key(), imds_provider_);
             cwcfg.flush_interval_seconds = cfg.cloudwatch_flush_interval();
             mod_audit_cw_ = std::make_unique<CloudWatchSink>(std::move(cwcfg));
             mod_audit_cw_->start();

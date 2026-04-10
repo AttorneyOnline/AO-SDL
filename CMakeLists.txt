@@ -370,6 +370,7 @@ add_library(aoengine STATIC
     engine/event/ServerConnectEvent.cpp
     engine/event/BackgroundEvent.cpp
 
+    engine/utils/ImdsCredentialProvider.cpp
     engine/utils/Log.cpp
     engine/utils/Base64.cpp
     engine/utils/JsonSchema.cpp

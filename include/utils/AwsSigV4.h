@@ -23,10 +23,21 @@
 
 namespace aws {
 
-/// AWS credentials (static key pair).
+/// AWS credentials.
+///
+/// For static IAM user access keys, populate `access_key_id` and
+/// `secret_access_key` only. For temporary credentials (STS, EC2 instance
+/// role via IMDS, etc.), also populate `session_token` — SigV4 will
+/// include it in the `x-amz-security-token` header and any consumer
+/// (AWS service) will accept the request.
 struct Credentials {
     std::string access_key_id;
     std::string secret_access_key;
+
+    /// Session token for temporary credentials. Non-empty for anything
+    /// issued by STS / IMDS. Signed into the request as
+    /// `x-amz-security-token`. Leave empty for long-lived IAM user keys.
+    std::string session_token;
 };
 
 /// A request to be signed. Caller fills in the fields, then calls sign().
@@ -47,6 +58,13 @@ struct SignedHeaders {
     std::string authorization;        // full "AWS4-HMAC-SHA256 Credential=... Signature=..." value
     std::string x_amz_date;           // "YYYYMMDDTHHMMSSZ"
     std::string x_amz_content_sha256; // hex-encoded SHA256 of body
+
+    /// Echo of `Credentials::session_token` when signing with
+    /// temporary credentials. Empty string for static IAM user keys.
+    /// Callers MUST add this as the `X-Amz-Security-Token` header on
+    /// the outgoing request whenever it's non-empty — AWS rejects
+    /// temporary-cred requests that omit it.
+    std::string x_amz_security_token;
 };
 
 // -- URI encoding (RFC 3986) --------------------------------------------------
@@ -134,6 +152,14 @@ inline SignedHeaders sign(const SignableRequest& req, const Credentials& creds, 
     std::string payload_hash = crypto::sha256(req.body);
     canonical_header_map["x-amz-content-sha256"] = payload_hash;
 
+    // Temporary-credential security token (STS/IMDS). When present, it
+    // MUST be included in the signed headers — AWS rejects requests
+    // that carry a session token in an unsigned header. Adding it here
+    // (before the canonical_headers loop below) automatically folds it
+    // into both the canonical header block and the SignedHeaders list.
+    if (!creds.session_token.empty())
+        canonical_header_map["x-amz-security-token"] = creds.session_token;
+
     std::string canonical_headers;
     std::string signed_headers;
     for (auto& [k, v] : canonical_header_map) {
@@ -179,7 +205,7 @@ inline SignedHeaders sign(const SignableRequest& req, const Credentials& creds, 
     std::string authorization = "AWS4-HMAC-SHA256 Credential=" + creds.access_key_id + "/" + credential_scope +
                                 ", SignedHeaders=" + signed_headers + ", Signature=" + signature;
 
-    return {authorization, timestamp, payload_hash};
+    return {authorization, timestamp, payload_hash, creds.session_token};
 }
 
 } // namespace aws

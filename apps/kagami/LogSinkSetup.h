@@ -8,6 +8,10 @@ class LokiSink;
 class ServerSettings;
 class TerminalUI;
 
+namespace aws {
+class ImdsCredentialProvider;
+}
+
 namespace moderation {
 class ModerationAuditLog;
 }
@@ -46,4 +50,11 @@ class LogSinkSetup {
     std::unique_ptr<LokiSink> mod_audit_loki_;
     std::unique_ptr<CloudWatchSink> mod_audit_cw_;
     moderation::ModerationAuditLog* audit_ = nullptr;
+
+    // Shared IMDS credential provider. Lazily constructed when the
+    // first CloudWatch sink needs zero-config credentials. Both the
+    // main and moderation audit sinks capture the same shared_ptr
+    // so the IMDS cache is hit once per ~6h rotation regardless of
+    // how many sinks are running.
+    std::shared_ptr<aws::ImdsCredentialProvider> imds_provider_;
 };
