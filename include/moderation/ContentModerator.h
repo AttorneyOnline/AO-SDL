@@ -77,6 +77,11 @@ class ContentModerator {
     /// are dropped on the floor (useful for unit tests).
     void set_audit_log(ModerationAuditLog* audit);
 
+    /// Wire the per-message telemetry trace log. Optional; when null
+    /// or disabled in config, the trace population path short-circuits
+    /// and no CPU/memory is spent on trace bookkeeping.
+    void set_trace_log(ModerationTraceLog* trace);
+
     /// Wire the database manager. Used for persisting moderation
     /// events and mutes. Optional; if null, moderation works entirely
     /// in memory and does not survive restart.
@@ -229,6 +234,7 @@ class ContentModerator {
     ModerationHeat heat_;
 
     ModerationAuditLog* audit_ = nullptr;
+    ModerationTraceLog* trace_log_ = nullptr;
     DatabaseManager* db_ = nullptr;
     ActionCallback action_cb_;
 

@@ -134,4 +134,84 @@ ModerationAuditLog::Sink make_stderr_sink() {
     return make_stream_sink(std::move(stream));
 }
 
+// ---------------------------------------------------------------------------
+// ModerationTraceLog
+// ---------------------------------------------------------------------------
+
+void ModerationTraceLog::set_enabled(bool enabled) {
+    std::lock_guard lock(mu_);
+    enabled_ = enabled;
+}
+
+void ModerationTraceLog::add_sink(const std::string& name, Sink sink) {
+    if (!sink)
+        return;
+    std::lock_guard lock(mu_);
+    sinks_[name] = std::move(sink);
+}
+
+void ModerationTraceLog::remove_sink(const std::string& name) {
+    std::lock_guard lock(mu_);
+    sinks_.erase(name);
+}
+
+void ModerationTraceLog::clear() {
+    std::lock_guard lock(mu_);
+    sinks_.clear();
+}
+
+void ModerationTraceLog::record(const ModerationTrace& trace) {
+    // Snapshot sinks + enabled flag under the lock, then release
+    // before calling any sink. Same pattern as ModerationAuditLog
+    // — keeps fan-out latency decoupled from registration.
+    std::vector<Sink> snapshot;
+    {
+        std::lock_guard lock(mu_);
+        if (!enabled_)
+            return;
+        snapshot.reserve(sinks_.size());
+        for (auto& [name, sink] : sinks_)
+            snapshot.push_back(sink);
+    }
+    for (auto& s : snapshot) {
+        try {
+            s(trace);
+        }
+        catch (const std::exception& e) {
+            // Sinks should never throw — if one does, log and
+            // continue. Must not let a buggy sink take down the
+            // moderation check path.
+            Log::log_print(WARNING, "ModerationTraceLog: sink threw: %s", e.what());
+        }
+    }
+}
+
+std::vector<std::string> ModerationTraceLog::sink_names() const {
+    std::vector<std::string> names;
+    std::lock_guard lock(mu_);
+    names.reserve(sinks_.size());
+    for (auto& [name, _] : sinks_)
+        names.push_back(name);
+    return names;
+}
+
+ModerationTraceLog::Sink make_trace_file_sink(const std::string& path) {
+    auto ofs = std::make_shared<std::ofstream>(path, std::ios::app);
+    if (!ofs->is_open()) {
+        Log::log_print(WARNING, "ModerationTraceLog: could not open %s for append", path.c_str());
+        return {};
+    }
+    auto mu = std::make_shared<std::mutex>();
+    return [ofs = std::move(ofs), mu = std::move(mu)](const ModerationTrace& trace) {
+        // Build the JSON line OUTSIDE the mutex, then hold the lock
+        // only for the actual write. Keeps the critical section to
+        // a single stream write + flush, no matter how large the
+        // trace or how many layers populated their payloads.
+        std::string line = trace_to_json_line(trace);
+        std::lock_guard lock(*mu);
+        (*ofs) << line << '\n';
+        ofs->flush();
+    };
+}
+
 } // namespace moderation

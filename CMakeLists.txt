@@ -396,6 +396,7 @@ add_library(aoengine STATIC
     engine/moderation/LocalClassifierLayer.cpp
     engine/moderation/ModerationAuditLog.cpp
     engine/moderation/ModerationHeat.cpp
+    engine/moderation/ModerationTrace.cpp
     engine/moderation/RemoteClassifier.cpp
     engine/moderation/RemoteDedupCache.cpp
     engine/moderation/SafeHintLayer.cpp

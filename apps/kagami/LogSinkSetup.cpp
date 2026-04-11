@@ -108,8 +108,9 @@ std::string format_timestamp(int64_t ts_ms) {
 } // namespace
 
 void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interactive,
-                        moderation::ModerationAuditLog* audit) {
+                        moderation::ModerationAuditLog* audit, moderation::ModerationTraceLog* trace) {
     audit_ = audit;
+    trace_ = trace;
     Log::set_stdout_level(cfg.console_log_level());
 
     if (interactive) {
@@ -240,6 +241,51 @@ void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interact
                            cm_cfg.audit.cloudwatch_log_group.c_str(), cm_cfg.audit.cloudwatch_log_stream.c_str());
         }
     }
+
+    // --- Per-message telemetry trace sinks ---
+    //
+    // Parallel to the audit sinks above but feeds a different stream
+    // (label `kagami_mod_trace` by default). Every check() emits a
+    // trace, so the volume is much higher than audit — sinks that
+    // charge per byte (CloudWatch) are deliberately NOT wired up;
+    // this stream is Loki + local file only.
+    if (trace_) {
+        auto cm_cfg = cfg.content_moderation_config();
+        trace_->set_enabled(cm_cfg.trace.enabled);
+
+        if (cm_cfg.trace.enabled) {
+            // Local JSONL file sink — offline-grep workflow and a
+            // backup for when the Loki pipeline is unreachable.
+            if (!cm_cfg.trace.file_path.empty()) {
+                auto sink = moderation::make_trace_file_sink(cm_cfg.trace.file_path);
+                if (sink) {
+                    trace_->add_sink("file", std::move(sink));
+                    Log::log_print(INFO, "ModerationTraceLog: file sink -> %s", cm_cfg.trace.file_path.c_str());
+                }
+            }
+
+            // Loki sink for Grafana/LogQL analysis. Uses its own
+            // LokiSink instance and its own job label so traces
+            // don't mix with audit or application logs.
+            if (!cm_cfg.trace.loki_url.empty()) {
+                LokiSink::Config lcfg;
+                lcfg.url = cm_cfg.trace.loki_url;
+                lcfg.job_label =
+                    cm_cfg.trace.loki_stream_label.empty() ? "kagami_mod_trace" : cm_cfg.trace.loki_stream_label;
+                mod_trace_loki_ = std::make_unique<LokiSink>(std::move(lcfg));
+                mod_trace_loki_->start();
+                trace_->add_sink("loki", [lk = mod_trace_loki_.get()](const moderation::ModerationTrace& tr) {
+                    std::string json = moderation::trace_to_json_line(tr);
+                    // Use INFO level — traces aren't severity-
+                    // graded, they're just structured records. All
+                    // filtering/sorting is done in LogQL.
+                    lk->push(INFO, format_timestamp(tr.timestamp_ms), json);
+                });
+                Log::log_print(INFO, "ModerationTraceLog: Loki sink -> %s (label=%s)", cm_cfg.trace.loki_url.c_str(),
+                               cm_cfg.trace.loki_stream_label.c_str());
+            }
+        }
+    }
 }
 
 void LogSinkSetup::teardown() {
@@ -262,4 +308,15 @@ void LogSinkSetup::teardown() {
         mod_audit_loki_->stop();
     if (mod_audit_cw_)
         mod_audit_cw_->stop();
+
+    // Per-message trace sinks. Same shutdown order as audit — drop
+    // registrations first so in-flight check() calls stop reaching
+    // the sinks, then stop the background flushers.
+    if (trace_) {
+        trace_->remove_sink("loki");
+        trace_->remove_sink("file");
+        trace_->set_enabled(false);
+    }
+    if (mod_trace_loki_)
+        mod_trace_loki_->stop();
 }

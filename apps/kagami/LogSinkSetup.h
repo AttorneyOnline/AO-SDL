@@ -14,7 +14,8 @@ class ImdsCredentialProvider;
 
 namespace moderation {
 class ModerationAuditLog;
-}
+class ModerationTraceLog;
+} // namespace moderation
 
 /// Manages the lifecycle of all log sinks (file, CloudWatch, Loki)
 /// AND the dedicated moderation audit sinks. Keeping them in one
@@ -33,7 +34,7 @@ class LogSinkSetup {
     ~LogSinkSetup();
 
     void init(const ServerSettings& cfg, TerminalUI& ui, bool interactive,
-              moderation::ModerationAuditLog* audit = nullptr);
+              moderation::ModerationAuditLog* audit = nullptr, moderation::ModerationTraceLog* trace = nullptr);
 
     /// Remove all sinks and stop background flushers.
     /// Must be called before protocol backends are destroyed.
@@ -50,6 +51,13 @@ class LogSinkSetup {
     std::unique_ptr<LokiSink> mod_audit_loki_;
     std::unique_ptr<CloudWatchSink> mod_audit_cw_;
     moderation::ModerationAuditLog* audit_ = nullptr;
+
+    // Dedicated per-message telemetry sinks. Parallel stream to the
+    // audit log, different stream label. Only the Loki push client
+    // is owned here; the file sink closes its own fstream when the
+    // sink lambda is destroyed.
+    std::unique_ptr<LokiSink> mod_trace_loki_;
+    moderation::ModerationTraceLog* trace_ = nullptr;
 
     // Shared IMDS credential provider. Lazily constructed when the
     // first CloudWatch sink needs zero-config credentials. Both the
