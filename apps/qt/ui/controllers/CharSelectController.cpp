@@ -21,7 +21,6 @@ CharSelectController::CharSelectController(UIManager& uiMgr, ICController& icCtr
 }
 
 void CharSelectController::drain() {
-    // New character list: rebuild roster.
     auto& charListCh = EventManager::instance().get_channel<CharacterListEvent>();
     while (auto ev = charListCh.get_event()) {
         m_chars.clear();
@@ -36,31 +35,25 @@ void CharSelectController::drain() {
         Log::info("[CharSelectController] received character list ({} characters)", m_chars.size());
     }
 
-    // Update taken flags — apply directly to already-hydrated model rows.
     auto& checkCh = EventManager::instance().get_channel<CharsCheckEvent>();
     while (auto ev = checkCh.get_event()) {
         const auto& taken = ev->get_taken();
         for (size_t i = 0; i < taken.size() && i < m_chars.size(); ++i) {
             m_chars[i].taken = taken[i];
-            // Only poke the model for rows already inserted.
             if (static_cast<int>(i) < m_hydrateCursor)
                 m_model.setTaken(static_cast<int>(i), taken[i]);
         }
     }
 
-    // Progressively feed entries into the QML model, prefetch icons,
-    // and resolve fetched icons into image-provider URLs.
     hydrateModel();
     prefetchIcons();
     resolveIcons();
 
-    // Navigation: server confirmed character selection → enter courtroom.
     auto& uiCh = EventManager::instance().get_channel<UIEvent>();
     while (auto ev = uiCh.get_event()) {
         if (ev->get_type() == UIEventType::ENTERED_COURTROOM) {
             Log::info("[CharSelectController] entering courtroom as '{}' (id={})", ev->get_character_name(),
                       ev->get_char_id());
-            // Inject character name into ICController before pushing.
             m_icCtrl.setInitialCharName(ev->get_character_name());
             m_uiMgr.push_screen(std::make_unique<CourtroomScreen>(ev->get_character_name(), ev->get_char_id()));
         }
@@ -76,7 +69,7 @@ void CharSelectController::selectCharacter(int index) {
     Log::debug("[CharSelectController] selectCharacter index={} folder='{}'", index, m_chars[index].folder);
 
     if (index == m_selected) {
-        // Already confirmed — push the courtroom directly without server round-trip.
+        // Already confirmed — push courtroom directly without a server round-trip.
         m_icCtrl.setInitialCharName(m_chars[index].folder);
         m_uiMgr.push_screen(std::make_unique<CourtroomScreen>(m_chars[index].folder, index));
         return;
@@ -90,10 +83,6 @@ void CharSelectController::disconnect() {
     Log::info("[CharSelectController] disconnecting, returning to server list");
     m_uiMgr.pop_to_root();
 }
-
-// --------------------------------------------------------------------------
-// Private helpers
-// --------------------------------------------------------------------------
 
 void CharSelectController::hydrateModel() {
     if (m_hydrateCursor >= static_cast<int>(m_chars.size()))
@@ -124,19 +113,18 @@ void CharSelectController::prefetchIcons() {
     if (exts.empty())
         exts = {"webp", "apng", "gif", "png"};
 
-    // Drip-feed HTTP prefetch requests — 32 per tick on the initial pass.
+    // Initial pass: 32 prefetch requests per tick.
     for (int i = 0; i < 32 && m_prefetchCursor < static_cast<int>(m_chars.size()); ++i, ++m_prefetchCursor) {
         std::string path = std::format("characters/{}/char_icon", m_chars[m_prefetchCursor].folder);
         lib.prefetch(path, exts, 0);
     }
 
-    // Retry pass for icons that failed transiently on the initial sweep.
+    // Retry pass after the initial sweep (AssetLibrary deduplicates in-flight requests).
     if (m_prefetchCursor >= static_cast<int>(m_chars.size())) {
         if (m_retryCursor >= static_cast<int>(m_chars.size()))
             m_retryCursor = 0;
         for (int i = 0; i < 16 && m_retryCursor < static_cast<int>(m_chars.size()); ++i, ++m_retryCursor) {
             std::string path = std::format("characters/{}/char_icon", m_chars[m_retryCursor].folder);
-            // Prefetch unconditionally — AssetLibrary deduplicates in-flight requests.
             lib.prefetch(path, exts, 0);
         }
     }
@@ -148,9 +136,6 @@ void CharSelectController::resolveIcons() {
 
     AssetLibrary& lib = MediaManager::instance().assets();
 
-    // Scan unresolved icons but only update up to kResolveBatch per tick
-    // to spread dataChanged signals across frames.  Only poke rows that
-    // have already been hydrated into the model.
     int resolved = 0;
     for (int i = 0; i < static_cast<int>(m_chars.size()); ++i) {
         if (m_chars[i].iconResolved)
@@ -163,9 +148,6 @@ void CharSelectController::resolveIcons() {
 
         m_chars[i].iconResolved = true;
 
-        // If this row is already in the model, update it now.
-        // Otherwise hydrateModel() will include the source when it
-        // appends this row in a future tick.
         if (i < m_hydrateCursor) {
             QString source = QStringLiteral("image://charicon/") + QString::fromStdString(m_chars[i].folder);
             m_model.setIconSource(i, source);

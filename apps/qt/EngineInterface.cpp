@@ -58,6 +58,7 @@ void EngineInterface::stop() {
         net_->stop();
     if (game_)
         game_->stop();
+    active_session_.reset();
     if (http_)
         http_->stop();
     Log::info("[EngineInterface] stopped");

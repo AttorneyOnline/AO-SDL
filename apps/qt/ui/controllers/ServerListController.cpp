@@ -28,8 +28,7 @@ void ServerListController::connectToServer(int index) {
 
     const ServerEntry& entry = m_entries[index];
 
-    // Prefer WebSocket ports (protocol plugin uses WebSocket for AO2).
-    // Fall back to TCP if no WS port is advertised.
+    // Prefer WebSocket; fall back to TCP if no WS port is advertised.
     uint16_t port = 0;
     if (entry.ws_port)
         port = *entry.ws_port;
@@ -49,6 +48,5 @@ void ServerListController::directConnect(const QString& host, quint16 port) {
 void ServerListController::doConnect(const std::string& host, uint16_t port) {
     Log::info("[ServerListController] connecting to {}:{}", host, port);
     EventManager::instance().get_channel<ServerConnectEvent>().publish(ServerConnectEvent(host, port));
-
     m_uiMgr.push_screen(std::make_unique<CharSelectScreen>());
 }

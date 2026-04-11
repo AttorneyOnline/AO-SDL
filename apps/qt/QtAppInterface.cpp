@@ -18,60 +18,27 @@ QtAppInterface::QtAppInterface(QObject* parent) : QObject(parent) {
 
 QtAppInterface::~QtAppInterface() = default;
 
-QtAppInterface& QtAppInterface::instance() {
-    static QtAppInterface ctx;
-    return ctx;
-}
-
-// --- Accessors (raw pointers from unique_ptr — QML does not own them) --------
-
-AudioController* QtAppInterface::audio_controller() const {
-    return audio_.get();
-}
-DebugController* QtAppInterface::debug_controller() const {
-    return dbg_.get();
-}
-ServerListController* QtAppInterface::server_list_controller() const {
-    return sl_.get();
-}
-CharSelectController* QtAppInterface::char_select_controller() const {
-    return cs_.get();
-}
-ChatController* QtAppInterface::chat_controller() const {
-    return chat_.get();
-}
-ICController* QtAppInterface::ic_controller() const {
-    return ic_.get();
-}
-PlayerController* QtAppInterface::player_controller() const {
-    return players_.get();
-}
-EvidenceController* QtAppInterface::evidence_controller() const {
-    return evidence_.get();
-}
-MusicAreaController* QtAppInterface::music_area_controller() const {
-    return music_area_.get();
-}
-HUDController* QtAppInterface::hud_controller() const {
-    return hud_.get();
-}
-QString QtAppInterface::current_screen_id() const {
-    return current_screen_id_;
-}
-
-// --- Lifecycle ---------------------------------------------------------------
+AudioController* QtAppInterface::audio_controller() const { return audio_.get(); }
+DebugController* QtAppInterface::debug_controller() const { return dbg_.get(); }
+ServerListController* QtAppInterface::server_list_controller() const { return sl_.get(); }
+CharSelectController* QtAppInterface::char_select_controller() const { return cs_.get(); }
+ChatController* QtAppInterface::chat_controller() const { return chat_.get(); }
+ICController* QtAppInterface::ic_controller() const { return ic_.get(); }
+PlayerController* QtAppInterface::player_controller() const { return players_.get(); }
+EvidenceController* QtAppInterface::evidence_controller() const { return evidence_.get(); }
+MusicAreaController* QtAppInterface::music_area_controller() const { return music_area_.get(); }
+HUDController* QtAppInterface::hud_controller() const { return hud_.get(); }
+QString QtAppInterface::current_screen_id() const { return current_screen_id_; }
 
 void QtAppInterface::init(EngineInterface& engine) {
     engine_ = &engine;
 
-    // 1. UIManager — no dependencies.
     ui_mgr_ = std::make_unique<UIManager>();
 
-    // 2. Global controllers (permanent drain, no screen dependency).
     audio_ = std::make_unique<AudioController>();
     dbg_ = std::make_unique<DebugController>();
 
-    // 3. Courtroom sub-controllers (ICController needs UIManager for sheet polling).
+    // ICController needs UIManager for sheet polling; CharSelectController depends on ICController.
     ic_ = std::make_unique<ICController>(*ui_mgr_);
     chat_ = std::make_unique<ChatController>();
     players_ = std::make_unique<PlayerController>();
@@ -79,27 +46,19 @@ void QtAppInterface::init(EngineInterface& engine) {
     music_area_ = std::make_unique<MusicAreaController>();
     hud_ = std::make_unique<HUDController>();
 
-    // 4. Navigation controllers (CharSelectController depends on ICController).
     sl_ = std::make_unique<ServerListController>(*ui_mgr_);
     cs_ = std::make_unique<CharSelectController>(*ui_mgr_, *ic_);
 
-    // 5. Push the initial screen.
     ui_mgr_->push_screen(std::make_unique<ServerListScreen>());
     Log::debug("[QtAppInterface] controllers created");
 
-    // 6. EngineEventBridge — drain channels registered in execution order.
     bridge_ = std::make_unique<EngineEventBridge>();
 
-    // Engine drain first (produces events consumed by controllers below).
     bridge_->add_channel([this] { engine_->drain(); });
-
-    // Global / permanent controllers — always active.
     bridge_->add_channel([this] {
         audio_->drain();
         dbg_->drain();
     });
-
-    // Screen-specific controllers.
     bridge_->add_channel([this] {
         sl_->drain();
         cs_->drain();
@@ -110,8 +69,7 @@ void QtAppInterface::init(EngineInterface& engine) {
         music_area_->drain();
         hud_->drain();
     });
-
-    // Navigation sync — always last so QML sees the final screen state.
+    // Navigation sync always runs last so QML sees the final screen state.
     bridge_->add_channel([this] { sync_current_screen_id(); });
 }
 

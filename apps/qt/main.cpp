@@ -1,18 +1,6 @@
-// The SDL frontend keeps all wiring in main() because SDL's event loop is an
-// explicit poll — the application owns the loop and calls SDL_PollEvent at the
-// top of each iteration.  Qt's event loop is framework-managed (app.exec()),
-// so engine services are bridged into it via two peer classes:
-//
-//   EngineInterface  — pure C++ engine services (networking, game loop, session
-//                      lifecycle).  Constructed first, destroyed last.  Has no
-//                      knowledge of Qt.
-//
-//   QtAppInterface   — QObject layer that wires engine events into the Qt event
-//                      loop via EngineEventBridge and exposes screen controllers
-//                      to QML.  Depends on EngineInterface, not the reverse.
-//
-// main() handles only render-pipeline setup (which must happen before
-// QGuiApplication) and coordinates the two interfaces.
+// EngineInterface  — pure C++ engine services (no Qt dependency).
+// QtAppInterface   — QObject layer wiring engine events into Qt via EngineEventBridge.
+// main() handles render-pipeline setup (must precede QGuiApplication).
 
 #include "EngineInterface.h"
 #include "QtAppInterface.h"
@@ -44,8 +32,6 @@ int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName("Attorney Online");
 
-    // --- Render pipeline (must be primed before QML engine) -------------------
-
     constexpr int render_w = 256 * 4;
     constexpr int render_h = 192 * 4;
 
@@ -58,11 +44,11 @@ int main(int argc, char* argv[]) {
     QtDebugContext::instance().backend_name = gpu_backend->backendName();
     Log::debug("[main] shader backend set to '{}'", gpu_backend->backendName());
 
-    // --- Engine + Qt interface (peers) ----------------------------------------
-
     EngineInterface engine(state_buffer);
 
-    auto& qt_iface = QtAppInterface::instance();
+    // Declared after engine — C++ destroys stack locals in reverse order,
+    // so ~QtAppInterface() runs while QGuiApplication is still alive.
+    QtAppInterface qt_iface;
     qt_iface.init(engine);
 
     if (!qt_iface.setup_qml()) {
@@ -72,7 +58,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    // Kick off the server-list fetch now that HTTP pool is ready.
     Log::info("[main] fetching server list");
     engine.http().get("http://servers.aceattorneyonline.com", "/servers", [](HttpResponse resp) {
         Log::debug("[main] server list HTTP response: {}", resp.status);
@@ -85,9 +70,7 @@ int main(int argc, char* argv[]) {
     qt_iface.start();
     Log::info("[main] entering event loop");
 
-    int result = app.exec();
-
-    // --- Shutdown (reverse construction order) --------------------------------
+    int result = QGuiApplication::exec();
 
     Log::info("[main] event loop exited (code {}), shutting down", result);
     qt_iface.stop();

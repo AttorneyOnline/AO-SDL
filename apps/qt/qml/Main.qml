@@ -1,5 +1,8 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.macOS
+
+import AO
 
 ApplicationWindow {
     id: root
