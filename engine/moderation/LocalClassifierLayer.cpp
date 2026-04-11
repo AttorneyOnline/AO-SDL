@@ -51,8 +51,7 @@ void LocalClassifierLayer::configure(const LocalClassifierConfig& cfg) {
     cfg_ = cfg;
 }
 
-bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size,
-                                         const std::string& runtime_model_name) {
+bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, const std::string& runtime_model_name) {
     std::lock_guard lock(mu_);
     loaded_ = false;
     weights_.clear();
@@ -62,8 +61,8 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size,
     model_name_.clear();
 
     if (blob == nullptr || blob_size < kHeaderFixedSize) {
-        Log::warn("LocalClassifier: weights blob missing or too short ({} bytes, need at least {})",
-                  blob_size, kHeaderFixedSize);
+        Log::warn("LocalClassifier: weights blob missing or too short ({} bytes, need at least {})", blob_size,
+                  kHeaderFixedSize);
         return false;
     }
 
@@ -76,8 +75,7 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size,
 
     const uint32_t version = read_u32_le(blob, 8);
     if (version != kSupportedFormatVersion) {
-        Log::warn("LocalClassifier: unsupported format version {} (supported: {})", version,
-                  kSupportedFormatVersion);
+        Log::warn("LocalClassifier: unsupported format version {} (supported: {})", version, kSupportedFormatVersion);
         return false;
     }
 
@@ -227,15 +225,32 @@ LocalClassifierResult LocalClassifierLayer::classify(const EmbeddingResult& embe
         //   6 visual_noise (zeroed in trained weights)
         //   7 link_risk    (zeroed in trained weights)
         switch (i) {
-        case 0: out.scores.toxicity = prob; break;
-        case 1: out.scores.hate = prob; break;
-        case 2: out.scores.sexual = prob; break;
-        case 3: out.scores.sexual_minors = prob; break;
-        case 4: out.scores.violence = prob; break;
-        case 5: out.scores.self_harm = prob; break;
-        case 6: out.scores.visual_noise = prob; break;
-        case 7: out.scores.link_risk = prob; break;
-        default: break; // categories beyond 8 are ignored
+        case 0:
+            out.scores.toxicity = prob;
+            break;
+        case 1:
+            out.scores.hate = prob;
+            break;
+        case 2:
+            out.scores.sexual = prob;
+            break;
+        case 3:
+            out.scores.sexual_minors = prob;
+            break;
+        case 4:
+            out.scores.violence = prob;
+            break;
+        case 5:
+            out.scores.self_harm = prob;
+            break;
+        case 6:
+            out.scores.visual_noise = prob;
+            break;
+        case 7:
+            out.scores.link_risk = prob;
+            break;
+        default:
+            break; // categories beyond 8 are ignored
         }
 
         if (prob > out.max_confidence) {

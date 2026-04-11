@@ -389,6 +389,7 @@ add_library(aoengine STATIC
     engine/game/ServerList.cpp
     engine/game/Session.cpp
 
+    engine/moderation/BadHintLayer.cpp
     engine/moderation/ContentModerator.cpp
     engine/moderation/EmbeddingBackend.cpp
     engine/moderation/HfModelFetcher.cpp

@@ -302,9 +302,12 @@ std::string SlurFilter::normalize(std::string_view message) {
             continue;
         }
         if (is_combining_mark(cp) || is_zero_width(cp)) {
-            // Drop entirely. The base letter on either side fuses,
-            // so "nig\u0301ger" behaves like "nigger" rather than
-            // breaking into two tokens.
+            // Drop entirely. The base letter on either side fuses —
+            // e.g. an attacker inserting a combining acute accent
+            // like U+0301 mid-word to break a token match. After
+            // the drop, the two halves re-join as if the combining
+            // mark never existed and the word-boundary tokenizer
+            // sees a single token instead of two.
             continue;
         }
 

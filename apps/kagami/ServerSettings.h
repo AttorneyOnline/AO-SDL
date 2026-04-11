@@ -300,6 +300,14 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.safe_hint.cache_dir = value<std::string>("content_moderation/safe_hint/cache_dir");
         cfg.safe_hint.similarity_threshold = value<double>("content_moderation/safe_hint/similarity_threshold");
 
+        // Bad-hint anchor matching (Layer 2 detection)
+        cfg.bad_hint.enabled = value<bool>("content_moderation/bad_hint/enabled");
+        cfg.bad_hint.anchors_url = value<std::string>("content_moderation/bad_hint/anchors_url");
+        cfg.bad_hint.cache_dir = value<std::string>("content_moderation/bad_hint/cache_dir");
+        cfg.bad_hint.similarity_threshold = value<double>("content_moderation/bad_hint/similarity_threshold");
+        cfg.bad_hint.inject_score = value<double>("content_moderation/bad_hint/inject_score");
+        cfg.bad_hint.inject_axis = value<std::string>("content_moderation/bad_hint/inject_axis");
+
         // Embeddings layer (Phase 3 wiring — config only in Phase 1)
         cfg.embeddings.enabled = value<bool>("content_moderation/embeddings/enabled");
         cfg.embeddings.hf_model_id = value<std::string>("content_moderation/embeddings/hf_model_id");
@@ -587,6 +595,21 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"anchors_url", ""},
                       {"cache_dir", "/tmp/kagami-moderation"},
                       {"similarity_threshold", 0.7},
+                  }},
+                 {"bad_hint",
+                  nlohmann::json{
+                      // Mirror of safe_hint with inverted semantics.
+                      // Threshold defaults HIGHER (0.75) because a
+                      // false positive here causes enforcement action
+                      // instead of a missed skip. Score injects into
+                      // the "hate" axis by default — the primary
+                      // intended use is paraphrased-hate detection.
+                      {"enabled", false},
+                      {"anchors_url", ""},
+                      {"cache_dir", "/tmp/kagami-moderation"},
+                      {"similarity_threshold", 0.75},
+                      {"inject_score", 1.0},
+                      {"inject_axis", "hate"},
                   }},
                  {"embeddings",
                   nlohmann::json{

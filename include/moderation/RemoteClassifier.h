@@ -19,6 +19,8 @@
 #include "moderation/ContentModerationConfig.h"
 #include "moderation/ModerationTypes.h"
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -85,10 +87,10 @@ class RemoteClassifier {
     /// Cache introspection: counts since configure(). Reset on
     /// configure(). Used by ContentModerator metrics.
     int64_t cache_hits() const {
-        return cache_hits_;
+        return cache_hits_.load(std::memory_order_relaxed);
     }
     int64_t cache_misses() const {
-        return cache_misses_;
+        return cache_misses_.load(std::memory_order_relaxed);
     }
 
     /// Direct handle to the cache, for /admin/reload clears or
@@ -102,13 +104,18 @@ class RemoteClassifier {
     RemoteClassifierConfig cfg_;
     std::unique_ptr<RemoteClassifierTransport> transport_;
     std::unique_ptr<RemoteDedupCache> cache_;
-    // Counters for cache behaviour. Not atomic — ContentModerator
-    // currently serializes check() via its own mutex so the
-    // increments from classify() happen on at most one thread at a
-    // time, and the dashboard can tolerate the ~1-message race
-    // window even if that assumption weakens in the future.
-    int64_t cache_hits_ = 0;
-    int64_t cache_misses_ = 0;
+    // Counters for cache behaviour. Atomic with relaxed ordering.
+    // ContentModerator::check() does NOT hold its mu_ across
+    // remote_.classify() — mu_ is taken only for short sub-
+    // operations (cfg snapshot, mute-state lookups) — so two
+    // sessions concurrently in check() can reach classify() at the
+    // same time and race on these counters. Relaxed memory order is
+    // sufficient because we only need tearing-free per-counter
+    // atomicity; the Prometheus exporter tolerates ordering skew
+    // between hits and misses. A plain fetch_add is sub-nanosecond
+    // on every target we ship to.
+    std::atomic<int64_t> cache_hits_{0};
+    std::atomic<int64_t> cache_misses_{0};
 };
 
 /// Parse an OpenAI `/v1/moderations` response body into axis scores.

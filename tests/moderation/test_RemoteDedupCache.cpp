@@ -91,7 +91,7 @@ TEST_F(RemoteDedupCacheTest, PutOfExistingKeyRefreshes) {
     cache_.put("k1", make_result(0.1));
     advance_seconds(30.0);
     cache_.put("k1", make_result(0.9)); // refresh with new value
-    advance_seconds(45.0); // original would have expired at t=60
+    advance_seconds(45.0);              // original would have expired at t=60
     auto hit = cache_.get("k1");
     ASSERT_TRUE(hit.has_value());
     // Second put refreshed the timestamp so we're at dt=45s from it,

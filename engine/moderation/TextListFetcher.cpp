@@ -161,8 +161,10 @@ std::vector<std::string> parse_text_list(std::string_view body) {
 
     // Strip a leading UTF-8 BOM if present — S3 objects edited on
     // Windows boxes sometimes arrive with \xEF\xBB\xBF on the first
-    // line, and "\xEF\xBB\xBFnigger" is a different token from "nigger"
-    // as far as the word-boundary matcher is concerned.
+    // line, and "\xEF\xBB\xBF<word>" is a different token from
+    // "<word>" as far as the word-boundary matcher is concerned.
+    // Dropping the BOM at parse time keeps the first wordlist entry
+    // from silently not-matching.
     if (body.size() >= 3 && static_cast<unsigned char>(body[0]) == 0xEF &&
         static_cast<unsigned char>(body[1]) == 0xBB && static_cast<unsigned char>(body[2]) == 0xBF) {
         body.remove_prefix(3);

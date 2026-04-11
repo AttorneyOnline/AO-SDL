@@ -6,12 +6,12 @@
  * Purpose
  * -------
  * OpenAI's moderation API has a categorical recall problem on common
- * casual slurs: "heil hitler" scores hate ~= 0.00014, "tranny" ~= 0.05,
- * various racial epithets in the 0.01-0.3 range because the hate axis
- * is narrowly tuned to overt identity-targeted hostility. No floor
- * tweak can rescue this — a 0.01 floor would catch everything
- * including normal dialogue. The mitigation is an explicit wordlist
- * checked before we spend money on a remote call.
+ * casual slurs: common pro-Nazi phrases score hate ~= 0.00014, common
+ * trans-targeting slurs ~= 0.05, various racial epithets in the
+ * 0.01-0.3 range — the hate axis is narrowly tuned to overt identity-
+ * targeted hostility. No floor tweak can rescue this — a 0.01 floor
+ * would catch everything including normal dialogue. The mitigation is
+ * an explicit wordlist checked before we spend money on a remote call.
  *
  * Design constraints
  * ------------------
@@ -22,10 +22,11 @@
  *     `penistone`, `analysis`, etc. Every one of those is a real
  *     Scunthorpe-problem case from production filter failures and
  *     we are not repeating them.
- *  3. Homoglyph + leet fold. Attackers write `n1gger`, `nigg\u0435r`
- *     (Cyrillic e), `ni\u200bgger` (zero-width join), `nіgger`
- *     (Cyrillic i). The normalizer folds ASCII-mappable confusables
- *     back to their ASCII form BEFORE word-boundary tokenization.
+ *  3. Homoglyph + leet fold. Attackers substitute `1` for `i` (leet),
+ *     Cyrillic `\u0435` for `e`, zero-width joins like `\u200b`
+ *     inserted mid-word, or Cyrillic `і` for Latin `i`. The
+ *     normalizer folds ASCII-mappable confusables back to their
+ *     ASCII form BEFORE word-boundary tokenization.
  *  4. Exception list. A companion list of words that the normalizer
  *     and matcher would otherwise fire on, supplied the same way.
  *     If the exception list contains a token that appears in the

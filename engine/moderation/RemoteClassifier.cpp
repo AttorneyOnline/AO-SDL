@@ -99,8 +99,10 @@ void RemoteClassifier::configure(const RemoteClassifierConfig& cfg) {
     else {
         cache_.reset();
     }
-    cache_hits_ = 0;
-    cache_misses_ = 0;
+    // Reset under relaxed memory order — configure() is a cold path
+    // called at startup / reload, so fences don't matter here.
+    cache_hits_.store(0, std::memory_order_relaxed);
+    cache_misses_.store(0, std::memory_order_relaxed);
 }
 
 void RemoteClassifier::set_transport(std::unique_ptr<RemoteClassifierTransport> transport) {
@@ -133,10 +135,10 @@ RemoteClassifierResult RemoteClassifier::classify(const std::string& text) {
     if (cache_) {
         cache_key = RemoteDedupCache::compute_key(text);
         if (auto hit = cache_->get(cache_key)) {
-            ++cache_hits_;
+            cache_hits_.fetch_add(1, std::memory_order_relaxed);
             return *hit;
         }
-        ++cache_misses_;
+        cache_misses_.fetch_add(1, std::memory_order_relaxed);
     }
 
     // Build the JSON body. OpenAI's omni-moderation endpoint accepts

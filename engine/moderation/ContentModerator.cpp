@@ -49,6 +49,7 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
         slurs_.configure(new_cfg->slurs);
         remote_.configure(new_cfg->remote);
         safe_hint_.configure(new_cfg->safe_hint);
+        bad_hint_.configure(new_cfg->bad_hint);
         local_classifier_.configure(new_cfg->local_classifier);
         // Load the bundled classifier weights if the layer is on.
         // The binary is embedded via cmake/EmbedAssets.cmake at the
@@ -150,6 +151,17 @@ size_t ContentModerator::set_safe_hint_anchors(const std::vector<std::string>& r
     }
     size_t loaded = safe_hint_.load_anchors(raw, *embedding_backend_);
     Log::log_print(INFO, "ContentModerator: loaded %zu safe-hint anchors", loaded);
+    return loaded;
+}
+
+size_t ContentModerator::set_bad_hint_anchors(const std::vector<std::string>& raw) {
+    if (!embedding_backend_) {
+        Log::log_print(WARNING, "ContentModerator: set_bad_hint_anchors called before embedding backend is ready; "
+                                "bad-hint layer will stay inert");
+        return 0;
+    }
+    size_t loaded = bad_hint_.load_anchors(raw, *embedding_backend_);
+    Log::log_print(INFO, "ContentModerator: loaded %zu bad-hint anchors", loaded);
     return loaded;
 }
 
@@ -369,11 +381,12 @@ namespace {
 constexpr double kAxisFloorNoise = 0.0;    // rules-based, non-zero = real
 constexpr double kAxisFloorLinkRisk = 0.0; // rules-based, non-zero = real
 constexpr double kAxisFloorSlurs = 0.0;    // exact-token match; any hit is real
-/// OpenAI's hate axis is high-precision but low-recall: confident slurs
-/// like "gas the jews" score 0.9+, but common casual slurs ("tranny",
-/// "heil hitler", racial epithets used casually) often score in the
-/// 0.1-0.3 range because the axis is narrowly tuned to "clearly
-/// identity-targeted". A 0.3 floor lets those through.
+/// OpenAI's hate axis is high-precision but low-recall: overt
+/// genocidal phrasing scores 0.9+, but common casual slurs (trans-
+/// targeting slurs, pro-Nazi phrases, racial epithets used casually)
+/// often score in the 0.1-0.3 range because the axis is narrowly
+/// tuned to "clearly identity-targeted" content. A 0.3 floor lets
+/// those through.
 ///
 /// 0.1 catches essentially every hate-axis signal OpenAI returns,
 /// and because the axis is narrowly defined, false positives on
@@ -565,9 +578,10 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     //
     //   1. It's strictly local — no network, no rate-limit concerns.
     //   2. The remote classifier misses this class of content. OpenAI
-    //      scores "heil hitler" at hate=0.00014 and various racial
-    //      epithets in the 0.05-0.3 range, which can't be caught by
-    //      any sensible floor tweak. This layer fills that gap.
+    //      scores common pro-Nazi phrases at hate=0.00014 and various
+    //      casual racial epithets in the 0.05-0.3 range, which can't
+    //      be caught by any sensible floor tweak. This layer fills
+    //      that gap.
     //   3. A hit contributes enough heat (slurs × weight_slurs, 6.0
     //      by default) to cross the mute_threshold on a single
     //      message — which makes layer1_sufficient fire below and
@@ -654,20 +668,30 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     //                              message is bad; merge its scores and
     //                              skip the remote (DETECTION — wins
     //                              against efficiency reasons below)
-    //   4. trust_bank            — user has accumulated clean-traffic
+    //   4. bad_hint              — embedding similarity to a known-bad
+    //                              anchor phrase; inject a score into
+    //                              the verdict and skip (DETECTION —
+    //                              plugs recall holes in the classifier
+    //                              without retraining)
+    //   5. trust_bank            — user has accumulated clean-traffic
     //                              credit and rolled under the sampling
     //                              rate (probabilistic; a floor keeps
     //                              a baseline of remote calls for drift)
-    //   5. local_classifier_clean — local model is highly confident this
+    //   6. local_classifier_clean — local model is highly confident this
     //                              message is clean; skip the remote
-    //   6. safe_hint             — embedding similarity to a known-safe
+    //   7. safe_hint             — embedding similarity to a known-safe
     //                              anchor
-    //   7. rate_limit            — per-IPID token bucket exhausted
+    //   8. rate_limit            — per-IPID token bucket exhausted
     // The final fall-through is the actual remote call.
     //
-    // Detection reasons (local_classifier_bad) dominate efficiency
-    // reasons (trust_bank, local_classifier_clean, safe_hint) so a
-    // bad message from a trusted user is still caught.
+    // Detection reasons (local_classifier_bad, bad_hint) dominate
+    // efficiency reasons (trust_bank, local_classifier_clean,
+    // safe_hint) so a bad message from a trusted user is still
+    // caught. bad_hint sits below local_classifier_bad because the
+    // classifier runs on the embedding we already have while
+    // bad_hint needs the same embedding plus a dot-product scan;
+    // if the classifier already said "definitely bad" we save the
+    // dot-product work.
     bool should_call_remote = false;
     if (!remote_.is_active()) {
         l2_skipped_counter.labels({"disabled"}).inc();
@@ -685,7 +709,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         // the non-embedding skip reasons and the remote call.
         EmbeddingResult shared_embedding;
         const bool need_embedding =
-            embedding_backend_ && (local_classifier_.is_active() || safe_hint_.is_active());
+            embedding_backend_ && (local_classifier_.is_active() || safe_hint_.is_active() || bad_hint_.is_active());
         if (need_embedding) {
             auto t_emb = std::chrono::steady_clock::now();
             shared_embedding = embedding_backend_->embed(message);
@@ -700,6 +724,16 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             auto t_lc = std::chrono::steady_clock::now();
             lc_result = local_classifier_.classify(shared_embedding);
             bump_layer("local_classifier", t_lc);
+        }
+
+        // Run the bad-hint layer on the shared embedding too. Cheap
+        // (one dot-product scan against ~50 unit vectors), and the
+        // hit result is used by priority-4 branch below.
+        BadHintResult bh_result;
+        if (bad_hint_.is_active() && shared_embedding.ok) {
+            auto t_bh = std::chrono::steady_clock::now();
+            bh_result = bad_hint_.query_with_embedding(shared_embedding);
+            bump_layer("bad_hint", t_bh);
         }
 
         // --- Priority 3: local_classifier_bad (detection) -----------
@@ -728,7 +762,34 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
                 v.triggered_axes.emplace_back("self_harm_lc");
             l2_skipped_counter.labels({"local_classifier_bad"}).inc();
         }
-        // --- Priority 4: trust_bank (efficiency) --------------------
+        // --- Priority 4: bad_hint (detection) -----------------------
+        else if (bh_result.is_bad) {
+            // Anchor-phrase match. Inject the configured score into
+            // the configured axis and short-circuit. Unlike the
+            // classifier path above, bad_hint has only one "signal"
+            // (the similarity score), so we write it into a SINGLE
+            // axis rather than the multi-axis score vector.
+            const std::string& axis = cfg->bad_hint.inject_axis;
+            const double score = cfg->bad_hint.inject_score;
+            if (axis == "toxicity")
+                v.scores.toxicity = std::max(v.scores.toxicity, score);
+            else if (axis == "hate")
+                v.scores.hate = std::max(v.scores.hate, score);
+            else if (axis == "sexual")
+                v.scores.sexual = std::max(v.scores.sexual, score);
+            else if (axis == "sexual_minors")
+                v.scores.sexual_minors = std::max(v.scores.sexual_minors, score);
+            else if (axis == "violence")
+                v.scores.violence = std::max(v.scores.violence, score);
+            else if (axis == "self_harm")
+                v.scores.self_harm = std::max(v.scores.self_harm, score);
+            // Unknown axis string: fail-open (no injection). The
+            // layer still reports the skip so the metric fires and
+            // ops can notice the misconfiguration.
+            v.triggered_axes.emplace_back(axis + "_bh");
+            l2_skipped_counter.labels({"bad_hint"}).inc();
+        }
+        // --- Priority 5: trust_bank (efficiency) --------------------
         else if (cfg->trust_bank.enabled && should_skip_for_trust_bank(ipid, cfg->trust_bank)) {
             // Probabilistic skip: user has accumulated trust credit
             // (negative heat) and rolled under the sampling rate. A
@@ -737,11 +798,11 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             // detectable.
             l2_skipped_counter.labels({"trust_bank"}).inc();
         }
-        // --- Priority 5: local_classifier_clean (efficiency) --------
+        // --- Priority 6: local_classifier_clean (efficiency) --------
         else if (lc_result.ran && lc_result.max_confidence < cfg->local_classifier.confidence_low_clean) {
             l2_skipped_counter.labels({"local_classifier_clean"}).inc();
         }
-        // --- Priority 6: safe_hint (efficiency) ---------------------
+        // --- Priority 7: safe_hint (efficiency) ---------------------
         else if (safe_hint_.is_active() && shared_embedding.ok) {
             auto t_sh = std::chrono::steady_clock::now();
             auto hint = safe_hint_.query_with_embedding(shared_embedding);
@@ -756,7 +817,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
                 should_call_remote = true;
             }
         }
-        // --- Priority 7: rate_limit / fall-through to remote --------
+        // --- Priority 8: rate_limit / fall-through to remote --------
         else {
             if (!remote_bucket_allow(ipid))
                 l2_skipped_counter.labels({"rate_limit"}).inc();
