@@ -82,8 +82,20 @@ target_sources(aoqt PRIVATE
     ui/controllers/ServerListController.cpp
     ui/controllers/CharSelectController.h
     ui/controllers/CharSelectController.cpp
-    ui/controllers/CourtroomController.h
-    ui/controllers/CourtroomController.cpp
+    ui/controllers/AudioController.h
+    ui/controllers/AudioController.cpp
+    ui/controllers/ChatController.h
+    ui/controllers/ChatController.cpp
+    ui/controllers/ICController.h
+    ui/controllers/ICController.cpp
+    ui/controllers/PlayerController.h
+    ui/controllers/PlayerController.cpp
+    ui/controllers/EvidenceController.h
+    ui/controllers/EvidenceController.cpp
+    ui/controllers/MusicAreaController.h
+    ui/controllers/MusicAreaController.cpp
+    ui/controllers/HUDController.h
+    ui/controllers/HUDController.cpp
     ui/controllers/DebugController.h
     ui/controllers/DebugController.cpp
 
@@ -101,6 +113,8 @@ target_sources(aoqt PRIVATE
     ui/models/PlayerListModel.cpp
     ui/models/EmoteModel.h
     ui/models/EmoteModel.cpp
+    ui/models/ICLogModel.h
+    ui/models/ICLogModel.cpp
 )
 
 target_link_libraries(aoqt PRIVATE

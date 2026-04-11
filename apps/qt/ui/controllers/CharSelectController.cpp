@@ -1,6 +1,6 @@
 #include "CharSelectController.h"
 
-#include "CourtroomController.h"
+#include "ICController.h"
 #include "ao/ui/screens/CourtroomScreen.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
@@ -16,8 +16,8 @@
 #include <format>
 #include <memory>
 
-CharSelectController::CharSelectController(UIManager& uiMgr, CourtroomController& crCtrl, QObject* parent)
-    : IQtScreenController(parent), m_uiMgr(uiMgr), m_crCtrl(crCtrl) {
+CharSelectController::CharSelectController(UIManager& uiMgr, ICController& icCtrl, QObject* parent)
+    : IQtScreenController(parent), m_uiMgr(uiMgr), m_icCtrl(icCtrl) {
 }
 
 void CharSelectController::drain() {
@@ -60,8 +60,8 @@ void CharSelectController::drain() {
         if (ev->get_type() == UIEventType::ENTERED_COURTROOM) {
             Log::info("[CharSelectController] entering courtroom as '{}' (id={})", ev->get_character_name(),
                       ev->get_char_id());
-            // Inject character name into CourtroomController before pushing.
-            m_crCtrl.setInitialCharName(ev->get_character_name());
+            // Inject character name into ICController before pushing.
+            m_icCtrl.setInitialCharName(ev->get_character_name());
             m_uiMgr.push_screen(std::make_unique<CourtroomScreen>(ev->get_character_name(), ev->get_char_id()));
         }
     }
@@ -77,7 +77,7 @@ void CharSelectController::selectCharacter(int index) {
 
     if (index == m_selected) {
         // Already confirmed — push the courtroom directly without server round-trip.
-        m_crCtrl.setInitialCharName(m_chars[index].folder);
+        m_icCtrl.setInitialCharName(m_chars[index].folder);
         m_uiMgr.push_screen(std::make_unique<CourtroomScreen>(m_chars[index].folder, index));
         return;
     }

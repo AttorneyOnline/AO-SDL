@@ -4,12 +4,12 @@ import QtQuick.Layouts
 
 /**
  * Side selection panel: Defence, Prosecution, Witness, Judge.
+ * controller: ICController — reads side, calls selectSide(id).
  */
 Frame {
     id: root
+    required property var controller
     padding: 4
-
-    property string selectedSide: "def"
 
     ColumnLayout {
         anchors.fill: parent
@@ -39,8 +39,11 @@ Frame {
                 Button {
                     text: modelData.label
                     checkable: true
-                    checked: root.selectedSide === modelData.id
-                    onClicked: root.selectedSide = modelData.id
+                    checked: root.controller ? root.controller.side === modelData.id : false
+                    onClicked: {
+                        if (root.controller)
+                            root.controller.selectSide(modelData.id)
+                    }
                     Layout.fillWidth: true
                 }
             }

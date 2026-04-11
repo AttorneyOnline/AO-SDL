@@ -4,12 +4,11 @@ import QtQuick.Layouts
 
 /**
  * Disconnect confirmation dialog.
- * Calls controller.disconnect() on confirm, which triggers navigation back
- * to the server list via UIManager.
+ * Calls app.disconnect() on confirm, which resets all courtroom controllers
+ * and navigates back to the server list via UIManager.
  */
 Dialog {
     id: root
-    required property var controller
 
     title: "Disconnected"
     modal: true
@@ -34,7 +33,7 @@ Dialog {
             text: "Return to Server List"
             onClicked: {
                 root.close()
-                root.controller.disconnect()
+                app.disconnect()
             }
         }
     }

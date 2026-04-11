@@ -22,18 +22,19 @@ import QtQuick.Layouts
  *
  * Overlay panels (EmoteSelector, Evidence, Options, Side) float above
  * mainArea when shown and can be undocked to persistent tool windows.
+ *
+ * Each panel receives its specific controller from app.* rather than a
+ * single monolithic courtroomController.
  */
 Page {
     id: root
     padding: 0
     background: null
 
-    property var controller: app.courtroomController
-
     // ── Bottom: IC composition bar ─────────────────────────────────────────
     ICInputPanel {
         id: icInput
-        controller: root.controller
+        controller: app.icController
         anchors {
             left:    parent.left
             right:   parent.right
@@ -42,9 +43,10 @@ Page {
         }
         height: 100
 
-        onEmoteRequested:   emoteOverlay.visible = !emoteOverlay.visible
-        onSideRequested:    sideOverlay.visible  = !sideOverlay.visible
-        onOptionsRequested: msgOverlay.visible   = !msgOverlay.visible
+        onEmoteRequested:    emoteOverlay.visible   = !emoteOverlay.visible
+        onEvidenceRequested: evidenceOverlay.visible = !evidenceOverlay.visible
+        onSideRequested:     sideOverlay.visible     = !sideOverlay.visible
+        onOptionsRequested:  msgOverlay.visible      = !msgOverlay.visible
     }
 
     // ── Main area (fills everything above the IC input bar) ───────────────
@@ -71,7 +73,7 @@ Page {
             spacing: 4
 
             PlayerListPanel {
-                controller: root.controller
+                controller: app.playerController
                 Layout.fillWidth:       true
                 Layout.preferredHeight: 120
             }
@@ -82,12 +84,16 @@ Page {
                 Layout.fillWidth:  true
                 Layout.fillHeight: true
                 panelComponent: Component {
-                    MusicAreaPanel { controller: root.controller }
+                    MusicAreaPanel {
+                        controller:      app.musicAreaController
+                        audioController: app.audioController
+                    }
                 }
             }
 
             OOCChatPanel {
-                controller: root.controller
+                controller: app.chatController
+                oocName:    app.icController.charName
                 Layout.fillWidth:       true
                 Layout.preferredHeight: 160
             }
@@ -111,6 +117,19 @@ Page {
                 anchors.fill: parent
             }
 
+            // IC log toggle — floats at the top-left corner of the viewport zone.
+            RoundButton {
+                id: icLogToggle
+                text: "≡"
+                font.pixelSize: 14
+                width: 28; height: 28
+                opacity: 0.7
+                anchors { left: parent.left; top: parent.top; margins: 4 }
+                onClicked: icLog.visible = !icLog.visible
+                ToolTip.visible: hovered
+                ToolTip.text: "Toggle IC log"
+            }
+
             // HUD overlay — positioned exactly over the rendered scene rect,
             // not the surrounding black space.
             Item {
@@ -121,11 +140,12 @@ Page {
                 height: gameViewport.sceneHeight
 
                 HealthPanel {
-                    controller: root.controller
+                    controller: app.hudController
                     anchors { left: parent.left; top: parent.top; margins: 4 }
                 }
 
                 TimerDisplay {
+                    secondsRemaining: app.hudController.timerSeconds
                     anchors {
                         horizontalCenter: parent.horizontalCenter
                         top:              parent.top
@@ -134,13 +154,21 @@ Page {
                 }
 
                 InterjectionOverlay {
+                    id: interjectionOverlay
                     anchors.centerIn: parent
+
+                    Connections {
+                        target: app.hudController
+                        function onInterjectionTriggered(word) {
+                            interjectionOverlay.show(word)
+                        }
+                    }
                 }
 
                 // IC log strip — left side, toggled externally (hidden by default)
                 ICLogPanel {
                     id: icLog
-                    controller: root.controller
+                    controller: app.icController
                     visible: false
                     anchors {
                         left:    parent.left
@@ -164,13 +192,13 @@ Page {
             anchors.centerIn: parent
             width: 400; height: 300
             panelComponent: Component {
-                EmoteSelectorPanel { controller: root.controller }
+                EmoteSelectorPanel { controller: app.icController }
             }
         }
 
         EvidencePanel {
             id: evidenceOverlay
-            controller: root.controller
+            controller: app.evidenceController
             visible: false
             anchors.centerIn: parent
             width: 320; height: 260
@@ -178,6 +206,7 @@ Page {
 
         MessageOptionsPanel {
             id: msgOverlay
+            controller: app.icController
             visible: false
             anchors.centerIn: parent
             width: 280; height: 200
@@ -185,6 +214,7 @@ Page {
 
         SideSelectPanel {
             id: sideOverlay
+            controller: app.icController
             visible: false
             anchors.centerIn: parent
             width: 240; height: 120
@@ -192,6 +222,6 @@ Page {
     }
 
     // ── Application-modal dialogs and global overlays ─────────────────────
-    DisconnectModal { controller: root.controller }
+    DisconnectModal { id: disconnectModal }
     DebugOverlay    { visible: false }
 }

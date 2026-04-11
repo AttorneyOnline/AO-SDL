@@ -5,7 +5,7 @@ import QtQuick.Layouts
 /**
  * IC message composition panel.
  * Emits signals for overlay requests so the parent Screen controls visibility.
- * Calls controller.sendICMessage(text, objectionMod) to publish outgoing IC events.
+ * Calls controller.sendICMessage(text) — objectionMod is read from ICController.objectionMod.
  */
 Frame {
     id: root
@@ -15,6 +15,7 @@ Frame {
     signal emoteRequested()
     signal sideRequested()
     signal optionsRequested()
+    signal evidenceRequested()
 
     ColumnLayout {
         anchors.fill: parent
@@ -64,9 +65,10 @@ Frame {
 
             ColumnLayout {
                 spacing: 2
-                Button { text: "Emote";   font.pixelSize: 10; implicitHeight: 22; onClicked: root.emoteRequested()   }
-                Button { text: "Side";    font.pixelSize: 10; implicitHeight: 22; onClicked: root.sideRequested()    }
-                Button { text: "Options"; font.pixelSize: 10; implicitHeight: 22; onClicked: root.optionsRequested() }
+                Button { text: "Emote";    font.pixelSize: 10; implicitHeight: 22; onClicked: root.emoteRequested()    }
+                Button { text: "Evidence"; font.pixelSize: 10; implicitHeight: 22; onClicked: root.evidenceRequested() }
+                Button { text: "Side";     font.pixelSize: 10; implicitHeight: 22; onClicked: root.sideRequested()     }
+                Button { text: "Options";  font.pixelSize: 10; implicitHeight: 22; onClicked: root.optionsRequested()  }
                 Button {
                     text: "Send"
                     font.pixelSize: 10

@@ -9,6 +9,7 @@ import QtQuick.Layouts
 Frame {
     id: root
     required property var controller
+    property var audioController: null
     padding: 4
 
     ColumnLayout {
@@ -16,7 +17,7 @@ Frame {
         spacing: 4
 
         Label {
-            text: root.controller ? root.controller.nowPlaying : ""
+            text: root.audioController ? root.audioController.nowPlaying : ""
             elide: Text.ElideRight
             font.italic: true
             font.pixelSize: 10
@@ -60,6 +61,14 @@ Frame {
                         font.pixelSize: 10
                         opacity: 0.7
                     }
+                }
+
+                onClicked: {
+                    if (!root.controller) return
+                    if (model.isArea)
+                        root.controller.changeArea(model.name)
+                    else
+                        root.controller.playTrack(model.name)
                 }
             }
         }

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-class CourtroomController;
+class ICController;
 class UIManager;
 
 /**
@@ -19,7 +19,7 @@ class UIManager;
  * from EventManager.  No CharSelectScreen is needed as a data source.
  *
  * On UIEvent::ENTERED_COURTROOM the controller:
- *   1. Injects the character name into CourtroomController.
+ *   1. Injects the character name into ICController.
  *   2. Pushes CourtroomScreen onto UIManager's stack.
  *
  * The character list is fed into the QML model in batches
@@ -32,7 +32,7 @@ class CharSelectController : public IQtScreenController {
     Q_PROPERTY(CharListModel* model READ model CONSTANT)
 
   public:
-    explicit CharSelectController(UIManager& uiMgr, CourtroomController& crCtrl, QObject* parent = nullptr);
+    explicit CharSelectController(UIManager& uiMgr, ICController& icCtrl, QObject* parent = nullptr);
 
     /// IQtScreenController
     void drain() override;
@@ -59,7 +59,7 @@ class CharSelectController : public IQtScreenController {
     void resolveIcons();
 
     UIManager& m_uiMgr;
-    CourtroomController& m_crCtrl;
+    ICController& m_icCtrl;
     CharListModel m_model;
 
     std::vector<CharEntry> m_chars;
