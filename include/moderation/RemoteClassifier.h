@@ -28,6 +28,8 @@ class Client;
 
 namespace moderation {
 
+class RemoteDedupCache;
+
 struct RemoteClassifierResult {
     bool ok = false;             ///< True on 2xx response with parseable body.
     ModerationAxisScores scores; ///< Populated from response; zero if ok=false.
@@ -74,11 +76,39 @@ class RemoteClassifier {
     /// timeout. On any failure, returns a result with ok=false; the
     /// caller decides whether to treat that as fail-open (Layer 1 only)
     /// or fail-closed.
+    ///
+    /// When cache_enabled is set on the config, classify() checks an
+    /// in-process dedup cache before the HTTP call; a hit returns the
+    /// cached result without hitting the network. See RemoteDedupCache.
     RemoteClassifierResult classify(const std::string& text);
+
+    /// Cache introspection: counts since configure(). Reset on
+    /// configure(). Used by ContentModerator metrics.
+    int64_t cache_hits() const {
+        return cache_hits_;
+    }
+    int64_t cache_misses() const {
+        return cache_misses_;
+    }
+
+    /// Direct handle to the cache, for /admin/reload clears or
+    /// metrics size probes. Returns nullptr when the cache is not
+    /// enabled. Intended for tests and introspection only.
+    RemoteDedupCache* cache_for_tests() {
+        return cache_.get();
+    }
 
   private:
     RemoteClassifierConfig cfg_;
     std::unique_ptr<RemoteClassifierTransport> transport_;
+    std::unique_ptr<RemoteDedupCache> cache_;
+    // Counters for cache behaviour. Not atomic — ContentModerator
+    // currently serializes check() via its own mutex so the
+    // increments from classify() happen on at most one thread at a
+    // time, and the dashboard can tolerate the ~1-message race
+    // window even if that assumption weakens in the future.
+    int64_t cache_hits_ = 0;
+    int64_t cache_misses_ = 0;
 };
 
 /// Parse an OpenAI `/v1/moderations` response body into axis scores.

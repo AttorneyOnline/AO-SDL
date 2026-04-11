@@ -50,6 +50,7 @@ set(TEST_SOURCES
     moderation/test_ModerationHeat.cpp
     moderation/test_ContentModerator.cpp
     moderation/test_RemoteClassifier.cpp
+    moderation/test_RemoteDedupCache.cpp
     moderation/test_SemanticClusterer.cpp
     game/test_TickProfiler.cpp
     game/test_ACLFlags.cpp

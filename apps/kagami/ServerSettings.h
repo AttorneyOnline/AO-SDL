@@ -290,6 +290,9 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.remote.model = value<std::string>("content_moderation/remote/model");
         cfg.remote.timeout_ms = value<int>("content_moderation/remote/timeout_ms");
         cfg.remote.fail_open = value<bool>("content_moderation/remote/fail_open");
+        cfg.remote.cache_enabled = value<bool>("content_moderation/remote/cache_enabled");
+        cfg.remote.cache_ttl_seconds = value<int>("content_moderation/remote/cache_ttl_seconds");
+        cfg.remote.cache_max_entries = value<int>("content_moderation/remote/cache_max_entries");
 
         // Safe-hint shortcut (Layer 2 optimization)
         cfg.safe_hint.enabled = value<bool>("content_moderation/safe_hint/enabled");
@@ -559,6 +562,11 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       // below ~2000 causes cold-start false failures.
                       {"timeout_ms", 3000},
                       {"fail_open", true},
+                      // Dedup cache for repeat messages. Off by
+                      // default; see RemoteDedupCache.h.
+                      {"cache_enabled", false},
+                      {"cache_ttl_seconds", 300},
+                      {"cache_max_entries", 1000},
                   }},
                  {"safe_hint",
                   nlohmann::json{

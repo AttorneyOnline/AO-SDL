@@ -198,6 +198,22 @@ struct RemoteClassifierConfig {
     /// for a chat server: better to miss a bad message than to brick
     /// the whole channel on an OpenAI incident.
     bool fail_open = true;
+
+    /// Dedup cache for repeat messages. Eliminates duplicate OpenAI
+    /// calls for identical (lightly-normalized) inputs. See
+    /// RemoteDedupCache.h for the full design rationale. Opt-in to
+    /// avoid quietly introducing cross-request state on existing
+    /// deployments.
+    bool cache_enabled = false;
+
+    /// Max age of a cached verdict. OpenAI omni-moderation's output
+    /// is stable for the same input over short intervals but can
+    /// shift with policy/model updates; a TTL caps the staleness.
+    int cache_ttl_seconds = 300;
+
+    /// Max cached entries. FIFO eviction past this cap. 1000 fits in
+    /// ~150 KB of RAM on a typical server.
+    int cache_max_entries = 1000;
 };
 
 /// Layer 2 shortcut: embedding-similarity "safe hint" that bypasses
