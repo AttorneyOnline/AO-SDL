@@ -337,6 +337,13 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.trust_bank.api_skip_threshold = value<double>("content_moderation/trust_bank/api_skip_threshold");
         cfg.trust_bank.min_sample_rate = value<double>("content_moderation/trust_bank/min_sample_rate");
 
+        // Local linear classifier (bundled weights, Layer 2 shortcut)
+        cfg.local_classifier.enabled = value<bool>("content_moderation/local_classifier/enabled");
+        cfg.local_classifier.confidence_high_skip =
+            value<double>("content_moderation/local_classifier/confidence_high_skip");
+        cfg.local_classifier.confidence_low_clean =
+            value<double>("content_moderation/local_classifier/confidence_low_clean");
+
         // Audit sinks
         cfg.audit.stdout_enabled = value<bool>("content_moderation/audit/stdout_enabled");
         cfg.audit.file_path = value<std::string>("content_moderation/audit/file_path");
@@ -648,6 +655,20 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"max_trust", 10.0},
                       {"api_skip_threshold", 5.0},
                       {"min_sample_rate", 0.05},
+                  }},
+                 {"local_classifier",
+                  nlohmann::json{
+                      // Thin linear classifier on top of the existing
+                      // embedding vector. Weights are bundled into
+                      // the binary by cmake/EmbedAssets.cmake from
+                      // assets/moderation/classifier-weights-v1.bin.
+                      // High-confidence outputs (either side) skip
+                      // the remote call; the middle band escalates.
+                      // Opt-in: operators enable after rebuilding
+                      // with fresh weights from scripts/train_classifier.py.
+                      {"enabled", false},
+                      {"confidence_high_skip", 0.9},
+                      {"confidence_low_clean", 0.2},
                   }},
                  {"audit",
                   nlohmann::json{

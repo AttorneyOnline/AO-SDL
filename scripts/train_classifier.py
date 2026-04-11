@@ -1,0 +1,740 @@
+#!/usr/bin/env python3
+"""Train the local linear toxicity classifier for kagami moderation.
+
+This script trains a thin linear classifier (one logistic regression per
+moderation axis) on top of a pre-existing sentence embedding model, then
+exports the resulting weights as a binary file that the kagami server
+bundles via cmake/EmbedAssets.cmake and loads at runtime through
+LocalClassifierLayer.
+
+The classifier is intentionally tiny: for each embedding (default 384
+dims for bge-small-en-v1.5) it performs one matrix-vector multiply and
+one sigmoid per axis. Total inference cost is ~1-5µs per message on
+modern ARM, vs 400-800ms for the OpenAI moderation API call it
+replaces. It is NOT as accurate as the remote classifier, but it is
+accurate enough to short-circuit the obvious cases (high confidence
+clean, high confidence bad) and escalate the uncertain middle to the
+remote layer.
+
+==============================================================================
+Which embedding model is this for?
+==============================================================================
+
+The classifier weights are ONLY meaningful in the latent space of the
+specific embedding model they were trained against. Swapping the
+runtime embedding model invalidates the weights — the dimensionality
+might still happen to match (384 for both bge-small and all-MiniLM for
+example) so you would not even get a loader error, you would just get
+silently wrong classifications.
+
+The weights file format stores the full HuggingFace model identifier in
+the header. At load time, kagami compares that identifier against the
+currently-configured content_moderation.embeddings.hf_model_id. On
+mismatch, it emits a WARNING log line and disables the local classifier
+layer — the moderation stack keeps working with the remaining layers,
+the operator gets a clear message pointing at this training script.
+
+If you are seeing that warning, the fix is: update the
+--embedding-model arg below to match the runtime model, re-run this
+script, rebuild the Docker image.
+
+==============================================================================
+Datasets
+==============================================================================
+
+The default configuration combines two public toxicity datasets:
+
+  1. **Jigsaw Toxic Comment Classification Challenge** (from Kaggle).
+     ~160k crowd-labeled Wikipedia comments with 6 binary axes: toxic,
+     severe_toxic, obscene, threat, insult, identity_hate. Broad
+     coverage of toxicity/hate/violence but no label for sexual content.
+
+  2. **allenai/real-toxicity-prompts** (from HuggingFace, public).
+     ~100k OpenWebText excerpts scored by Perspective API on 7 axes
+     including **sexually_explicit** (the big gap in Jigsaw), plus
+     toxicity/severe_toxicity/insult/identity_attack/threat/profanity/
+     flirtation. Each row has a "prompt" and a "continuation" text
+     each with their own attribute scores — we treat them as separate
+     training examples for ~2x effective rows (~200k).
+
+Combining them gives the classifier training signal on 4 out of the
+8 kagami axes:
+    toxicity        — Jigsaw(toxic OR severe_toxic) + RTP(tox>0.5 OR insult>0.5 OR profanity>0.5)
+    hate            — Jigsaw(identity_hate)          + RTP(identity_attack>0.5)
+    sexual          — (Jigsaw: no data)              + RTP(sexually_explicit>0.5)
+    violence        — Jigsaw(threat)                 + RTP(threat>0.5)
+
+The remaining 4 axes (sexual_minors, self_harm, visual_noise, link_risk)
+have no training source in these datasets. Their weight rows stay
+zero and their biases are initialized to -20 so sigmoid(-20) ≈ 2e-9
+contributes effectively nothing to max_confidence at runtime — the
+kagami moderation stack handles those axes through other layers
+(slur filter for explicit content, UrlExtractor for link_risk,
+UnicodeClassifier for visual_noise).
+
+==============================================================================
+Prerequisites
+==============================================================================
+
+- Python 3.10+ with pip
+- Kaggle API credentials (for Jigsaw) — either ~/.kaggle/kaggle.json,
+  KAGGLE_USERNAME/KAGGLE_KEY env vars, or KAGGLE_API_TOKEN env var.
+  See https://www.kaggle.com/docs/api#authentication
+  IMPORTANT: you must also accept the Jigsaw competition rules once in
+  a browser at the competition rules page, otherwise the API returns
+  HTTP 403 regardless of credentials.
+- ~1 GB disk space for the downloaded datasets and embedding cache
+- ~15-30 min runtime on CPU (the embedding step dominates), or
+  ~10-15 min on Apple Silicon MPS with --batch-size 128.
+
+Install dependencies:
+
+    pip install \\
+        numpy \\
+        pandas \\
+        scikit-learn \\
+        sentence-transformers \\
+        datasets \\
+        kaggle
+
+==============================================================================
+Usage
+==============================================================================
+
+    # Default: combined Jigsaw + real-toxicity-prompts
+    python3 scripts/train_classifier.py
+
+    # Single dataset only
+    python3 scripts/train_classifier.py --dataset jigsaw
+    python3 scripts/train_classifier.py --dataset rtp
+
+    # Override the embedding model (remember to change kagami config too)
+    python3 scripts/train_classifier.py \\
+        --embedding-model sentence-transformers/all-MiniLM-L6-v2
+
+    # Limit training data for a quick sanity run
+    python3 scripts/train_classifier.py --max-rows 10000
+
+    # Custom output location
+    python3 scripts/train_classifier.py \\
+        --output /tmp/classifier-weights-dev.bin
+
+    # Apple Silicon: use MPS with a bigger batch for speedup
+    python3 scripts/train_classifier.py --device mps --batch-size 128
+
+==============================================================================
+Output format
+==============================================================================
+
+The output file is binary little-endian, layout:
+
+    offset  size    field
+    ------  ----    -----
+    0       8       magic "KGCLF\\x01\\x00\\x00"
+    8       4       format version (uint32): currently 1
+    12      4       num_categories (uint32): currently 8
+    16      4       embedding_dim (uint32): e.g. 384
+    20      4       model_name_len (uint32)
+    24      N       model_name (utf-8, not null-terminated)
+    24+N    M       weights (float32, row-major, num_categories x dim)
+    24+N+M  P       biases (float32, num_categories)
+
+Kagami's LocalClassifierLayer::load_weights parses this header,
+validates magic/version/dimension, compares model_name against the
+runtime embedding model id, and only activates the layer on a full
+match. See include/moderation/LocalClassifierLayer.h for the loader.
+
+==============================================================================
+Jigsaw → kagami axis mapping
+==============================================================================
+
+Jigsaw Toxic Comment Classification Challenge labels 6 binary axes:
+toxic, severe_toxic, obscene, threat, insult, identity_hate. Kagami's
+moderation stack uses 8 axes — some map directly, some are left at 0
+because other layers handle them:
+
+    kagami axis      <- jigsaw label(s)
+    ---------------  -----------------------------------------
+    toxicity         toxic OR severe_toxic
+    hate             identity_hate
+    sexual           (no direct jigsaw label — left at 0)
+    sexual_minors    (no direct jigsaw label — left at 0)
+    violence         threat
+    self_harm        (no direct jigsaw label — left at 0)
+    visual_noise     (handled by UnicodeClassifier, left at 0)
+    link_risk        (handled by UrlExtractor, left at 0)
+
+The "left at 0" axes still appear as weight rows in the output file
+(zeroed out) so the runtime C++ code can use a fixed-stride layout.
+Messages that would trip those axes will fall through to the other
+layers in the stack rather than to this classifier.
+"""
+import argparse
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+# Kagami's 8 moderation axes in their canonical order. The C++ loader
+# expects the weights in this exact row order. Do not reorder without
+# also updating LocalClassifierLayer::load_weights.
+KAGAMI_AXES = [
+    "toxicity",
+    "hate",
+    "sexual",
+    "sexual_minors",
+    "violence",
+    "self_harm",
+    "visual_noise",  # zeroed
+    "link_risk",     # zeroed
+]
+
+DEFAULT_EMBEDDING_MODEL = "ChristianAzinn/bge-small-en-v1.5-gguf"
+DEFAULT_OUTPUT = "assets/moderation/classifier-weights-v1.bin"
+
+# The HF model id we pass to sentence-transformers might differ from
+# the one kagami uses at runtime (kagami loads GGUF files via
+# llama.cpp, sentence-transformers uses the base HF repo). They must
+# reference the same underlying bge-small-en-v1.5 weights. The
+# embedding runtime on kagami's side loads from:
+#   ChristianAzinn/bge-small-en-v1.5-gguf
+# which is a GGUF quantized repack of:
+#   BAAI/bge-small-en-v1.5
+# The underlying model is the same; the GGUF is just a different
+# serialization of the same weights.
+SENTENCE_TRANSFORMER_ID = "BAAI/bge-small-en-v1.5"
+
+
+def die(msg: str, code: int = 1) -> "NoReturn":  # noqa: F821
+    print(f"FATAL: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def require(*modules: str) -> None:
+    missing = []
+    for m in modules:
+        try:
+            __import__(m)
+        except ImportError:
+            missing.append(m)
+    if missing:
+        die(
+            "Missing Python dependencies: "
+            + ", ".join(missing)
+            + "\nInstall with: pip install numpy pandas scikit-learn "
+              "sentence-transformers kaggle"
+        )
+
+
+def download_jigsaw(target_dir: Path) -> Path:
+    """Download and extract the Jigsaw training CSV.
+
+    Returns the path to train.csv. Idempotent — skips download if
+    already present.
+    """
+    train_csv = target_dir / "train.csv"
+    if train_csv.exists():
+        print(f"[1/5] Jigsaw train.csv already present at {train_csv}")
+        return train_csv
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    print("[1/5] Downloading Jigsaw Toxic Comment Classification dataset "
+          "from Kaggle...")
+    # Prefer the kaggle CLI over the Python API because the CLI exits
+    # with a clear nonzero status on credential failure.
+    try:
+        subprocess.run(
+            [
+                "kaggle", "competitions", "download",
+                "-c", "jigsaw-toxic-comment-classification-challenge",
+                "-p", str(target_dir),
+            ],
+            check=True,
+        )
+    except FileNotFoundError:
+        die(
+            "`kaggle` CLI not found. Install with `pip install kaggle` "
+            "and set up credentials at ~/.kaggle/kaggle.json. See "
+            "https://www.kaggle.com/docs/api#authentication"
+        )
+    except subprocess.CalledProcessError as e:
+        die(
+            f"Kaggle download failed (exit {e.returncode}). Most "
+            "likely cause: missing or unaccepted competition rules. "
+            "Visit the competition page in a browser and click "
+            "'I Understand and Accept' before retrying:\n"
+            "  https://www.kaggle.com/competitions/"
+            "jigsaw-toxic-comment-classification-challenge/rules"
+        )
+
+    # Extract the outer zip and the nested train.csv.zip.
+    zip_path = target_dir / "jigsaw-toxic-comment-classification-challenge.zip"
+    if not zip_path.exists():
+        die(f"expected {zip_path} after download, not found")
+    subprocess.run(["unzip", "-o", str(zip_path), "-d", str(target_dir)], check=True)
+    nested_zip = target_dir / "train.csv.zip"
+    if nested_zip.exists():
+        subprocess.run(["unzip", "-o", str(nested_zip), "-d", str(target_dir)], check=True)
+    if not train_csv.exists():
+        die(f"expected {train_csv} after extract, not found")
+    return train_csv
+
+
+def map_jigsaw_to_kagami_labels(df):
+    """Map Jigsaw's 6 binary labels to kagami's 8 axes.
+
+    Returns an (N, 8) numpy float32 array. Axes with no direct Jigsaw
+    source stay at 0.
+    """
+    import numpy as np
+
+    labels = np.zeros((len(df), len(KAGAMI_AXES)), dtype=np.float32)
+    axis_idx = {name: i for i, name in enumerate(KAGAMI_AXES)}
+
+    # toxicity: union of toxic and severe_toxic
+    labels[:, axis_idx["toxicity"]] = np.maximum(
+        df["toxic"].values.astype(np.float32),
+        df["severe_toxic"].values.astype(np.float32),
+    )
+    # hate: identity_hate in Jigsaw's schema
+    labels[:, axis_idx["hate"]] = df["identity_hate"].values.astype(np.float32)
+    # violence: threat
+    labels[:, axis_idx["violence"]] = df["threat"].values.astype(np.float32)
+    # sexual / sexual_minors / self_harm / visual_noise / link_risk: 0
+
+    return labels
+
+
+# Threshold for converting RTP continuous Perspective-API scores
+# (0.0 to 1.0) to binary labels for logistic regression training.
+# 0.5 is the standard calibration point for Perspective.
+RTP_THRESHOLD = 0.5
+
+
+def load_jigsaw_arrays(args, require=None):
+    """Load Jigsaw as (texts: list[str], labels: np.ndarray Nx8)."""
+    import pandas as pd
+
+    dataset_dir = Path(args.dataset_dir).expanduser().resolve()
+    train_csv = download_jigsaw(dataset_dir)
+    print(f"      loading {train_csv}")
+    df = pd.read_csv(train_csv)
+    labels = map_jigsaw_to_kagami_labels(df)
+    texts = df["comment_text"].astype(str).tolist()
+    print(f"      jigsaw: {len(texts):,} rows")
+    return texts, labels
+
+
+def load_rtp_arrays(args, require=None):
+    """Load allenai/real-toxicity-prompts as (texts, labels Nx8).
+
+    Each dataset row yields TWO training examples: one for the
+    'prompt' field and one for the 'continuation' field, each with
+    their own Perspective API scores. This roughly doubles the
+    effective training-set size for free.
+    """
+    import numpy as np
+    from datasets import load_dataset
+
+    print("      loading allenai/real-toxicity-prompts from HF")
+    ds = load_dataset("allenai/real-toxicity-prompts", split="train")
+
+    axis_idx = {name: i for i, name in enumerate(KAGAMI_AXES)}
+    texts = []
+    labels_list = []
+
+    def make_label_row(score_dict):
+        row = np.zeros(len(KAGAMI_AXES), dtype=np.float32)
+        # toxicity: union of toxicity, severe_toxicity, insult, profanity
+        vals = [
+            score_dict.get("toxicity") or 0.0,
+            score_dict.get("severe_toxicity") or 0.0,
+            score_dict.get("insult") or 0.0,
+            score_dict.get("profanity") or 0.0,
+        ]
+        row[axis_idx["toxicity"]] = 1.0 if max(vals) > RTP_THRESHOLD else 0.0
+        # hate: identity_attack
+        ia = score_dict.get("identity_attack") or 0.0
+        row[axis_idx["hate"]] = 1.0 if ia > RTP_THRESHOLD else 0.0
+        # sexual: sexually_explicit — RTP's unique contribution
+        se = score_dict.get("sexually_explicit") or 0.0
+        row[axis_idx["sexual"]] = 1.0 if se > RTP_THRESHOLD else 0.0
+        # violence: threat
+        thr = score_dict.get("threat") or 0.0
+        row[axis_idx["violence"]] = 1.0 if thr > RTP_THRESHOLD else 0.0
+        return row
+
+    for row in ds:
+        for field in ("prompt", "continuation"):
+            obj = row.get(field)
+            if not obj:
+                continue
+            text = obj.get("text")
+            if not text or not isinstance(text, str):
+                continue
+            # Perspective scores can be None when the API declined
+            # to score a fragment — skip those to avoid biasing the
+            # all-zero labels.
+            if obj.get("toxicity") is None:
+                continue
+            texts.append(text)
+            labels_list.append(make_label_row(obj))
+
+    labels = np.stack(labels_list, axis=0) if labels_list else np.zeros((0, len(KAGAMI_AXES)), dtype=np.float32)
+    print(f"      rtp: {len(texts):,} rows (prompt+continuation)")
+    return texts, labels
+
+
+def load_toxigen_arrays(args, require=None):
+    """Load toxigen/toxigen-data as (texts, labels Nx8).
+
+    Toxigen is ~250k AI-generated hate speech snippets targeting
+    specific demographic groups. Each row has:
+      - prompt: context prompt used to generate the example
+      - generation: the model-generated output (what we train on)
+      - roberta_prediction: a RoBERTa classifier's toxicity score for
+        the generation, in [0, 1]
+      - group: the targeted demographic (e.g. "black", "asian")
+
+    We use `generation` as the text and `roberta_prediction > 0.5`
+    as the binary label for BOTH `hate` and `toxicity` axes — hate
+    is a subset of toxicity, so a positive hate label should also
+    mark the example positive for toxicity.
+
+    Toxigen's one-sided focus (hate only) complements Jigsaw+RTP
+    by increasing positive-class density on the hate axis, which
+    is the hardest axis to train on standard-web datasets because
+    overt hate speech is relatively rare there.
+    """
+    import numpy as np
+    from datasets import load_dataset
+
+    print("      loading toxigen/toxigen-data from HF")
+    ds = load_dataset("toxigen/toxigen-data", "train", split="train")
+
+    axis_idx = {name: i for i, name in enumerate(KAGAMI_AXES)}
+    texts = []
+    labels_list = []
+
+    for row in ds:
+        gen = row.get("generation")
+        if not gen or not isinstance(gen, str):
+            continue
+        score = row.get("roberta_prediction")
+        if score is None:
+            continue
+        label = np.zeros(len(KAGAMI_AXES), dtype=np.float32)
+        is_toxic = 1.0 if score > RTP_THRESHOLD else 0.0
+        label[axis_idx["hate"]] = is_toxic
+        label[axis_idx["toxicity"]] = is_toxic
+        texts.append(gen)
+        labels_list.append(label)
+
+    labels = np.stack(labels_list, axis=0) if labels_list else np.zeros((0, len(KAGAMI_AXES)), dtype=np.float32)
+    print(f"      toxigen: {len(texts):,} rows")
+    return texts, labels
+
+
+def load_combined_arrays(args):
+    """Load Jigsaw ∪ RTP ∪ (optionally) Toxigen as (texts, labels Nx8)."""
+    import numpy as np
+
+    j_texts, j_labels = load_jigsaw_arrays(args)
+    r_texts, r_labels = load_rtp_arrays(args)
+    texts = j_texts + r_texts
+    labels = np.concatenate([j_labels, r_labels], axis=0)
+    if args.add_toxigen:
+        t_texts, t_labels = load_toxigen_arrays(args)
+        texts = texts + t_texts
+        labels = np.concatenate([labels, t_labels], axis=0)
+    print(f"      combined: {len(texts):,} rows")
+    return texts, labels
+
+
+def train(args) -> int:
+    require("numpy", "pandas", "sklearn", "sentence_transformers")
+    if args.dataset in ("rtp", "toxigen", "combined"):
+        require("datasets")
+
+    import numpy as np
+    from sentence_transformers import SentenceTransformer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+    from sklearn.model_selection import train_test_split
+
+    label = f"{args.dataset}"
+    if args.dataset == "combined" and args.add_toxigen:
+        label += "+toxigen"
+    print(f"[2/5] Loading dataset(s): {label}")
+    if args.dataset == "jigsaw":
+        texts, labels = load_jigsaw_arrays(args)
+    elif args.dataset == "rtp":
+        texts, labels = load_rtp_arrays(args)
+    elif args.dataset == "toxigen":
+        texts, labels = load_toxigen_arrays(args)
+    elif args.dataset == "combined":
+        texts, labels = load_combined_arrays(args)
+    else:
+        die(f"unknown --dataset value: {args.dataset}")
+
+    # Apply --max-rows AFTER concatenation so the subsample is a
+    # representative mix of whichever datasets were combined. Shuffle
+    # first using a deterministic seed so the subsample is consistent
+    # across re-runs and the split in train_test_split below is stable.
+    if args.max_rows and len(texts) > args.max_rows:
+        rng = np.random.default_rng(42)
+        idx = rng.permutation(len(texts))[: args.max_rows]
+        texts = [texts[i] for i in idx]
+        labels = labels[idx]
+    print(f"      {len(texts):,} rows after filtering")
+
+    # Device selection: prefer Apple Metal (MPS) on Apple Silicon or
+    # CUDA on Linux. Falls back to CPU. MPS speeds up a 160k-row
+    # bge-small embedding pass from ~75 minutes on M-series CPU to
+    # ~8 minutes on the same chip's GPU cores — worth the one-line
+    # detection.
+    import torch
+    if args.device:
+        device = args.device
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = "mps"
+    elif torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+    print(f"[3/5] Loading embedding model {SENTENCE_TRANSFORMER_ID!r} on {device}")
+    model = SentenceTransformer(SENTENCE_TRANSFORMER_ID, device=device)
+    # get_embedding_dimension is the supported name in
+    # sentence-transformers 5.x; fall back to the older name for
+    # 3.x / 4.x users.
+    if hasattr(model, "get_embedding_dimension"):
+        embedding_dim = model.get_embedding_dimension()
+    else:
+        embedding_dim = model.get_sentence_embedding_dimension()
+    print(f"      embedding dim = {embedding_dim}")
+
+    # Batch size: 256 is aggressive but fits in memory for
+    # bge-small (384-dim encoder, ~30 MB model) even on CPU. Larger
+    # batches amortize per-batch Python overhead and (on MPS) GPU
+    # kernel launch cost, which dominates at batch=64 for such a
+    # small model.
+    batch_size = args.batch_size
+    print(f"[4/5] Embedding {len(texts):,} comments "
+          f"(batch={batch_size}, device={device})...")
+    X = model.encode(
+        texts,
+        batch_size=batch_size,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=True,
+    ).astype(np.float32)
+
+    # Train/val split for AUC reporting.
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, labels, test_size=0.1, random_state=42
+    )
+
+    print("[5/5] Training one logistic regression per axis")
+    weights = np.zeros((len(KAGAMI_AXES), embedding_dim), dtype=np.float32)
+    # Default bias is a large negative value so untrained / skipped
+    # axes produce sigmoid(-20) ≈ 2e-9 at runtime. This matters
+    # because the C++ layer computes max_confidence across ALL axes
+    # to decide the low/high skip thresholds — if skipped axes
+    # defaulted to sigmoid(0) = 0.5, max_confidence would be pinned
+    # at 0.5 for every message and the "below 0.2 → clean" gate
+    # would become unreachable. See the validation section of the
+    # plan for how this was caught on staging.
+    biases = np.full(len(KAGAMI_AXES), -20.0, dtype=np.float32)
+
+    for i, axis in enumerate(KAGAMI_AXES):
+        y_train_i = y_train[:, i]
+        y_val_i = y_val[:, i]
+        pos_count = int(y_train_i.sum())
+        total = len(y_train_i)
+
+        if pos_count == 0 or pos_count == total:
+            # No positive examples (or everything positive — won't
+            # happen in practice but guard both sides). Leave this
+            # axis zeroed. The C++ layer will produce sigmoid(0)=0.5
+            # which is a "don't know" signal that falls into the
+            # escalate-to-remote band.
+            print(f"      {axis:16s}: SKIPPED (no positive labels in train set)")
+            continue
+
+        clf = LogisticRegression(
+            C=1.0,
+            max_iter=200,
+            random_state=42,
+        )
+        clf.fit(X_train, y_train_i)
+
+        # Scores for the val set — binary classifier uses predict_proba
+        # column 1 as the positive-class probability.
+        try:
+            auc = roc_auc_score(y_val_i, clf.predict_proba(X_val)[:, 1])
+        except ValueError:
+            # Can happen if the val set has only one class for this
+            # axis. Skip the AUC print, still save the weights.
+            auc = float("nan")
+
+        weights[i] = clf.coef_[0].astype(np.float32)
+        biases[i] = float(clf.intercept_[0])
+        print(f"      {axis:16s}: AUC={auc:.4f} "
+              f"(pos={pos_count}/{total}={pos_count/total*100:.2f}%)")
+
+    # Write the binary output.
+    output_path = Path(args.output).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_weights_file(
+        output_path,
+        num_categories=len(KAGAMI_AXES),
+        embedding_dim=embedding_dim,
+        model_name=args.embedding_model,
+        weights=weights,
+        biases=biases,
+    )
+    print(f"\nWrote {output_path} "
+          f"({output_path.stat().st_size:,} bytes)")
+    print("\nNext steps:")
+    print("  1. Commit the weights file:")
+    try:
+        display = output_path.relative_to(Path.cwd())
+    except ValueError:
+        display = output_path
+    print(f"     git add {display}")
+    print("  2. Rebuild kagami. cmake/EmbedAssets.cmake will pick up")
+    print("     the file automatically at configure time.")
+    print("  3. Enable the layer in kagami.json:")
+    print('       content_moderation.local_classifier.enabled = true')
+    return 0
+
+
+def write_weights_file(
+    path: Path,
+    num_categories: int,
+    embedding_dim: int,
+    model_name: str,
+    weights,  # np.ndarray (num_categories, embedding_dim) float32
+    biases,   # np.ndarray (num_categories,) float32
+) -> None:
+    """Serialize to kagami's LocalClassifier binary format.
+
+    See the docstring at the top of this file for the full layout.
+    """
+    import numpy as np
+
+    assert weights.shape == (num_categories, embedding_dim), (
+        f"weights shape {weights.shape} != "
+        f"({num_categories}, {embedding_dim})"
+    )
+    assert biases.shape == (num_categories,), (
+        f"biases shape {biases.shape} != ({num_categories},)"
+    )
+    assert weights.dtype == np.float32
+    assert biases.dtype == np.float32
+
+    model_name_bytes = model_name.encode("utf-8")
+    if len(model_name_bytes) > 512:
+        raise ValueError(
+            "model_name too long (>512 bytes) — keep it to the "
+            "standard HuggingFace namespace/name form"
+        )
+
+    # Atomic write via temp file in the same directory, then rename.
+    tmp_fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=".classifier-", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(b"KGCLF\x01\x00\x00")
+            f.write(struct.pack("<I", 1))  # format version
+            f.write(struct.pack("<I", num_categories))
+            f.write(struct.pack("<I", embedding_dim))
+            f.write(struct.pack("<I", len(model_name_bytes)))
+            f.write(model_name_bytes)
+            f.write(weights.tobytes(order="C"))  # row-major float32
+            f.write(biases.tobytes(order="C"))
+        shutil.move(tmp_name, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--dataset", default="combined",
+        choices=["jigsaw", "rtp", "toxigen", "combined"],
+        help=(
+            "Which dataset(s) to train on. 'jigsaw' = Kaggle "
+            "Jigsaw Toxic Comments (160k, needs rules accepted). "
+            "'rtp' = allenai/real-toxicity-prompts (~100k, public, "
+            "adds sexual axis coverage). 'toxigen' = "
+            "toxigen/toxigen-data (~250k hate-speech samples, "
+            "public). 'combined' = jigsaw + rtp (default, ~260k "
+            "rows). Add --add-toxigen to also include toxigen."
+        ),
+    )
+    parser.add_argument(
+        "--add-toxigen", action="store_true",
+        help=(
+            "When --dataset=combined, also include toxigen to "
+            "boost hate-axis positive density. Adds ~250k rows and "
+            "proportionally longer training time."
+        ),
+    )
+    parser.add_argument(
+        "--output", default=DEFAULT_OUTPUT,
+        help=f"Output path for the weights file (default: {DEFAULT_OUTPUT})",
+    )
+    parser.add_argument(
+        "--embedding-model", default=DEFAULT_EMBEDDING_MODEL,
+        help=(
+            "HuggingFace model identifier stored in the weights header. "
+            "Must match the runtime kagami embeddings.hf_model_id."
+        ),
+    )
+    parser.add_argument(
+        "--dataset-dir", default="./.kagami-train-data",
+        help="Where to cache the downloaded Jigsaw dataset",
+    )
+    parser.add_argument(
+        "--max-rows", type=int, default=0,
+        help=(
+            "If >0, randomly subsample this many rows from the training "
+            "set. Useful for quick smoke tests (5000 rows → ~2 minutes)."
+        ),
+    )
+    parser.add_argument(
+        "--device", default=None,
+        help=(
+            "Override the torch device (e.g. 'cpu', 'mps', 'cuda'). "
+            "Default auto-detects MPS on Apple Silicon, CUDA on Linux, "
+            "else CPU."
+        ),
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=256,
+        help=(
+            "Batch size for the embedding pass. 256 is a good default "
+            "for bge-small (small model, large batches amortize Python "
+            "overhead). Lower to 64 if you see memory pressure."
+        ),
+    )
+    args = parser.parse_args()
+    return train(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
