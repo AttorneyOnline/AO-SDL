@@ -249,6 +249,21 @@ class ContentModerator {
     /// for @p ipid. Returns true if the call is allowed.
     bool remote_bucket_allow(const std::string& ipid);
 
+    /// Probabilistic skip decision for the trust-bank layer. Returns
+    /// true if the current heat for @p ipid is sufficiently negative
+    /// (below -cfg.api_skip_threshold) AND a uniform random draw lands
+    /// under the sampling rate computed from the heat value.
+    ///
+    /// Sampling rate is a linear ramp: 100% API-call rate at exactly
+    /// -api_skip_threshold (no skip), tapering to min_sample_rate at
+    /// -max_trust (maximum skip). The floor ensures even the most
+    /// trusted user has a fraction of their traffic sent to the
+    /// remote classifier for ground-truth drift detection.
+    ///
+    /// NOT const because peek() mutates the underlying Entry (decays
+    /// it in place). Guarded by heat_'s internal mutex.
+    bool should_skip_for_trust_bank(const std::string& ipid, const TrustBankConfig& cfg);
+
     mutable std::mutex mu_;
     /// ipid -> mute state. In-memory mirror of the mutes table.
     /// Loaded on configure() from db if set.

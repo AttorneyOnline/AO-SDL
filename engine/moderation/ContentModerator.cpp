@@ -4,7 +4,9 @@
 #include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
 
+#include <algorithm>
 #include <chrono>
+#include <random>
 #include <utility>
 
 namespace moderation {
@@ -256,6 +258,43 @@ bool ContentModerator::remote_bucket_allow(const std::string& ipid) {
         return false;
     bucket.tokens -= 1.0;
     return true;
+}
+
+bool ContentModerator::should_skip_for_trust_bank(const std::string& ipid, const TrustBankConfig& cfg) {
+    // Guard: config must have a sane range. max_trust > api_skip_threshold
+    // is load-bearing — a zero-width band would make the denominator
+    // below blow up. Default config has max_trust=10.0 and
+    // api_skip_threshold=5.0 which is a 5.0-wide band.
+    if (cfg.max_trust <= cfg.api_skip_threshold)
+        return false;
+
+    const double heat = heat_.peek(ipid);
+    // Only positive-absolute trust credit is eligible. Users above
+    // zero are in suspicion and always get the remote call.
+    if (heat > -cfg.api_skip_threshold)
+        return false;
+
+    // Linear ramp: at heat = -api_skip_threshold → api_rate = 1.0 (no skip);
+    // at heat = -max_trust → api_rate = min_sample_rate (maximum skip).
+    // Clamp at either end so values outside the band still behave sanely.
+    const double over_threshold = -heat - cfg.api_skip_threshold;
+    const double band_width = cfg.max_trust - cfg.api_skip_threshold;
+    double fraction = over_threshold / band_width;
+    if (fraction < 0.0)
+        fraction = 0.0;
+    if (fraction > 1.0)
+        fraction = 1.0;
+    const double api_rate = 1.0 - fraction * (1.0 - cfg.min_sample_rate);
+    // api_rate is the probability of STILL calling the remote. We
+    // want to SKIP with probability (1 - api_rate).
+    const double skip_rate = 1.0 - api_rate;
+
+    // Thread-local RNG: one per worker thread, seeded once from
+    // random_device. Using a shared global RNG would require a
+    // mutex which would serialize every check() call.
+    thread_local std::mt19937_64 rng{std::random_device{}()};
+    thread_local std::uniform_real_distribution<double> dist{0.0, 1.0};
+    return dist(rng) < skip_rate;
 }
 
 namespace {
@@ -581,11 +620,15 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // total Layer 2 calls = checks_total - sum across all reasons.
     //
     // The reasons are evaluated in priority order:
-    //   1. disabled        — operator never wired the remote layer
+    //   1. disabled          — operator never wired the remote layer
     //   2. layer1_sufficient — Layer 1 already crossed mute threshold,
     //                          calling remote can't escalate further
-    //   3. safe_hint       — embedding similarity to a known-safe anchor
-    //   4. rate_limit      — per-IPID token bucket exhausted
+    //   3. trust_bank        — user has accumulated clean-traffic
+    //                          credit and rolled under the sampling
+    //                          rate (probabilistic; a floor keeps a
+    //                          baseline of remote calls for drift)
+    //   4. safe_hint         — embedding similarity to a known-safe anchor
+    //   5. rate_limit        — per-IPID token bucket exhausted
     // The final fall-through is the actual remote call.
     bool should_call_remote = false;
     if (!remote_.is_active()) {
@@ -593,6 +636,13 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     }
     else if (layer1_sufficient) {
         l2_skipped_counter.labels({"layer1_sufficient"}).inc();
+    }
+    else if (cfg->trust_bank.enabled && should_skip_for_trust_bank(ipid, cfg->trust_bank)) {
+        // Probabilistic skip: user has accumulated trust credit
+        // (negative heat) and rolled under the sampling rate. A
+        // minimum sample rate floor still sends some traffic to the
+        // remote classifier so behavioral drift stays detectable.
+        l2_skipped_counter.labels({"trust_bank"}).inc();
     }
     else {
         // Try the safe-hint shortcut. Inert if the layer isn't
@@ -715,11 +765,21 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     v.heat_delta = heat_delta_from(v.scores, cfg->heat);
 
     if (v.heat_delta <= 0.0) {
-        // No meaningful contribution from this message — peek the
-        // stored heat (which decays in place against the elapsed
-        // time) so the gauge reflects natural cooling, and return
-        // NONE without adding anything.
-        v.heat_after = heat_.peek(ipid);
+        // No meaningful contribution from this message — accrue a
+        // drop of trust if the feature is enabled (moves heat toward
+        // the negative floor, unlocking the trust_bank skip gate for
+        // this IPID), then peek the stored heat so the gauge reflects
+        // the updated value, and return NONE.
+        //
+        // accrue_trust() is a no-op when the user is currently in a
+        // positive-heat (suspicion) state, so this is safe to call
+        // unconditionally on every clean message.
+        if (cfg->trust_bank.enabled) {
+            v.heat_after = heat_.accrue_trust(ipid, cfg->trust_bank.clean_reward, -cfg->trust_bank.max_trust);
+        }
+        else {
+            v.heat_after = heat_.peek(ipid);
+        }
         v.action = ModerationAction::NONE;
         events_counter.labels({to_string(v.action), std::string(channel)}).inc();
         // Wall-clock timing for the whole check() including the early
