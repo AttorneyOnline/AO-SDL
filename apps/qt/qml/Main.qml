@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.macOS
 
 import AO
 
@@ -17,10 +16,14 @@ ApplicationWindow {
         anchors.fill: parent
         source: {
             switch (app.currentScreenId) {
-            case "server_list": return "screens/ServerListScreen.qml"
-            case "char_select": return "screens/CharSelectScreen.qml"
-            case "courtroom":   return "screens/CourtroomScreen.qml"
-            default:            return ""
+            case "server_list":
+                return "screens/ServerListScreen.qml";
+            case "char_select":
+                return "screens/CharSelectScreen.qml";
+            case "courtroom":
+                return "screens/CourtroomScreen.qml";
+            default:
+                return "";
             }
         }
     }
