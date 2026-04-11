@@ -529,6 +529,34 @@ if(KAGAMI_WITH_LLAMA_CPP)
     set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
     set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+
+    # Pin llama.cpp / ggml to a portable ARM target instead of letting
+    # it auto-detect the build host's CPU features. Without these two
+    # lines, llama.cpp's CMake runs -mcpu=native which bakes in whatever
+    # extensions the build host happens to support (i8mm, bf16, SVE,
+    # ...). The resulting binary SIGILLs at first matmul when run on
+    # any CPU missing those extensions — in particular Graviton2
+    # (t4g.*), which is Neoverse-N1 / ARMv8.2-A and predates i8mm by
+    # several architecture revisions.
+    #
+    # The target chosen is ARMv8.2-A + dotprod + fp16:
+    #   - ARMv8.2-A baseline: Neoverse-N1 (Graviton2), Neoverse-V1
+    #     (Graviton3), Neoverse-V2 (Graviton4), Apple M1/M2/M3/M4
+    #   - +dotprod (UDOT/SDOT 8-bit dot products): all Graviton 2+,
+    #     all Apple Silicon. Keeps the performant q8 kernels.
+    #   - +fp16 (half-precision arithmetic): same set.
+    #
+    # What we deliberately DO NOT enable:
+    #   - i8mm (SMMLA/UMMLA): added ARMv8.6-A, absent on Graviton2
+    #   - bf16: added ARMv8.6-A, absent on Graviton2
+    #   - SVE/SVE2: Neoverse-V1+, absent on Graviton2
+    #
+    # For x86_64 builds, GGML_CPU_ARM_ARCH is silently ignored and
+    # GGML_NATIVE=OFF just means "no -march=native", which is already
+    # the right default for portable builds.
+    set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+    set(GGML_CPU_ARM_ARCH "armv8.2-a+dotprod+fp16" CACHE STRING "" FORCE)
+
     FetchContent_Declare(llama_cpp
         GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
         # Pinned to a full SHA rather than a tag so a re-tag on the
