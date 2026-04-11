@@ -105,6 +105,20 @@ class SafeHintLayer {
     ///   - embed() returned !ok
     SafeHintResult query(std::string_view message, EmbeddingBackend& backend) const;
 
+    /// Alternate hot path for callers who already have an embedding.
+    /// When ContentModerator runs multiple embedding-based Layer 2
+    /// shortcuts back-to-back (safe_hint, local_classifier), it
+    /// computes the message vector ONCE and hands it to each layer
+    /// via this overload, avoiding 2-3 redundant embed() calls per
+    /// check. The caller must pass an embedding from the same
+    /// backend (matching dim_) or the result is undefined.
+    ///
+    /// Failure modes — returns is_safe=false when:
+    ///   - no anchors loaded
+    ///   - @p embedding.ok is false
+    ///   - embedding dim != anchor dim
+    SafeHintResult query_with_embedding(const EmbeddingResult& embedding) const;
+
   private:
     mutable std::shared_mutex mu_;
 

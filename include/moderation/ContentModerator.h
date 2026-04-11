@@ -25,6 +25,7 @@
 
 #include "moderation/ContentModerationConfig.h"
 #include "moderation/EmbeddingBackend.h"
+#include "moderation/LocalClassifierLayer.h"
 #include "moderation/ModerationAuditLog.h"
 #include "moderation/ModerationHeat.h"
 #include "moderation/ModerationTypes.h"
@@ -213,6 +214,7 @@ class ContentModerator {
     SlurFilter slurs_;
     RemoteClassifier remote_;
     SafeHintLayer safe_hint_;
+    LocalClassifierLayer local_classifier_;
     SemanticClusterer clusterer_;
     ModerationHeat heat_;
 

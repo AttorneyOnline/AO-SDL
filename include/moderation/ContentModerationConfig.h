@@ -348,6 +348,36 @@ struct ModerationAuditSinkConfig {
 ///
 /// Disabled by default; zero behavior change from pre-trust-bank
 /// kagami when off.
+/// Layer 2 shortcut: local linear classifier.
+///
+/// Runs a thin 384x8 logistic regression on top of the existing
+/// embedding vector (already computed for SafeHintLayer). High-
+/// confidence positive or negative outputs short-circuit the
+/// remote classifier call; uncertain middle-band outputs escalate
+/// to the remote layer as usual.
+///
+/// See LocalClassifierLayer.h for the full design, including the
+/// embedding-model compatibility check that prevents silently
+/// wrong outputs when the runtime model doesn't match the model
+/// the weights were trained against.
+struct LocalClassifierConfig {
+    bool enabled = false;
+
+    /// If any axis score exceeds this threshold, the classifier is
+    /// confident enough that the message is bad to skip the remote
+    /// call. 0.9 = "very sure". Tune lower for more skips at the
+    /// cost of more false positives from a model that's much less
+    /// accurate than the remote classifier.
+    double confidence_high_skip = 0.9;
+
+    /// If the MAXIMUM axis score is below this threshold, the
+    /// classifier is confident enough that the message is clean to
+    /// skip the remote call. 0.2 = "no axis shows meaningful
+    /// signal". Messages between this and confidence_high_skip
+    /// escalate to the remote classifier for a tiebreaker.
+    double confidence_low_clean = 0.2;
+};
+
 struct TrustBankConfig {
     bool enabled = false;
 
@@ -397,6 +427,7 @@ struct ContentModerationConfig {
     EmbeddingsLayerConfig embeddings;
     HeatConfig heat;
     TrustBankConfig trust_bank;
+    LocalClassifierConfig local_classifier;
     ModerationAuditSinkConfig audit;
 };
 

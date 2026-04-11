@@ -1,5 +1,6 @@
 #include "moderation/ContentModerator.h"
 
+#include "asset/MountEmbedded.h"
 #include "game/DatabaseManager.h"
 #include "metrics/MetricsRegistry.h"
 #include "utils/Log.h"
@@ -48,6 +49,33 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
         slurs_.configure(new_cfg->slurs);
         remote_.configure(new_cfg->remote);
         safe_hint_.configure(new_cfg->safe_hint);
+        local_classifier_.configure(new_cfg->local_classifier);
+        // Load the bundled classifier weights if the layer is on.
+        // The binary is embedded via cmake/EmbedAssets.cmake at the
+        // path "moderation/classifier-weights-v1.bin". If the file
+        // wasn't built into this image (fresh checkout without
+        // training), load_weights fails softly and the layer stays
+        // inactive. The model-name header check inside load_weights
+        // also disables the layer on a runtime/training mismatch.
+        if (new_cfg->local_classifier.enabled) {
+            const uint8_t* weights_data = nullptr;
+            size_t weights_size = 0;
+            for (const auto& file : embedded_assets()) {
+                if (std::string_view(file.path) == "moderation/classifier-weights-v1.bin") {
+                    weights_data = file.data;
+                    weights_size = file.size;
+                    break;
+                }
+            }
+            if (weights_data) {
+                local_classifier_.load_weights(weights_data, weights_size, new_cfg->embeddings.hf_model_id);
+            }
+            else {
+                Log::warn("LocalClassifier: enabled in config but no bundled weights at "
+                          "'moderation/classifier-weights-v1.bin' — layer will stay inert. "
+                          "Run scripts/train_classifier.py and rebuild.");
+            }
+        }
         clusterer_.configure(new_cfg->embeddings);
         heat_.configure(new_cfg->heat);
         db_snapshot = db_;
@@ -620,16 +648,26 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // total Layer 2 calls = checks_total - sum across all reasons.
     //
     // The reasons are evaluated in priority order:
-    //   1. disabled          — operator never wired the remote layer
-    //   2. layer1_sufficient — Layer 1 already crossed mute threshold,
-    //                          calling remote can't escalate further
-    //   3. trust_bank        — user has accumulated clean-traffic
-    //                          credit and rolled under the sampling
-    //                          rate (probabilistic; a floor keeps a
-    //                          baseline of remote calls for drift)
-    //   4. safe_hint         — embedding similarity to a known-safe anchor
-    //   5. rate_limit        — per-IPID token bucket exhausted
+    //   1. disabled              — operator never wired the remote layer
+    //   2. layer1_sufficient     — Layer 1 already crossed mute threshold
+    //   3. local_classifier_bad  — local model is highly confident this
+    //                              message is bad; merge its scores and
+    //                              skip the remote (DETECTION — wins
+    //                              against efficiency reasons below)
+    //   4. trust_bank            — user has accumulated clean-traffic
+    //                              credit and rolled under the sampling
+    //                              rate (probabilistic; a floor keeps
+    //                              a baseline of remote calls for drift)
+    //   5. local_classifier_clean — local model is highly confident this
+    //                              message is clean; skip the remote
+    //   6. safe_hint             — embedding similarity to a known-safe
+    //                              anchor
+    //   7. rate_limit            — per-IPID token bucket exhausted
     // The final fall-through is the actual remote call.
+    //
+    // Detection reasons (local_classifier_bad) dominate efficiency
+    // reasons (trust_bank, local_classifier_clean, safe_hint) so a
+    // bad message from a trusted user is still caught.
     bool should_call_remote = false;
     if (!remote_.is_active()) {
         l2_skipped_counter.labels({"disabled"}).inc();
@@ -637,33 +675,89 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     else if (layer1_sufficient) {
         l2_skipped_counter.labels({"layer1_sufficient"}).inc();
     }
-    else if (cfg->trust_bank.enabled && should_skip_for_trust_bank(ipid, cfg->trust_bank)) {
-        // Probabilistic skip: user has accumulated trust credit
-        // (negative heat) and rolled under the sampling rate. A
-        // minimum sample rate floor still sends some traffic to the
-        // remote classifier so behavioral drift stays detectable.
-        l2_skipped_counter.labels({"trust_bank"}).inc();
-    }
     else {
-        // Try the safe-hint shortcut. Inert if the layer isn't
-        // configured or the embedding backend isn't loaded yet.
-        bool safe_hint_hit = false;
-        if (safe_hint_.is_active() && embedding_backend_) {
-            auto t0 = std::chrono::steady_clock::now();
-            auto hint = safe_hint_.query(message, *embedding_backend_);
-            bump_layer("safe_hint", t0);
+        // Compute the message embedding ONCE if any embedding-based
+        // layer is active. SafeHintLayer, LocalClassifierLayer (and
+        // later BadHintLayer) all need the same vector, and embed()
+        // is ~1-5ms per call on bge-small — re-doing it per layer
+        // would dominate the Layer 2 budget. An "inactive embedding
+        // backend" is normal on cold start; the fallback path runs
+        // the non-embedding skip reasons and the remote call.
+        EmbeddingResult shared_embedding;
+        const bool need_embedding =
+            embedding_backend_ && (local_classifier_.is_active() || safe_hint_.is_active());
+        if (need_embedding) {
+            auto t_emb = std::chrono::steady_clock::now();
+            shared_embedding = embedding_backend_->embed(message);
+            bump_layer("layer2_embedding", t_emb);
+        }
+
+        // Run the local classifier on the shared embedding. Result
+        // is used by BOTH the "bad" and "clean" skip branches below;
+        // we compute once and branch based on thresholds.
+        LocalClassifierResult lc_result;
+        if (local_classifier_.is_active() && shared_embedding.ok) {
+            auto t_lc = std::chrono::steady_clock::now();
+            lc_result = local_classifier_.classify(shared_embedding);
+            bump_layer("local_classifier", t_lc);
+        }
+
+        // --- Priority 3: local_classifier_bad (detection) -----------
+        if (lc_result.ran && lc_result.max_confidence > cfg->local_classifier.confidence_high_skip) {
+            // High-confidence bad. Merge the classifier scores into
+            // the verdict — treat it like a remote response. max()
+            // against the existing scores so Layer 1 hits can't be
+            // lowered and vice versa.
+            v.scores.toxicity = std::max(v.scores.toxicity, lc_result.scores.toxicity);
+            v.scores.hate = std::max(v.scores.hate, lc_result.scores.hate);
+            v.scores.sexual = std::max(v.scores.sexual, lc_result.scores.sexual);
+            v.scores.sexual_minors = std::max(v.scores.sexual_minors, lc_result.scores.sexual_minors);
+            v.scores.violence = std::max(v.scores.violence, lc_result.scores.violence);
+            v.scores.self_harm = std::max(v.scores.self_harm, lc_result.scores.self_harm);
+            // Tag axes that crossed the visibility floor so the
+            // reason string is consistent with the remote path.
+            if (lc_result.scores.toxicity > kAxisFloorToxicity)
+                v.triggered_axes.emplace_back("toxicity_lc");
+            if (lc_result.scores.hate > kAxisFloorHate)
+                v.triggered_axes.emplace_back("hate_lc");
+            if (lc_result.scores.sexual > kAxisFloorSexual)
+                v.triggered_axes.emplace_back("sexual_lc");
+            if (lc_result.scores.violence > kAxisFloorViolence)
+                v.triggered_axes.emplace_back("violence_lc");
+            if (lc_result.scores.self_harm > kAxisFloorSelfHarm)
+                v.triggered_axes.emplace_back("self_harm_lc");
+            l2_skipped_counter.labels({"local_classifier_bad"}).inc();
+        }
+        // --- Priority 4: trust_bank (efficiency) --------------------
+        else if (cfg->trust_bank.enabled && should_skip_for_trust_bank(ipid, cfg->trust_bank)) {
+            // Probabilistic skip: user has accumulated trust credit
+            // (negative heat) and rolled under the sampling rate. A
+            // minimum sample rate floor still sends some traffic to
+            // the remote classifier so behavioral drift stays
+            // detectable.
+            l2_skipped_counter.labels({"trust_bank"}).inc();
+        }
+        // --- Priority 5: local_classifier_clean (efficiency) --------
+        else if (lc_result.ran && lc_result.max_confidence < cfg->local_classifier.confidence_low_clean) {
+            l2_skipped_counter.labels({"local_classifier_clean"}).inc();
+        }
+        // --- Priority 6: safe_hint (efficiency) ---------------------
+        else if (safe_hint_.is_active() && shared_embedding.ok) {
+            auto t_sh = std::chrono::steady_clock::now();
+            auto hint = safe_hint_.query_with_embedding(shared_embedding);
+            bump_layer("safe_hint", t_sh);
             if (hint.is_safe) {
-                safe_hint_hit = true;
                 l2_skipped_counter.labels({"safe_hint"}).inc();
             }
+            else if (!remote_bucket_allow(ipid)) {
+                l2_skipped_counter.labels({"rate_limit"}).inc();
+            }
+            else {
+                should_call_remote = true;
+            }
         }
-        if (!safe_hint_hit) {
-            // Per-IPID rate limit is the last gate. Token bucket
-            // returning false means an abuser is firing classifier
-            // calls faster than the configured refill rate — Layer
-            // 1 still ran on this message, the heat ladder still
-            // applies, we just don't burn additional OpenAI quota
-            // on the same client.
+        // --- Priority 7: rate_limit / fall-through to remote --------
+        else {
             if (!remote_bucket_allow(ipid))
                 l2_skipped_counter.labels({"rate_limit"}).inc();
             else

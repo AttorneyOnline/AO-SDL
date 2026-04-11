@@ -392,6 +392,7 @@ add_library(aoengine STATIC
     engine/moderation/ContentModerator.cpp
     engine/moderation/EmbeddingBackend.cpp
     engine/moderation/HfModelFetcher.cpp
+    engine/moderation/LocalClassifierLayer.cpp
     engine/moderation/ModerationAuditLog.cpp
     engine/moderation/ModerationHeat.cpp
     engine/moderation/RemoteClassifier.cpp

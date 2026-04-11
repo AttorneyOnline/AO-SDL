@@ -217,6 +217,18 @@ cfg = {
             'weight_self_harm': 1.0,
             'weight_semantic_echo': 2.0,
         },
+        'local_classifier': {
+            # Local linear classifier on top of the embedding layer.
+            # Bundled weights are built into the image by EmbedAssets
+            # at configure time; they're trained against the same
+            # bge-small-en-v1.5 model kagami uses for embeddings, so
+            # the compatibility check in LocalClassifierLayer passes.
+            # Opt-in per feature — operators enable after confirming
+            # their traffic mix benefits.
+            'enabled': False,
+            'confidence_high_skip': 0.9,
+            'confidence_low_clean': 0.2,
+        },
         'trust_bank': {
             # Trust bank (Layer 2 skip): clean messages accrue
             # negative heat which probabilistically skips the remote

@@ -144,4 +144,53 @@ SafeHintResult SafeHintLayer::query(std::string_view message, EmbeddingBackend& 
     return out;
 }
 
+SafeHintResult SafeHintLayer::query_with_embedding(const EmbeddingResult& embedding) const {
+    SafeHintResult out;
+
+    if (!embedding.ok)
+        return out;
+
+    // Snapshot under the shared lock like the message-based overload.
+    // See that function for the reason this copies instead of holding
+    // the lock through the dot-product loop.
+    int dim = 0;
+    size_t rows = 0;
+    double threshold = 0.0;
+    std::vector<float> snapshot;
+    {
+        std::shared_lock lock(mu_);
+        if (!cfg_.enabled || anchor_rows_ == 0 || anchor_dim_ <= 0)
+            return out;
+        dim = anchor_dim_;
+        rows = anchor_rows_;
+        threshold = cfg_.similarity_threshold;
+        snapshot = anchors_flat_;
+    }
+
+    // Embedding dim must match the anchors. If the caller handed us
+    // a vector from a different backend we'd produce garbage, so
+    // fail-closed.
+    if (static_cast<int>(embedding.vector.size()) != dim)
+        return out;
+
+    double max_sim = -1.0;
+    int best = -1;
+    const float* msg = embedding.vector.data();
+    for (size_t r = 0; r < rows; ++r) {
+        const float* anchor = &snapshot[r * static_cast<size_t>(dim)];
+        double dot = 0.0;
+        for (int k = 0; k < dim; ++k)
+            dot += static_cast<double>(anchor[k]) * static_cast<double>(msg[k]);
+        if (dot > max_sim) {
+            max_sim = dot;
+            best = static_cast<int>(r);
+        }
+    }
+
+    out.max_similarity = max_sim;
+    out.best_anchor_index = best;
+    out.is_safe = (max_sim >= threshold);
+    return out;
+}
+
 } // namespace moderation
