@@ -35,7 +35,7 @@ RemoteClassifierConfig active_config() {
     RemoteClassifierConfig c;
     c.enabled = true;
     c.api_key = "sk-test";
-    c.model = "omni-moderation-latest";
+    c.model = "text-moderation-latest";
     c.endpoint = "https://api.openai.com/v1/moderations";
     c.timeout_ms = 500;
     c.fail_open = true;
@@ -66,7 +66,7 @@ TEST(RemoteClassifierTest, SuccessfulResponseMapsScores) {
     rc.configure(active_config());
     const std::string body = R"({
         "id": "modr-1",
-        "model": "omni-moderation-latest",
+        "model": "text-moderation-latest",
         "results": [{
             "flagged": true,
             "categories": {"hate": true, "sexual": false},
@@ -128,7 +128,7 @@ TEST(RemoteClassifierTest, BodyContainsModelAndInput) {
     rc.set_transport(std::move(transport));
 
     rc.classify("hello there");
-    EXPECT_NE(transport_ref->last_body.find("\"model\":\"omni-moderation-latest\""), std::string::npos);
+    EXPECT_NE(transport_ref->last_body.find("\"model\":\"text-moderation-latest\""), std::string::npos);
     EXPECT_NE(transport_ref->last_body.find("\"input\":\"hello there\""), std::string::npos);
 }
 

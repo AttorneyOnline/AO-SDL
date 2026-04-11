@@ -186,8 +186,13 @@ struct RemoteClassifierConfig {
     /// Endpoint URL. The default works for openai.
     std::string endpoint = "https://api.openai.com/v1/moderations";
 
-    /// Model name sent in the request body.
-    std::string model = "omni-moderation-latest";
+    /// Model name sent in the request body. Defaults to the
+    /// text-only model because kagami is a text-only chat server
+    /// and the multimodal `omni-moderation-latest` just burns
+    /// more tokens and has stricter rate limits for no benefit
+    /// here. Operators who specifically want multimodal can
+    /// override this to "omni-moderation-latest" in kagami.json.
+    std::string model = "text-moderation-latest";
 
     /// Timeout after which we give up and fall back to Layer 1 only.
     int timeout_ms = 500;

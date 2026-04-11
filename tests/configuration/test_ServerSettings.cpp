@@ -85,7 +85,7 @@ class MockServerSettings : public JsonConfiguration<MockServerSettings> {
                       {"provider", "openai"},
                       {"api_key", ""},
                       {"endpoint", "https://api.openai.com/v1/moderations"},
-                      {"model", "omni-moderation-latest"},
+                      {"model", "text-moderation-latest"},
                       {"timeout_ms", 3000},
                       {"fail_open", true},
                   }},
