@@ -71,7 +71,7 @@ class QtAppInterface : public QObject {
     Q_PROPERTY(HUDController* hudController READ hud_controller CONSTANT)
 
   public:
-    static QtAppInterface& instance();
+    explicit QtAppInterface(QObject* parent = nullptr);
     ~QtAppInterface() override;
 
     /**
@@ -124,8 +124,6 @@ class QtAppInterface : public QObject {
     void currentScreenIdChanged();
 
   private:
-    explicit QtAppInterface(QObject* parent = nullptr);
-
     EngineInterface* engine_ = nullptr;
 
     std::unique_ptr<UIManager> ui_mgr_;
