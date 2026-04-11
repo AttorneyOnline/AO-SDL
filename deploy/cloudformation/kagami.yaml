@@ -667,6 +667,16 @@ Resources:
                 grpc_listen_port: 9096
                 log_level: warn
               common:
+                # Force all component interconnects (query frontend,
+                # scheduler, ingester ring) to use loopback. Without
+                # this, Loki auto-discovers the first non-loopback
+                # interface (the EC2 private IP, 172.31.x.x) and
+                # advertises that as the frontend address — but
+                # grpc_listen_address above is 127.0.0.1, so the
+                # querier's dial() against the advertised IP fails
+                # with "connection refused" and every query returns
+                # HTTP 400. Caught during trace-dashboard validation.
+                instance_addr: 127.0.0.1
                 path_prefix: /loki
                 storage:
                   filesystem:
@@ -718,6 +728,8 @@ Resources:
                   -o grafana/provisioning/dashboards/kagami-overview.json || true
               curl -fsSL $CBASE/grafana/provisioning/dashboards/kagami-moderation.json \
                   -o grafana/provisioning/dashboards/kagami-moderation.json || true
+              curl -fsSL $CBASE/grafana/provisioning/dashboards/kagami-moderation-trace.json \
+                  -o grafana/provisioning/dashboards/kagami-moderation-trace.json || true
               # Dashboard provider config
               cat > grafana/provisioning/dashboards/default.yaml <<'DASHPROV'
               apiVersion: 1

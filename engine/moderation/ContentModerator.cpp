@@ -966,7 +966,15 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         const int64_t dm_final = remote_.cache_misses() - misses_before;
         tr.remote.ran = true;
         tr.remote.http_status = rr.http_status;
-        tr.remote.cache_hit = (dm_final == 0);
+        // cache_hit is meaningful only when the cache is enabled. When
+        // disabled, neither hits nor misses increment, so the naive
+        // `dm_final == 0` check would report cache_hit=true on every
+        // remote call in a cache-disabled deployment — false signal
+        // that pollutes trace-stream aggregations. Gate on the config
+        // so cache_hit only claims true when the cache actually served
+        // the response (cache enabled AND the miss counter didn't
+        // advance during this call).
+        tr.remote.cache_hit = cfg->remote.cache_enabled && (dm_final == 0);
         tr.remote.ok = rr.ok;
         tr.remote.scores = rr.scores;
         tr.remote.error = rr.error;
