@@ -123,3 +123,125 @@ TEST_F(ModerationHeatTest, ConcurrentUsersTrackedIndependently) {
     EXPECT_DOUBLE_EQ(heat_.peek("alice"), 5.0);
     EXPECT_DOUBLE_EQ(heat_.peek("bob"), 2.0);
 }
+
+// ---------------------------------------------------------------------------
+// Trust bank (negative heat) tests
+// ---------------------------------------------------------------------------
+
+TEST_F(ModerationHeatTest, AccrueTrustSubtractsFromZero) {
+    double v = heat_.accrue_trust("a", 0.1, -5.0);
+    EXPECT_DOUBLE_EQ(v, -0.1);
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), -0.1);
+}
+
+TEST_F(ModerationHeatTest, AccrueTrustRespectsFloor) {
+    // Call accrue_trust 100 times with reward=0.1 and floor=-5.0.
+    // Expected final heat is exactly -5.0 (the floor), NOT -10.0
+    // even though raw math would give -10.0.
+    for (int i = 0; i < 100; ++i)
+        heat_.accrue_trust("a", 0.1, -5.0);
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), -5.0);
+}
+
+TEST_F(ModerationHeatTest, AccrueTrustNoOpWhenSuspicious) {
+    // User in suspicion state (heat > 0) cannot build trust.
+    heat_.apply("a", 3.0);
+    double before = heat_.peek("a");
+    double after = heat_.accrue_trust("a", 0.1, -5.0);
+    EXPECT_DOUBLE_EQ(after, before);
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), before);
+}
+
+TEST_F(ModerationHeatTest, AccrueTrustRejectsPositiveFloor) {
+    // Guard against caller mistakes — a non-negative floor would
+    // make accrue_trust pointless or worse, push heat upward.
+    heat_.accrue_trust("a", 0.1, 5.0);
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), 0.0);
+}
+
+TEST_F(ModerationHeatTest, AccrueTrustRejectsNonPositiveAmount) {
+    heat_.accrue_trust("a", 0.0, -5.0);
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), 0.0);
+    heat_.accrue_trust("a", -1.0, -5.0);
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), 0.0);
+}
+
+TEST_F(ModerationHeatTest, NegativeHeatDecaysTowardZero) {
+    // Trust is subject to the same exponential decay as suspicion.
+    // Set up -4.0 trust, advance one half-life, expect -2.0.
+    for (int i = 0; i < 40; ++i)
+        heat_.accrue_trust("a", 0.1, -5.0);
+    ASSERT_DOUBLE_EQ(heat_.peek("a"), -4.0);
+    advance_seconds(60.0);
+    double v = heat_.peek("a");
+    EXPECT_NEAR(v, -2.0, 0.01);
+}
+
+TEST_F(ModerationHeatTest, NegativeHeatSnapsToZeroAtFloor) {
+    // The abs() fix in decay_locked should snap tiny negatives to
+    // zero, not clobber meaningful ones. Set up a very small
+    // negative value and verify it snaps to exactly 0.
+    heat_.accrue_trust("a", 1e-7, -5.0); // well below the 1e-6 snap
+    advance_seconds(1.0);                // trigger a decay pass
+    EXPECT_DOUBLE_EQ(heat_.peek("a"), 0.0);
+}
+
+TEST_F(ModerationHeatTest, MeaningfulNegativeHeatSurvivesDecayPass) {
+    // Confirm the mirror case: a value clearly above the 1e-6 snap
+    // on the negative side MUST survive a decay pass.
+    heat_.accrue_trust("a", 3.0, -5.0); // heat = -3.0
+    advance_seconds(0.001);             // tiny advance — barely any decay
+    double v = heat_.peek("a");
+    EXPECT_LT(v, -1.0);  // still meaningfully negative
+    EXPECT_GT(v, -3.01); // very close to the original -3.0
+}
+
+TEST_F(ModerationHeatTest, PositiveDeltaResetsNegativeHeat) {
+    // The critical safety invariant of the trust bank: accumulated
+    // trust credit cannot absorb a slur hit. A user with -5.0 trust
+    // who sends a slur (delta=6.0) must end up at heat=6.0 (mute
+    // threshold), NOT at 1.0 (below any threshold). The apply()
+    // method resets negative heat to zero before adding delta.
+    for (int i = 0; i < 50; ++i)
+        heat_.accrue_trust("a", 0.1, -10.0);
+    ASSERT_DOUBLE_EQ(heat_.peek("a"), -5.0);
+    double new_heat = heat_.apply("a", 6.0);
+    EXPECT_DOUBLE_EQ(new_heat, 6.0);
+    EXPECT_EQ(heat_.decide(new_heat), ModerationAction::MUTE);
+}
+
+TEST_F(ModerationHeatTest, PartialTrustResetOnSmallPositiveDelta) {
+    // Even a sub-censor delta (0.5) applied to a trusted user
+    // should reset to zero first, landing the user at exactly 0.5
+    // (LOG level). The trust is GONE — not merely reduced.
+    for (int i = 0; i < 50; ++i)
+        heat_.accrue_trust("a", 0.1, -10.0);
+    ASSERT_DOUBLE_EQ(heat_.peek("a"), -5.0);
+    double new_heat = heat_.apply("a", 0.5);
+    EXPECT_DOUBLE_EQ(new_heat, 0.5);
+    EXPECT_EQ(heat_.decide(new_heat), ModerationAction::LOG);
+}
+
+TEST_F(ModerationHeatTest, TrustAccrualIsTrackedPerUser) {
+    heat_.accrue_trust("alice", 0.5, -5.0);
+    heat_.accrue_trust("bob", 0.2, -5.0);
+    EXPECT_DOUBLE_EQ(heat_.peek("alice"), -0.5);
+    EXPECT_DOUBLE_EQ(heat_.peek("bob"), -0.2);
+}
+
+TEST_F(ModerationHeatTest, SweepPreservesMeaningfulNegativeHeat) {
+    // Regression for a latent bug exposed by trust-bank: the sweep()
+    // prune condition used `heat < prune_below` which is trivially
+    // true for any negative value. Without the abs() fix, a trusted
+    // user would lose all accumulated credit on the very first idle
+    // sweep after accrual. Confirm a meaningfully-trusted user
+    // survives a sweep.
+    heat_.accrue_trust("alice", 5.0, -10.0);
+    ASSERT_DOUBLE_EQ(heat_.peek("alice"), -5.0);
+    advance_seconds(2.0); // past sweep_idle
+    heat_.sweep();
+    // Alice still has negative heat (decayed slightly from -5.0).
+    double v = heat_.peek("alice");
+    EXPECT_LT(v, -4.0);
+    EXPECT_GT(v, -5.01);
+}

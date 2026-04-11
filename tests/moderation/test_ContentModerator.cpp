@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -51,8 +52,14 @@ class SyntheticRemoteTransport : public moderation::RemoteClassifierTransport {
     explicit SyntheticRemoteTransport(Scores s) : scores_(s) {
     }
 
+    /// Number of post_json() invocations. Incremented atomically so
+    /// tests that want to assert "remote was (not) called N times"
+    /// can read it after the ContentModerator calls complete.
+    mutable std::atomic<int> call_count{0};
+
     std::pair<int, std::string> post_json(const std::string& /*url*/, const std::string& /*bearer*/,
                                           const std::string& /*body*/, int /*timeout_ms*/) override {
+        call_count.fetch_add(1, std::memory_order_relaxed);
         // Hand-construct the minimal OpenAI omni-moderation response
         // shape the parser expects.
         std::string body = "{\"id\":\"test\",\"model\":\"omni\",\"results\":[{\"flagged\":true,\"categories\":{}";
@@ -293,6 +300,196 @@ TEST_F(ContentModeratorTest, CleanMessageAfterOffenseDoesNotInheritAction) {
     EXPECT_EQ(clean.action, moderation::ModerationAction::NONE);
     // The heat should NOT have grown (no delta applied).
     EXPECT_LE(clean.heat_after, bad.heat_after);
+}
+
+// ---------------------------------------------------------------------------
+// Trust bank (Feature 1): clean-message accrual + Layer 2 skip + safety reset
+// ---------------------------------------------------------------------------
+
+namespace {
+/// Build a config suitable for testing trust bank behavior in isolation.
+/// Only remote classifier is enabled as a moderation layer (so "clean"
+/// messages produce a zero heat delta from Layer 1), with synthetic
+/// remote scores the caller provides via SyntheticRemoteTransport.
+ContentModerationConfig enable_trust_bank_test() {
+    ContentModerationConfig cfg;
+    cfg.enabled = true;
+    cfg.check_ic = true;
+    cfg.check_ooc = true;
+    cfg.remote.enabled = true;
+    cfg.remote.api_key = "sk-test";
+
+    // Trust bank: aggressive so the tests are deterministic.
+    // clean_reward=1.0 means each NONE verdict moves heat -1.0.
+    // api_skip_threshold=1.5 means eligible to skip when heat < -1.5.
+    // max_trust=3.0 means the skip rate ramps from 0% at -1.5 to
+    //   (1 - min_sample_rate) = 100% at -3.0.
+    // min_sample_rate=0.0 gives a deterministic "always skip" at the floor.
+    cfg.trust_bank.enabled = true;
+    cfg.trust_bank.clean_reward = 1.0;
+    cfg.trust_bank.max_trust = 3.0;
+    cfg.trust_bank.api_skip_threshold = 1.5;
+    cfg.trust_bank.min_sample_rate = 0.0;
+
+    // Heat ladder: give enough headroom that slur delta (6.0 *
+    // weight_slurs 6.0 = 36.0) clearly crosses mute_threshold.
+    cfg.heat.decay_half_life_seconds = 3600.0; // long so no decay during test
+    cfg.heat.censor_threshold = 1.0;
+    cfg.heat.drop_threshold = 3.0;
+    cfg.heat.mute_threshold = 6.0;
+    cfg.heat.kick_threshold = 10.0;
+    cfg.heat.ban_threshold = 15.0;
+    cfg.heat.perma_ban_threshold = 25.0;
+    cfg.heat.weight_toxicity = 1.0;
+    return cfg;
+}
+} // namespace
+
+TEST_F(ContentModeratorTest, TrustBankAccruesOnCleanMessages) {
+    cm_.configure(enable_trust_bank_test());
+    // Clean synthetic transport — every call returns zero scores.
+    cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{}));
+
+    // 3 clean messages → heat should accumulate -1.0 per message
+    // UNTIL the user crosses api_skip_threshold, at which point the
+    // skip branch starts firing and heat STILL accumulates (accrual
+    // runs on the NONE early-return path regardless of skip).
+    for (int i = 0; i < 3; ++i) {
+        auto v = cm_.check("trusted_user", "ooc", "hello");
+        EXPECT_EQ(v.action, ModerationAction::NONE);
+    }
+    // After 3 clean messages, heat should be at the -3.0 max_trust
+    // floor (clamped). current_heat() is a public diagnostic accessor.
+    EXPECT_DOUBLE_EQ(cm_.current_heat("trusted_user"), -3.0);
+}
+
+TEST_F(ContentModeratorTest, TrustBankSkipsRemoteForTrustedUser) {
+    auto cfg = enable_trust_bank_test();
+    cm_.configure(cfg);
+    auto transport = std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{});
+    auto* transport_ptr = transport.get();
+    cm_.set_remote_transport(std::move(transport));
+
+    // First 2 clean messages: heat not yet past api_skip_threshold
+    // (-1.5), so the remote IS called. These accrue trust.
+    cm_.check("trusted_user", "ooc", "hello one");
+    cm_.check("trusted_user", "ooc", "hello two");
+    // After 2 clean: heat = -2.0. Past threshold, but not yet at
+    // max_trust = -3.0. The 3rd message should reach heat = -3.0
+    // where skip_rate = 100% by our deterministic config.
+    cm_.check("trusted_user", "ooc", "hello three");
+
+    // At this point, heat is at -3.0 (the floor). Any further clean
+    // message must hit the deterministic skip branch — remote
+    // transport call_count must NOT increment for the next 10 calls.
+    int before = transport_ptr->call_count.load();
+    for (int i = 0; i < 10; ++i) {
+        cm_.check("trusted_user", "ooc", "still clean");
+    }
+    int after = transport_ptr->call_count.load();
+    EXPECT_EQ(after, before) << "expected all 10 calls to skip remote at max trust";
+}
+
+TEST_F(ContentModeratorTest, TrustBankZeroSampleRateSkipsEverything) {
+    // Contrast with the previous TrustBankSkipsRemoteForTrustedUser
+    // test: min_sample_rate=0 is already the deterministic floor, so
+    // every at-max-trust message deterministically skips. This
+    // exists as a separate test mostly for naming clarity in the
+    // regression suite — "zero sample rate is respected".
+    auto cfg = enable_trust_bank_test();
+    cfg.trust_bank.min_sample_rate = 0.0;
+    cm_.configure(cfg);
+    auto transport = std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{});
+    auto* transport_ptr = transport.get();
+    cm_.set_remote_transport(std::move(transport));
+
+    // Burn through the initial accrual phase (reaches the floor
+    // after 3 clean messages with clean_reward=1.0 and max_trust=3.0).
+    for (int i = 0; i < 3; ++i)
+        cm_.check("user", "ooc", "warmup");
+    int baseline = transport_ptr->call_count.load();
+
+    // At max trust with zero sample rate, ALL subsequent calls must skip.
+    for (int i = 0; i < 50; ++i)
+        cm_.check("user", "ooc", "still clean");
+    EXPECT_EQ(transport_ptr->call_count.load(), baseline);
+}
+
+TEST_F(ContentModeratorTest, TrustBankMinSampleRateFloorLetsSomeTrafficThrough) {
+    // Load-bearing test: with min_sample_rate > 0, even at max trust
+    // SOME traffic reaches the remote classifier for drift detection.
+    // The exact fraction is dominated by the per-IPID remote token
+    // bucket (burst=10, refill=2/sec) which caps API calls globally
+    // regardless of the trust-bank skip rate. So we don't assert on
+    // the exact count — just that the floor lets more than zero
+    // calls through in contrast to min_sample_rate=0, which deter-
+    // ministically blocks everything.
+    auto cfg = enable_trust_bank_test();
+    cfg.trust_bank.min_sample_rate = 0.5; // aggressive floor
+    cm_.configure(cfg);
+    auto transport = std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{});
+    auto* transport_ptr = transport.get();
+    cm_.set_remote_transport(std::move(transport));
+
+    // Accrue trust to the floor.
+    for (int i = 0; i < 3; ++i)
+        cm_.check("user", "ooc", "warmup");
+    int before = transport_ptr->call_count.load();
+
+    // Send a batch of messages at max trust. With 50% sample rate
+    // AND a generous remote bucket budget, we expect several to get
+    // through before the bucket depletes. The exact count depends
+    // on timing — this is a lower-bound assertion only.
+    for (int i = 0; i < 200; ++i)
+        cm_.check("user", "ooc", "clean message");
+    int after = transport_ptr->call_count.load();
+    int calls_during_trusted_phase = after - before;
+
+    EXPECT_GT(calls_during_trusted_phase, 0) << "min_sample_rate > 0 must let at least some calls through "
+                                                "for drift detection";
+}
+
+TEST_F(ContentModeratorTest, TrustBankSlurHitResetsAndPenalizes) {
+    // The safety-critical test: a user with accumulated trust who
+    // trips a slur filter must end up at mute_threshold (not
+    // absorbed into trust credit). This is the "slur-reset" semantic
+    // of ModerationHeat::apply().
+    auto cfg = enable_trust_bank_test();
+    // Enable slur layer with a wordlist.
+    cfg.slurs.enabled = true;
+    cfg.slurs.match_score = 1.0;
+    cfg.heat.weight_slurs = 6.0; // single hit = mute threshold
+    cm_.configure(cfg);
+    cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{}));
+    cm_.set_slur_wordlist({"forbidden"});
+
+    // Accrue full trust.
+    for (int i = 0; i < 3; ++i)
+        cm_.check("trusted_user", "ooc", "hello friend");
+    ASSERT_DOUBLE_EQ(cm_.current_heat("trusted_user"), -3.0);
+
+    // Now send a slur. Heat math:
+    //   slur score 1.0 * weight 6.0 = +6.0 heat delta
+    //   BEFORE that is applied, apply() resets negative heat to 0
+    //   → new heat = 0 + 6.0 = 6.0 = mute_threshold
+    //   → action = MUTE (NOT below-any-threshold 1.0)
+    auto v = cm_.check("trusted_user", "ooc", "forbidden");
+    EXPECT_EQ(v.action, ModerationAction::MUTE) << "trusted user who trips slur filter must still be muted, "
+                                                   "not absorbed by accumulated trust credit";
+    EXPECT_DOUBLE_EQ(v.heat_after, 6.0);
+}
+
+TEST_F(ContentModeratorTest, TrustBankDisabledLeavesHeatAtZero) {
+    // Regression: when trust_bank is disabled, clean messages should
+    // NOT touch heat (existing pre-feature behavior preserved).
+    auto cfg = enable_trust_bank_test();
+    cfg.trust_bank.enabled = false;
+    cm_.configure(cfg);
+    cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{}));
+
+    for (int i = 0; i < 20; ++i)
+        cm_.check("user", "ooc", "hello");
+    EXPECT_DOUBLE_EQ(cm_.current_heat("user"), 0.0);
 }
 
 TEST_F(ContentModeratorTest, JsonSerializationRoundTrip) {

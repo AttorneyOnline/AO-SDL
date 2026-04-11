@@ -316,6 +316,46 @@ struct ModerationAuditSinkConfig {
     std::string min_action = "log";
 };
 
+/// Trust bank (negative heat) layer.
+///
+/// An orthogonal use of the ModerationHeat counter: users with a track
+/// record of clean messages accumulate "trust credit" as NEGATIVE heat,
+/// which probabilistically skips the expensive remote classifier call.
+/// Any positive delta (slur, toxicity hit, etc.) resets trust to zero
+/// before applying penalty — trust accelerates the skip decision, never
+/// the enforcement decision.
+///
+/// The skip is probabilistic rather than absolute so behavioral drift
+/// (a previously-trusted user going bad) is still detectable — a
+/// minimum sampling rate forces ~5% of trusted messages through the
+/// remote classifier for ground truth.
+///
+/// Disabled by default; zero behavior change from pre-trust-bank
+/// kagami when off.
+struct TrustBankConfig {
+    bool enabled = false;
+
+    /// Heat subtracted from the counter for each NONE-verdict (clean)
+    /// message. 0.1 means 50 clean messages to reach -5.0 trust (the
+    /// default api_skip_threshold).
+    double clean_reward = 0.1;
+
+    /// Maximum trust credit allowed (most-negative heat value). At
+    /// -max_trust, the skip rate hits min_sample_rate. Further clean
+    /// messages are no-ops.
+    double max_trust = 10.0;
+
+    /// Heat must be at most -api_skip_threshold before the trust bank
+    /// is eligible to skip the remote call. Linear ramp from 100% API
+    /// rate at -api_skip_threshold to min_sample_rate at -max_trust.
+    double api_skip_threshold = 5.0;
+
+    /// Floor on the sampling rate — even the most trusted users get
+    /// this fraction of their messages sent to the remote classifier
+    /// for ground-truth verification. 0.05 = 5% of traffic.
+    double min_sample_rate = 0.05;
+};
+
 /// Top-level content moderation config. Everything defaults to off.
 struct ContentModerationConfig {
     /// Master kill switch. When false, no layer runs and the moderator
@@ -340,6 +380,7 @@ struct ContentModerationConfig {
     SafeHintConfig safe_hint;
     EmbeddingsLayerConfig embeddings;
     HeatConfig heat;
+    TrustBankConfig trust_bank;
     ModerationAuditSinkConfig audit;
 };
 

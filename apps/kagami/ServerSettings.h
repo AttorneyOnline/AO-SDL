@@ -327,6 +327,13 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.heat.weight_self_harm = value<double>("content_moderation/heat/weight_self_harm");
         cfg.heat.weight_semantic_echo = value<double>("content_moderation/heat/weight_semantic_echo");
 
+        // Trust bank (negative heat accrual for API-call skip)
+        cfg.trust_bank.enabled = value<bool>("content_moderation/trust_bank/enabled");
+        cfg.trust_bank.clean_reward = value<double>("content_moderation/trust_bank/clean_reward");
+        cfg.trust_bank.max_trust = value<double>("content_moderation/trust_bank/max_trust");
+        cfg.trust_bank.api_skip_threshold = value<double>("content_moderation/trust_bank/api_skip_threshold");
+        cfg.trust_bank.min_sample_rate = value<double>("content_moderation/trust_bank/min_sample_rate");
+
         // Audit sinks
         cfg.audit.stdout_enabled = value<bool>("content_moderation/audit/stdout_enabled");
         cfg.audit.file_path = value<std::string>("content_moderation/audit/file_path");
@@ -618,6 +625,21 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"weight_violence", 1.0},
                       {"weight_self_harm", 1.0},
                       {"weight_semantic_echo", 2.0},
+                  }},
+                 {"trust_bank",
+                  nlohmann::json{
+                      // Orthogonal use of the heat counter: clean
+                      // messages accrue NEGATIVE heat (trust credit)
+                      // which probabilistically skips the expensive
+                      // remote classifier call. Any positive delta
+                      // resets trust to zero before penalty — trust
+                      // only accelerates the skip decision, never
+                      // the enforcement decision. Opt-in.
+                      {"enabled", false},
+                      {"clean_reward", 0.1},
+                      {"max_trust", 10.0},
+                      {"api_skip_threshold", 5.0},
+                      {"min_sample_rate", 0.05},
                   }},
                  {"audit",
                   nlohmann::json{

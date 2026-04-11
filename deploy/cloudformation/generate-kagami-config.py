@@ -209,6 +209,19 @@ cfg = {
             'weight_self_harm': 1.0,
             'weight_semantic_echo': 2.0,
         },
+        'trust_bank': {
+            # Trust bank (Layer 2 skip): clean messages accrue
+            # negative heat which probabilistically skips the remote
+            # classifier call. Opt-in — operators enable it explicitly
+            # once they've confirmed their traffic mix benefits.
+            # See the TrustBankConfig doc in ContentModerationConfig.h
+            # for the full semantics.
+            'enabled': False,
+            'clean_reward': 0.1,
+            'max_trust': 10.0,
+            'api_skip_threshold': 5.0,
+            'min_sample_rate': 0.05,
+        },
         'audit': {
             'stdout_enabled': False,
             'file_path': '/logs/kagami_mod_audit.jsonl',

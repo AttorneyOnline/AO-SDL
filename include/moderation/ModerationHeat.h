@@ -40,9 +40,34 @@ class ModerationHeat {
     /// Apply @p delta heat to the counter for @p ipid, first decaying
     /// the previous value by the elapsed time. Returns the new heat.
     ///
-    /// Delta should always be >= 0 — the accumulator never decreases
-    /// except via decay or explicit reset().
+    /// Delta should always be >= 0 — apply() clamps negative deltas
+    /// to zero.
+    ///
+    /// **Trust reset semantic**: before the positive delta is added,
+    /// any currently-negative heat (accumulated via accrue_trust())
+    /// is reset to zero. Rationale: a slur hit should not be absorbed
+    /// by accumulated trust credit. A user with -5.0 trust who sends
+    /// a slur (delta=6.0) should end up at heat=6.0 (mute threshold),
+    /// not 1.0 (below any threshold). Trust accelerates the decision
+    /// to SKIP the remote classifier, never the decision to act.
     double apply(const std::string& ipid, double delta);
+
+    /// Accrue "trust" for @p ipid by subtracting @p amount from heat,
+    /// clamped at -@p floor (the most negative the heat can go).
+    ///
+    /// Only applies when current heat <= 0. If the IPID is currently
+    /// in a suspicion state (heat > 0), this is a no-op — the user
+    /// has to decay naturally back to zero before they can start
+    /// building trust. Decays the existing entry first like apply().
+    ///
+    /// Intended to be called from ContentModerator when a check()
+    /// produces a NONE verdict (clean message). Used by the trust-
+    /// bank layer to probabilistically skip the expensive remote
+    /// classifier call for well-behaved users.
+    ///
+    /// Returns the new heat value (may be the same as before if the
+    /// IPID is in suspicion state or the floor has been reached).
+    double accrue_trust(const std::string& ipid, double amount, double floor);
 
     /// Read the current heat for an IPID without adding anything.
     /// Still decays the stored value by elapsed time as a side effect.

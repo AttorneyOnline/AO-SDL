@@ -40,7 +40,13 @@ void ModerationHeat::decay_locked(Entry& entry, int64_t now_ms) const {
     // gauge and delays the sweep() prune. 1e-6 is well below the
     // censor threshold (1.0) so snapping to zero can't affect action
     // decisions — it just keeps the numbers clean.
-    if (entry.heat < 1e-6)
+    //
+    // std::abs() because trust-bank accumulation (accrue_trust) puts
+    // heat on the negative side of zero. A plain `heat < 1e-6` check
+    // would clobber any meaningful negative value (e.g. -5.0 < 1e-6
+    // is true) on the very first decay pass, defeating trust
+    // accumulation entirely.
+    if (std::abs(entry.heat) < 1e-6)
         entry.heat = 0.0;
     entry.last_update_ms = now_ms;
 }
@@ -53,7 +59,40 @@ double ModerationHeat::apply(const std::string& ipid, double delta) {
     const int64_t t = now_ms();
     auto& entry = state_[ipid];
     decay_locked(entry, t);
+    // Trust-reset semantic: any accumulated trust credit (negative
+    // heat from accrue_trust) is wiped BEFORE the positive delta is
+    // applied. Without this, a user with -5.0 trust who trips a slur
+    // filter for delta=6.0 ends up at heat=1.0 (below mute_threshold),
+    // effectively absorbing 83% of the penalty. Trust is allowed to
+    // accelerate the decision to SKIP the remote classifier, never
+    // the decision to enforce. See apply() doc comment in the header
+    // for the full rationale.
+    if (entry.heat < 0.0)
+        entry.heat = 0.0;
     entry.heat += delta;
+    return entry.heat;
+}
+
+double ModerationHeat::accrue_trust(const std::string& ipid, double amount, double floor) {
+    if (amount <= 0.0)
+        return peek(ipid);
+    if (floor >= 0.0)
+        return peek(ipid); // floor must be negative to accrue trust toward it
+
+    std::lock_guard lock(mu_);
+    const int64_t t = now_ms();
+    auto& entry = state_[ipid];
+    decay_locked(entry, t);
+    // Suspicion dominates trust: a user currently above zero (in the
+    // LOG/CENSOR/DROP/MUTE ladder) cannot start building trust credit.
+    // They have to decay naturally back to zero first. This prevents
+    // a malicious user from bouncing between mild misbehavior and
+    // clean traffic to game the trust-skip gate.
+    if (entry.heat > 0.0)
+        return entry.heat;
+    entry.heat -= amount; // move toward the negative floor
+    if (entry.heat < floor)
+        entry.heat = floor;
     return entry.heat;
 }
 
@@ -103,7 +142,13 @@ void ModerationHeat::sweep() {
         // see dt=0 and never prune anything.
         const bool idle_long_enough = (t - entry.last_update_ms) > idle_ms;
         decay_locked(entry, t);
-        if (entry.heat < cfg_.prune_below && idle_long_enough)
+        // std::abs() to cover the trust-bank (negative heat) case:
+        // without it, a trusted user's -5.0 heat would satisfy
+        // `heat < prune_below` on the very first idle sweep and lose
+        // all accumulated credit. decay_locked already snaps
+        // sufficiently-small magnitudes to exact zero, so this check
+        // still prunes stale entries on either side of zero.
+        if (std::abs(entry.heat) < cfg_.prune_below && idle_long_enough)
             to_erase.push_back(ipid);
     }
     for (auto& k : to_erase)
