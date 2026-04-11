@@ -76,6 +76,8 @@ target_sources(aoqt PRIVATE
     ui/CharIconProvider.cpp
     ui/EmoteIconProvider.h
     ui/EmoteIconProvider.cpp
+    ui/QtImageWatcher.h
+    ui/QtImageWatcher.cpp
 
     ui/controllers/IQtScreenController.h
     ui/controllers/ServerListController.h

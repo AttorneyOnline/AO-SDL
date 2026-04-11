@@ -51,12 +51,9 @@ class CharSelectController : public IQtScreenController {
     struct CharEntry {
         std::string folder;
         bool taken = false;
-        bool iconResolved = false;
     };
 
     void hydrateModel();
-    void prefetchIcons();
-    void resolveIcons();
 
     UIManager& m_uiMgr;
     ICController& m_icCtrl;
@@ -65,11 +62,7 @@ class CharSelectController : public IQtScreenController {
     std::vector<CharEntry> m_chars;
     int m_selected = -1;
     int m_hydrateCursor = 0;
-    int m_prefetchCursor = 0;
-    int m_retryCursor = 0;
 
     /// Entries inserted into the model per tick during initial hydration.
     static constexpr int kHydrateBatch = 64;
-    /// Icon resolves (dataChanged signals) per tick.
-    static constexpr int kResolveBatch = 32;
 };

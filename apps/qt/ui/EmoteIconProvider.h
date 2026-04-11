@@ -1,31 +1,32 @@
 #pragma once
 
-#include <QHash>
-#include <QImage>
-#include <QQuickImageProvider>
-#include <QReadWriteLock>
+#include <QQuickAsyncImageProvider>
 
 class AssetLibrary;
+class QtImageWatcher;
 
 /**
- * @brief QML image provider for emote button icons.
+ * @brief Async QML image provider for emote button icons.
  *
  * Registered as "emoteicon" — QML accesses icons via:
  *   Image { source: "image://emoteicon/<CharacterFolder>/<emoteIndex>" }
  *
- * Delegates to AOAssetLibrary::emote_icon() (emotions/button{N}_off path
- * convention) and caches the decoded QImage so repeated scrolling through
- * the emote grid is a cheap hash lookup.  Thread-safe: requestImage() may
- * be called from a QML worker thread when Image.asynchronous is true.
+ * Delegates to the AO2 path convention for emote icons
+ * (characters/<char>/emotions/button<N>_off).
+ *
+ * Returns a QQuickImageResponse immediately.  finished() is emitted once the
+ * asset is decoded and available in AssetLibrary's LRU cache.  No internal
+ * QImage cache is maintained — removing the duplicate pixel allocation that
+ * the old synchronous provider required.
  */
-class EmoteIconProvider : public QQuickImageProvider {
-  public:
-    explicit EmoteIconProvider(AssetLibrary& lib);
+class EmoteIconProvider : public QQuickAsyncImageProvider {
+public:
+    explicit EmoteIconProvider(AssetLibrary& lib, QtImageWatcher& watcher);
 
-    QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override;
+    QQuickImageResponse* requestImageResponse(const QString& id,
+                                              const QSize& requestedSize) override;
 
-  private:
+private:
     AssetLibrary& m_lib;
-    QHash<QString, QImage> m_cache;
-    mutable QReadWriteLock m_lock;
+    QtImageWatcher& m_watcher;
 };

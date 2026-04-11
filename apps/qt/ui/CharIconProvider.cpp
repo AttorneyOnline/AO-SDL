@@ -1,60 +1,57 @@
 #include "CharIconProvider.h"
 
+#include "QtImageWatcher.h"
 #include "asset/AssetLibrary.h"
 #include "asset/ImageAsset.h"
 
-CharIconProvider::CharIconProvider(AssetLibrary& lib) : QQuickImageProvider(QQuickImageProvider::Image), m_lib(lib) {
-}
+#include <QQuickImageResponse>
+#include <QQuickTextureFactory>
 
-QImage CharIconProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize) {
-    // Check provider cache first (fast path for scrolling).
-    {
-        QReadLocker locker(&m_lock);
-        auto it = m_cache.find(id);
-        if (it != m_cache.end()) {
-            const QImage& cached = it.value();
-            if (size)
-                *size = cached.size();
-            if (requestedSize.isValid() && !requestedSize.isNull())
-                return cached.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            return cached;
-        }
+namespace {
+
+/**
+ * @brief Async response for a single character icon request.
+ *
+ * Lifetime is managed by Qt Quick.  The alive_ guard prevents the watcher
+ * callback from touching this object after cancel() or destruction.
+ */
+class AsyncCharIconResponse : public QQuickImageResponse {
+public:
+    AsyncCharIconResponse(QtImageWatcher& watcher, const QString& id, const QSize& /*requestedSize*/) {
+        const std::string path = "characters/" + id.toStdString() + "/char_icon";
+
+        auto alive = m_alive;
+        watcher.watch(path, [this, alive](std::shared_ptr<ImageAsset> asset) {
+            if (!*alive)
+                return;
+            m_image = asset_frame_to_qimage(asset, kMaxThumb);
+            emit finished();
+        });
     }
 
-    // Cache miss — decode from AssetLibrary.
-    std::string path = "characters/" + id.toStdString() + "/char_icon";
-    auto img = m_lib.image(path);
-    if (!img || img->frame_count() == 0)
-        return {};
+    ~AsyncCharIconResponse() override { *m_alive = false; }
 
-    const auto& f = img->frame(0);
-    // Construct QImage from the RGBA pixel buffer.  copy() detaches from the
-    // ImageAsset-owned memory so the QImage remains valid after the shared_ptr
-    // is released.
-    QImage qimg(img->frame_pixels(0), f.width, f.height, f.width * 4, QImage::Format_RGBA8888);
+    // Called by Qt Quick when the requesting Image item is destroyed or its
+    // source changes.  Prevent the pending callback from touching this object.
+    void cancel() override { *m_alive = false; }
 
-    QImage result = qimg.copy();
-    result.flip(Qt::Vertical);
+    QQuickTextureFactory* textureFactory() const override {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
 
-    // Pre-scale to thumbnail size before caching.  Character icons are
-    // displayed at 96×96 or smaller — storing full-resolution images
-    // wastes memory and makes the scaling cost per-request instead of
-    // once.
+private:
     static constexpr int kMaxThumb = 128;
-    if (result.width() > kMaxThumb || result.height() > kMaxThumb)
-        result = result.scaled(kMaxThumb, kMaxThumb, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    // Store in provider cache so future requests skip the decode.
-    {
-        QWriteLocker locker(&m_lock);
-        m_cache.insert(id, result);
-    }
+    QImage m_image;
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
+};
 
-    if (size)
-        *size = result.size();
+} // namespace
 
-    if (requestedSize.isValid() && !requestedSize.isNull() &&
-        (requestedSize.width() < result.width() || requestedSize.height() < result.height()))
-        return result.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    return result;
+CharIconProvider::CharIconProvider(AssetLibrary& lib, QtImageWatcher& watcher)
+    : m_lib(lib), m_watcher(watcher) {}
+
+QQuickImageResponse* CharIconProvider::requestImageResponse(const QString& id,
+                                                            const QSize& requestedSize) {
+    return new AsyncCharIconResponse(m_watcher, id, requestedSize);
 }

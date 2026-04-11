@@ -2,8 +2,6 @@
 
 #include "ICController.h"
 #include "ao/ui/screens/CourtroomScreen.h"
-#include "asset/MediaManager.h"
-#include "asset/MountManager.h"
 #include "event/CharSelectRequestEvent.h"
 #include "event/CharacterListEvent.h"
 #include "event/CharsCheckEvent.h"
@@ -13,7 +11,6 @@
 
 #include "utils/Log.h"
 
-#include <format>
 #include <memory>
 
 CharSelectController::CharSelectController(UIManager& uiMgr, ICController& icCtrl, QObject* parent)
@@ -28,8 +25,6 @@ void CharSelectController::drain() {
         for (const auto& folder : ev->get_characters())
             m_chars.push_back({folder, false});
         m_hydrateCursor = 0;
-        m_prefetchCursor = 0;
-        m_retryCursor = 0;
         m_selected = -1;
         m_model.clear();
         Log::info("[CharSelectController] received character list ({} characters)", m_chars.size());
@@ -46,8 +41,6 @@ void CharSelectController::drain() {
     }
 
     hydrateModel();
-    prefetchIcons();
-    resolveIcons();
 
     auto& uiCh = EventManager::instance().get_channel<UIEvent>();
     while (auto ev = uiCh.get_event()) {
@@ -94,66 +87,13 @@ void CharSelectController::hydrateModel() {
     batch.reserve(end - m_hydrateCursor);
     for (int i = m_hydrateCursor; i < end; ++i) {
         const auto& c = m_chars[i];
-        QString source;
-        if (c.iconResolved)
-            source = QStringLiteral("image://charicon/") + QString::fromStdString(c.folder);
+        // Always set iconSource — the async CharIconProvider handles the loading
+        // state and emits finished() when the asset is available.  QML shows the
+        // letter fallback while Image.status !== Image.Ready.
+        QString source = QStringLiteral("image://charicon/") + QString::fromStdString(c.folder);
         batch.push_back({QString::fromStdString(c.folder), c.taken, source});
     }
 
     m_model.appendBatch(batch);
     m_hydrateCursor = end;
-}
-
-void CharSelectController::prefetchIcons() {
-    if (m_chars.empty())
-        return;
-
-    AssetLibrary& lib = MediaManager::instance().assets();
-    auto exts = MediaManager::instance().mounts_ref().http_extensions(0);
-    if (exts.empty())
-        exts = {"webp", "apng", "gif", "png"};
-
-    // Initial pass: 32 prefetch requests per tick.
-    for (int i = 0; i < 32 && m_prefetchCursor < static_cast<int>(m_chars.size()); ++i, ++m_prefetchCursor) {
-        std::string path = std::format("characters/{}/char_icon", m_chars[m_prefetchCursor].folder);
-        lib.prefetch(path, exts, 0);
-    }
-
-    // Retry pass after the initial sweep (AssetLibrary deduplicates in-flight requests).
-    if (m_prefetchCursor >= static_cast<int>(m_chars.size())) {
-        if (m_retryCursor >= static_cast<int>(m_chars.size()))
-            m_retryCursor = 0;
-        for (int i = 0; i < 16 && m_retryCursor < static_cast<int>(m_chars.size()); ++i, ++m_retryCursor) {
-            std::string path = std::format("characters/{}/char_icon", m_chars[m_retryCursor].folder);
-            lib.prefetch(path, exts, 0);
-        }
-    }
-}
-
-void CharSelectController::resolveIcons() {
-    if (m_chars.empty())
-        return;
-
-    AssetLibrary& lib = MediaManager::instance().assets();
-
-    int resolved = 0;
-    for (int i = 0; i < static_cast<int>(m_chars.size()); ++i) {
-        if (m_chars[i].iconResolved)
-            continue;
-
-        std::string path = std::format("characters/{}/char_icon", m_chars[i].folder);
-        auto img = lib.image(path);
-        if (!img)
-            continue;
-
-        m_chars[i].iconResolved = true;
-
-        if (i < m_hydrateCursor) {
-            QString source = QStringLiteral("image://charicon/") + QString::fromStdString(m_chars[i].folder);
-            m_model.setIconSource(i, source);
-        }
-
-        if (++resolved >= kResolveBatch)
-            break;
-    }
 }

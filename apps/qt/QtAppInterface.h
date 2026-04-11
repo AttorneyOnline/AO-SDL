@@ -19,6 +19,7 @@
 class EngineEventBridge;
 class EngineInterface;
 class QQmlApplicationEngine;
+class QtImageWatcher;
 class UIManager;
 
 /**
@@ -146,6 +147,7 @@ class QtAppInterface : public QObject {
 
     std::unique_ptr<EngineEventBridge> bridge_;
     std::unique_ptr<QQmlApplicationEngine> qml_engine_;
+    std::unique_ptr<QtImageWatcher> watcher_;
 
     QString current_screen_id_;
 };

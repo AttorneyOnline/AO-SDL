@@ -1,61 +1,76 @@
 #include "EmoteIconProvider.h"
 
-#include "ao/asset/AOAssetLibrary.h"
+#include "QtImageWatcher.h"
 #include "asset/AssetLibrary.h"
 #include "asset/ImageAsset.h"
 
-EmoteIconProvider::EmoteIconProvider(AssetLibrary& lib) : QQuickImageProvider(QQuickImageProvider::Image), m_lib(lib) {
-}
+#include <QQuickImageResponse>
+#include <QQuickTextureFactory>
 
-QImage EmoteIconProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize) {
-    // Fast path: already decoded and cached.
-    {
-        QReadLocker locker(&m_lock);
-        auto it = m_cache.find(id);
-        if (it != m_cache.end()) {
-            const QImage& cached = it.value();
-            if (size)
-                *size = cached.size();
-            if (requestedSize.isValid() && !requestedSize.isNull())
-                return cached.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            return cached;
+#include <format>
+#include <memory>
+
+namespace {
+
+/**
+ * @brief Async response for a single emote icon request.
+ *
+ * Lifetime is managed by Qt Quick.  The alive_ guard prevents the watcher
+ * callback from touching this object after cancel() or destruction.
+ */
+class AsyncEmoteIconResponse : public QQuickImageResponse {
+public:
+    AsyncEmoteIconResponse(QtImageWatcher& watcher, const QString& id,
+                           const QSize& /*requestedSize*/) {
+        // Parse "CharacterFolder/emoteIndex"
+        const int slash = id.lastIndexOf('/');
+        if (slash < 0) {
+            // Malformed id — emit finished with empty image after construction.
+            QMetaObject::invokeMethod(this, &QQuickImageResponse::finished, Qt::QueuedConnection);
+            return;
         }
+        const std::string character = id.left(slash).toStdString();
+        bool ok = false;
+        const int index = id.mid(slash + 1).toInt(&ok);
+        if (!ok || index < 0) {
+            QMetaObject::invokeMethod(this, &QQuickImageResponse::finished, Qt::QueuedConnection);
+            return;
+        }
+
+        // AO2 convention: emotions/button{N}_off (matches AOAssetLibrary::emote_icon()).
+        const std::string path =
+            std::format("characters/{}/emotions/button{}_off", character, index + 1);
+
+        auto alive = m_alive;
+        watcher.watch(path, [this, alive](std::shared_ptr<ImageAsset> asset) {
+            if (!*alive)
+                return;
+            m_image = asset_frame_to_qimage(asset, kMaxThumb);
+            emit finished();
+        });
     }
 
-    // Parse "CharacterFolder/emoteIndex".
-    int slash = id.lastIndexOf('/');
-    if (slash < 0)
-        return {};
-    const QString character = id.left(slash);
-    bool ok = false;
-    const int index = id.mid(slash + 1).toInt(&ok);
-    if (!ok || index < 0)
-        return {};
+    ~AsyncEmoteIconResponse() override { *m_alive = false; }
 
-    // Resolve via AO asset convention (emotions/button{N}_off).
-    AOAssetLibrary ao(m_lib);
-    auto img = ao.emote_icon(character.toStdString(), index);
-    if (!img || img->frame_count() == 0)
-        return {};
+    void cancel() override { *m_alive = false; }
 
-    const auto& f = img->frame(0);
-    QImage qimg(img->frame_pixels(0), f.width, f.height, f.width * 4, QImage::Format_RGBA8888);
-    QImage result = qimg.copy();
-    result.flip(Qt::Vertical);
+    QQuickTextureFactory* textureFactory() const override {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
 
-    // Pre-scale to button size before caching — emote icons are small (≤64px).
+private:
     static constexpr int kMaxThumb = 64;
-    if (result.width() > kMaxThumb || result.height() > kMaxThumb)
-        result = result.scaled(kMaxThumb, kMaxThumb, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    {
-        QWriteLocker locker(&m_lock);
-        m_cache.insert(id, result);
-    }
+    QImage m_image;
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
+};
 
-    if (size)
-        *size = result.size();
-    if (requestedSize.isValid() && !requestedSize.isNull())
-        return result.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    return result;
+} // namespace
+
+EmoteIconProvider::EmoteIconProvider(AssetLibrary& lib, QtImageWatcher& watcher)
+    : m_lib(lib), m_watcher(watcher) {}
+
+QQuickImageResponse* EmoteIconProvider::requestImageResponse(const QString& id,
+                                                             const QSize& requestedSize) {
+    return new AsyncEmoteIconResponse(m_watcher, id, requestedSize);
 }

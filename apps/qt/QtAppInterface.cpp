@@ -5,6 +5,7 @@
 #include "asset/MediaManager.h"
 #include "ui/CharIconProvider.h"
 #include "ui/EmoteIconProvider.h"
+#include "ui/QtImageWatcher.h"
 #include "ui/UIManager.h"
 #include "utils/Log.h"
 
@@ -52,9 +53,17 @@ void QtAppInterface::init(EngineInterface& engine) {
     ui_mgr_->push_screen(std::make_unique<ServerListScreen>());
     Log::debug("[QtAppInterface] controllers created");
 
+    watcher_ = std::make_unique<QtImageWatcher>(MediaManager::instance().assets());
+
     bridge_ = std::make_unique<EngineEventBridge>();
 
-    bridge_->add_channel([this] { engine_->drain(); });
+    // 1. Engine drain: polls HttpPool and delivers HTTP callbacks to MountHttp caches.
+    // 2. Image watcher: checks http_cache_generation(); decodes newly available assets
+    //    and fires pending provider callbacks — runs after HTTP responses land.
+    bridge_->add_channel([this] {
+        engine_->drain();
+        watcher_->drain();
+    });
     bridge_->add_channel([this] {
         audio_->drain();
         dbg_->drain();
@@ -76,9 +85,10 @@ void QtAppInterface::init(EngineInterface& engine) {
 bool QtAppInterface::setup_qml() {
     qml_engine_ = std::make_unique<QQmlApplicationEngine>();
     qml_engine_->rootContext()->setContextProperty("app", this);
-    qml_engine_->addImageProvider(QStringLiteral("charicon"), new CharIconProvider(MediaManager::instance().assets()));
+    qml_engine_->addImageProvider(QStringLiteral("charicon"),
+                                  new CharIconProvider(MediaManager::instance().assets(), *watcher_));
     qml_engine_->addImageProvider(QStringLiteral("emoteicon"),
-                                  new EmoteIconProvider(MediaManager::instance().assets()));
+                                  new EmoteIconProvider(MediaManager::instance().assets(), *watcher_));
     Log::debug("[QtAppInterface] QML engine created");
 
     Log::info("[QtAppInterface] loading QML module");
