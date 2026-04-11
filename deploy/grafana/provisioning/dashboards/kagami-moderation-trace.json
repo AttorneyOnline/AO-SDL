@@ -27,6 +27,43 @@
   "description": "Per-message moderation trace analytics. Answers questions that the aggregate counter dashboards can't: which specific messages missed skip opportunities, where classifier and remote disagreed, which bad_hint anchors are firing, full audit trail for any non-NONE action. Requires content_moderation.trace.enabled=true and a Loki push sink.",
   "panels": [
     {
+      "id": 100,
+      "title": "Live IC moderation stream (all messages)",
+      "type": "logs",
+      "description": "Unfiltered firehose of every IC message flowing through ContentModerator::check(), with the key data tags pulled inline. This is the 'what's happening right now' view — no filters, newest first. Each row shows: IPID, final action, skip reason, local classifier max confidence (+ winning axis), bad_hint similarity, safe_hint similarity, check wall-clock ns, and the message text. Click any row and Grafana's 'log details' pane expands to show every field in the JSON trace, including per-axis scores, matched slurs, extracted URLs, and heat before/after. Swap channel=\"ic\" to channel=\"ooc\" in the query for the OOC equivalent.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"kagami_mod_trace\"} | json | channel=\"ic\" | line_format \"[{{.decision_final_action}}] [{{.ipid}}] skip={{.decision_skip_reason}} lc={{.layers_local_classifier_max_confidence}}(ax{{.layers_local_classifier_max_category_index}}) bh={{.layers_bad_hint_max_similarity}} sh={{.layers_safe_hint_max_similarity}} tox={{.decision_final_scores_toxicity}} hate={{.decision_final_scores_hate}} heat={{.decision_heat_after}} \u2192 {{.message}}\"",
+          "queryType": "range",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    },
+    {
       "id": 1,
       "title": "Trace stream rate (req/s, last 5m)",
       "type": "stat",
@@ -35,7 +72,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 12
       },
       "datasource": {
         "type": "loki",
@@ -86,7 +123,7 @@
         "h": 8,
         "w": 18,
         "x": 6,
-        "y": 0
+        "y": 12
       },
       "datasource": {
         "type": "loki",
@@ -123,7 +160,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 20
       },
       "datasource": {
         "type": "loki",
@@ -160,7 +197,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 20
       },
       "datasource": {
         "type": "loki",
@@ -197,7 +234,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 28
       },
       "datasource": {
         "type": "loki",
@@ -234,7 +271,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 38
       },
       "datasource": {
         "type": "loki",
@@ -304,7 +341,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 38
       },
       "datasource": {
         "type": "loki",
