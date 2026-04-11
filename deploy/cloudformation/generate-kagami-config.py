@@ -33,6 +33,7 @@ embed_model = env('CF_EMBED_MODEL')
 slur_wordlist = env('CF_SLUR_WORDLIST')
 slur_exceptions = env('CF_SLUR_EXCEPTIONS')
 safe_hint_url = env('CF_SAFE_HINT_URL')
+bad_hint_url = env('CF_BAD_HINT_URL')
 
 cfg = {
     'domain': env('CF_DOMAIN'),
@@ -178,6 +179,22 @@ cfg = {
             'anchors_url': safe_hint_url,
             'cache_dir': '/opt/kagami/moderation-cache',
             'similarity_threshold': 0.7,
+        },
+        'bad_hint': {
+            # Mirror of safe_hint with inverted semantics. Requires
+            # the embeddings layer AND a non-empty BadHintAnchorsURL
+            # CFN parameter. Same fetch+embed lifecycle as safe_hint.
+            # Plugs recall holes in the local classifier without
+            # retraining — operators curate the anchor list and
+            # redeploy to catch new paraphrases.
+            'enabled': (
+                cm_enabled and len(bad_hint_url) > 0 and len(embed_model) > 0
+            ),
+            'anchors_url': bad_hint_url,
+            'cache_dir': '/opt/kagami/moderation-cache',
+            'similarity_threshold': 0.75,
+            'inject_score': 1.0,
+            'inject_axis': 'hate',
         },
         'embeddings': {
             # Inert unless subsystem is on + HF model id provided.

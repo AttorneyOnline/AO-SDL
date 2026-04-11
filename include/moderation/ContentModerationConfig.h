@@ -348,6 +348,50 @@ struct ModerationAuditSinkConfig {
 ///
 /// Disabled by default; zero behavior change from pre-trust-bank
 /// kagami when off.
+/// Layer 2 shortcut: "bad hint" anchor phrases.
+///
+/// The mirror of SafeHintLayer. Maintains a small operator-curated
+/// list of "obviously bad" phrase-level anchors (hate patterns,
+/// paraphrased slurs, dog whistles). At startup kagami fetches the
+/// list from an https URL, embeds each anchor, and stores unit
+/// vectors. On every check() with a ready embedding backend, the
+/// layer computes max cosine similarity against all anchors. A
+/// match above the threshold injects a score into a configurable
+/// axis (default hate) and causes Layer 2 to skip the remote call.
+///
+/// The default threshold (0.75) is higher than SafeHintLayer's 0.7
+/// because a false positive here ENFORCES action — erring on the
+/// conservative side is the correct safety trade-off.
+struct BadHintConfig {
+    bool enabled = false;
+
+    /// URL to fetch the anchor list from. One anchor per line. An
+    /// empty URL keeps the layer inert even if enabled=true.
+    std::string anchors_url;
+
+    /// Cache directory for the persisted anchor list snapshot.
+    /// The TextListFetcher writes the most recent successful fetch
+    /// here so subsequent boots can fall back offline.
+    std::string cache_dir = "/tmp/kagami-moderation";
+
+    /// Minimum cosine similarity for a match. Higher = fewer but
+    /// more confident positives. 0.75 is a safer default than
+    /// SafeHint's 0.7 because a hit HERE leads to enforcement.
+    double similarity_threshold = 0.75;
+
+    /// Score to inject into the kagami axis named below when an
+    /// anchor matches. 1.0 = full confidence on that axis. The
+    /// heat ladder then translates the axis score into an action.
+    double inject_score = 1.0;
+
+    /// Which ModerationAxisScores field to write the inject_score
+    /// into on a match. Must be one of: toxicity, hate, sexual,
+    /// sexual_minors, violence, self_harm. Default "hate" because
+    /// the primary use case for this layer is hate-pattern
+    /// detection where the wordlist misses.
+    std::string inject_axis = "hate";
+};
+
 /// Layer 2 shortcut: local linear classifier.
 ///
 /// Runs a thin 384x8 logistic regression on top of the existing
@@ -428,6 +472,7 @@ struct ContentModerationConfig {
     HeatConfig heat;
     TrustBankConfig trust_bank;
     LocalClassifierConfig local_classifier;
+    BadHintConfig bad_hint;
     ModerationAuditSinkConfig audit;
 };
 

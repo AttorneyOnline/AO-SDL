@@ -49,6 +49,7 @@ set(TEST_SOURCES
     moderation/test_SafeHintLayer.cpp
     moderation/test_ModerationHeat.cpp
     moderation/test_ContentModerator.cpp
+    moderation/test_BadHintLayer.cpp
     moderation/test_LocalClassifierLayer.cpp
     moderation/test_RemoteClassifier.cpp
     moderation/test_RemoteDedupCache.cpp

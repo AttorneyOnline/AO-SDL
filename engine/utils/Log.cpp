@@ -94,9 +94,20 @@ void Log::log_impl(LogLevel level, std::string message) {
     {
         std::lock_guard lock(sink_mutex);
 
-        // stdout
-        if (level >= stdout_level)
+        // stdout — must flush explicitly. When kagami runs under docker
+        // the stdout handle is a pipe, and the C stdlib block-buffers
+        // writes to pipes by default. Lines from a detached background
+        // thread with a low write rate (e.g. ContentModerator anchor
+        // fetch results after a period of idleness) would otherwise
+        // sit in the buffer indefinitely — docker logs never see them
+        // until either the buffer fills (~4-8 KB later) or the process
+        // exits. Flushing on every logged line costs ~50ns per call
+        // and eliminates the class of bug where "silent logs" actually
+        // mean "buffered, not silent".
+        if (level >= stdout_level) {
             std::printf("[%s][%s] %s\n", ts.c_str(), log_level_name(level), event.message.c_str());
+            std::fflush(stdout);
+        }
 
         if (log_sink && level >= log_sink_level)
             log_sink(level, ts, event.message);

@@ -23,6 +23,7 @@
  */
 #pragma once
 
+#include "moderation/BadHintLayer.h"
 #include "moderation/ContentModerationConfig.h"
 #include "moderation/EmbeddingBackend.h"
 #include "moderation/LocalClassifierLayer.h"
@@ -116,6 +117,14 @@ class ContentModerator {
     /// A zero return means the layer stays inert (embedding backend
     /// not ready, or every anchor failed to embed).
     size_t set_safe_hint_anchors(const std::vector<std::string>& raw);
+
+    /// Install bad-hint anchors onto the BadHintLayer. Counterpart
+    /// of set_safe_hint_anchors(): same lifecycle, same fetch-from-URL
+    /// pattern in main.cpp, but the result is used for DETECTION
+    /// (high-priority Layer 2 skip reason that injects a score into
+    /// the verdict) rather than efficiency. Returns the number of
+    /// successfully-embedded anchors.
+    size_t set_bad_hint_anchors(const std::vector<std::string>& raw);
 
     /// Decide what to do with a message. Called from the OOC and IC
     /// packet handlers before broadcast.
@@ -215,6 +224,7 @@ class ContentModerator {
     RemoteClassifier remote_;
     SafeHintLayer safe_hint_;
     LocalClassifierLayer local_classifier_;
+    BadHintLayer bad_hint_;
     SemanticClusterer clusterer_;
     ModerationHeat heat_;
 

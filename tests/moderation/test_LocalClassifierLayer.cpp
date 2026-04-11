@@ -20,7 +20,7 @@ using moderation::LocalClassifierLayer;
 // and model_name are caller-controlled so specific tests can assert
 // the loader rejects mismatches.
 std::vector<uint8_t> build_blob(uint32_t num_cat, uint32_t dim, const std::string& model_name,
-                                 const std::vector<float>& weights, const std::vector<float>& biases) {
+                                const std::vector<float>& weights, const std::vector<float>& biases) {
     std::vector<uint8_t> blob;
     // magic
     const char magic[] = "KGCLF";
@@ -158,8 +158,7 @@ TEST(LocalClassifierLayerTest, AcceptsRuntimeNameWithFilenameSuffix) {
     LocalClassifierLayer layer;
     layer.configure(enabled_cfg());
     auto blob = zero_blob("hf-user/some-model");
-    EXPECT_TRUE(
-        layer.load_weights(blob.data(), blob.size(), "hf-user/some-model:q8_0.gguf"));
+    EXPECT_TRUE(layer.load_weights(blob.data(), blob.size(), "hf-user/some-model:q8_0.gguf"));
     EXPECT_TRUE(layer.is_active());
 }
 
@@ -169,8 +168,7 @@ TEST(LocalClassifierLayerTest, RejectsDifferentRepoEvenWithSameFilename) {
     LocalClassifierLayer layer;
     layer.configure(enabled_cfg());
     auto blob = zero_blob("hf-user/model-a");
-    EXPECT_FALSE(
-        layer.load_weights(blob.data(), blob.size(), "hf-user/model-b:q8_0.gguf"));
+    EXPECT_FALSE(layer.load_weights(blob.data(), blob.size(), "hf-user/model-b:q8_0.gguf"));
     EXPECT_FALSE(layer.is_active());
 }
 

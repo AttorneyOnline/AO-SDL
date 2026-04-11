@@ -156,8 +156,7 @@ TEST(RemoteClassifierTest, CacheHitSkipsTransport) {
     cfg.cache_max_entries = 10;
     rc.configure(cfg);
 
-    const std::string body =
-        R"({"results":[{"flagged":false,"categories":{},"category_scores":{"hate":0.12}}]})";
+    const std::string body = R"({"results":[{"flagged":false,"categories":{},"category_scores":{"hate":0.12}}]})";
     auto transport = std::make_unique<MockTransport>(std::make_pair(200, body));
     auto* transport_ref = transport.get();
     rc.set_transport(std::move(transport));
@@ -187,8 +186,7 @@ TEST(RemoteClassifierTest, CacheDisabledAlwaysCallsTransport) {
     // "cache silently introduces state" failure mode.
     RemoteClassifier rc;
     rc.configure(active_config()); // cache_enabled default false
-    const std::string body =
-        R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})";
+    const std::string body = R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})";
     auto transport = std::make_unique<MockTransport>(std::make_pair(200, body));
     auto* transport_ref = transport.get();
     rc.set_transport(std::move(transport));
@@ -227,8 +225,7 @@ TEST(RemoteClassifierTest, CacheDistinguishesDifferentMessages) {
     auto cfg = active_config();
     cfg.cache_enabled = true;
     rc.configure(cfg);
-    const std::string body =
-        R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})";
+    const std::string body = R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})";
     auto transport = std::make_unique<MockTransport>(std::make_pair(200, body));
     auto* transport_ref = transport.get();
     rc.set_transport(std::move(transport));

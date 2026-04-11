@@ -360,7 +360,11 @@ TEST_F(ContentModeratorTest, TrustBankAccruesOnCleanMessages) {
     }
     // After 3 clean messages, heat should be at the -3.0 max_trust
     // floor (clamped). current_heat() is a public diagnostic accessor.
-    EXPECT_DOUBLE_EQ(cm_.current_heat("trusted_user"), -3.0);
+    // Small tolerance (0.01) because ModerationHeat uses wall-clock
+    // time internally and the few-ms between each check() in a busy
+    // CI suite produces a tiny decay toward zero — negligible, but
+    // enough to fail DOUBLE_EQ.
+    EXPECT_NEAR(cm_.current_heat("trusted_user"), -3.0, 0.01);
 }
 
 TEST_F(ContentModeratorTest, TrustBankSkipsRemoteForTrustedUser) {
@@ -463,10 +467,11 @@ TEST_F(ContentModeratorTest, TrustBankSlurHitResetsAndPenalizes) {
     cm_.set_remote_transport(std::make_unique<SyntheticRemoteTransport>(SyntheticRemoteTransport::Scores{}));
     cm_.set_slur_wordlist({"forbidden"});
 
-    // Accrue full trust.
+    // Accrue full trust. Small tolerance because heat decay is
+    // wall-clock driven — see TrustBankAccruesOnCleanMessages.
     for (int i = 0; i < 3; ++i)
         cm_.check("trusted_user", "ooc", "hello friend");
-    ASSERT_DOUBLE_EQ(cm_.current_heat("trusted_user"), -3.0);
+    ASSERT_NEAR(cm_.current_heat("trusted_user"), -3.0, 0.01);
 
     // Now send a slur. Heat math:
     //   slur score 1.0 * weight 6.0 = +6.0 heat delta
