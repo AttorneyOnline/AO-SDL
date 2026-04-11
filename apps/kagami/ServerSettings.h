@@ -567,7 +567,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                   }},
                  {"remote",
                   nlohmann::json{
-                      // Remote classifier (OpenAI omni-moderation).
+                      // Remote classifier (OpenAI text-moderation by default).
                       // Opt-in: requires enabled=true AND a non-empty
                       // api_key. An empty api_key automatically disables
                       // the layer regardless of the enabled flag.
@@ -575,7 +575,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"provider", "openai"},
                       {"api_key", ""},
                       {"endpoint", "https://api.openai.com/v1/moderations"},
-                      {"model", "omni-moderation-latest"},
+                      {"model", "text-moderation-latest"},
                       // 3s default leaves headroom for OpenAI's cold-
                       // start TLS handshake (observed ~1.6s on fresh
                       // connections from EC2). Keep-alive reuse drops

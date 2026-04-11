@@ -153,12 +153,15 @@ cfg = {
             'match_score': 1.0,
         },
         'remote': {
-            # OpenAI omni-moderation. Needs a non-empty API key.
+            # OpenAI text-moderation. Needs a non-empty API key.
+            # Kagami is text-only so we default to the text-
+            # moderation model — it has more generous rate
+            # limits than omni-moderation and is slightly faster.
             'enabled': cm_enabled and len(openai_key) > 0,
             'provider': 'openai',
             'api_key': openai_key,
             'endpoint': 'https://api.openai.com/v1/moderations',
-            'model': 'omni-moderation-latest',
+            'model': 'text-moderation-latest',
             'timeout_ms': 3000,
             'fail_open': True,
             # Dedup cache eliminates duplicate API calls for repeat
