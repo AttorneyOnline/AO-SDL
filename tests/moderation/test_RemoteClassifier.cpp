@@ -21,9 +21,11 @@ class MockTransport : public RemoteClassifierTransport {
     std::pair<int, std::string> post_json(const std::string& /*url*/, const std::string& /*bearer*/,
                                           const std::string& body, int /*timeout_ms*/) override {
         last_body = body;
+        ++call_count;
         return response_;
     }
     std::string last_body;
+    int call_count = 0;
 
   private:
     std::pair<int, std::string> response_;
@@ -141,6 +143,102 @@ TEST(RemoteClassifierTest, ParseOpenaiResponseRejectsMissingResults) {
     ModerationAxisScores scores;
     std::string err;
     EXPECT_FALSE(parse_openai_response(R"({"id":"x","model":"y"})", scores, err));
+}
+
+TEST(RemoteClassifierTest, CacheHitSkipsTransport) {
+    // With cache_enabled, a second classify() for the same (normalized)
+    // input should NOT call the transport — the verdict should come
+    // straight from the cache.
+    RemoteClassifier rc;
+    auto cfg = active_config();
+    cfg.cache_enabled = true;
+    cfg.cache_ttl_seconds = 60;
+    cfg.cache_max_entries = 10;
+    rc.configure(cfg);
+
+    const std::string body =
+        R"({"results":[{"flagged":false,"categories":{},"category_scores":{"hate":0.12}}]})";
+    auto transport = std::make_unique<MockTransport>(std::make_pair(200, body));
+    auto* transport_ref = transport.get();
+    rc.set_transport(std::move(transport));
+
+    auto first = rc.classify("hello there");
+    ASSERT_TRUE(first.ok);
+    EXPECT_EQ(transport_ref->call_count, 1);
+    EXPECT_EQ(rc.cache_misses(), 1);
+    EXPECT_EQ(rc.cache_hits(), 0);
+
+    // Same input → cache hit, no new transport call.
+    auto second = rc.classify("hello there");
+    ASSERT_TRUE(second.ok);
+    EXPECT_NEAR(second.scores.hate, 0.12, 1e-6);
+    EXPECT_EQ(transport_ref->call_count, 1);
+    EXPECT_EQ(rc.cache_hits(), 1);
+
+    // Case / whitespace normalization: still a hit.
+    auto third = rc.classify("  HELLO   THERE  ");
+    EXPECT_EQ(transport_ref->call_count, 1);
+    EXPECT_EQ(rc.cache_hits(), 2);
+}
+
+TEST(RemoteClassifierTest, CacheDisabledAlwaysCallsTransport) {
+    // Default config has cache_enabled=false. The same input called
+    // twice must hit the transport twice — regression guard for the
+    // "cache silently introduces state" failure mode.
+    RemoteClassifier rc;
+    rc.configure(active_config()); // cache_enabled default false
+    const std::string body =
+        R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})";
+    auto transport = std::make_unique<MockTransport>(std::make_pair(200, body));
+    auto* transport_ref = transport.get();
+    rc.set_transport(std::move(transport));
+
+    rc.classify("hello there");
+    rc.classify("hello there");
+    rc.classify("hello there");
+    EXPECT_EQ(transport_ref->call_count, 3);
+    EXPECT_EQ(rc.cache_hits(), 0);
+    EXPECT_EQ(rc.cache_misses(), 0);
+}
+
+TEST(RemoteClassifierTest, CacheDoesNotStoreErrorResults) {
+    // Transient failures must not be cached — the retry path would
+    // otherwise get pinned to an error for the TTL window.
+    RemoteClassifier rc;
+    auto cfg = active_config();
+    cfg.cache_enabled = true;
+    rc.configure(cfg);
+    auto transport = std::make_unique<MockTransport>(std::make_pair(500, R"({"error":"flaky"})"));
+    auto* transport_ref = transport.get();
+    rc.set_transport(std::move(transport));
+
+    auto first = rc.classify("hello there");
+    EXPECT_FALSE(first.ok);
+    EXPECT_EQ(transport_ref->call_count, 1);
+
+    // Second call must still hit the transport.
+    auto second = rc.classify("hello there");
+    EXPECT_FALSE(second.ok);
+    EXPECT_EQ(transport_ref->call_count, 2);
+}
+
+TEST(RemoteClassifierTest, CacheDistinguishesDifferentMessages) {
+    RemoteClassifier rc;
+    auto cfg = active_config();
+    cfg.cache_enabled = true;
+    rc.configure(cfg);
+    const std::string body =
+        R"({"results":[{"flagged":false,"categories":{},"category_scores":{}}]})";
+    auto transport = std::make_unique<MockTransport>(std::make_pair(200, body));
+    auto* transport_ref = transport.get();
+    rc.set_transport(std::move(transport));
+
+    rc.classify("message alpha");
+    rc.classify("message bravo");
+    rc.classify("message charlie");
+    EXPECT_EQ(transport_ref->call_count, 3);
+    EXPECT_EQ(rc.cache_hits(), 0);
+    EXPECT_EQ(rc.cache_misses(), 3);
 }
 
 TEST(RemoteClassifierTest, SexualMinorsAxisSeparated) {

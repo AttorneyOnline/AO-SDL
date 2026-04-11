@@ -160,6 +160,14 @@ cfg = {
             'model': 'omni-moderation-latest',
             'timeout_ms': 3000,
             'fail_open': True,
+            # Dedup cache eliminates duplicate API calls for repeat
+            # messages (spam waves, echoed chatter). Enabled by
+            # default when the remote layer itself is enabled —
+            # pure win if the remote layer is on, zero effect if
+            # it's off. See RemoteDedupCache.h for design.
+            'cache_enabled': cm_enabled and len(openai_key) > 0,
+            'cache_ttl_seconds': 300,
+            'cache_max_entries': 1000,
         },
         'safe_hint': {
             # Layer 2 shortcut — requires both the embeddings layer

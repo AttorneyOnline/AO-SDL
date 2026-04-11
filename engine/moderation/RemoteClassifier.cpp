@@ -1,5 +1,6 @@
 #include "moderation/RemoteClassifier.h"
 
+#include "moderation/RemoteDedupCache.h"
 #include "net/Http.h"
 
 #include <json.hpp>
@@ -86,6 +87,20 @@ RemoteClassifier::~RemoteClassifier() = default;
 
 void RemoteClassifier::configure(const RemoteClassifierConfig& cfg) {
     cfg_ = cfg;
+    // (Re)build the dedup cache each configure() so hot-reloads pick
+    // up changes to cache_max_entries / cache_ttl_seconds and so the
+    // previous cache state doesn't leak across config reloads. The
+    // reset counters matching match the lifecycle of the cache — new
+    // cache, new counters.
+    if (cfg_.cache_enabled) {
+        cache_ = std::make_unique<RemoteDedupCache>();
+        cache_->configure(static_cast<size_t>(std::max(1, cfg_.cache_max_entries)), cfg_.cache_ttl_seconds);
+    }
+    else {
+        cache_.reset();
+    }
+    cache_hits_ = 0;
+    cache_misses_ = 0;
 }
 
 void RemoteClassifier::set_transport(std::unique_ptr<RemoteClassifierTransport> transport) {
@@ -101,6 +116,27 @@ RemoteClassifierResult RemoteClassifier::classify(const std::string& text) {
     if (!is_active()) {
         out.error = "layer disabled";
         return out;
+    }
+
+    // Dedup cache lookup BEFORE the HTTP call. The cache key is
+    // sha256(normalize(text)) — see RemoteDedupCache for the reason
+    // behind the light normalization. Cache only returns hits for
+    // non-stale entries that were previously stored with ok=true.
+    // We deliberately DO NOT cache errored calls: caching a 500 or
+    // a timeout would pin failure state across the TTL window, and
+    // transient OpenAI issues are exactly what we want to retry.
+    //
+    // An ok=true cached result still costs ~microseconds of key
+    // computation plus a hash map lookup. For the typical hit rate
+    // expected on real traffic, this pays for itself by 3-4 hits.
+    std::string cache_key;
+    if (cache_) {
+        cache_key = RemoteDedupCache::compute_key(text);
+        if (auto hit = cache_->get(cache_key)) {
+            ++cache_hits_;
+            return *hit;
+        }
+        ++cache_misses_;
     }
 
     // Build the JSON body. OpenAI's omni-moderation endpoint accepts
@@ -154,6 +190,14 @@ RemoteClassifierResult RemoteClassifier::classify(const std::string& text) {
         return out;
     }
     out.ok = true;
+
+    // Only cache successful parses. See comment at the cache-get
+    // site above — we explicitly don't cache error paths so the
+    // retry path for transient failures is preserved.
+    if (cache_ && !cache_key.empty()) {
+        cache_->put(cache_key, out);
+    }
+
     return out;
 }
 

@@ -674,8 +674,30 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     if (should_call_remote) {
         static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
             "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
+        // Dedup cache counters: counted on every classify() that
+        // reached the remote path (i.e. after all L2 skip decisions
+        // already said "call it"). A hit means the HTTP call was
+        // avoided; a miss means it happened. These counters track
+        // the RemoteClassifier's internal state, so we diff the
+        // per-classifier totals against our last-seen snapshot and
+        // inc() by the delta — the RemoteClassifier counters are
+        // monotonic and the Prometheus counters must also be.
+        static auto& cache_hits_counter = metrics::MetricsRegistry::instance().counter(
+            "kagami_moderation_remote_cache_hits_total", "Remote classifier dedup cache hits", {});
+        static auto& cache_misses_counter = metrics::MetricsRegistry::instance().counter(
+            "kagami_moderation_remote_cache_misses_total", "Remote classifier dedup cache misses", {});
+        const int64_t hits_before = remote_.cache_hits();
+        const int64_t misses_before = remote_.cache_misses();
         auto t0 = std::chrono::steady_clock::now();
         auto rr = remote_.classify(std::string(message));
+        {
+            const int64_t dh = remote_.cache_hits() - hits_before;
+            const int64_t dm = remote_.cache_misses() - misses_before;
+            if (dh > 0)
+                cache_hits_counter.get().inc(static_cast<uint64_t>(dh));
+            if (dm > 0)
+                cache_misses_counter.get().inc(static_cast<uint64_t>(dm));
+        }
         if (rr.ok) {
             // Merge remote scores into the verdict. Use max() so a
             // Layer 1 hit isn't overwritten by a lower remote score,
