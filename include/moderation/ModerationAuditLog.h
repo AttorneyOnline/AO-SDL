@@ -22,6 +22,7 @@
  */
 #pragma once
 
+#include "moderation/ModerationTrace.h"
 #include "moderation/ModerationTypes.h"
 
 #include <json.hpp>
@@ -95,5 +96,70 @@ ModerationAuditLog::Sink make_file_sink(const std::string& path);
 /// Built-in sink: write events to stderr (not stdout, to avoid
 /// clobbering REPL output) as JSON lines.
 ModerationAuditLog::Sink make_stderr_sink();
+
+// ---------------------------------------------------------------------------
+// ModerationTraceLog — parallel fan-out for per-message traces
+// ---------------------------------------------------------------------------
+//
+// ModerationAuditLog carries the "what was enforced" record (mute / kick
+// / etc.) and is gated on a min_action threshold. ModerationTraceLog
+// carries the "here's every layer's contribution to every check()"
+// record with NO action gate — every check emits a trace, including
+// the clean-traffic majority.
+//
+// The two are deliberately separate because their consumers are
+// different:
+//   - audit log  → SQLite, security-sensitive CloudWatch, enforcement
+//                  review, always low volume.
+//   - trace log  → Loki + JSONL file, dashboard/histogram analysis,
+//                  always high volume.
+//
+// Sharing one class would require every audit sink to also handle the
+// high-volume trace stream, which is wrong for CloudWatch ($) and
+// SQLite (write amplification).
+
+class ModerationTraceLog {
+  public:
+    using Sink = std::function<void(const ModerationTrace&)>;
+
+    ModerationTraceLog() = default;
+    ~ModerationTraceLog() = default;
+
+    ModerationTraceLog(const ModerationTraceLog&) = delete;
+    ModerationTraceLog& operator=(const ModerationTraceLog&) = delete;
+
+    /// Enable/disable trace emission. When disabled, record() returns
+    /// immediately without invoking any sinks. Lets operators toggle
+    /// telemetry at runtime without tearing down the sink
+    /// infrastructure.
+    void set_enabled(bool enabled);
+
+    /// Add a named sink. Replaces any existing sink with the same name.
+    /// Called synchronously from record(); slow sinks should fan out
+    /// to their own thread internally (the Loki sink does this).
+    void add_sink(const std::string& name, Sink sink);
+
+    /// Remove a named sink.
+    void remove_sink(const std::string& name);
+
+    /// Remove all sinks.
+    void clear();
+
+    /// Record a trace. Fans out to every sink when enabled. Safe to
+    /// call from any thread.
+    void record(const ModerationTrace& trace);
+
+    /// Query the list of currently-registered sink names. For diagnostics.
+    std::vector<std::string> sink_names() const;
+
+  private:
+    mutable std::mutex mu_;
+    std::unordered_map<std::string, Sink> sinks_;
+    bool enabled_ = false;
+};
+
+/// Built-in sink: append traces as JSON lines to a file. Opens the
+/// file in append mode; if it cannot be opened, returns a null sink.
+ModerationTraceLog::Sink make_trace_file_sink(const std::string& path);
 
 } // namespace moderation

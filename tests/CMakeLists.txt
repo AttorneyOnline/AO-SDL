@@ -51,6 +51,7 @@ set(TEST_SOURCES
     moderation/test_ContentModerator.cpp
     moderation/test_BadHintLayer.cpp
     moderation/test_LocalClassifierLayer.cpp
+    moderation/test_ModerationTrace.cpp
     moderation/test_RemoteClassifier.cpp
     moderation/test_RemoteDedupCache.cpp
     moderation/test_SemanticClusterer.cpp

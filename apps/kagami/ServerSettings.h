@@ -361,6 +361,12 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.audit.cloudwatch_log_stream = value<std::string>("content_moderation/audit/cloudwatch_log_stream");
         cfg.audit.sqlite_enabled = value<bool>("content_moderation/audit/sqlite_enabled");
         cfg.audit.min_action = value<std::string>("content_moderation/audit/min_action");
+
+        // Per-message trace sinks (parallel stream to audit)
+        cfg.trace.enabled = value<bool>("content_moderation/trace/enabled");
+        cfg.trace.file_path = value<std::string>("content_moderation/trace/file_path");
+        cfg.trace.loki_url = value<std::string>("content_moderation/trace/loki_url");
+        cfg.trace.loki_stream_label = value<std::string>("content_moderation/trace/loki_stream_label");
         return cfg;
     }
 
@@ -703,6 +709,19 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"cloudwatch_log_stream", ""},
                       {"sqlite_enabled", true},
                       {"min_action", "log"},
+                  }},
+                 {"trace",
+                  nlohmann::json{
+                      // Per-message telemetry stream. Opt-in because
+                      // every check() emits ~2-3 KB of JSON — on a
+                      // busy server that's 20-50 MB/day into Loki.
+                      // Best enabled when the operator has a Grafana
+                      // dashboard ready to consume it; otherwise it's
+                      // just bytes.
+                      {"enabled", false},
+                      {"file_path", ""},
+                      {"loki_url", ""},
+                      {"loki_stream_label", "kagami_mod_trace"},
                   }},
              }},
             {"rate_limits",

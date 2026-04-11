@@ -269,6 +269,15 @@ cfg = {
             'sqlite_enabled': True,
             'min_action': 'log',
         },
+        'trace': {
+            # Per-message telemetry stream. Off by default — enable
+            # when you have a Grafana dashboard consuming it. See
+            # ModerationTrace.h for the stream shape.
+            'enabled': False,
+            'file_path': '/logs/kagami_mod_trace.jsonl',
+            'loki_url': 'http://127.0.0.1:3100',
+            'loki_stream_label': 'kagami_mod_trace',
+        },
     },
     'firewall': {
         'enabled': True,

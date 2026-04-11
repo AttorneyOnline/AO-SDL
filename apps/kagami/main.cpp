@@ -120,9 +120,12 @@ int main(int /*argc*/, char* argv[]) {
     // The moderation audit log is constructed here (before log_sinks
     // init) so its destructor runs AFTER log_sinks.teardown(). This
     // ensures the audit flushers stop before the audit log itself
-    // goes out of scope.
+    // goes out of scope. Same lifetime pattern for the per-message
+    // trace log — both are declared in main's scope so their sinks
+    // are torn down before the objects themselves vanish.
     moderation::ModerationAuditLog mod_audit_log;
-    log_sinks.init(cfg, ui, interactive, &mod_audit_log);
+    moderation::ModerationTraceLog mod_trace_log;
+    log_sinks.init(cfg, ui, interactive, &mod_audit_log, &mod_trace_log);
 
     Log::log_print(INFO, "Server: %s", cfg.server_name().c_str());
 
@@ -228,6 +231,7 @@ int main(int /*argc*/, char* argv[]) {
         content_moderator->configure(cm_cfg);
         content_moderator->set_database(&db);
         content_moderator->set_audit_log(&mod_audit_log);
+        content_moderator->set_trace_log(&mod_trace_log);
 
         // Parse min_action string once to avoid string compares per event.
         auto parse_action = [](const std::string& s) -> moderation::ModerationAction {

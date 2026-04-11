@@ -332,6 +332,34 @@ struct ModerationAuditSinkConfig {
     std::string min_action = "log";
 };
 
+/// Per-message telemetry sinks. Parallel to ModerationAuditSinkConfig
+/// but feeds a DIFFERENT stream: every check() call emits a trace,
+/// regardless of action. Audit log is "what was enforced"; trace log
+/// is "here's every layer's contribution to every decision".
+///
+/// Disabled by default — telemetry is high-volume and only useful
+/// when the operator has Loki + Grafana (or a file-grep workflow)
+/// already set up. Turning it on adds ~2-3 KB per moderation check
+/// to the log stream, which on a busy server compounds to ~20-50 MB
+/// per day at Loki compression.
+struct ModerationTraceSinkConfig {
+    /// Master toggle. When false, ContentModerator::check() skips
+    /// the trace population path entirely — no CPU or memory cost.
+    bool enabled = false;
+
+    /// If non-empty, append traces as JSON lines to this file.
+    /// Same rotation policy as the audit file sink — the operator
+    /// is expected to rotate via logrotate or similar. The file is
+    /// opened in append mode on first write.
+    std::string file_path;
+
+    /// If non-empty, POST traces to this Loki push endpoint. Uses
+    /// its own stream label so traces don't mix with application
+    /// logs or audit events.
+    std::string loki_url;
+    std::string loki_stream_label = "kagami_mod_trace";
+};
+
 /// Trust bank (negative heat) layer.
 ///
 /// An orthogonal use of the ModerationHeat counter: users with a track
@@ -474,6 +502,7 @@ struct ContentModerationConfig {
     LocalClassifierConfig local_classifier;
     BadHintConfig bad_hint;
     ModerationAuditSinkConfig audit;
+    ModerationTraceSinkConfig trace;
 };
 
 } // namespace moderation

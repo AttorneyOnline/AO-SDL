@@ -3,6 +3,7 @@
 #include "asset/MountEmbedded.h"
 #include "game/DatabaseManager.h"
 #include "metrics/MetricsRegistry.h"
+#include "moderation/ModerationTrace.h"
 #include "utils/Log.h"
 
 #include <algorithm>
@@ -107,6 +108,11 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
 void ContentModerator::set_audit_log(ModerationAuditLog* audit) {
     std::lock_guard lock(mu_);
     audit_ = audit;
+}
+
+void ContentModerator::set_trace_log(ModerationTraceLog* trace) {
+    std::lock_guard lock(mu_);
+    trace_log_ = trace;
 }
 
 void ContentModerator::set_database(DatabaseManager* db) {
@@ -498,6 +504,20 @@ std::string ContentModerator::sample(std::string_view message, int max_bytes) {
 ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_view channel, std::string_view message) {
     ModerationVerdict v;
 
+    // Per-message telemetry trace. Always stack-allocated and
+    // populated inline with the verdict, even when the trace sink
+    // is disabled — the population cost is ~2-3 KB of stack for a
+    // handful of scalars and two score arrays, essentially free.
+    // Keeping it unconditional keeps the control flow linear and
+    // lets unit tests inspect trace state directly if they want to.
+    // It's only EMITTED (handed to the trace sink) at the bottom of
+    // check() when trace_log_ is set and cfg->trace.enabled is true.
+    ModerationTrace tr;
+    tr.ipid = ipid;
+    tr.channel = std::string(channel);
+    tr.message = std::string(message);
+    tr.timestamp_ms = now_ms();
+
     // Metric handles are registered once per process — static-local
     // caches avoid repeated hash lookups in MetricsRegistry on every
     // message. This is the same pattern SpamDetector uses at line 55.
@@ -523,10 +543,15 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         {"axis"});
 
     const auto check_start = std::chrono::steady_clock::now();
-    auto bump_layer = [&](const char* layer, std::chrono::steady_clock::time_point t0) {
+    // Bump the per-layer metric counters AND return the elapsed ns so
+    // the caller can also write it into the trace sub-struct without
+    // re-reading the clock. Returning the dt keeps the "time the layer,
+    // record once, use twice" pattern in a single expression.
+    auto bump_layer = [&](const char* layer, std::chrono::steady_clock::time_point t0) -> int64_t {
         auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
         layer_ns_counter.labels({layer}).inc(static_cast<double>(dt));
         layer_calls_counter.labels({layer}).inc();
+        return dt;
     };
 
     // Capture a cfg snapshot at the top of check() and use it for
@@ -558,7 +583,9 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         if (unicode_result.score > 0.0) {
             v.triggered_axes.push_back("visual_noise(" + unicode_result.reason + ")");
         }
-        bump_layer("unicode", t0);
+        tr.unicode.ran = true;
+        tr.unicode.visual_noise = unicode_result.score;
+        tr.unicode.ns = bump_layer("unicode", t0);
     }
 
     // --- Layer 1b: URL blocklist ------------------------------------
@@ -569,7 +596,10 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         if (url_result.score > 0.0) {
             v.triggered_axes.push_back("link(" + url_result.reason + ")");
         }
-        bump_layer("urls", t0);
+        tr.urls.ran = true;
+        tr.urls.link_risk = url_result.score;
+        tr.urls.urls = url_result.urls; // full extracted list, for human review
+        tr.urls.ns = bump_layer("urls", t0);
     }
 
     // --- Layer 1c: slur wordlist ------------------------------------
@@ -599,7 +629,10 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         if (slur_result.score > 0.0) {
             v.triggered_axes.push_back(slur_result.reason);
         }
-        bump_layer("slurs", t0);
+        tr.slurs.ran = true;
+        tr.slurs.match_score = slur_result.score;
+        tr.slurs.matches = slur_result.matched;
+        tr.slurs.ns = bump_layer("slurs", t0);
     }
 
     // --- Layer 2: remote classifier ---------------------------------
@@ -695,9 +728,11 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     bool should_call_remote = false;
     if (!remote_.is_active()) {
         l2_skipped_counter.labels({"disabled"}).inc();
+        tr.skip_reason = "disabled";
     }
     else if (layer1_sufficient) {
         l2_skipped_counter.labels({"layer1_sufficient"}).inc();
+        tr.skip_reason = "layer1_sufficient";
     }
     else {
         // Compute the message embedding ONCE if any embedding-based
@@ -713,7 +748,9 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         if (need_embedding) {
             auto t_emb = std::chrono::steady_clock::now();
             shared_embedding = embedding_backend_->embed(message);
-            bump_layer("layer2_embedding", t_emb);
+            tr.layer2_embedding.ran = shared_embedding.ok;
+            tr.layer2_embedding.dim = static_cast<int>(shared_embedding.vector.size());
+            tr.layer2_embedding.ns = bump_layer("layer2_embedding", t_emb);
         }
 
         // Run the local classifier on the shared embedding. Result
@@ -723,7 +760,11 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         if (local_classifier_.is_active() && shared_embedding.ok) {
             auto t_lc = std::chrono::steady_clock::now();
             lc_result = local_classifier_.classify(shared_embedding);
-            bump_layer("local_classifier", t_lc);
+            tr.local_classifier.ran = lc_result.ran;
+            tr.local_classifier.scores = lc_result.scores;
+            tr.local_classifier.max_confidence = lc_result.max_confidence;
+            tr.local_classifier.max_category_index = lc_result.max_category_index;
+            tr.local_classifier.ns = bump_layer("local_classifier", t_lc);
         }
 
         // Run the bad-hint layer on the shared embedding too. Cheap
@@ -733,7 +774,11 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         if (bad_hint_.is_active() && shared_embedding.ok) {
             auto t_bh = std::chrono::steady_clock::now();
             bh_result = bad_hint_.query_with_embedding(shared_embedding);
-            bump_layer("bad_hint", t_bh);
+            tr.bad_hint.ran = true;
+            tr.bad_hint.max_similarity = bh_result.max_similarity;
+            tr.bad_hint.best_anchor_index = bh_result.best_anchor_index;
+            tr.bad_hint.is_bad = bh_result.is_bad;
+            tr.bad_hint.ns = bump_layer("bad_hint", t_bh);
         }
 
         // --- Priority 3: local_classifier_bad (detection) -----------
@@ -761,6 +806,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             if (lc_result.scores.self_harm > kAxisFloorSelfHarm)
                 v.triggered_axes.emplace_back("self_harm_lc");
             l2_skipped_counter.labels({"local_classifier_bad"}).inc();
+            tr.skip_reason = "local_classifier_bad";
         }
         // --- Priority 4: bad_hint (detection) -----------------------
         else if (bh_result.is_bad) {
@@ -788,6 +834,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             // ops can notice the misconfiguration.
             v.triggered_axes.emplace_back(axis + "_bh");
             l2_skipped_counter.labels({"bad_hint"}).inc();
+            tr.skip_reason = "bad_hint";
         }
         // --- Priority 5: trust_bank (efficiency) --------------------
         else if (cfg->trust_bank.enabled && should_skip_for_trust_bank(ipid, cfg->trust_bank)) {
@@ -797,21 +844,32 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             // the remote classifier so behavioral drift stays
             // detectable.
             l2_skipped_counter.labels({"trust_bank"}).inc();
+            tr.skip_reason = "trust_bank";
+            tr.trust_bank.ran = true;
+            tr.trust_bank.skipped = true;
+            tr.trust_bank.current_heat = heat_.peek(ipid);
         }
         // --- Priority 6: local_classifier_clean (efficiency) --------
         else if (lc_result.ran && lc_result.max_confidence < cfg->local_classifier.confidence_low_clean) {
             l2_skipped_counter.labels({"local_classifier_clean"}).inc();
+            tr.skip_reason = "local_classifier_clean";
         }
         // --- Priority 7: safe_hint (efficiency) ---------------------
         else if (safe_hint_.is_active() && shared_embedding.ok) {
             auto t_sh = std::chrono::steady_clock::now();
             auto hint = safe_hint_.query_with_embedding(shared_embedding);
-            bump_layer("safe_hint", t_sh);
+            tr.safe_hint.ran = true;
+            tr.safe_hint.max_similarity = hint.max_similarity;
+            tr.safe_hint.best_anchor_index = hint.best_anchor_index;
+            tr.safe_hint.is_safe = hint.is_safe;
+            tr.safe_hint.ns = bump_layer("safe_hint", t_sh);
             if (hint.is_safe) {
                 l2_skipped_counter.labels({"safe_hint"}).inc();
+                tr.skip_reason = "safe_hint";
             }
             else if (!remote_bucket_allow(ipid)) {
                 l2_skipped_counter.labels({"rate_limit"}).inc();
+                tr.skip_reason = "rate_limit";
             }
             else {
                 should_call_remote = true;
@@ -819,8 +877,10 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         }
         // --- Priority 8: rate_limit / fall-through to remote --------
         else {
-            if (!remote_bucket_allow(ipid))
+            if (!remote_bucket_allow(ipid)) {
                 l2_skipped_counter.labels({"rate_limit"}).inc();
+                tr.skip_reason = "rate_limit";
+            }
             else
                 should_call_remote = true;
         }
@@ -898,7 +958,19 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
                                                                                    : "other";
             remote_err_counter.labels({reason}).inc();
         }
-        bump_layer("remote", t0);
+        // Trace population for the remote call. cache_hit = true
+        // when the classifier's miss counter didn't advance (we
+        // served from cache); false otherwise. This gives Grafana
+        // a per-request view of "did this message actually hit the
+        // network" rather than just the bulk hit/miss aggregates.
+        const int64_t dm_final = remote_.cache_misses() - misses_before;
+        tr.remote.ran = true;
+        tr.remote.http_status = rr.http_status;
+        tr.remote.cache_hit = (dm_final == 0);
+        tr.remote.ok = rr.ok;
+        tr.remote.scores = rr.scores;
+        tr.remote.error = rr.error;
+        tr.remote.ns = bump_layer("remote", t0);
     }
 
     // --- Layer 3: semantic clustering -------------------------------
@@ -913,7 +985,14 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             v.scores.semantic_echo = std::max(v.scores.semantic_echo, sr.score);
             v.triggered_axes.push_back(sr.reason);
         }
-        bump_layer("embeddings", t0);
+        tr.semantic_cluster.ran = true;
+        tr.semantic_cluster.semantic_echo = sr.score;
+        // distinct_ipids is the number of unique users whose
+        // recent messages matched — the right signal for
+        // gap-hunting (1 = singleton, 3+ = genuine cross-user
+        // echo event worth flagging).
+        tr.semantic_cluster.cluster_size = sr.distinct_ipids;
+        tr.semantic_cluster.ns = bump_layer("embeddings", t0);
     }
 
     // --- Heat accumulation ------------------------------------------
@@ -941,6 +1020,24 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // for users with accumulated heat.
     v.heat_delta = heat_delta_from(v.scores, cfg->heat);
 
+    // Emit the trace to the telemetry sink if enabled. Called from
+    // both the early-NONE return below and the main return at the
+    // bottom of check(). Populates the decision fields from the
+    // current verdict state, so it must run AFTER the verdict is
+    // finalized (action, heat_after, reason all set). Cheap when
+    // trace_log_ is null or disabled — a single branch + early out.
+    auto emit_trace_if_enabled = [&]() {
+        if (!trace_log_ || !cfg->trace.enabled)
+            return;
+        tr.final_scores = v.scores;
+        tr.heat_delta = v.heat_delta;
+        tr.heat_after = v.heat_after;
+        tr.final_action = v.action;
+        tr.reason = v.reason;
+        tr.triggered_axes = v.triggered_axes;
+        trace_log_->record(tr);
+    };
+
     if (v.heat_delta <= 0.0) {
         // No meaningful contribution from this message — accrue a
         // drop of trust if the feature is enabled (moves heat toward
@@ -959,6 +1056,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         }
         v.action = ModerationAction::NONE;
         events_counter.labels({to_string(v.action), std::string(channel)}).inc();
+        emit_trace_if_enabled();
         // Wall-clock timing for the whole check() including the early
         // return path (so dashboards see the full cost, not just the
         // action-bearing subset).
@@ -1071,6 +1169,12 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             db_->record_moderation_event(std::move(ev));
         }
     }
+
+    // Emit the per-message trace after the verdict is final and
+    // the audit log has been fanned out — the trace is a separate
+    // stream with a different consumer set (Loki + JSONL file) so
+    // it doesn't share any state with the audit path above.
+    emit_trace_if_enabled();
 
     // Wall-clock cost of the entire check(), including audit-log
     // fan-out. Useful for catching regressions after Phase 2/3 land.
