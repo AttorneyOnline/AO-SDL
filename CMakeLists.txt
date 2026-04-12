@@ -514,19 +514,16 @@ set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
 # --- Optional: llama.cpp for local embedding backend ---
 #
-# ON by default so the shipped Docker image supports the moderation
-# subsystem's Layer 3 (semantic spam clustering) without requiring
-# operators to rebuild from source. The CI container image carries
-# llama.cpp + ggml linked into libaoengine.a.
+# Defaults to ON only for server-only builds (AO_BUILD_SERVER_ONLY=ON).
+# The client never uses embeddings — llama.cpp is purely for kagami's
+# moderation Layer 2 (local classifier, hint layers, semantic clustering).
+# The Dockerfile sets AO_BUILD_SERVER_ONLY=ON, so production kagami
+# images always get the real backend. Client-inclusive builds (the
+# default, and CI) skip the ~5min llama.cpp compile; kagami still
+# builds but falls back to NullEmbeddingBackend.
 #
-# Disable with -DKAGAMI_WITH_LLAMA_CPP=OFF to:
-#   - Skip the ~40s configure + ~5min first-build cost from FetchContent
-#     pulling and compiling llama.cpp + ggml kernels.
-#   - Drop ~25MB from the final binary and libgomp1 from the runtime
-#     image (ggml uses OpenMP).
-#   - Keep embedding-layer code compiled as a NullEmbeddingBackend
-#     stub — the rest of the moderation stack handles it transparently.
-option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" ON)
+# Force on with -DKAGAMI_WITH_LLAMA_CPP=ON for local kagami dev.
+option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" ${AO_BUILD_SERVER_ONLY})
 if(KAGAMI_WITH_LLAMA_CPP)
     include(FetchContent)
     set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -575,7 +572,7 @@ if(KAGAMI_WITH_LLAMA_CPP)
     target_compile_definitions(aoengine PRIVATE KAGAMI_WITH_LLAMA_CPP=1)
     message(STATUS "Content moderation: llama.cpp embedding backend ENABLED")
 else()
-    message(STATUS "Content moderation: llama.cpp embedding backend disabled (use -DKAGAMI_WITH_LLAMA_CPP=ON to enable)")
+    message(STATUS "Content moderation: llama.cpp embedding backend OFF (use -DKAGAMI_WITH_LLAMA_CPP=ON or -DAO_BUILD_SERVER_ONLY=ON to enable)")
 endif()
 
 target_include_directories(aoengine

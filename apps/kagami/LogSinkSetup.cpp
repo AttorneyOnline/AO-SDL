@@ -275,11 +275,11 @@ void LogSinkSetup::init(const ServerSettings& cfg, TerminalUI& ui, bool interact
                 mod_trace_loki_ = std::make_unique<LokiSink>(std::move(lcfg));
                 mod_trace_loki_->start();
                 trace_->add_sink("loki", [lk = mod_trace_loki_.get()](const moderation::ModerationTrace& tr) {
-                    std::string json = moderation::trace_to_json_line(tr);
-                    // Use INFO level — traces aren't severity-
-                    // graded, they're just structured records. All
-                    // filtering/sorting is done in LogQL.
-                    lk->push(INFO, format_timestamp(tr.timestamp_ms), json);
+                    // Push raw JSON without a timestamp prefix so
+                    // LogQL's `| json` parser can extract fields
+                    // directly. Loki already stores its own
+                    // nanosecond-precision timestamp per entry.
+                    lk->push_raw(INFO, moderation::trace_to_json_line(tr));
                 });
                 Log::log_print(INFO, "ModerationTraceLog: Loki sink -> %s (label=%s)", cm_cfg.trace.loki_url.c_str(),
                                cm_cfg.trace.loki_stream_label.c_str());

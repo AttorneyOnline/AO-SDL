@@ -41,15 +41,10 @@ jobs:
 
           - name: macOS
             os: macos-latest
-            # Disable llama.cpp on macOS CI: GGML's ARM CPU backend
-            # uses i8mm intrinsics (vmmlaq_s32) that fail to compile
-            # on the macos-latest Apple Silicon runner because the
-            # default toolchain isn't configured with i8mm enabled
-            # for the build target. Production deploys are Linux —
-            # this job is a build-verify only, the embeddings layer
-            # is exercised by the Linux job. Skipping llama.cpp here
-            # also drops ~5min from the macOS configure+build time.
-            cmake_args: -DCMAKE_BUILD_TYPE=Release -DKAGAMI_WITH_LLAMA_CPP=OFF
+            # llama.cpp is off by default for non-server builds (the
+            # CMake default gates on AO_BUILD_SERVER_ONLY). No explicit
+            # -DKAGAMI_WITH_LLAMA_CPP=OFF needed.
+            cmake_args: -DCMAKE_BUILD_TYPE=Release
             xcode: '26.3'
 
           - name: Windows
@@ -109,7 +104,7 @@ jobs:
 
       - name: Build (coverage)
         if: matrix.coverage
-        run: cmake --build build-coverage --target aosdl_tests aosdl_widget_tests --config Debug --parallel
+        run: cmake --build build-coverage --target aosdl_tests aosdl_widget_tests --config Debug --parallel 2
 
       # ---- Test ----
       - name: Run tests
