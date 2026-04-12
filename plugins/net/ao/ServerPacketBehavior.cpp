@@ -447,7 +447,7 @@ void AOPacketMS::handle_server(AOServer& server, ServerSession& session) {
         // clean messages pass through regardless of accumulated heat
         // or mute state. ContentModerator::check() returns NONE for any
         // message with zero offending-content score.
-        auto verdict = cm->check(session.ipid, "ic", action.message);
+        auto verdict = cm->check(session.ipid, "ic", action.message, session.area);
         switch (apply_content_verdict(server, session, *cm, verdict, "IC")) {
         case ContentVerdictOutcome::Pass:
             break;
@@ -554,7 +554,7 @@ void AOPacketCT::handle_server(AOServer& server, ServerSession& session) {
     // heat score, so a spree across both channels escalates as expected.
     std::string forwarded_message = message;
     if (auto* cm = server.room().content_moderator()) {
-        auto verdict = cm->check(session.ipid, "ooc", message);
+        auto verdict = cm->check(session.ipid, "ooc", message, session.area);
         switch (apply_content_verdict(server, session, *cm, verdict, "OOC")) {
         case ContentVerdictOutcome::Pass:
             break;

@@ -58,7 +58,7 @@ class AreaOocEndpoint : public NXEndpoint {
         // muted users; ContentModerator::check() returns NONE for
         // any zero-content-score message regardless of heat.
         if (auto* cm = room().content_moderator()) {
-            auto v = cm->check(req.session->ipid, "ooc", action.message);
+            auto v = cm->check(req.session->ipid, "ooc", action.message, it->second);
             auto verdict_result = apply_content_verdict(*req.session, v, "ooc");
             if (verdict_result.early_return)
                 return std::move(*verdict_result.early_return);

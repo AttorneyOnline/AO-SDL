@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -7,34 +9,54 @@
   "refresh": "5s",
   "liveNow": true,
   "schemaVersion": 39,
-  "tags": ["kagami", "moderation", "trace"],
-  "templating": { "list": [] },
+  "tags": [
+    "kagami",
+    "moderation",
+    "trace"
+  ],
+  "templating": {
+    "list": []
+  },
   "title": "Kagami Moderation Trace (MLP v2, local-only)",
   "uid": "kagami-moderation-trace",
-  "version": 2,
-  "time": { "from": "now-1h", "to": "now" },
+  "version": 3,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "panels": [
     {
       "id": 10,
       "title": "Live moderation trace stream",
       "type": "logs",
-      "description": "Full per-message trace stream. Each line is one ContentModerator::check() call with classifier scores, heat delta, action, and all layer contributions.",
-      "gridPos": { "h": 24, "w": 24, "x": 0, "y": 0 },
-      "datasource": { "type": "loki", "uid": "loki" },
+      "description": "Compact one-line summaries. Click any row to expand the full JSON trace with all layer details, classifier scores, and heat computation.",
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"kagami_mod_trace\"}",
+          "expr": "{job=\"kagami_mod_trace\"} | json | line_format `{{ .decision_final_action }} [{{ .channel }}][{{ .area }}] {{ .ipid }} \"{{ .message }}\"{{ if .decision_reason }} | {{ .decision_reason }}{{ end }} | d={{ .decision_heat_delta }} h={{ .decision_heat_after }}`",
           "queryType": "range",
-          "datasource": { "type": "loki", "uid": "loki" }
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
         }
       ],
       "options": {
         "showTime": true,
         "showLabels": false,
         "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": true,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
         "enableLogDetails": true,
         "dedupStrategy": "none",
         "sortOrder": "Descending"
@@ -44,20 +66,35 @@
       "id": 1,
       "title": "Trace rate (req/s)",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
-      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate({job=\"kagami_mod_trace\"}[5m]))",
           "queryType": "range",
-          "datasource": { "type": "loki", "uid": "loki" }
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
         }
       ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
-        "reduceOptions": { "calcs": ["lastNotNull"] }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -66,8 +103,14 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 0.01 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.01
+              }
             ]
           }
         }
@@ -77,33 +120,61 @@
       "id": 6,
       "title": "Classifier max_conf p50/p90 on clean traffic",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 24 },
-      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 24
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "quantile_over_time(0.5, {job=\"kagami_mod_trace\"} | json | decision_final_action=\"NONE\" | unwrap layers_local_classifier_max_confidence [5m])",
           "queryType": "range",
           "legendFormat": "p50",
-          "datasource": { "type": "loki", "uid": "loki" }
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
         },
         {
           "refId": "B",
           "expr": "quantile_over_time(0.9, {job=\"kagami_mod_trace\"} | json | decision_final_action=\"NONE\" | unwrap layers_local_classifier_max_confidence [5m])",
           "queryType": "range",
           "legendFormat": "p90",
-          "datasource": { "type": "loki", "uid": "loki" }
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 },
-          "unit": "none", "min": 0, "max": 1, "decimals": 3
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "none",
+          "min": 0,
+          "max": 1,
+          "decimals": 3
         }
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     }
   ]
