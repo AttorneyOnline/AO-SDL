@@ -81,7 +81,7 @@ jobs:
 
       # ---- Build ----
       - name: Build
-        run: cmake --build build --config Release --parallel 4
+        run: cmake --build build --config Release --parallel 4 --target aoqt
 
       # ---- Package (Windows) — windeployqt + zip ----
       - name: Package (Windows)
