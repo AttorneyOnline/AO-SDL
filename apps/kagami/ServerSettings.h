@@ -740,13 +740,11 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                   }},
                  {"trace",
                   nlohmann::json{
-                      // Per-message telemetry stream. Opt-in because
-                      // every check() emits ~2-3 KB of JSON — on a
-                      // busy server that's 20-50 MB/day into Loki.
-                      // Best enabled when the operator has a Grafana
-                      // dashboard ready to consume it; otherwise it's
-                      // just bytes.
-                      {"enabled", false},
+                      // Per-message telemetry stream. Enabled by default
+                      // now that the local MLP classifier is the primary
+                      // moderation layer — traces are essential for
+                      // calibrating floors/weights and auditing decisions.
+                      {"enabled", true},
                       {"file_path", ""},
                       {"loki_url", ""},
                       {"loki_stream_label", "kagami_mod_trace"},
