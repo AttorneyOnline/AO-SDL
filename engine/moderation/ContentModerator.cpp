@@ -513,7 +513,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
                         vowels++;
                 }
             }
-            if (alpha >= 8 && static_cast<double>(vowels) / alpha < 0.12)
+            if (alpha >= 8 && static_cast<double>(vowels) / alpha < 0.25)
                 keysmash_suppressed = true;
         }
         tr.keysmash_suppressed = keysmash_suppressed;
