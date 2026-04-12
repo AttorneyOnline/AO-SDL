@@ -167,8 +167,8 @@ target_include_directories(opusfile
 target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
 target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
 
-# ImGui (static lib — desktop only, not needed for Flutter or server)
-if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
+# ImGui (static lib — SDL frontend only; uses imgui_impl_sdl2 + SDL2::SDL2)
+if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
     set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
