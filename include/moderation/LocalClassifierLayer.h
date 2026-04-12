@@ -1,55 +1,51 @@
 /**
  * @file LocalClassifierLayer.h
- * @brief Layer 2 shortcut: thin linear classifier on embedding vectors.
+ * @brief Layer 2: per-axis MLP classifier on embedding vectors.
  *
- * This layer sits between the safe-hint shortcut and the remote
- * classifier in the Layer 2 decision tree. For each message it takes
- * the embedding vector that SafeHintLayer already computes, runs a
- * single 384×8 matrix-vector multiply + sigmoid, and produces per-
- * axis probabilities. Two exits short-circuit the remote call:
+ * The local classifier is the PRIMARY moderation classifier in kagami.
+ * For each message, it takes the bge-small embedding and runs per-axis
+ * MLP inference to produce moderation scores. These scores feed directly
+ * into the heat ladder via per-axis weights and floors configured in
+ * HeatConfig.
  *
- *   - HIGH CONFIDENCE BAD: any axis above confidence_high_skip →
- *     Layer 2 is already sure this is bad; inject the score into
- *     the verdict and skip the OpenAI call. Feeds `local_classifier_bad`
- *     into the l2_skipped_counter.
+ * === Architecture (v2 format) ===
  *
- *   - HIGH CONFIDENCE CLEAN: maximum axis below confidence_low_clean
- *     → Layer 2 is already sure this is fine; skip the OpenAI call.
- *     Feeds `local_classifier_clean` into the l2_skipped_counter.
+ * Per-axis 2-layer MLP with residual skip connection:
  *
- * Messages in the middle band (some axis between low and high) are
- * genuinely uncertain and escalate to the remote classifier for a
- * tiebreaker. The local classifier does not REPLACE the remote —
- * it HANDLES the obvious cases so the remote becomes a last-resort
- * verifier, not a first-line decoder.
+ *   hidden = ReLU(W1[axis] · x + b1[axis])
+ *   logit  = W2[axis] · hidden + b2[axis] + W_skip[axis] · x
+ *   prob   = sigmoid(platt_a[axis] * logit + platt_b[axis])
  *
- * ===============================================================
- * Embedding-model compatibility (critical)
- * ===============================================================
+ * The residual (W_skip · x) retains a direct linear path from input
+ * to output — a safety net that prevents the MLP from overfitting
+ * away from a working linear baseline on small training sets.
+ * Platt calibration (optional, per-axis) maps raw logits to
+ * well-calibrated probabilities.
+ *
+ * === Weight file format ===
+ *
+ * The loader supports both v1 (linear) and v2 (MLP) formats:
+ *
+ * v1 (legacy, ~12 KB):
+ *   magic "KGCLF\x01\x00\x00" | version=1 | num_cat | dim |
+ *   name_len | name | W[num_cat×dim] | b[num_cat]
+ *   Inference: sigmoid(W[i]·x + b[i])
+ *
+ * v2 (MLP, ~800 KB):
+ *   magic "KGCLF\x02\x00\x00" | version=2 | num_cat | dim |
+ *   hidden_dim | name_len | name |
+ *   W1[num_cat×dim×hidden] | b1[num_cat×hidden] |
+ *   W2[num_cat×hidden] | b2[num_cat] |
+ *   W_skip[num_cat×dim] |
+ *   calibration_type(1 byte) |
+ *   platt_a[num_cat] | platt_b[num_cat] (if calibration_type==1)
+ *
+ * === Embedding-model compatibility (critical) ===
  *
  * The classifier weights are ONLY meaningful in the latent space of
- * the specific embedding model they were trained against. A runtime
- * mismatch (e.g. operator overrides embeddings.hf_model_id to a
- * different 384-dim model) produces silently-wrong classifications —
- * the vector shape is fine but the basis vectors of the embedding
- * space are different, so the trained decision boundary is pure
- * noise relative to the new model.
- *
- * The weights file format (see scripts/train_classifier.py for the
- * full layout) stores the full HuggingFace model identifier in the
- * header. At load time, load_weights() compares that identifier
- * against the passed-in `runtime_model_name`. On mismatch, the
- * layer DISABLES itself — is_active() returns false regardless of
- * config, a WARNING is logged with both names, and ContentModerator
- * behaves as if the layer were off. The graceful-degrade path keeps
- * moderation running with the remaining layers; the operator gets
- * a clear pointer to scripts/train_classifier.py for remediation.
- *
- * If you are reading this because of an operator complaint about
- * the local_classifier being inactive: the fix is to run
- * `python3 scripts/train_classifier.py --embedding-model <new-id>`
- * and rebuild kagami. Weights are a 12 KB binary file bundled into
- * the image via cmake/EmbedAssets.cmake.
+ * the specific embedding model they were trained against. The weights
+ * file stores the HF model identifier; on mismatch, the layer
+ * disables itself with a WARNING.
  */
 #pragma once
 
@@ -134,15 +130,38 @@ class LocalClassifierLayer {
     mutable std::mutex mu_;
     LocalClassifierConfig cfg_{};
 
-    // Flat row-major weights: [num_categories_ x embedding_dim_].
-    // Kept as std::vector<float> for cache-friendly traversal in the
-    // GEMV loop. The biases trail the weights in a separate vector.
-    std::vector<float> weights_;
-    std::vector<float> biases_;
+    int format_version_ = 0;
     int num_categories_ = 0;
     int embedding_dim_ = 0;
+    int hidden_dim_ = 0;
     std::string model_name_;
     bool loaded_ = false;
+
+    // === v1 (linear) storage ===
+    // Flat row-major: [num_categories_ x embedding_dim_]
+    std::vector<float> weights_;   // W for v1
+    std::vector<float> biases_;    // b for v1
+
+    // === v2 (MLP) storage ===
+    // Per-axis independent MLPs: each axis has its own W1/b1/W2/b2/W_skip.
+    // Stored contiguously per-layer across axes for cache-friendly access.
+    std::vector<float> w1_;        // [num_cat × embedding_dim × hidden_dim]
+    std::vector<float> b1_;        // [num_cat × hidden_dim]
+    std::vector<float> w2_;        // [num_cat × hidden_dim]
+    std::vector<float> b2_;        // [num_cat]
+    std::vector<float> w_skip_;    // [num_cat × embedding_dim] (residual)
+    int calibration_type_ = 0;     // 0=raw sigmoid, 1=platt
+    std::vector<float> platt_a_;   // [num_cat] (platt scaling slope)
+    std::vector<float> platt_b_;   // [num_cat] (platt scaling intercept)
+
+    // Internal dispatch
+    LocalClassifierResult classify_v1(const EmbeddingResult& embedding) const;
+    LocalClassifierResult classify_v2(const EmbeddingResult& embedding) const;
+
+    bool load_weights_v1(const uint8_t* blob, size_t blob_size, uint32_t num_cat,
+                         uint32_t dim, uint32_t name_len, const std::string& runtime_model_name);
+    bool load_weights_v2(const uint8_t* blob, size_t blob_size, uint32_t num_cat,
+                         uint32_t dim, uint32_t name_len, const std::string& runtime_model_name);
 };
 
 } // namespace moderation

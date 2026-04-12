@@ -269,12 +269,10 @@ int main(int /*argc*/, char* argv[]) {
 
         if (cm_cfg.enabled)
             Log::log_print(INFO,
-                           "ContentModerator: enabled (unicode=%s urls=%s slurs=%s remote=%s safe_hint=%s bad_hint=%s "
+                           "ContentModerator: enabled (unicode=%s urls=%s slurs=%s bad_hint=%s "
                            "local_classifier=%s embeddings=%s)",
                            cm_cfg.unicode.enabled ? "on" : "off", cm_cfg.urls.enabled ? "on" : "off",
                            (cm_cfg.slurs.enabled && !cm_cfg.slurs.wordlist_url.empty()) ? "pending" : "off",
-                           (cm_cfg.remote.enabled && !cm_cfg.remote.api_key.empty()) ? "on" : "off",
-                           (cm_cfg.safe_hint.enabled && !cm_cfg.safe_hint.anchors_url.empty()) ? "pending" : "off",
                            (cm_cfg.bad_hint.enabled && !cm_cfg.bad_hint.anchors_url.empty()) ? "pending" : "off",
                            cm_cfg.local_classifier.enabled ? "on" : "off",
                            (cm_cfg.embeddings.enabled && !cm_cfg.embeddings.hf_model_id.empty()) ? "on" : "off");
@@ -313,22 +311,12 @@ int main(int /*argc*/, char* argv[]) {
             auto cache_dir = cm_cfg.embeddings.cache_dir.empty()
                                  ? (std::filesystem::path(argv[0]).parent_path() / "models").string()
                                  : cm_cfg.embeddings.cache_dir;
-            auto safe_hint_cache = cm_cfg.safe_hint.cache_dir.empty()
-                                       ? (std::filesystem::path(argv[0]).parent_path() / "safe_hints").string()
-                                       : cm_cfg.safe_hint.cache_dir;
-            const bool safe_hint_on =
-                cm_cfg.enabled && cm_cfg.safe_hint.enabled && !cm_cfg.safe_hint.anchors_url.empty();
             Log::log_print(INFO, "ContentModerator: scheduling embedding model load (%s)",
                            cm_cfg.embeddings.hf_model_id.c_str());
-            // Capture the shared_ptr by value (NOT by reference) so the
-            // moderator survives even if main() unwinds before the fetch
-            // completes. The detached thread keeps a reference until
-            // the lambda returns.
             const std::string bad_hint_cache =
                 cm_cfg.bad_hint.cache_dir.empty() ? std::string("/tmp/kagami-moderation") : cm_cfg.bad_hint.cache_dir;
             const bool bad_hint_on = cm_cfg.enabled && cm_cfg.bad_hint.enabled && !cm_cfg.bad_hint.anchors_url.empty();
-            std::thread([hf_id = cm_cfg.embeddings.hf_model_id, cache_dir, safe_hint_cache,
-                         safe_hint_url = cm_cfg.safe_hint.anchors_url, safe_hint_on, bad_hint_cache,
+            std::thread([hf_id = cm_cfg.embeddings.hf_model_id, cache_dir, bad_hint_cache,
                          bad_hint_url = cm_cfg.bad_hint.anchors_url, bad_hint_on, content_moderator]() mutable {
                 auto fetch = retry_with_backoff("ContentModerator: embedding model fetch",
                                                 [&] { return moderation::resolve_hf_model(hf_id, cache_dir); });
@@ -349,36 +337,9 @@ int main(int /*argc*/, char* argv[]) {
                     return;
                 }
 
-                // Chain the safe-hint anchor fetch onto the same
-                // thread. This MUST happen after set_embedding_backend
-                // because SafeHintLayer::load_anchors needs a ready
-                // backend to compute the anchor vectors. Running it
-                // in a separate thread would race against the backend
-                // install and need extra synchronization for no
-                // benefit — this thread is already detached and the
-                // total added latency is ~5ms × 50 anchors = 250ms.
-                if (safe_hint_on) {
-                    Log::log_print(INFO, "ContentModerator: scheduling safe-hint anchor fetch (%s)",
-                                   safe_hint_url.c_str());
-                    auto anchors = retry_with_backoff("ContentModerator: safe-hint anchor fetch", [&] {
-                        return moderation::fetch_text_list(safe_hint_url, safe_hint_cache, "safe_anchors.txt");
-                    });
-                    if (anchors.ok) {
-                        size_t loaded = content_moderator->set_safe_hint_anchors(anchors.entries);
-                        Log::log_print(INFO, "ContentModerator: safe-hint layer armed (%zu/%zu anchors embedded, %s)",
-                                       loaded, anchors.entries.size(),
-                                       anchors.from_cache ? "cached" : (anchors.downloaded ? "fresh" : "?"));
-                    }
-                    else {
-                        Log::log_print(WARNING, "ContentModerator: safe-hint anchor fetch failed (%s); layer inert",
-                                       anchors.error.c_str());
-                    }
-                }
-
-                // Bad-hint anchor fetch runs after safe-hint on the
-                // same thread for the same reasons: ordering (embedding
-                // backend must be installed) and zero benefit from
-                // parallelism (both are <250ms of dot-products).
+                // Bad-hint anchor fetch runs on the same thread after
+                // the embedding backend is installed (needs a ready
+                // backend to compute anchor vectors).
                 if (bad_hint_on) {
                     Log::log_print(INFO, "ContentModerator: scheduling bad-hint anchor fetch (%s)",
                                    bad_hint_url.c_str());

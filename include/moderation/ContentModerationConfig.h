@@ -57,22 +57,31 @@ struct HeatConfig {
     // separating drama from real hostility).
     double weight_visual_noise = 0.5;
     double weight_link_risk = 5.0;
-    /// Slur wordlist hits (Layer 1c). Default 6.0 means a single
-    /// match crosses the 6.0 mute_threshold immediately — a first
-    /// offense on a curated extremist-hate wordlist is MUTE on sight,
-    /// no warnings. Lower to 3.0 for a "DROP the message, escalate
-    /// on repeat" policy, or raise to 10.0 for an instant kick.
     double weight_slurs = 6.0;
-    double weight_toxicity = 1.0; // roleplay-friendly; use 2.0 for general chat
-    double weight_hate = 4.0;     // identity-based hate is never context-sensitive
+    double weight_toxicity = 1.0;
+    double weight_hate = 4.0;
     double weight_sexual = 1.5;
-    /// Sexual content involving minors is non-negotiable: a weight high
-    /// enough that any positive signal instantly crosses the perma-ban
-    /// threshold. Kept as a config knob so test fixtures can override.
     double weight_sexual_minors = 100.0;
-    double weight_violence = 1.0; // courtroom violence is canon; use 1.5+ for general chat
+    double weight_violence = 1.0;
     double weight_self_harm = 1.0;
     double weight_semantic_echo = 2.0;
+
+    // Per-axis visibility floors: an axis only contributes heat when its
+    // score exceeds this threshold. Prevents classifier noise from
+    // accumulating — clean messages with floor-level scores (toxicity
+    // ~1e-5) produce delta=0. Defaults are tuned for roleplay-heavy AO
+    // servers where courtroom aggression is in-character. General chat
+    // servers should lower toxicity/violence floors to 0.3-0.5.
+    double floor_visual_noise = 0.0;
+    double floor_link_risk = 0.0;
+    double floor_slurs = 0.0;
+    double floor_toxicity = 0.85;       // high — RP harassment is canon
+    double floor_hate = 0.1;            // low — hate is never RP
+    double floor_sexual = 0.7;          // 16+ audience
+    double floor_sexual_minors = 0.01;  // catastrophic, strictest possible
+    double floor_violence = 0.85;       // high — courtroom violence is canon
+    double floor_self_harm = 0.5;       // moderate — catches grooming
+    double floor_semantic_echo = 0.0;
 
     /// Prune heat entries that have decayed below this value AND haven't
     /// been touched in sweep_idle_seconds. Keeps the table from growing

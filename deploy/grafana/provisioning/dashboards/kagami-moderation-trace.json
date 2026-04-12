@@ -17,7 +17,7 @@
   "templating": {
     "list": []
   },
-  "title": "Kagami \u2014 Content Moderation Trace",
+  "title": "Kagami Moderation Trace (MLP v2, local-only)",
   "uid": "kagami-moderation-trace",
   "version": 1,
   "time": {
@@ -26,43 +26,6 @@
   },
   "description": "Per-message moderation trace analytics. Answers questions that the aggregate counter dashboards can't: which specific messages missed skip opportunities, where classifier and remote disagreed, which bad_hint anchors are firing, full audit trail for any non-NONE action. Requires content_moderation.trace.enabled=true and a Loki push sink.",
   "panels": [
-    {
-      "id": 100,
-      "title": "Live IC moderation stream (all messages)",
-      "type": "logs",
-      "description": "Unfiltered firehose of every IC message flowing through ContentModerator::check(), with the key data tags pulled inline. This is the 'what's happening right now' view — no filters, newest first. Each row shows: IPID, final action, skip reason, local classifier max confidence (+ winning axis), bad_hint similarity, safe_hint similarity, check wall-clock ns, and the message text. Click any row and Grafana's 'log details' pane expands to show every field in the JSON trace, including per-axis scores, matched slurs, extracted URLs, and heat before/after. Swap channel=\"ic\" to channel=\"ooc\" in the query for the OOC equivalent.",
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{job=\"kagami_mod_trace\"} | json | channel=\"ic\" | line_format \"[{{.decision_final_action}}] [{{.ipid}}] skip={{.decision_skip_reason}} lc={{.layers_local_classifier_max_confidence}}(ax{{.layers_local_classifier_max_category_index}}) bh={{.layers_bad_hint_max_similarity}} sh={{.layers_safe_hint_max_similarity}} tox={{.decision_final_scores_toxicity}} hate={{.decision_final_scores_hate}} heat={{.decision_heat_after}} \u2192 {{.message}}\"",
-          "queryType": "range",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      }
-    },
     {
       "id": 1,
       "title": "Trace stream rate (req/s, last 5m)",
@@ -94,7 +57,9 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -107,159 +72,17 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "red", "value": null},
-              {"color": "green", "value": 0.01}
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.01
+              }
             ]
           }
         }
-      }
-    },
-    {
-      "id": 2,
-      "title": "Missed skip opportunities (remote ran, action=NONE)",
-      "type": "logs",
-      "description": "Messages where the remote classifier fired AND the final action was NONE \u2014 i.e. we paid for an OpenAI call on a clean message that could have been skipped by a Layer 2 shortcut. Each row is a wasted API spend candidate. If this list is large, consider: raising confidence_low_clean, enlarging the safe_hint anchor list, or enabling trust_bank.",
-      "gridPos": {
-        "h": 8,
-        "w": 18,
-        "x": 6,
-        "y": 12
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{job=\"kagami_mod_trace\"} | json | layers_remote_ran=\"true\" | decision_final_action=\"NONE\" | line_format \"[{{.ipid}}] conf={{.layers_local_classifier_max_confidence}} sh={{.layers_safe_hint_max_similarity}} msg={{.message}}\"",
-          "queryType": "range",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      }
-    },
-    {
-      "id": 3,
-      "title": "Classifier vs remote disagreement (classifier hot, remote cold)",
-      "type": "logs",
-      "description": "Messages where the local classifier scored max_confidence > 0.5 but the remote classifier came back with toxicity < 0.1. These are potential false positives in the local model \u2014 classifier is flagging benign content as borderline-toxic. Use this feed for weekly calibration review: if the pattern repeats, consider retraining or raising confidence_high_skip.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 20
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{job=\"kagami_mod_trace\"} | json | layers_local_classifier_max_confidence > 0.5 | layers_remote_ran=\"true\" | layers_remote_scores_toxicity < 0.1 | line_format \"lc_conf={{.layers_local_classifier_max_confidence}} lc_axis={{.layers_local_classifier_max_category_index}} remote_tox={{.layers_remote_scores_toxicity}} msg={{.message}}\"",
-          "queryType": "range",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      }
-    },
-    {
-      "id": 4,
-      "title": "Bad-hint anchor hit rankings (anchor curation feedback)",
-      "type": "logs",
-      "description": "Messages that matched a bad_hint anchor, sorted descending by similarity. Use this to review whether the anchor list is drifting: if matches are consistently at similarity > 0.85 with obvious hate patterns, the anchors are well-tuned. If matches are hovering at 0.75-0.78 on mundane content, the threshold is too loose or an anchor needs pruning. Review weekly; add/remove anchors based on observed false-positive rate.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 20
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{job=\"kagami_mod_trace\"} | json | decision_skip_reason=\"bad_hint\" | line_format \"sim={{.layers_bad_hint_max_similarity}} anchor#{{.layers_bad_hint_best_anchor_index}} action={{.decision_final_action}} msg={{.message}}\"",
-          "queryType": "range",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      }
-    },
-    {
-      "id": 5,
-      "title": "Enforcement audit (every non-NONE action)",
-      "type": "logs",
-      "description": "Every moderation decision with action \u2260 NONE \u2014 log, censor, drop, mute, kick, ban. Full trace context for human review. When a user appeals a mute, this is the source of truth: which layer fired, what the scores were, which axis triggered, and the message text that caused it. Retain as long as your privacy policy allows; this IS the enforcement audit trail.",
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 28
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{job=\"kagami_mod_trace\"} | json | decision_final_action!=\"NONE\" | line_format \"[{{.decision_final_action}}] [{{.ipid}}] skip={{.decision_skip_reason}} reason={{.decision_reason}} msg={{.message}}\"",
-          "queryType": "range",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
       }
     },
     {
@@ -313,9 +136,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 0.2},
-              {"color": "red", "value": 0.4}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.2
+              },
+              {
+                "color": "red",
+                "value": 0.4
+              }
             ]
           }
         }
@@ -325,61 +157,6 @@
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 7,
-      "title": "Layer 2 skip reason distribution",
-      "type": "timeseries",
-      "description": "Rate of each Layer 2 skip reason over time, derived from the trace stream. Mirrors the kagami_moderation_layer2_skipped_total counter but sourced from traces so you can cross-reference against the per-message panels above. A healthy API-cost-optimized deployment has bad_hint/local_classifier_bad + trust_bank + safe_hint/local_classifier_clean collectively dominating the remote-call rate.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 38
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (decision_skip_reason) (rate({job=\"kagami_mod_trace\"} | json | decision_skip_reason!=\"\" [5m]))",
-          "queryType": "range",
-          "legendFormat": "{{decision_skip_reason}}",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "lineWidth": 1,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          },
-          "unit": "reqps",
-          "decimals": 2
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "calcs": ["lastNotNull", "mean"]
         },
         "tooltip": {
           "mode": "multi",

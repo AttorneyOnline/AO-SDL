@@ -338,6 +338,18 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.heat.weight_self_harm = value<double>("content_moderation/heat/weight_self_harm");
         cfg.heat.weight_semantic_echo = value<double>("content_moderation/heat/weight_semantic_echo");
 
+        // Per-axis visibility floors (configurable since MLP v2)
+        cfg.heat.floor_visual_noise = value<double>("content_moderation/heat/floor_visual_noise");
+        cfg.heat.floor_link_risk = value<double>("content_moderation/heat/floor_link_risk");
+        cfg.heat.floor_slurs = value<double>("content_moderation/heat/floor_slurs");
+        cfg.heat.floor_toxicity = value<double>("content_moderation/heat/floor_toxicity");
+        cfg.heat.floor_hate = value<double>("content_moderation/heat/floor_hate");
+        cfg.heat.floor_sexual = value<double>("content_moderation/heat/floor_sexual");
+        cfg.heat.floor_sexual_minors = value<double>("content_moderation/heat/floor_sexual_minors");
+        cfg.heat.floor_violence = value<double>("content_moderation/heat/floor_violence");
+        cfg.heat.floor_self_harm = value<double>("content_moderation/heat/floor_self_harm");
+        cfg.heat.floor_semantic_echo = value<double>("content_moderation/heat/floor_semantic_echo");
+
         // Trust bank (negative heat accrual for API-call skip)
         cfg.trust_bank.enabled = value<bool>("content_moderation/trust_bank/enabled");
         cfg.trust_bank.clean_reward = value<double>("content_moderation/trust_bank/clean_reward");
@@ -669,6 +681,22 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"weight_violence", 1.0},
                       {"weight_self_harm", 1.0},
                       {"weight_semantic_echo", 2.0},
+                      // Per-axis visibility floors. An axis only
+                      // contributes heat when its score exceeds this.
+                      // RP-friendly defaults: toxicity/violence at 0.85
+                      // (courtroom drama is expected), hate at 0.1
+                      // (never roleplay), sexual_minors at 0.01
+                      // (catastrophic). General chat: drop to 0.3.
+                      {"floor_visual_noise", 0.0},
+                      {"floor_link_risk", 0.0},
+                      {"floor_slurs", 0.0},
+                      {"floor_toxicity", 0.85},
+                      {"floor_hate", 0.1},
+                      {"floor_sexual", 0.7},
+                      {"floor_sexual_minors", 0.01},
+                      {"floor_violence", 0.85},
+                      {"floor_self_harm", 0.5},
+                      {"floor_semantic_echo", 0.0},
                   }},
                  {"trust_bank",
                   nlohmann::json{
