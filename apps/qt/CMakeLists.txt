@@ -1,6 +1,6 @@
-qt_standard_project_setup(REQUIRES 6.11)
+qt_standard_project_setup(REQUIRES 6.10)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 
 # Common output root for all AO.* QML modules — Qt Creator uses this to
