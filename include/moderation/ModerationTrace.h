@@ -180,25 +180,20 @@ struct ModerationTrace {
     Layer2EmbeddingTrace layer2_embedding;
     LocalClassifierTrace local_classifier;
     BadHintTrace bad_hint;
-    SafeHintTrace safe_hint;
-    TrustBankTrace trust_bank;
-    RemoteClassifierTrace remote;
+    SafeHintTrace safe_hint;       // retained for trace compat, no longer populated
+    TrustBankTrace trust_bank;     // retained for trace compat, no longer populated
+    RemoteClassifierTrace remote;  // retained for trace compat, no longer populated
     SemanticClusterTrace semantic_cluster;
 
-    // -------------------------------------------------------------------
-    // Decision outputs
-    // -------------------------------------------------------------------
+    /// True if the message was suppressed as OOD keyboard mash (low
+    /// vowel ratio). The classifier still ran (scores are in
+    /// local_classifier) but the scores were NOT merged into the
+    /// verdict because they're noise on a garbage embedding.
+    bool keysmash_suppressed = false;
 
-    /// Which Layer 2 skip reason fired (if any). One of:
-    ///   ""                       (no skip, remote actually called)
-    ///   "disabled"
-    ///   "layer1_sufficient"
-    ///   "local_classifier_bad"
-    ///   "bad_hint"
-    ///   "trust_bank"
-    ///   "local_classifier_clean"
-    ///   "safe_hint"
-    ///   "rate_limit"
+    // -------------------------------------------------------------------
+    // Decision outputs (legacy skip_reason kept for trace JSON compat)
+    // -------------------------------------------------------------------
     std::string skip_reason;
 
     /// Axis names that crossed their per-axis visibility floor.

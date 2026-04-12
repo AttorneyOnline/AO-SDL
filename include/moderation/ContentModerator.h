@@ -30,8 +30,6 @@
 #include "moderation/ModerationAuditLog.h"
 #include "moderation/ModerationHeat.h"
 #include "moderation/ModerationTypes.h"
-#include "moderation/RemoteClassifier.h"
-#include "moderation/SafeHintLayer.h"
 #include "moderation/SemanticClusterer.h"
 #include "moderation/SlurFilter.h"
 #include "moderation/UnicodeClassifier.h"
@@ -92,10 +90,6 @@ class ContentModerator {
     /// called with the moderator's mutex held.
     void set_action_callback(ActionCallback cb);
 
-    /// Swap in a custom remote classifier transport (mock for tests).
-    /// Must be called after configure().
-    void set_remote_transport(std::unique_ptr<RemoteClassifierTransport> t);
-
     /// Install the embedding backend used by the semantic clustering
     /// layer. Typically called once at startup after the HF model has
     /// been fetched. Use make_embedding_backend() for the default, or
@@ -112,19 +106,7 @@ class ContentModerator {
     /// background-fetch pattern as set_slur_wordlist.
     void set_slur_exceptions(const std::vector<std::string>& raw);
 
-    /// Install the safe-hint anchor list. Computes embeddings via the
-    /// currently-installed embedding backend (must be ready) and
-    /// stores them internally. Called from main.cpp on the same
-    /// background thread that fetched the anchor list, AFTER the
-    /// HF model fetch completes.
-    ///
-    /// Returns the number of anchors that successfully embedded.
-    /// A zero return means the layer stays inert (embedding backend
-    /// not ready, or every anchor failed to embed).
-    size_t set_safe_hint_anchors(const std::vector<std::string>& raw);
-
-    /// Install bad-hint anchors onto the BadHintLayer. Counterpart
-    /// of set_safe_hint_anchors(): same lifecycle, same fetch-from-URL
+    /// Install bad-hint anchors onto the BadHintLayer. Same fetch-from-URL
     /// pattern in main.cpp, but the result is used for DETECTION
     /// (high-priority Layer 2 skip reason that injects a score into
     /// the verdict) rather than efficiency. Returns the number of
@@ -226,8 +208,6 @@ class ContentModerator {
     UnicodeClassifier unicode_;
     UrlExtractor urls_;
     SlurFilter slurs_;
-    RemoteClassifier remote_;
-    SafeHintLayer safe_hint_;
     LocalClassifierLayer local_classifier_;
     BadHintLayer bad_hint_;
     SemanticClusterer clusterer_;
@@ -239,13 +219,10 @@ class ContentModerator {
     ActionCallback action_cb_;
 
     /// Non-owning pointer to the embedding backend that
-    /// SemanticClusterer owns via unique_ptr. Cached here so the
-    /// SafeHintLayer can use the same backend without a second
-    /// ownership boundary. Set by set_embedding_backend() before it
-    /// forwards ownership to clusterer_; cleared to nullptr if the
-    /// backend is replaced with one that isn't is_ready(). Access
-    /// is thread-safe because the pointer itself is only mutated on
-    /// the startup path.
+    /// SemanticClusterer owns via unique_ptr. Cached here so
+    /// BadHintLayer and LocalClassifierLayer can use it. Set by
+    /// set_embedding_backend(); access is thread-safe because the
+    /// pointer is only mutated on the startup path.
     EmbeddingBackend* embedding_backend_ = nullptr;
 
     struct ActiveMute {
@@ -253,42 +230,10 @@ class ContentModerator {
         std::string reason;     ///< Human-readable reason from the verdict.
     };
 
-    /// Per-IPID token bucket state for Layer 2 rate limiting. Every
-    /// remote classifier call consumes one token; tokens refill at
-    /// `kRemoteRefillPerSec` with a burst cap of `kRemoteBurst`.
-    /// Bounds OpenAI API cost per abusing client to O(burst) regardless
-    /// of how fast they send messages — Layer 1 still runs.
-    struct RemoteBucket {
-        double tokens = 0.0;
-        int64_t last_refill_ms = 0;
-    };
-
-    /// Atomically consume one token from the remote classifier bucket
-    /// for @p ipid. Returns true if the call is allowed.
-    bool remote_bucket_allow(const std::string& ipid);
-
-    /// Probabilistic skip decision for the trust-bank layer. Returns
-    /// true if the current heat for @p ipid is sufficiently negative
-    /// (below -cfg.api_skip_threshold) AND a uniform random draw lands
-    /// under the sampling rate computed from the heat value.
-    ///
-    /// Sampling rate is a linear ramp: 100% API-call rate at exactly
-    /// -api_skip_threshold (no skip), tapering to min_sample_rate at
-    /// -max_trust (maximum skip). The floor ensures even the most
-    /// trusted user has a fraction of their traffic sent to the
-    /// remote classifier for ground-truth drift detection.
-    ///
-    /// NOT const because peek() mutates the underlying Entry (decays
-    /// it in place). Guarded by heat_'s internal mutex.
-    bool should_skip_for_trust_bank(const std::string& ipid, const TrustBankConfig& cfg);
-
     mutable std::mutex mu_;
     /// ipid -> mute state. In-memory mirror of the mutes table.
     /// Loaded on configure() from db if set.
     std::unordered_map<std::string, ActiveMute> active_mutes_;
-    /// ipid -> remote classifier token bucket. Pruned by sweep() when
-    /// the IPID hasn't made a call in sweep_idle_seconds.
-    std::unordered_map<std::string, RemoteBucket> remote_buckets_;
 };
 
 /// Register the Prometheus metric collectors for a ContentModerator

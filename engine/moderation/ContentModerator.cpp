@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <random>
 #include <utility>
 
 namespace moderation {
@@ -48,13 +47,11 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
         unicode_.configure(new_cfg->unicode);
         urls_.configure(new_cfg->urls);
         slurs_.configure(new_cfg->slurs);
-        remote_.configure(new_cfg->remote);
-        safe_hint_.configure(new_cfg->safe_hint);
         bad_hint_.configure(new_cfg->bad_hint);
         local_classifier_.configure(new_cfg->local_classifier);
         // Load the bundled classifier weights if the layer is on.
         // The binary is embedded via cmake/EmbedAssets.cmake at the
-        // path "moderation/classifier-weights-v1.bin". If the file
+        // path "moderation/classifier-weights-v2.bin". If the file
         // wasn't built into this image (fresh checkout without
         // training), load_weights fails softly and the layer stays
         // inactive. The model-name header check inside load_weights
@@ -63,7 +60,7 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
             const uint8_t* weights_data = nullptr;
             size_t weights_size = 0;
             for (const auto& file : embedded_assets()) {
-                if (std::string_view(file.path) == "moderation/classifier-weights-v1.bin") {
+                if (std::string_view(file.path) == "moderation/classifier-weights-v2.bin") {
                     weights_data = file.data;
                     weights_size = file.size;
                     break;
@@ -74,7 +71,7 @@ void ContentModerator::configure(const ContentModerationConfig& cfg) {
             }
             else {
                 Log::warn("LocalClassifier: enabled in config but no bundled weights at "
-                          "'moderation/classifier-weights-v1.bin' — layer will stay inert. "
+                          "'moderation/classifier-weights-v2.bin' — layer will stay inert. "
                           "Run scripts/train_classifier.py and rebuild.");
             }
         }
@@ -125,39 +122,9 @@ void ContentModerator::set_action_callback(ActionCallback cb) {
     action_cb_ = std::move(cb);
 }
 
-void ContentModerator::set_remote_transport(std::unique_ptr<RemoteClassifierTransport> t) {
-    std::lock_guard lock(mu_);
-    remote_.set_transport(std::move(t));
-}
-
 void ContentModerator::set_embedding_backend(std::unique_ptr<EmbeddingBackend> backend) {
-    // Cache a non-owning pointer before transferring ownership to the
-    // clusterer. SafeHintLayer needs access to the same backend for
-    // its query() path, and storing a second owning reference would
-    // duplicate the model in memory. The backend outlives the
-    // clusterer (and therefore outlives ContentModerator itself) so
-    // a raw pointer here is safe.
-    //
-    // If the passed-in backend isn't ready (make_embedding_backend()
-    // can return a NullEmbeddingBackend when llama.cpp is compiled
-    // out), clear the cache so SafeHintLayer reliably sees the
-    // no-backend state.
     embedding_backend_ = (backend && backend->is_ready()) ? backend.get() : nullptr;
-
-    // Note: SemanticClusterer takes its own mutex; we don't hold the
-    // moderator mutex here to avoid nested-lock subtlety.
     clusterer_.set_backend(std::move(backend));
-}
-
-size_t ContentModerator::set_safe_hint_anchors(const std::vector<std::string>& raw) {
-    if (!embedding_backend_) {
-        Log::log_print(WARNING, "ContentModerator: set_safe_hint_anchors called before embedding backend is ready; "
-                                "safe-hint layer will stay inert");
-        return 0;
-    }
-    size_t loaded = safe_hint_.load_anchors(raw, *embedding_backend_);
-    Log::log_print(INFO, "ContentModerator: loaded %zu safe-hint anchors", loaded);
-    return loaded;
 }
 
 size_t ContentModerator::set_bad_hint_anchors(const std::vector<std::string>& raw) {
@@ -281,133 +248,6 @@ namespace {
 // back before throttling kicks in; refill 2/sec matches the default
 // rate limit for the ao:CT (OOC chat) action family, so a well-
 // behaved client on the default rate limits will never hit this.
-constexpr double kRemoteBurst = 10.0;
-constexpr double kRemoteRefillPerSec = 2.0;
-} // namespace
-
-bool ContentModerator::remote_bucket_allow(const std::string& ipid) {
-    std::lock_guard lock(mu_);
-    const int64_t now =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
-            .count();
-    auto& bucket = remote_buckets_[ipid];
-    if (bucket.last_refill_ms == 0) {
-        bucket.tokens = kRemoteBurst;
-        bucket.last_refill_ms = now;
-    }
-    else {
-        const double dt_sec = static_cast<double>(now - bucket.last_refill_ms) / 1000.0;
-        bucket.tokens = std::min(kRemoteBurst, bucket.tokens + dt_sec * kRemoteRefillPerSec);
-        bucket.last_refill_ms = now;
-    }
-    if (bucket.tokens < 1.0)
-        return false;
-    bucket.tokens -= 1.0;
-    return true;
-}
-
-bool ContentModerator::should_skip_for_trust_bank(const std::string& ipid, const TrustBankConfig& cfg) {
-    // Guard: config must have a sane range. max_trust > api_skip_threshold
-    // is load-bearing — a zero-width band would make the denominator
-    // below blow up. Default config has max_trust=10.0 and
-    // api_skip_threshold=5.0 which is a 5.0-wide band.
-    if (cfg.max_trust <= cfg.api_skip_threshold)
-        return false;
-
-    const double heat = heat_.peek(ipid);
-    // Only positive-absolute trust credit is eligible. Users above
-    // zero are in suspicion and always get the remote call.
-    if (heat > -cfg.api_skip_threshold)
-        return false;
-
-    // Linear ramp: at heat = -api_skip_threshold → api_rate = 1.0 (no skip);
-    // at heat = -max_trust → api_rate = min_sample_rate (maximum skip).
-    // Clamp at either end so values outside the band still behave sanely.
-    const double over_threshold = -heat - cfg.api_skip_threshold;
-    const double band_width = cfg.max_trust - cfg.api_skip_threshold;
-    double fraction = over_threshold / band_width;
-    if (fraction < 0.0)
-        fraction = 0.0;
-    if (fraction > 1.0)
-        fraction = 1.0;
-    const double api_rate = 1.0 - fraction * (1.0 - cfg.min_sample_rate);
-    // api_rate is the probability of STILL calling the remote. We
-    // want to SKIP with probability (1 - api_rate).
-    const double skip_rate = 1.0 - api_rate;
-
-    // Thread-local RNG: one per worker thread, seeded once from
-    // random_device. Using a shared global RNG would require a
-    // mutex which would serialize every check() call.
-    thread_local std::mt19937_64 rng{std::random_device{}()};
-    thread_local std::uniform_real_distribution<double> dist{0.0, 1.0};
-    return dist(rng) < skip_rate;
-}
-
-namespace {
-
-// Per-axis visibility floors: an axis only contributes to the
-// per-message heat delta when its score crosses this threshold.
-// Chosen to match the dashboard axis_fires counter and the verdict
-// reason labels so "the axis fired", "the axis added heat", and
-// "the reason string mentions this axis" are always the same event.
-//
-// Rationale: remote classifiers (OpenAI omni-moderation) return
-// floor-level noise on every input — clean messages commonly see
-// toxicity ~= 1e-5, hate ~= 1e-6, etc. Without a floor, those
-// multiply by the axis weight to produce a sub-0.001 heat delta
-// that IS still > 0, which blows through the "heat_delta > 0"
-// short-circuit and lets the heat ladder act on accumulated heat
-// from previous offenses.
-//
-// Floor tuning for kagami (roleplay-heavy Ace Attorney server):
-//
-//   Toxicity/harassment floor is DELIBERATELY VERY HIGH (0.85).
-//   OpenAI's harassment axis scores canonical courtroom dialogue
-//   in surprising places:
-//     - "Do you have cotton between your ears, spiky boy?" → 0.65
-//     - "You killed her! I know you did!"                 → 0.4-0.5
-//     - "Objection! You're nothing but a liar!"           → 0.3-0.4
-//     - "You pathetic little worm"                        → 0.6-0.7
-//   All of those are normal Ace Attorney cross-examination and
-//   should never fire moderation. Real sustained abuse scores
-//   ~0.9+ and still catches at this floor.
-//
-//   Violence gets the same treatment — courtroom accusations
-//   ("he killed her with a knife") score in the 0.4-0.6 range
-//   and are expected in-character.
-//
-//   Hate stays relatively strict (0.3) because identity-based
-//   slurs are never roleplay. Sexual/minors is catastrophic.
-//   Self-harm floor is moderate because even in-character, the
-//   axis needs to catch grooming-adjacent content.
-//
-// If you're deploying kagami on a general chat server without
-// heavy roleplay, drop the classifier floors to 0.15-0.3 and
-// raise the heat weights for a stricter baseline.
-constexpr double kAxisFloorNoise = 0.0;    // rules-based, non-zero = real
-constexpr double kAxisFloorLinkRisk = 0.0; // rules-based, non-zero = real
-constexpr double kAxisFloorSlurs = 0.0;    // exact-token match; any hit is real
-/// OpenAI's hate axis is high-precision but low-recall: overt
-/// genocidal phrasing scores 0.9+, but common casual slurs (trans-
-/// targeting slurs, pro-Nazi phrases, racial epithets used casually)
-/// often score in the 0.1-0.3 range because the axis is narrowly
-/// tuned to "clearly identity-targeted" content. A 0.3 floor lets
-/// those through.
-///
-/// 0.1 catches essentially every hate-axis signal OpenAI returns,
-/// and because the axis is narrowly defined, false positives on
-/// non-hate content are rare. Roleplay content (Ace Attorney cross-
-/// examination, dramatic accusations) doesn't trigger the hate
-/// axis at all — it lives on the harassment axis, which we keep
-/// high (0.85) for roleplay tolerance.
-constexpr double kAxisFloorHate = 0.1;
-constexpr double kAxisFloorToxicity = 0.85;     // harassment — very high floor for roleplay
-constexpr double kAxisFloorSexual = 0.7;        // sexual content (adult) — 16+ audience
-constexpr double kAxisFloorViolence = 0.85;     // courtroom violence is canon
-constexpr double kAxisFloorSelfHarm = 0.5;      // moderate — catches grooming-adjacent content
-constexpr double kAxisFloorSexualMinors = 0.01; // catastrophic, stricter
-constexpr double kAxisFloorSemanticEcho = 0.0;  // clustering is already >= 1.0 when it fires
-
 } // namespace
 
 std::shared_ptr<const ContentModerationConfig> ContentModerator::cfg_snapshot() const {
@@ -416,26 +256,30 @@ std::shared_ptr<const ContentModerationConfig> ContentModerator::cfg_snapshot() 
 }
 
 double ContentModerator::heat_delta_from(const ModerationAxisScores& s, const HeatConfig& h) {
+    // Per-axis visibility floors are now configurable in HeatConfig
+    // (loaded from JSON). Each axis only contributes heat when its
+    // score exceeds the floor — prevents classifier noise from
+    // accumulating on clean messages.
     double d = 0.0;
-    if (s.visual_noise > kAxisFloorNoise)
+    if (s.visual_noise > h.floor_visual_noise)
         d += s.visual_noise * h.weight_visual_noise;
-    if (s.link_risk > kAxisFloorLinkRisk)
+    if (s.link_risk > h.floor_link_risk)
         d += s.link_risk * h.weight_link_risk;
-    if (s.slurs > kAxisFloorSlurs)
+    if (s.slurs > h.floor_slurs)
         d += s.slurs * h.weight_slurs;
-    if (s.toxicity > kAxisFloorToxicity)
+    if (s.toxicity > h.floor_toxicity)
         d += s.toxicity * h.weight_toxicity;
-    if (s.hate > kAxisFloorHate)
+    if (s.hate > h.floor_hate)
         d += s.hate * h.weight_hate;
-    if (s.sexual > kAxisFloorSexual)
+    if (s.sexual > h.floor_sexual)
         d += s.sexual * h.weight_sexual;
-    if (s.sexual_minors > kAxisFloorSexualMinors)
+    if (s.sexual_minors > h.floor_sexual_minors)
         d += s.sexual_minors * h.weight_sexual_minors;
-    if (s.violence > kAxisFloorViolence)
+    if (s.violence > h.floor_violence)
         d += s.violence * h.weight_violence;
-    if (s.self_harm > kAxisFloorSelfHarm)
+    if (s.self_harm > h.floor_self_harm)
         d += s.self_harm * h.weight_self_harm;
-    if (s.semantic_echo > kAxisFloorSemanticEcho)
+    if (s.semantic_echo > h.floor_semantic_echo)
         d += s.semantic_echo * h.weight_semantic_echo;
     return d;
 }
@@ -635,116 +479,44 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         tr.slurs.ns = bump_layer("slurs", t0);
     }
 
-    // --- Layer 2: remote classifier ---------------------------------
-    // Synchronously calls OpenAI's moderation API (or any compatible
-    // endpoint) with the configured timeout. On any failure — network,
-    // HTTP error, parse error — the layer contributes zero signal and
-    // the Layer 1 result carries the decision. This is "fail open" and
-    // is the right default for a chat server: better to occasionally
-    // miss a bad message than to brick the channel when OpenAI has an
-    // incident.
+    // --- Layer 2: local MLP classifier + bad-hint --------------------
     //
-    // Two short-circuits prevent wasted API calls:
+    // The local classifier is the PRIMARY moderation classifier. No
+    // remote API calls — the MLP runs on the bge-small embedding
+    // (~10µs), produces per-axis scores, and those scores feed
+    // directly into the heat ladder via per-axis floors + weights.
     //
-    //   1. Layer-1 sufficient: if the rules-based layers have already
-    //      produced enough heat delta to cross the mute threshold,
-    //      the remote classifier has nothing to add — the decision is
-    //      already made, calling OpenAI is a guaranteed waste of
-    //      quota. We still run remote for lower-severity Layer 1
-    //      hits because the classifier may escalate them.
+    // BadHintLayer provides supplemental detection by matching against
+    // operator-curated anchor phrases, plugging recall holes in the
+    // classifier without retraining.
     //
-    //   2. Per-IPID token bucket: each IPID gets a small bucket
-    //      (burst=10, refill=2/sec by default) of remote calls. A
-    //      malicious client posting 100 msg/s can burn at most the
-    //      bucket width before Layer 2 short-circuits; Layer 1 still
-    //      runs on every message. This bounds the API cost per
-    //      abuser to O(bucket_size) regardless of their send rate.
-    const double layer1_delta = heat_delta_from(v.scores, cfg->heat);
-    const bool layer1_sufficient = layer1_delta >= cfg->heat.mute_threshold;
+    // Keysmash suppression: messages with near-zero vowel ratio (e.g.
+    // "KFVIOULPJBFVSDJHLGBUKDLSFGFD") produce garbage embeddings that
+    // the MLP makes noisy predictions on. Suppress classifier scores
+    // to zero for these — they're not meaningful content, and Layer 1
+    // UnicodeClassifier handles the visual-noise aspect.
+    {
+        // --- Keysmash detection ------------------------------------
+        bool keysmash_suppressed = false;
+        {
+            int alpha = 0, vowels = 0;
+            for (char c : message) {
+                char lower = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (std::isalpha(static_cast<unsigned char>(lower))) {
+                    alpha++;
+                    if (lower == 'a' || lower == 'e' || lower == 'i' || lower == 'o' || lower == 'u')
+                        vowels++;
+                }
+            }
+            if (alpha >= 8 && static_cast<double>(vowels) / alpha < 0.12)
+                keysmash_suppressed = true;
+        }
+        tr.keysmash_suppressed = keysmash_suppressed;
 
-    // --- Layer 2 shortcut: safe-hint embedding similarity -------------
-    // Before deciding whether to spend budget on the remote classifier,
-    // ask SafeHintLayer if the message is embedding-close to any
-    // operator-curated "obviously safe" anchor phrase. On a hit, we
-    // skip Layer 2 entirely — Layer 1 (which ran above) made the
-    // final decision, and the heat delta is whatever those layers
-    // contributed (usually zero for mundane chatter).
-    //
-    // This is a cost optimization, NOT a safety bypass: Layer 1 still
-    // ran against the same message above, so slurs / URLs / unicode
-    // noise still caught. The shortcut only removes the redundant
-    // "is this harmless?" classifier call for messages the embedding
-    // model already says look harmless.
-    //
-    // Ordering matters: we check this BEFORE the remote_bucket_allow
-    // call because we don't want safe-hint skips to consume token-
-    // bucket credit intended for actual classifier calls.
-    static auto& l2_skipped_counter = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_layer2_skipped_total", "Times Layer 2 (remote classifier) was skipped and why", {"reason"});
-
-    // Skip-reason bookkeeping is structured as a single decision tree
-    // so the four reasons (disabled / safe_hint / layer1_sufficient /
-    // rate_limit) are MUTUALLY EXCLUSIVE by construction — exactly one
-    // gets incremented per check() on the Layer-2-skipped path, and
-    // the gating that enforces the exclusion is structural rather
-    // than scattered across multiple `if (remote_.is_active() && ...)`
-    // guards that a future maintainer might forget to mirror.
-    //
-    // Dashboards can sum any subset of the labels and the sum is
-    // meaningful: total Layer 2 skips = sum across all reasons,
-    // total Layer 2 calls = checks_total - sum across all reasons.
-    //
-    // The reasons are evaluated in priority order:
-    //   1. disabled              — operator never wired the remote layer
-    //   2. layer1_sufficient     — Layer 1 already crossed mute threshold
-    //   3. local_classifier_bad  — local model is highly confident this
-    //                              message is bad; merge its scores and
-    //                              skip the remote (DETECTION — wins
-    //                              against efficiency reasons below)
-    //   4. bad_hint              — embedding similarity to a known-bad
-    //                              anchor phrase; inject a score into
-    //                              the verdict and skip (DETECTION —
-    //                              plugs recall holes in the classifier
-    //                              without retraining)
-    //   5. trust_bank            — user has accumulated clean-traffic
-    //                              credit and rolled under the sampling
-    //                              rate (probabilistic; a floor keeps
-    //                              a baseline of remote calls for drift)
-    //   6. local_classifier_clean — local model is highly confident this
-    //                              message is clean; skip the remote
-    //   7. safe_hint             — embedding similarity to a known-safe
-    //                              anchor
-    //   8. rate_limit            — per-IPID token bucket exhausted
-    // The final fall-through is the actual remote call.
-    //
-    // Detection reasons (local_classifier_bad, bad_hint) dominate
-    // efficiency reasons (trust_bank, local_classifier_clean,
-    // safe_hint) so a bad message from a trusted user is still
-    // caught. bad_hint sits below local_classifier_bad because the
-    // classifier runs on the embedding we already have while
-    // bad_hint needs the same embedding plus a dot-product scan;
-    // if the classifier already said "definitely bad" we save the
-    // dot-product work.
-    bool should_call_remote = false;
-    if (!remote_.is_active()) {
-        l2_skipped_counter.labels({"disabled"}).inc();
-        tr.skip_reason = "disabled";
-    }
-    else if (layer1_sufficient) {
-        l2_skipped_counter.labels({"layer1_sufficient"}).inc();
-        tr.skip_reason = "layer1_sufficient";
-    }
-    else {
-        // Compute the message embedding ONCE if any embedding-based
-        // layer is active. SafeHintLayer, LocalClassifierLayer (and
-        // later BadHintLayer) all need the same vector, and embed()
-        // is ~1-5ms per call on bge-small — re-doing it per layer
-        // would dominate the Layer 2 budget. An "inactive embedding
-        // backend" is normal on cold start; the fallback path runs
-        // the non-embedding skip reasons and the remote call.
+        // --- Compute shared embedding ONCE -------------------------
         EmbeddingResult shared_embedding;
         const bool need_embedding =
-            embedding_backend_ && (local_classifier_.is_active() || safe_hint_.is_active() || bad_hint_.is_active());
+            embedding_backend_ && (local_classifier_.is_active() || bad_hint_.is_active());
         if (need_embedding) {
             auto t_emb = std::chrono::steady_clock::now();
             shared_embedding = embedding_backend_->embed(message);
@@ -753,232 +525,71 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             tr.layer2_embedding.ns = bump_layer("layer2_embedding", t_emb);
         }
 
-        // Run the local classifier on the shared embedding. Result
-        // is used by BOTH the "bad" and "clean" skip branches below;
-        // we compute once and branch based on thresholds.
-        LocalClassifierResult lc_result;
+        // --- Local MLP classifier ----------------------------------
         if (local_classifier_.is_active() && shared_embedding.ok) {
             auto t_lc = std::chrono::steady_clock::now();
-            lc_result = local_classifier_.classify(shared_embedding);
+            auto lc_result = local_classifier_.classify(shared_embedding);
             tr.local_classifier.ran = lc_result.ran;
             tr.local_classifier.scores = lc_result.scores;
             tr.local_classifier.max_confidence = lc_result.max_confidence;
             tr.local_classifier.max_category_index = lc_result.max_category_index;
             tr.local_classifier.ns = bump_layer("local_classifier", t_lc);
+
+            if (lc_result.ran && !keysmash_suppressed) {
+                // Merge ALL classifier scores into the verdict. No
+                // confidence gating — per-axis floors in heat_delta_from()
+                // handle the "is this score meaningful?" decision.
+                v.scores.toxicity = std::max(v.scores.toxicity, lc_result.scores.toxicity);
+                v.scores.hate = std::max(v.scores.hate, lc_result.scores.hate);
+                v.scores.sexual = std::max(v.scores.sexual, lc_result.scores.sexual);
+                v.scores.sexual_minors = std::max(v.scores.sexual_minors, lc_result.scores.sexual_minors);
+                v.scores.violence = std::max(v.scores.violence, lc_result.scores.violence);
+                v.scores.self_harm = std::max(v.scores.self_harm, lc_result.scores.self_harm);
+
+                // Tag axes that crossed their visibility floor.
+                if (lc_result.scores.toxicity > cfg->heat.floor_toxicity)
+                    v.triggered_axes.emplace_back("toxicity");
+                if (lc_result.scores.hate > cfg->heat.floor_hate)
+                    v.triggered_axes.emplace_back("hate");
+                if (lc_result.scores.sexual > cfg->heat.floor_sexual)
+                    v.triggered_axes.emplace_back("sexual");
+                if (lc_result.scores.sexual_minors > cfg->heat.floor_sexual_minors)
+                    v.triggered_axes.emplace_back("sexual_minors");
+                if (lc_result.scores.violence > cfg->heat.floor_violence)
+                    v.triggered_axes.emplace_back("violence");
+                if (lc_result.scores.self_harm > cfg->heat.floor_self_harm)
+                    v.triggered_axes.emplace_back("self_harm");
+            }
         }
 
-        // Run the bad-hint layer on the shared embedding too. Cheap
-        // (one dot-product scan against ~50 unit vectors), and the
-        // hit result is used by priority-4 branch below.
-        BadHintResult bh_result;
+        // --- Bad-hint anchor detection -----------------------------
         if (bad_hint_.is_active() && shared_embedding.ok) {
             auto t_bh = std::chrono::steady_clock::now();
-            bh_result = bad_hint_.query_with_embedding(shared_embedding);
+            auto bh_result = bad_hint_.query_with_embedding(shared_embedding);
             tr.bad_hint.ran = true;
             tr.bad_hint.max_similarity = bh_result.max_similarity;
             tr.bad_hint.best_anchor_index = bh_result.best_anchor_index;
             tr.bad_hint.is_bad = bh_result.is_bad;
             tr.bad_hint.ns = bump_layer("bad_hint", t_bh);
-        }
 
-        // --- Priority 3: local_classifier_bad (detection) -----------
-        if (lc_result.ran && lc_result.max_confidence > cfg->local_classifier.confidence_high_skip) {
-            // High-confidence bad. Merge the classifier scores into
-            // the verdict — treat it like a remote response. max()
-            // against the existing scores so Layer 1 hits can't be
-            // lowered and vice versa.
-            v.scores.toxicity = std::max(v.scores.toxicity, lc_result.scores.toxicity);
-            v.scores.hate = std::max(v.scores.hate, lc_result.scores.hate);
-            v.scores.sexual = std::max(v.scores.sexual, lc_result.scores.sexual);
-            v.scores.sexual_minors = std::max(v.scores.sexual_minors, lc_result.scores.sexual_minors);
-            v.scores.violence = std::max(v.scores.violence, lc_result.scores.violence);
-            v.scores.self_harm = std::max(v.scores.self_harm, lc_result.scores.self_harm);
-            // Tag axes that crossed the visibility floor so the
-            // reason string is consistent with the remote path.
-            if (lc_result.scores.toxicity > kAxisFloorToxicity)
-                v.triggered_axes.emplace_back("toxicity_lc");
-            if (lc_result.scores.hate > kAxisFloorHate)
-                v.triggered_axes.emplace_back("hate_lc");
-            if (lc_result.scores.sexual > kAxisFloorSexual)
-                v.triggered_axes.emplace_back("sexual_lc");
-            if (lc_result.scores.violence > kAxisFloorViolence)
-                v.triggered_axes.emplace_back("violence_lc");
-            if (lc_result.scores.self_harm > kAxisFloorSelfHarm)
-                v.triggered_axes.emplace_back("self_harm_lc");
-            l2_skipped_counter.labels({"local_classifier_bad"}).inc();
-            tr.skip_reason = "local_classifier_bad";
-        }
-        // --- Priority 4: bad_hint (detection) -----------------------
-        else if (bh_result.is_bad) {
-            // Anchor-phrase match. Inject the configured score into
-            // the configured axis and short-circuit. Unlike the
-            // classifier path above, bad_hint has only one "signal"
-            // (the similarity score), so we write it into a SINGLE
-            // axis rather than the multi-axis score vector.
-            const std::string& axis = cfg->bad_hint.inject_axis;
-            const double score = cfg->bad_hint.inject_score;
-            if (axis == "toxicity")
-                v.scores.toxicity = std::max(v.scores.toxicity, score);
-            else if (axis == "hate")
-                v.scores.hate = std::max(v.scores.hate, score);
-            else if (axis == "sexual")
-                v.scores.sexual = std::max(v.scores.sexual, score);
-            else if (axis == "sexual_minors")
-                v.scores.sexual_minors = std::max(v.scores.sexual_minors, score);
-            else if (axis == "violence")
-                v.scores.violence = std::max(v.scores.violence, score);
-            else if (axis == "self_harm")
-                v.scores.self_harm = std::max(v.scores.self_harm, score);
-            // Unknown axis string: fail-open (no injection). The
-            // layer still reports the skip so the metric fires and
-            // ops can notice the misconfiguration.
-            v.triggered_axes.emplace_back(axis + "_bh");
-            l2_skipped_counter.labels({"bad_hint"}).inc();
-            tr.skip_reason = "bad_hint";
-        }
-        // --- Priority 5: trust_bank (efficiency) --------------------
-        else if (cfg->trust_bank.enabled && should_skip_for_trust_bank(ipid, cfg->trust_bank)) {
-            // Probabilistic skip: user has accumulated trust credit
-            // (negative heat) and rolled under the sampling rate. A
-            // minimum sample rate floor still sends some traffic to
-            // the remote classifier so behavioral drift stays
-            // detectable.
-            l2_skipped_counter.labels({"trust_bank"}).inc();
-            tr.skip_reason = "trust_bank";
-            tr.trust_bank.ran = true;
-            tr.trust_bank.skipped = true;
-            tr.trust_bank.current_heat = heat_.peek(ipid);
-        }
-        // --- Priority 6: local_classifier_clean (efficiency) --------
-        else if (lc_result.ran && lc_result.max_confidence < cfg->local_classifier.confidence_low_clean) {
-            l2_skipped_counter.labels({"local_classifier_clean"}).inc();
-            tr.skip_reason = "local_classifier_clean";
-        }
-        // --- Priority 7: safe_hint (efficiency) ---------------------
-        else if (safe_hint_.is_active() && shared_embedding.ok) {
-            auto t_sh = std::chrono::steady_clock::now();
-            auto hint = safe_hint_.query_with_embedding(shared_embedding);
-            tr.safe_hint.ran = true;
-            tr.safe_hint.max_similarity = hint.max_similarity;
-            tr.safe_hint.best_anchor_index = hint.best_anchor_index;
-            tr.safe_hint.is_safe = hint.is_safe;
-            tr.safe_hint.ns = bump_layer("safe_hint", t_sh);
-            if (hint.is_safe) {
-                l2_skipped_counter.labels({"safe_hint"}).inc();
-                tr.skip_reason = "safe_hint";
-            }
-            else if (!remote_bucket_allow(ipid)) {
-                l2_skipped_counter.labels({"rate_limit"}).inc();
-                tr.skip_reason = "rate_limit";
-            }
-            else {
-                should_call_remote = true;
+            if (bh_result.is_bad) {
+                const std::string& axis = cfg->bad_hint.inject_axis;
+                const double score = cfg->bad_hint.inject_score;
+                if (axis == "toxicity")
+                    v.scores.toxicity = std::max(v.scores.toxicity, score);
+                else if (axis == "hate")
+                    v.scores.hate = std::max(v.scores.hate, score);
+                else if (axis == "sexual")
+                    v.scores.sexual = std::max(v.scores.sexual, score);
+                else if (axis == "sexual_minors")
+                    v.scores.sexual_minors = std::max(v.scores.sexual_minors, score);
+                else if (axis == "violence")
+                    v.scores.violence = std::max(v.scores.violence, score);
+                else if (axis == "self_harm")
+                    v.scores.self_harm = std::max(v.scores.self_harm, score);
+                v.triggered_axes.emplace_back(axis + "_bh");
             }
         }
-        // --- Priority 8: rate_limit / fall-through to remote --------
-        else {
-            if (!remote_bucket_allow(ipid)) {
-                l2_skipped_counter.labels({"rate_limit"}).inc();
-                tr.skip_reason = "rate_limit";
-            }
-            else
-                should_call_remote = true;
-        }
-    }
-
-    if (should_call_remote) {
-        static auto& remote_err_counter = metrics::MetricsRegistry::instance().counter(
-            "kagami_moderation_remote_errors_total", "Remote classifier failures by cause", {"reason"});
-        // Dedup cache counters: counted on every classify() that
-        // reached the remote path (i.e. after all L2 skip decisions
-        // already said "call it"). A hit means the HTTP call was
-        // avoided; a miss means it happened. These counters track
-        // the RemoteClassifier's internal state, so we diff the
-        // per-classifier totals against our last-seen snapshot and
-        // inc() by the delta — the RemoteClassifier counters are
-        // monotonic and the Prometheus counters must also be.
-        static auto& cache_hits_counter = metrics::MetricsRegistry::instance().counter(
-            "kagami_moderation_remote_cache_hits_total", "Remote classifier dedup cache hits", {});
-        static auto& cache_misses_counter = metrics::MetricsRegistry::instance().counter(
-            "kagami_moderation_remote_cache_misses_total", "Remote classifier dedup cache misses", {});
-        const int64_t hits_before = remote_.cache_hits();
-        const int64_t misses_before = remote_.cache_misses();
-        auto t0 = std::chrono::steady_clock::now();
-        auto rr = remote_.classify(std::string(message));
-        {
-            const int64_t dh = remote_.cache_hits() - hits_before;
-            const int64_t dm = remote_.cache_misses() - misses_before;
-            if (dh > 0)
-                cache_hits_counter.get().inc(static_cast<uint64_t>(dh));
-            if (dm > 0)
-                cache_misses_counter.get().inc(static_cast<uint64_t>(dm));
-        }
-        if (rr.ok) {
-            // Merge remote scores into the verdict. Use max() so a
-            // Layer 1 hit isn't overwritten by a lower remote score,
-            // and vice versa — the stronger signal wins per axis.
-            v.scores.toxicity = std::max(v.scores.toxicity, rr.scores.toxicity);
-            v.scores.hate = std::max(v.scores.hate, rr.scores.hate);
-            v.scores.sexual = std::max(v.scores.sexual, rr.scores.sexual);
-            v.scores.sexual_minors = std::max(v.scores.sexual_minors, rr.scores.sexual_minors);
-            v.scores.violence = std::max(v.scores.violence, rr.scores.violence);
-            v.scores.self_harm = std::max(v.scores.self_harm, rr.scores.self_harm);
-
-            // Only tag the reason for axes that actually crossed
-            // their per-axis visibility floor. Using the same
-            // constants as heat_delta_from() guarantees "axis
-            // contributed heat" and "axis appears in reason string"
-            // are the same event.
-            if (rr.scores.toxicity > kAxisFloorToxicity)
-                v.triggered_axes.emplace_back("toxicity");
-            if (rr.scores.hate > kAxisFloorHate)
-                v.triggered_axes.emplace_back("hate");
-            if (rr.scores.sexual > kAxisFloorSexual)
-                v.triggered_axes.emplace_back("sexual");
-            if (rr.scores.sexual_minors > kAxisFloorSexualMinors)
-                v.triggered_axes.emplace_back("sexual_minors");
-            if (rr.scores.violence > kAxisFloorViolence)
-                v.triggered_axes.emplace_back("violence");
-            if (rr.scores.self_harm > kAxisFloorSelfHarm)
-                v.triggered_axes.emplace_back("self_harm");
-        }
-        else if (!cfg->remote.fail_open) {
-            // fail_closed: treat any remote failure as a high-toxicity
-            // signal. Rarely the right choice for a chat server.
-            v.scores.toxicity = std::max(v.scores.toxicity, 0.5);
-            v.triggered_axes.push_back("remote_error(" + rr.error + ")");
-        }
-        if (!rr.ok) {
-            // Cardinality: error reason is already coarse-grained
-            // (timeout/http/parse). Fall back to "other" for anything
-            // unexpected to keep the label set bounded.
-            std::string reason = rr.http_status == 0                               ? "transport"
-                                 : (rr.http_status >= 400 && rr.http_status < 500) ? "http_4xx"
-                                 : (rr.http_status >= 500)                         ? "http_5xx"
-                                                                                   : "other";
-            remote_err_counter.labels({reason}).inc();
-        }
-        // Trace population for the remote call. cache_hit = true
-        // when the classifier's miss counter didn't advance (we
-        // served from cache); false otherwise. This gives Grafana
-        // a per-request view of "did this message actually hit the
-        // network" rather than just the bulk hit/miss aggregates.
-        const int64_t dm_final = remote_.cache_misses() - misses_before;
-        tr.remote.ran = true;
-        tr.remote.http_status = rr.http_status;
-        // cache_hit is meaningful only when the cache is enabled. When
-        // disabled, neither hits nor misses increment, so the naive
-        // `dm_final == 0` check would report cache_hit=true on every
-        // remote call in a cache-disabled deployment — false signal
-        // that pollutes trace-stream aggregations. Gate on the config
-        // so cache_hit only claims true when the cache actually served
-        // the response (cache enabled AND the miss counter didn't
-        // advance during this call).
-        tr.remote.cache_hit = cfg->remote.cache_enabled && (dm_final == 0);
-        tr.remote.ok = rr.ok;
-        tr.remote.scores = rr.scores;
-        tr.remote.error = rr.error;
-        tr.remote.ns = bump_layer("remote", t0);
     }
 
     // --- Layer 3: semantic clustering -------------------------------
@@ -1086,25 +697,25 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // Per-axis fires. Uses the same per-axis floors as
     // heat_delta_from() so "fired" and "added heat" are always
     // the same event in the dashboards.
-    if (v.scores.visual_noise > kAxisFloorNoise)
+    if (v.scores.visual_noise > cfg->heat.floor_visual_noise)
         axis_fires.labels({"visual_noise"}).inc();
-    if (v.scores.link_risk > kAxisFloorLinkRisk)
+    if (v.scores.link_risk > cfg->heat.floor_link_risk)
         axis_fires.labels({"link_risk"}).inc();
-    if (v.scores.slurs > kAxisFloorSlurs)
+    if (v.scores.slurs > cfg->heat.floor_slurs)
         axis_fires.labels({"slurs"}).inc();
-    if (v.scores.toxicity > kAxisFloorToxicity)
+    if (v.scores.toxicity > cfg->heat.floor_toxicity)
         axis_fires.labels({"toxicity"}).inc();
-    if (v.scores.hate > kAxisFloorHate)
+    if (v.scores.hate > cfg->heat.floor_hate)
         axis_fires.labels({"hate"}).inc();
-    if (v.scores.sexual > kAxisFloorSexual)
+    if (v.scores.sexual > cfg->heat.floor_sexual)
         axis_fires.labels({"sexual"}).inc();
-    if (v.scores.sexual_minors > kAxisFloorSexualMinors)
+    if (v.scores.sexual_minors > cfg->heat.floor_sexual_minors)
         axis_fires.labels({"sexual_minors"}).inc();
-    if (v.scores.violence > kAxisFloorViolence)
+    if (v.scores.violence > cfg->heat.floor_violence)
         axis_fires.labels({"violence"}).inc();
-    if (v.scores.self_harm > kAxisFloorSelfHarm)
+    if (v.scores.self_harm > cfg->heat.floor_self_harm)
         axis_fires.labels({"self_harm"}).inc();
-    if (v.scores.semantic_echo > kAxisFloorSemanticEcho)
+    if (v.scores.semantic_echo > cfg->heat.floor_semantic_echo)
         axis_fires.labels({"semantic_echo"}).inc();
 
     // --- Side effects -----------------------------------------------

@@ -111,30 +111,9 @@ std::string trace_to_json_line(const ModerationTrace& trace) {
         {"is_bad", trace.bad_hint.is_bad},
     };
 
-    j["layers"]["safe_hint"] = {
-        {"ran", trace.safe_hint.ran},
-        {"ns", trace.safe_hint.ns},
-        {"max_similarity", trace.safe_hint.max_similarity},
-        {"best_anchor_index", trace.safe_hint.best_anchor_index},
-        {"is_safe", trace.safe_hint.is_safe},
-    };
-
-    j["layers"]["trust_bank"] = {
-        {"ran", trace.trust_bank.ran},
-        {"current_heat", trace.trust_bank.current_heat},
-        {"skip_rate", trace.trust_bank.skip_rate},
-        {"skipped", trace.trust_bank.skipped},
-    };
-
-    j["layers"]["remote"] = {
-        {"ran", trace.remote.ran},
-        {"ns", trace.remote.ns},
-        {"http_status", trace.remote.http_status},
-        {"cache_hit", trace.remote.cache_hit},
-        {"ok", trace.remote.ok},
-        {"scores", scores_to_json(trace.remote.scores)},
-        {"error", trace.remote.error},
-    };
+    // safe_hint, trust_bank, and remote layers removed in MLP v2
+    // (no remote API calls). Omitting from trace JSON to keep payload
+    // small. Loki queries referencing these old fields will return null.
 
     j["layers"]["semantic_cluster"] = {
         {"ran", trace.semantic_cluster.ran},
@@ -146,7 +125,7 @@ std::string trace_to_json_line(const ModerationTrace& trace) {
     // Decision payload — same shape as ModerationEvent plus the
     // skip_reason and heat_before which are unique to the trace.
     j["decision"] = {
-        {"skip_reason", trace.skip_reason},
+        {"keysmash_suppressed", trace.keysmash_suppressed},
         {"triggered_axes", trace.triggered_axes},
         {"final_scores", scores_to_json(trace.final_scores)},
         {"heat_before", trace.heat_before},
