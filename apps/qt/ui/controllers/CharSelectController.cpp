@@ -15,6 +15,7 @@
 
 CharSelectController::CharSelectController(UIManager& uiMgr, ICController& icCtrl, QObject* parent)
     : IQtScreenController(parent), m_uiMgr(uiMgr), m_icCtrl(icCtrl) {
+    m_filterProxy.setSourceModel(&m_model);
 }
 
 void CharSelectController::drain() {
@@ -53,7 +54,9 @@ void CharSelectController::drain() {
     }
 }
 
-void CharSelectController::selectCharacter(int index) {
+void CharSelectController::selectCharacter(int proxyRow) {
+    const QModelIndex sourceIdx = m_filterProxy.mapToSource(m_filterProxy.index(proxyRow, 0));
+    const int index = sourceIdx.row();
     if (index < 0 || index >= static_cast<int>(m_chars.size()))
         return;
     if (m_chars[index].taken && index != m_selected)

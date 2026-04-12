@@ -11,6 +11,7 @@
 
 ServerListController::ServerListController(UIManager& uiMgr, QObject* parent)
     : IQtScreenController(parent), m_uiMgr(uiMgr) {
+    m_filterProxy.setSourceModel(&m_model);
 }
 
 void ServerListController::drain() {
@@ -22,7 +23,9 @@ void ServerListController::drain() {
     }
 }
 
-void ServerListController::connectToServer(int index) {
+void ServerListController::connectToServer(int proxyRow) {
+    const QModelIndex sourceIdx = m_filterProxy.mapToSource(m_filterProxy.index(proxyRow, 0));
+    const int index = sourceIdx.row();
     if (index < 0 || index >= static_cast<int>(m_entries.size()))
         return;
 

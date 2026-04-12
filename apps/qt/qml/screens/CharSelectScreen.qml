@@ -12,10 +12,36 @@ Page {
 
     property var controller: app.charSelectController
 
-    header: RowLayout {
+    header: ColumnLayout {
         width: parent.width
-        Label   { text: "Select your character"; font.bold: true; padding: 8; Layout.fillWidth: true }
-        ToolButton { text: "✕ Disconnect"; onClicked: root.controller.disconnect() }
+        spacing: 0
+
+        RowLayout {
+            Layout.fillWidth: true
+            Label   { text: "Select your character"; font.bold: true; padding: 8; Layout.fillWidth: true }
+            ToolButton { text: "✕ Disconnect"; onClicked: root.controller.disconnect() }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.bottomMargin: 4
+            spacing: 8
+
+            TextField {
+                id: searchField
+                Layout.fillWidth: true
+                placeholderText: "Search characters…"
+                onTextChanged: if (root.controller) root.controller.setFilter(text)
+            }
+
+            CheckBox {
+                id: hideTakenBox
+                text: "Hide taken"
+                onCheckedChanged: if (root.controller) root.controller.setHideTaken(checked)
+            }
+        }
     }
 
     GridView {
@@ -26,7 +52,7 @@ Page {
         cellHeight: 112
         clip: true
         cacheBuffer: 2000
-        model: root.controller ? root.controller.model : null
+        model: root.controller ? root.controller.filteredModel : null
         reuseItems: true
 
         delegate: Item {

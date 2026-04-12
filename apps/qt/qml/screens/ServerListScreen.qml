@@ -41,43 +41,63 @@ Page {
             }
         }
 
+        // Search bar
+        TextField {
+            id: searchField
+            Layout.fillWidth: true
+            placeholderText: "Search servers…"
+            onTextChanged: if (root.controller)
+                root.controller.setFilter(text)
+        }
+
         // Server list
         ListView {
+            id: listView
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: root.controller ? root.controller.model : null
+            model: root.controller ? root.controller.filteredModel : null
 
             delegate: ItemDelegate {
                 width: ListView.view.width
                 contentItem: ColumnLayout {
                     spacing: 2
-                    Label { text: model.name;        font.bold: true }
-                    Label { text: model.description; wrapMode: Text.Wrap; opacity: 0.7 }
-                    Label { text: model.players + " players"; font.pixelSize: 11 }
+                    Label {
+                        text: model.name
+                        font.bold: true
+                    }
+                    Label {
+                        text: model.description
+                        wrapMode: Text.Wrap
+                        opacity: 0.7
+                    }
+                    Label {
+                        text: model.players + " players"
+                        font.pixelSize: 11
+                    }
                 }
                 onClicked: root.controller.connectToServer(index)
             }
 
             Label {
                 anchors.centerIn: parent
-                text: "Fetching server list…"
-                visible: parent.count === 0
+                visible: listView.count === 0
+                text: searchField.text.length ? "No servers match " + searchField.text + "" : "Fetching server list…"
             }
         }
     }
 
     function doDirectConnect() {
-        var addr = directField.text.trim()
+        var addr = directField.text.trim();
         if (!addr.length)
-            return
-        var port = 27016
-        var colon = addr.lastIndexOf(":")
+            return;
+        var port = 27016;
+        var colon = addr.lastIndexOf(":");
         if (colon >= 0) {
-            port = parseInt(addr.substring(colon + 1), 10) || port
-            addr = addr.substring(0, colon)
+            port = parseInt(addr.substring(colon + 1), 10) || port;
+            addr = addr.substring(0, colon);
         }
-        root.controller.directConnect(addr, port)
-        directField.clear()
+        root.controller.directConnect(addr, port);
+        directField.clear();
     }
 }

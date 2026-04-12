@@ -1,5 +1,7 @@
 import QtQuick
 
+import AO
+
 /**
  * Game scene viewport — the only element that is simultaneously a Component
  * (backed by the C++ SceneTextureItem QML_ELEMENT) and a Panel (owned by
@@ -20,22 +22,21 @@ Item {
     id: root
 
     // AO base resolution — defines the display aspect ratio.
-    readonly property int baseWidth:  256
+    readonly property int baseWidth: 256
     readonly property int baseHeight: 192
 
     // Exact bounds of the rendered rectangle within this item's coordinate
     // space.  Bind a sibling overlay Item to these to avoid covering the
     // surrounding black space.
-    readonly property alias sceneX:      scene.x
-    readonly property alias sceneY:      scene.y
-    readonly property alias sceneWidth:  scene.width
+    readonly property alias sceneX: scene.x
+    readonly property alias sceneY: scene.y
+    readonly property alias sceneWidth: scene.width
     readonly property alias sceneHeight: scene.height
 
     SceneTextureItem {
         id: scene
-        readonly property real scaleFactor: Math.min(root.width  / root.baseWidth,
-                                                     root.height / root.baseHeight)
-        width:  Math.round(root.baseWidth  * scaleFactor)
+        readonly property real scaleFactor: Math.min(root.width / root.baseWidth, root.height / root.baseHeight)
+        width: Math.round(root.baseWidth * scaleFactor)
         height: Math.round(root.baseHeight * scaleFactor)
         anchors.centerIn: parent
         smooth: false
