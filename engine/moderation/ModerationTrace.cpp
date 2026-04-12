@@ -54,6 +54,7 @@ std::string trace_to_json_line(const ModerationTrace& trace) {
     j["ts"] = trace.timestamp_ms;
     j["ipid"] = trace.ipid;
     j["channel"] = trace.channel;
+    j["area"] = trace.area;
     j["message"] = trace.message;
 
     // Each layer is an object whose first field is always `ran`. The

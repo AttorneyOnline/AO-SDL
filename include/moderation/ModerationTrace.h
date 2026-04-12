@@ -168,6 +168,7 @@ struct ModerationTrace {
     int64_t timestamp_ms = 0;
     std::string ipid;
     std::string channel; ///< "ic" or "ooc"
+    std::string area;    ///< Area/room name for context in traces
 
     /// Full message text. Bounded by the kagami IC/OOC length limit
     /// (256 chars default), so no truncation needed here.

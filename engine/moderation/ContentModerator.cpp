@@ -350,7 +350,8 @@ std::string ContentModerator::sample(std::string_view message, int max_bytes) {
     return out;
 }
 
-ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_view channel, std::string_view message) {
+ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_view channel, std::string_view message,
+                                          std::string_view area) {
     ModerationVerdict v;
 
     // Per-message telemetry trace. Always stack-allocated and
@@ -364,6 +365,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     ModerationTrace tr;
     tr.ipid = ipid;
     tr.channel = std::string(channel);
+    tr.area = std::string(area);
     tr.message = std::string(message);
     tr.timestamp_ms = now_ms();
 

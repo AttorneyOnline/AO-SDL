@@ -130,7 +130,7 @@ class AreaIcEndpoint : public NXEndpoint {
         // bans) write to BanManager so SessionCreateEndpoint rejects
         // reconnects. Pre-fix this branch was a 403-only no-op.
         if (auto* cm = room().content_moderator()) {
-            auto v = cm->check(req.session->ipid, "ic", action.message);
+            auto v = cm->check(req.session->ipid, "ic", action.message, it->second);
             auto verdict_result = apply_content_verdict(*req.session, v, "ic");
             if (verdict_result.early_return)
                 return std::move(*verdict_result.early_return);
