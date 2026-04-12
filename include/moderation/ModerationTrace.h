@@ -191,6 +191,12 @@ struct ModerationTrace {
     /// verdict because they're noise on a garbage embedding.
     bool keysmash_suppressed = false;
 
+    /// True if the IPID was in noheat exemption mode. The full
+    /// pipeline ran and the action was determined, but heat was NOT
+    /// applied and enforcement was NOT executed. Traces show what
+    /// WOULD have happened.
+    bool noheat_suppressed = false;
+
     // -------------------------------------------------------------------
     // Decision outputs (legacy skip_reason kept for trace JSON compat)
     // -------------------------------------------------------------------

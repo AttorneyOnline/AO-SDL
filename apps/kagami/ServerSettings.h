@@ -693,7 +693,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"floor_toxicity", 0.85},
                       {"floor_hate", 0.1},
                       {"floor_sexual", 0.7},
-                      {"floor_sexual_minors", 0.01},
+                      {"floor_sexual_minors", 0.8},
                       {"floor_violence", 0.85},
                       {"floor_self_harm", 0.5},
                       {"floor_semantic_echo", 0.0},

@@ -43,6 +43,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 class DatabaseManager;
 
@@ -152,6 +153,15 @@ class ContentModerator {
     /// Returns true if any state was cleared.
     bool reset_state(const std::string& ipid);
 
+    /// Toggle enforcement exemption for an IPID. When exempt, check()
+    /// runs the full pipeline (classifier, heat computation, action
+    /// determination) but does NOT enforce the action (no mute, no
+    /// kick, no ban). Traces and audit logs still emit with a
+    /// `noheat_suppressed` flag so the operator can see what WOULD
+    /// have happened. Intended for `/noheat` self-testing.
+    void set_noheat(const std::string& ipid, bool exempt);
+    bool is_noheat(const std::string& ipid) const;
+
     /// Periodic housekeeping: prune decayed heat entries and expired
     /// mutes. Call every 30s from the same sweep loop as SpamDetector.
     void sweep();
@@ -234,6 +244,10 @@ class ContentModerator {
     /// ipid -> mute state. In-memory mirror of the mutes table.
     /// Loaded on configure() from db if set.
     std::unordered_map<std::string, ActiveMute> active_mutes_;
+    /// IPIDs exempt from enforcement. check() still runs the full
+    /// pipeline and logs what would happen, but doesn't apply heat
+    /// or enforce actions. Set by `/noheat` command.
+    std::unordered_set<std::string> noheat_ipids_;
 };
 
 /// Register the Prometheus metric collectors for a ContentModerator
