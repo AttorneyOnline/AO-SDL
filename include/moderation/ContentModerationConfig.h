@@ -62,7 +62,7 @@ struct HeatConfig {
     double weight_hate = 4.0;
     double weight_sexual = 1.5;
     double weight_sexual_minors = 100.0;
-    double weight_violence = 1.0;
+    double weight_violence = 0.3;   // contextual — RP violence is common, slow accum
     double weight_self_harm = 1.0;
     double weight_semantic_echo = 2.0;
 
