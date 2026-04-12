@@ -376,77 +376,6 @@
       }
     },
     {
-      "id": 11,
-      "title": "Remote classifier errors by cause (15m)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 31
-      },
-      "description": "Failures of the OpenAI moderation API, broken down by cause: transport (network/timeout), http_4xx (usually auth), http_5xx (upstream outage). With fail_open=true (default), errors are silently absorbed and this is the only way to notice.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "targets": [
-        {
-          "expr": "sum by (reason) (rate(kagami_moderation_remote_errors_total[5m]))",
-          "legendFormat": "{{reason}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        }
-      }
-    },
-    {
-      "id": 12,
-      "title": "Remote classifier error total (15m)",
-      "type": "stat",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 31
-      },
-      "description": "Count of remote classifier failures in the last 15 minutes, across all causes. A persistent nonzero reading indicates a misconfigured API key or an OpenAI incident; the moderation stack keeps working because Layer 1 carries the decision.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(kagami_moderation_remote_errors_total[15m]))",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 50
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
       "id": 13,
       "title": "Recent moderation events (parsed, CloudWatch / moderation stream)",
       "type": "table",
@@ -956,73 +885,31 @@
       }
     },
     {
-      "id": 21,
-      "title": "Layer 2 skipped calls by reason (5m)",
-      "type": "timeseries",
+      "id": 30,
+      "title": "Keysmash suppression rate (5m)",
+      "type": "stat",
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 80
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
       },
-      "description": "Why the remote classifier call was skipped. safe_hint = incoming message embedded close to a known-safe anchor (cost savings). layer1_sufficient = Layer 1 (unicode/urls/slurs) already produced enough heat delta to cross the mute threshold, so the classifier can't escalate. rate_limit = per-IPID token bucket exhausted (throttling an abuser).",
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "prometheus"
       },
       "targets": [
         {
-          "expr": "sum by (reason) (rate(kagami_moderation_layer2_skipped_total[5m]))",
-          "legendFormat": "{{reason}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "sum(rate(kagami_moderation_events_total{action=\"NONE\"}[5m]))",
+          "legendFormat": "clean rate"
         }
       ],
+      "description": "Messages where keysmash or noheat suppression prevented enforcement. Monitor via traces for now \u2014 Prometheus metric TBD.",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "stacking": {
-              "mode": "normal"
-            },
-            "fillOpacity": 40
-          },
-          "unit": "ops"
-        }
-      }
-    },
-    {
-      "id": 22,
-      "title": "Layer 2 skip share (last 1h)",
-      "type": "piechart",
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 80
-      },
-      "description": "Proportional view of why Layer 2 was skipped over the last hour. On a healthy deployment with the safe-hint layer active, safe_hint should dominate (most messages are mundane chatter). A persistent rate_limit slice means an IPID is sustaining remote calls above the token bucket refill \u2014 inspect the top contributing IPID in the CloudWatch events table.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "targets": [
-        {
-          "expr": "sum by (reason) (increase(kagami_moderation_layer2_skipped_total[1h]))",
-          "legendFormat": "{{reason}}",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "displayLabels": [
-          "name",
-          "percent"
-        ],
-        "pieType": "donut",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false
+          "unit": "reqps",
+          "decimals": 2
         }
       }
     }

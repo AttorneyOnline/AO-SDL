@@ -1,69 +1,63 @@
 {
-  "annotations": {
-    "list": []
-  },
+  "annotations": { "list": [] },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "links": [],
-  "refresh": "30s",
+  "refresh": "5s",
   "liveNow": true,
   "schemaVersion": 39,
-  "tags": [
-    "kagami",
-    "moderation",
-    "trace"
-  ],
-  "templating": {
-    "list": []
-  },
+  "tags": ["kagami", "moderation", "trace"],
+  "templating": { "list": [] },
   "title": "Kagami Moderation Trace (MLP v2, local-only)",
   "uid": "kagami-moderation-trace",
-  "version": 1,
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
-  "description": "Per-message moderation trace analytics. Answers questions that the aggregate counter dashboards can't: which specific messages missed skip opportunities, where classifier and remote disagreed, which bad_hint anchors are firing, full audit trail for any non-NONE action. Requires content_moderation.trace.enabled=true and a Loki push sink.",
+  "version": 2,
+  "time": { "from": "now-1h", "to": "now" },
   "panels": [
     {
+      "id": 10,
+      "title": "Live moderation trace stream",
+      "type": "logs",
+      "description": "Full per-message trace stream. Each line is one ContentModerator::check() call with classifier scores, heat delta, action, and all layer contributions.",
+      "gridPos": { "h": 24, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"kagami_mod_trace\"}",
+          "queryType": "range",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
       "id": 1,
-      "title": "Trace stream rate (req/s, last 5m)",
+      "title": "Trace rate (req/s)",
       "type": "stat",
-      "description": "Per-message traces emitted per second. Equals the total ContentModerator::check() rate when tracing is enabled. Zero means traces are not being emitted \u2014 check content_moderation.trace.enabled in kagami.json.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 12
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate({job=\"kagami_mod_trace\"}[5m]))",
           "queryType": "range",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
+          "datasource": { "type": "loki", "uid": "loki" }
         }
       ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
+        "reduceOptions": { "calcs": ["lastNotNull"] }
       },
       "fieldConfig": {
         "defaults": {
@@ -72,14 +66,8 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 0.01
-              }
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.01 }
             ]
           }
         }
@@ -87,81 +75,35 @@
     },
     {
       "id": 6,
-      "title": "Classifier max_conf p50 / p90 on clean traffic",
+      "title": "Classifier max_conf p50/p90 on clean traffic",
       "type": "timeseries",
-      "description": "Rolling p50 and p90 of the local classifier's max_confidence output, filtered to messages where the final action was NONE. This is the metric that tells you whether confidence_low_clean is set correctly: if p90 is below your threshold, most clean traffic is correctly skipping the remote; if p90 is above, you're escalating too many benign messages and should raise the threshold. Calibrate by reading this line for a week on real traffic.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 38
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 24 },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "refId": "A",
           "expr": "quantile_over_time(0.5, {job=\"kagami_mod_trace\"} | json | decision_final_action=\"NONE\" | unwrap layers_local_classifier_max_confidence [5m])",
           "queryType": "range",
           "legendFormat": "p50",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
+          "datasource": { "type": "loki", "uid": "loki" }
         },
         {
           "refId": "B",
           "expr": "quantile_over_time(0.9, {job=\"kagami_mod_trace\"} | json | decision_final_action=\"NONE\" | unwrap layers_local_classifier_max_confidence [5m])",
           "queryType": "range",
           "legendFormat": "p90",
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          }
+          "datasource": { "type": "loki", "uid": "loki" }
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineWidth": 2
-          },
-          "unit": "none",
-          "min": 0,
-          "max": 1,
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.2
-              },
-              {
-                "color": "red",
-                "value": 0.4
-              }
-            ]
-          }
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 },
+          "unit": "none", "min": 0, "max": 1, "decimals": 3
         }
       },
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       }
     }
   ]
