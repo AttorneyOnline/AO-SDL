@@ -100,9 +100,12 @@ jobs:
           cp "$Qt6_DIR/../../../bin/libcrypto-3-x64.dll"  artifact/ 2>/dev/null || \
           cp "/c/Program Files/OpenSSL/bin/libcrypto-3-x64.dll" artifact/ 2>/dev/null || true
 
-          # windeployqt bundles Qt runtimes, QML modules, and plugins
+          # windeployqt bundles Qt runtimes, QML modules, and plugins.
+          # --qmldir must include both the source tree (for screen/panel QML)
+          # and the build output (for generated AO.Components / AO.Panels qmldir files).
           windeployqt \
             --qmldir apps/qt/qml \
+            --qmldir build/apps/qt/qml \
             --release \
             --no-compiler-runtime \
             artifact/aoqt.exe
