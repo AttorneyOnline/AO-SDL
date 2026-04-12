@@ -242,13 +242,18 @@ double ContentModerator::current_heat(const std::string& ipid) {
     return heat_.peek(ipid);
 }
 
-namespace {
-// Token bucket tunables for the per-IPID remote-classifier rate
-// limit. Burst 10 means a client can fire 10 remote calls back-to-
-// back before throttling kicks in; refill 2/sec matches the default
-// rate limit for the ao:CT (OOC chat) action family, so a well-
-// behaved client on the default rate limits will never hit this.
-} // namespace
+void ContentModerator::set_noheat(const std::string& ipid, bool exempt) {
+    std::lock_guard lock(mu_);
+    if (exempt)
+        noheat_ipids_.insert(ipid);
+    else
+        noheat_ipids_.erase(ipid);
+}
+
+bool ContentModerator::is_noheat(const std::string& ipid) const {
+    std::lock_guard lock(mu_);
+    return noheat_ipids_.count(ipid) > 0;
+}
 
 std::shared_ptr<const ContentModerationConfig> ContentModerator::cfg_snapshot() const {
     std::lock_guard lock(mu_);
@@ -686,10 +691,26 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         return v;
     }
 
-    // Real content — apply the delta and determine action.
-    v.heat_after = heat_.apply(ipid, v.heat_delta);
-    v.action = heat_.decide(v.heat_after);
-    v.reason = format_reason(v);
+    // --- Noheat exemption check --------------------------------------
+    // If the IPID has noheat mode on, we still compute what WOULD
+    // happen (for traces/audit) but don't apply heat or enforce.
+    const bool noheat = is_noheat(ipid);
+    if (noheat) {
+        // Simulate: compute hypothetical heat and action for logging
+        const double hypothetical_heat = heat_.peek(ipid) + v.heat_delta;
+        v.heat_after = heat_.peek(ipid); // actual heat unchanged
+        v.action = heat_.decide(hypothetical_heat); // what would have happened
+        v.reason = format_reason(v);
+        if (!v.reason.empty())
+            v.reason += " [noheat_suppressed]";
+        tr.noheat_suppressed = true;
+    }
+    else {
+        // Real content — apply the delta and determine action.
+        v.heat_after = heat_.apply(ipid, v.heat_delta);
+        v.action = heat_.decide(v.heat_after);
+        v.reason = format_reason(v);
+    }
 
     // Per-action event counter (low cardinality: <10 actions × 2 channels).
     events_counter.labels({to_string(v.action), std::string(channel)}).inc();
@@ -719,6 +740,23 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         axis_fires.labels({"semantic_echo"}).inc();
 
     // --- Side effects -----------------------------------------------
+    // Skip all enforcement when noheat is active. Traces and metrics
+    // above still recorded what WOULD have happened.
+    if (noheat) {
+        emit_trace_if_enabled();
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                      std::chrono::steady_clock::now() - check_start)
+                      .count();
+        check_ns_counter.get().inc(static_cast<uint64_t>(dt));
+        check_calls_counter.get().inc();
+        // Return the verdict with the hypothetical action so the
+        // caller sees what would have happened, but the action has
+        // no enforcement backing. Packet handler should still
+        // broadcast the message normally.
+        v.action = ModerationAction::NONE;
+        return v;
+    }
+
     // If the action is MUTE, record it in the active_mutes_ table so
     // subsequent check()/is_muted() calls short-circuit. Persist to
     // DB if available.

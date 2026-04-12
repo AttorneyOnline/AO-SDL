@@ -126,6 +126,7 @@ std::string trace_to_json_line(const ModerationTrace& trace) {
     // skip_reason and heat_before which are unique to the trace.
     j["decision"] = {
         {"keysmash_suppressed", trace.keysmash_suppressed},
+        {"noheat_suppressed", trace.noheat_suppressed},
         {"triggered_axes", trace.triggered_axes},
         {"final_scores", scores_to_json(trace.final_scores)},
         {"heat_before", trace.heat_before},
