@@ -194,7 +194,10 @@ KAGAMI_AXES = [
 ]
 
 DEFAULT_EMBEDDING_MODEL = "ChristianAzinn/bge-small-en-v1.5-gguf"
-DEFAULT_OUTPUT = "assets/moderation/classifier-weights-v1.bin"
+DEFAULT_OUTPUT_V1 = "assets/moderation/classifier-weights-v1.bin"
+DEFAULT_OUTPUT_V2 = "assets/moderation/classifier-weights-v2.bin"
+SENTINEL_BIAS = -20.0
+HIDDEN_DIM = 64
 
 # The HF model id we pass to sentence-transformers might differ from
 # the one kagami uses at runtime (kagami loads GGUF files via
@@ -457,9 +460,11 @@ def load_combined_arrays(args):
 
 
 def train(args) -> int:
-    require("numpy", "pandas", "sklearn", "sentence_transformers")
-    if args.dataset in ("rtp", "toxigen", "combined"):
-        require("datasets")
+    require("numpy", "sklearn", "sentence_transformers")
+    if not args.ao_labels:
+        require("pandas")
+        if args.dataset in ("rtp", "toxigen", "combined"):
+            require("datasets")
 
     import numpy as np
     from sentence_transformers import SentenceTransformer
@@ -467,20 +472,24 @@ def train(args) -> int:
     from sklearn.metrics import roc_auc_score
     from sklearn.model_selection import train_test_split
 
-    label = f"{args.dataset}"
-    if args.dataset == "combined" and args.add_toxigen:
-        label += "+toxigen"
-    print(f"[2/5] Loading dataset(s): {label}")
-    if args.dataset == "jigsaw":
-        texts, labels = load_jigsaw_arrays(args)
-    elif args.dataset == "rtp":
-        texts, labels = load_rtp_arrays(args)
-    elif args.dataset == "toxigen":
-        texts, labels = load_toxigen_arrays(args)
-    elif args.dataset == "combined":
-        texts, labels = load_combined_arrays(args)
+    if args.ao_labels:
+        print(f"[2/5] Loading AO labels from {args.ao_labels}")
+        texts, labels = load_ao_labels(args.ao_labels, None)
     else:
-        die(f"unknown --dataset value: {args.dataset}")
+        label = f"{args.dataset}"
+        if args.dataset == "combined" and args.add_toxigen:
+            label += "+toxigen"
+        print(f"[2/5] Loading dataset(s): {label}")
+        if args.dataset == "jigsaw":
+            texts, labels = load_jigsaw_arrays(args)
+        elif args.dataset == "rtp":
+            texts, labels = load_rtp_arrays(args)
+        elif args.dataset == "toxigen":
+            texts, labels = load_toxigen_arrays(args)
+        elif args.dataset == "combined":
+            texts, labels = load_combined_arrays(args)
+        else:
+            die(f"unknown --dataset value: {args.dataset}")
 
     # Apply --max-rows AFTER concatenation so the subsample is a
     # representative mix of whichever datasets were combined. Shuffle
@@ -539,79 +548,284 @@ def train(args) -> int:
         X, labels, test_size=0.1, random_state=42
     )
 
-    print("[5/5] Training one logistic regression per axis")
+    if args.architecture == "mlp":
+        return train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim)
+    return train_linear(args, X_train, X_val, y_train, y_val, embedding_dim)
+
+
+def train_linear(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
+    """v1 logistic regression training (legacy path)."""
+    import numpy as np
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+
+    print("[5/5] Training one logistic regression per axis (v1 linear)")
     weights = np.zeros((len(KAGAMI_AXES), embedding_dim), dtype=np.float32)
-    # Default bias is a large negative value so untrained / skipped
-    # axes produce sigmoid(-20) ≈ 2e-9 at runtime. This matters
-    # because the C++ layer computes max_confidence across ALL axes
-    # to decide the low/high skip thresholds — if skipped axes
-    # defaulted to sigmoid(0) = 0.5, max_confidence would be pinned
-    # at 0.5 for every message and the "below 0.2 → clean" gate
-    # would become unreachable. See the validation section of the
-    # plan for how this was caught on staging.
-    biases = np.full(len(KAGAMI_AXES), -20.0, dtype=np.float32)
+    biases = np.full(len(KAGAMI_AXES), SENTINEL_BIAS, dtype=np.float32)
 
     for i, axis in enumerate(KAGAMI_AXES):
         y_train_i = y_train[:, i]
         y_val_i = y_val[:, i]
-        pos_count = int(y_train_i.sum())
-        total = len(y_train_i)
+        valid_train = ~np.isnan(y_train_i)
+        valid_val = ~np.isnan(y_val_i)
+        y_tr = y_train_i[valid_train]
+        y_va = y_val_i[valid_val]
+        pos_count = int(y_tr.sum())
+        total = len(y_tr)
 
-        if pos_count == 0 or pos_count == total:
-            # No positive examples (or everything positive — won't
-            # happen in practice but guard both sides). Leave this
-            # axis zeroed. The C++ layer will produce sigmoid(0)=0.5
-            # which is a "don't know" signal that falls into the
-            # escalate-to-remote band.
-            print(f"      {axis:16s}: SKIPPED (no positive labels in train set)")
+        if pos_count < 5 or total < 20:
+            print(f"      {axis:16s}: SKIPPED (pos={pos_count}, total={total})")
             continue
 
-        clf = LogisticRegression(
-            C=1.0,
-            max_iter=200,
-            random_state=42,
-        )
-        clf.fit(X_train, y_train_i)
+        clf = LogisticRegression(C=1.0, max_iter=200, random_state=42)
+        clf.fit(X_train[valid_train], y_tr)
 
-        # Scores for the val set — binary classifier uses predict_proba
-        # column 1 as the positive-class probability.
         try:
-            auc = roc_auc_score(y_val_i, clf.predict_proba(X_val)[:, 1])
+            auc = roc_auc_score(y_va, clf.predict_proba(X_val[valid_val])[:, 1])
         except ValueError:
-            # Can happen if the val set has only one class for this
-            # axis. Skip the AUC print, still save the weights.
             auc = float("nan")
 
         weights[i] = clf.coef_[0].astype(np.float32)
         biases[i] = float(clf.intercept_[0])
-        print(f"      {axis:16s}: AUC={auc:.4f} "
-              f"(pos={pos_count}/{total}={pos_count/total*100:.2f}%)")
+        print(f"      {axis:16s}: AUC={auc:.4f} (pos={pos_count}/{total})")
 
-    # Write the binary output.
     output_path = Path(args.output).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_weights_file(
-        output_path,
-        num_categories=len(KAGAMI_AXES),
-        embedding_dim=embedding_dim,
-        model_name=args.embedding_model,
-        weights=weights,
-        biases=biases,
+        output_path, len(KAGAMI_AXES), embedding_dim,
+        args.embedding_model, weights, biases,
     )
-    print(f"\nWrote {output_path} "
-          f"({output_path.stat().st_size:,} bytes)")
-    print("\nNext steps:")
-    print("  1. Commit the weights file:")
-    try:
-        display = output_path.relative_to(Path.cwd())
-    except ValueError:
-        display = output_path
-    print(f"     git add {display}")
-    print("  2. Rebuild kagami. cmake/EmbedAssets.cmake will pick up")
-    print("     the file automatically at configure time.")
-    print("  3. Enable the layer in kagami.json:")
-    print('       content_moderation.local_classifier.enabled = true')
+    print(f"\nWrote {output_path} ({output_path.stat().st_size:,} bytes)")
     return 0
+
+
+def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
+    """v2 MLP training: per-axis 2-layer MLP with residual + Platt."""
+    import numpy as np
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    import torch.optim as optim
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
+    print(f"[5/5] Training per-axis MLP (v2, hidden={HIDDEN_DIM}, device={device})")
+
+    num_cat = len(KAGAMI_AXES)
+    H = HIDDEN_DIM
+    D = embedding_dim
+
+    all_w1 = np.zeros((num_cat, D, H), dtype=np.float32)
+    all_b1 = np.zeros((num_cat, H), dtype=np.float32)
+    all_w2 = np.zeros((num_cat, H), dtype=np.float32)
+    all_b2 = np.full(num_cat, SENTINEL_BIAS, dtype=np.float32)
+    all_wskip = np.zeros((num_cat, D), dtype=np.float32)
+    all_platt_a = np.ones(num_cat, dtype=np.float32)
+    all_platt_b = np.zeros(num_cat, dtype=np.float32)
+
+    class AxisMLP(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc1 = nn.Linear(D, H)
+            self.fc2 = nn.Linear(H, 1)
+            self.skip = nn.Linear(D, 1, bias=False)
+        def forward(self, x):
+            h = F.relu(self.fc1(x))
+            return (self.fc2(h) + self.skip(x)).squeeze(-1)
+
+    for i, axis in enumerate(KAGAMI_AXES):
+        y_train_i = y_train[:, i]
+        y_val_i = y_val[:, i]
+        valid_train = ~np.isnan(y_train_i)
+        valid_val = ~np.isnan(y_val_i)
+        y_tr = y_train_i[valid_train].astype(np.float32)
+        y_va = y_val_i[valid_val].astype(np.float32)
+        X_tr = X_train[valid_train]
+        X_va = X_val[valid_val]
+        n_pos = int(y_tr.sum())
+
+        if n_pos < 5 or len(y_tr) < 20:
+            print(f"      {axis:16s}: SENTINEL (pos={n_pos}, total={len(y_tr)})")
+            continue
+
+        torch.manual_seed(42)
+        model = AxisMLP().to(device)
+        X_t = torch.from_numpy(X_tr).float().to(device)
+        y_t = torch.from_numpy(y_tr).float().to(device)
+        X_v = torch.from_numpy(X_va).float().to(device)
+        y_v = torch.from_numpy(y_va).float().to(device)
+
+        n_neg = max(float(len(y_tr) - n_pos), 1.0)
+        pos_weight = torch.tensor([n_neg / max(n_pos, 1)], device=device)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
+
+        best_loss, best_state, patience = float("inf"), None, 0
+        for _ in range(300):
+            model.train()
+            optimizer.zero_grad()
+            criterion(model(X_t), y_t).backward()
+            optimizer.step()
+            model.eval()
+            with torch.no_grad():
+                vl = criterion(model(X_v), y_v).item()
+            if vl < best_loss - 1e-4:
+                best_loss = vl
+                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                patience = 0
+            else:
+                patience += 1
+                if patience >= 20:
+                    break
+        if best_state:
+            model.load_state_dict(best_state)
+        model.eval()
+
+        # Platt calibration
+        with torch.no_grad():
+            val_logits = model(X_v).cpu().numpy()
+        if len(np.unique(y_va)) >= 2:
+            platt = LogisticRegression(C=1.0)
+            platt.fit(val_logits.reshape(-1, 1), y_va)
+            pa, pb = float(platt.coef_[0][0]), float(platt.intercept_[0])
+            cal_probs = 1.0 / (1.0 + np.exp(-(pa * val_logits + pb)))
+        else:
+            pa, pb = 1.0, 0.0
+            cal_probs = 1.0 / (1.0 + np.exp(-val_logits))
+
+        try:
+            auc = roc_auc_score(y_va, cal_probs)
+        except ValueError:
+            auc = float("nan")
+        brier = float(np.mean((y_va - cal_probs) ** 2))
+
+        sd = {k: v.cpu().numpy() for k, v in model.state_dict().items()}
+        all_w1[i] = sd["fc1.weight"].T  # [D, H] from [H, D]
+        all_b1[i] = sd["fc1.bias"]
+        all_w2[i] = sd["fc2.weight"].squeeze(0)
+        all_b2[i] = sd["fc2.bias"].item()
+        all_wskip[i] = sd["skip.weight"].squeeze(0)
+        all_platt_a[i] = pa
+        all_platt_b[i] = pb
+
+        print(f"      {axis:16s}: AUC={auc:.4f}  Brier={brier:.4f}  "
+              f"(pos={n_pos}/{len(y_tr)})")
+
+    output_path = Path(args.output).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_weights_file_v2(
+        output_path, num_cat, D, H, args.embedding_model,
+        all_w1, all_b1, all_w2, all_b2, all_wskip,
+        all_platt_a, all_platt_b,
+    )
+    print(f"\nWrote {output_path} ({output_path.stat().st_size:,} bytes)")
+    return 0
+
+
+def load_ao_labels(db_path: str, embedding_model):
+    """Load AO-specific labels from the labeler SQLite database.
+
+    Returns (texts, labels) where labels is (N, 8) float32 with values
+    0.0 (clean) or 1.0 (bad). Borderline labels (1) are excluded.
+    Axes without labels get NaN so the per-axis training can skip them.
+    """
+    import numpy as np
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    # Get all unique text_hashes that have at least one non-borderline label
+    hashes_with_labels = conn.execute(
+        "SELECT DISTINCT text_hash FROM labels WHERE label IN (0, 2)"
+    ).fetchall()
+    hashes = [r["text_hash"] for r in hashes_with_labels]
+
+    if not hashes:
+        print(f"      no labels found in {db_path}")
+        return [], np.zeros((0, len(KAGAMI_AXES)), dtype=np.float32)
+
+    # Build per-hash label vectors
+    texts = []
+    label_rows = []
+    for h in hashes:
+        msg = conn.execute("SELECT text FROM messages WHERE text_hash = ? LIMIT 1", (h,)).fetchone()
+        if msg is None:
+            continue
+        texts.append(msg["text"])
+        row = np.full(len(KAGAMI_AXES), np.nan, dtype=np.float32)
+        for lr in conn.execute("SELECT axis, label FROM labels WHERE text_hash = ? AND label IN (0, 2)", (h,)):
+            axis_name = lr["axis"]
+            if axis_name in KAGAMI_AXES:
+                idx = KAGAMI_AXES.index(axis_name)
+                row[idx] = 1.0 if lr["label"] == 2 else 0.0
+        label_rows.append(row)
+
+    conn.close()
+    labels = np.stack(label_rows) if label_rows else np.zeros((0, len(KAGAMI_AXES)), dtype=np.float32)
+    print(f"      loaded {len(texts)} labeled messages from {db_path}")
+    for i, axis in enumerate(KAGAMI_AXES):
+        valid = ~np.isnan(labels[:, i])
+        pos = int(labels[valid, i].sum()) if valid.any() else 0
+        total = int(valid.sum())
+        if total > 0:
+            print(f"        {axis:16s}: {pos} positive / {total} total")
+    return texts, labels
+
+
+def write_weights_file_v2(
+    path,
+    num_categories: int,
+    embedding_dim: int,
+    hidden_dim: int,
+    model_name: str,
+    w1, b1, w2, b2, w_skip,  # np.ndarrays
+    platt_a, platt_b,         # np.ndarrays (num_categories,)
+) -> None:
+    """Serialize to kagami v2 MLP binary format.
+
+    Format:
+      magic "KGCLF\\x02\\x00\\x00" | version=2 | num_cat | dim | hidden_dim |
+      name_len | name | W1 | b1 | W2 | b2 | W_skip |
+      calibration_type(1) | platt_a | platt_b
+    """
+    import numpy as np
+
+    model_name_bytes = model_name.encode("utf-8")
+    tmp_fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=".classifier-v2-", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(b"KGCLF\x02\x00\x00")
+            f.write(struct.pack("<I", 2))  # format version
+            f.write(struct.pack("<I", num_categories))
+            f.write(struct.pack("<I", embedding_dim))
+            f.write(struct.pack("<I", hidden_dim))
+            f.write(struct.pack("<I", len(model_name_bytes)))
+            f.write(model_name_bytes)
+            f.write(w1.astype(np.float32).tobytes())
+            f.write(b1.astype(np.float32).tobytes())
+            f.write(w2.astype(np.float32).tobytes())
+            f.write(b2.astype(np.float32).tobytes())
+            f.write(w_skip.astype(np.float32).tobytes())
+            f.write(struct.pack("B", 1))  # calibration_type = platt
+            f.write(platt_a.astype(np.float32).tobytes())
+            f.write(platt_b.astype(np.float32).tobytes())
+        shutil.move(tmp_name, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def write_weights_file(
@@ -695,8 +909,8 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--output", default=DEFAULT_OUTPUT,
-        help=f"Output path for the weights file (default: {DEFAULT_OUTPUT})",
+        "--output", default=None,
+        help="Output path for the weights file (default: auto from architecture)",
     )
     parser.add_argument(
         "--embedding-model", default=DEFAULT_EMBEDDING_MODEL,
@@ -732,7 +946,27 @@ def main() -> int:
             "overhead). Lower to 64 if you see memory pressure."
         ),
     )
+    parser.add_argument(
+        "--architecture", default="mlp",
+        choices=["linear", "mlp"],
+        help=(
+            "Classifier architecture. 'linear' = v1 logistic regression "
+            "(single GEMV per axis, ~12 KB weights). 'mlp' = v2 2-layer "
+            "MLP with residual skip + Platt calibration (~800 KB weights). "
+            "Default: mlp."
+        ),
+    )
+    parser.add_argument(
+        "--ao-labels", default=None,
+        help=(
+            "Path to the labeler SQLite database with AO-specific labels. "
+            "When provided, trains on AO labels only (ignores --dataset). "
+            "Typically ~/Documents/notes-AOSDL/labeler/data/labels.sqlite."
+        ),
+    )
     args = parser.parse_args()
+    if args.output is None:
+        args.output = DEFAULT_OUTPUT_V2 if args.architecture == "mlp" else DEFAULT_OUTPUT_V1
     return train(args)
 
 
