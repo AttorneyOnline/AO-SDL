@@ -78,10 +78,8 @@ option(AO_BUILD_SERVER_ONLY "Build only the Kagami server (no SDL client, render
 # Third-party dependencies
 # =============================================================================
 
-option(AO_BUILD_SDL "Build the SDL2 desktop frontend" ON)
-
-# --- SDL2 — only needed for the SDL desktop app ------------------------------
-if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
+# --- SDL2 — only needed for the desktop SDL app, not for Flutter/mobile ------
+if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
@@ -169,8 +167,8 @@ target_include_directories(opusfile
 target_link_libraries(opusfile PUBLIC Ogg::ogg Opus::opus)
 target_compile_definitions(opusfile PRIVATE OP_DISABLE_HTTP)
 
-# ImGui (static lib — SDL frontend only)
-if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
+# ImGui (static lib — desktop only, not needed for Flutter or server)
+if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/imgui)
     set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
@@ -372,6 +370,7 @@ add_library(aoengine STATIC
     engine/event/ServerConnectEvent.cpp
     engine/event/BackgroundEvent.cpp
 
+    engine/utils/ImdsCredentialProvider.cpp
     engine/utils/Log.cpp
     engine/utils/Base64.cpp
     engine/utils/JsonSchema.cpp
@@ -390,12 +389,16 @@ add_library(aoengine STATIC
     engine/game/ServerList.cpp
     engine/game/Session.cpp
 
+    engine/moderation/BadHintLayer.cpp
     engine/moderation/ContentModerator.cpp
     engine/moderation/EmbeddingBackend.cpp
     engine/moderation/HfModelFetcher.cpp
+    engine/moderation/LocalClassifierLayer.cpp
     engine/moderation/ModerationAuditLog.cpp
     engine/moderation/ModerationHeat.cpp
+    engine/moderation/ModerationTrace.cpp
     engine/moderation/RemoteClassifier.cpp
+    engine/moderation/RemoteDedupCache.cpp
     engine/moderation/SafeHintLayer.cpp
     engine/moderation/SemanticClusterer.cpp
     engine/moderation/SlurFilter.cpp
@@ -511,25 +514,50 @@ set_property(TARGET aoengine PROPERTY CXX_STANDARD 20)
 
 # --- Optional: llama.cpp for local embedding backend ---
 #
-# ON by default so the shipped Docker image supports the moderation
-# subsystem's Layer 3 (semantic spam clustering) without requiring
-# operators to rebuild from source. The CI container image carries
-# llama.cpp + ggml linked into libaoengine.a.
+# Defaults to ON only for server-only builds (AO_BUILD_SERVER_ONLY=ON).
+# The client never uses embeddings — llama.cpp is purely for kagami's
+# moderation Layer 2 (local classifier, hint layers, semantic clustering).
+# The Dockerfile sets AO_BUILD_SERVER_ONLY=ON, so production kagami
+# images always get the real backend. Client-inclusive builds (the
+# default, and CI) skip the ~5min llama.cpp compile; kagami still
+# builds but falls back to NullEmbeddingBackend.
 #
-# Disable with -DKAGAMI_WITH_LLAMA_CPP=OFF to:
-#   - Skip the ~40s configure + ~5min first-build cost from FetchContent
-#     pulling and compiling llama.cpp + ggml kernels.
-#   - Drop ~25MB from the final binary and libgomp1 from the runtime
-#     image (ggml uses OpenMP).
-#   - Keep embedding-layer code compiled as a NullEmbeddingBackend
-#     stub — the rest of the moderation stack handles it transparently.
-option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" ON)
+# Force on with -DKAGAMI_WITH_LLAMA_CPP=ON for local kagami dev.
+option(KAGAMI_WITH_LLAMA_CPP "Build with llama.cpp for local embedding backend" ${AO_BUILD_SERVER_ONLY})
 if(KAGAMI_WITH_LLAMA_CPP)
     include(FetchContent)
     set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
     set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+
+    # Pin llama.cpp / ggml to a portable ARM target instead of letting
+    # it auto-detect the build host's CPU features. Without these two
+    # lines, llama.cpp's CMake runs -mcpu=native which bakes in whatever
+    # extensions the build host happens to support (i8mm, bf16, SVE,
+    # ...). The resulting binary SIGILLs at first matmul when run on
+    # any CPU missing those extensions — in particular Graviton2
+    # (t4g.*), which is Neoverse-N1 / ARMv8.2-A and predates i8mm by
+    # several architecture revisions.
+    #
+    # The target chosen is ARMv8.2-A + dotprod + fp16:
+    #   - ARMv8.2-A baseline: Neoverse-N1 (Graviton2), Neoverse-V1
+    #     (Graviton3), Neoverse-V2 (Graviton4), Apple M1/M2/M3/M4
+    #   - +dotprod (UDOT/SDOT 8-bit dot products): all Graviton 2+,
+    #     all Apple Silicon. Keeps the performant q8 kernels.
+    #   - +fp16 (half-precision arithmetic): same set.
+    #
+    # What we deliberately DO NOT enable:
+    #   - i8mm (SMMLA/UMMLA): added ARMv8.6-A, absent on Graviton2
+    #   - bf16: added ARMv8.6-A, absent on Graviton2
+    #   - SVE/SVE2: Neoverse-V1+, absent on Graviton2
+    #
+    # For x86_64 builds, GGML_CPU_ARM_ARCH is silently ignored and
+    # GGML_NATIVE=OFF just means "no -march=native", which is already
+    # the right default for portable builds.
+    set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+    set(GGML_CPU_ARM_ARCH "armv8.2-a+dotprod+fp16" CACHE STRING "" FORCE)
+
     FetchContent_Declare(llama_cpp
         GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
         # Pinned to a full SHA rather than a tag so a re-tag on the
@@ -544,7 +572,7 @@ if(KAGAMI_WITH_LLAMA_CPP)
     target_compile_definitions(aoengine PRIVATE KAGAMI_WITH_LLAMA_CPP=1)
     message(STATUS "Content moderation: llama.cpp embedding backend ENABLED")
 else()
-    message(STATUS "Content moderation: llama.cpp embedding backend disabled (use -DKAGAMI_WITH_LLAMA_CPP=ON to enable)")
+    message(STATUS "Content moderation: llama.cpp embedding backend OFF (use -DKAGAMI_WITH_LLAMA_CPP=ON or -DAO_BUILD_SERVER_ONLY=ON to enable)")
 endif()
 
 target_include_directories(aoengine
@@ -582,10 +610,6 @@ endif()
 # =============================================================================
 
 if(NOT AO_BUILD_SERVER_ONLY)
-
-if(NOT APPLE)
-    find_package(OpenGL REQUIRED)
-endif()
 if(APPLE)
     # --- aorender_metal — Metal renderer backend (macOS / iOS) ----------------
 
@@ -770,14 +794,8 @@ endif() # NOT AO_BUILD_SERVER_ONLY
 # =============================================================================
 
 if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
-    if(AO_BUILD_SDL)
-        add_subdirectory(apps/sdl)
-    endif()
-
-    find_package(Qt6 6.10 QUIET COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
-    if(Qt6_FOUND)
-        add_subdirectory(apps/qt)
-    endif()
+    add_subdirectory(apps/sdl)
+    # add_subdirectory(apps/qt)   # future: ENABLE_THE_HORRORS
 endif()
 
 if(NOT AO_BUILD_FLUTTER)

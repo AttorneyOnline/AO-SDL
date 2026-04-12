@@ -77,6 +77,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DAO_BUILD_QT=ON
           -DAO_BUILD_SDL=OFF
+          -DKAGAMI_WITH_LLAMA_CPP=OFF
           -DPython3_EXECUTABLE=${{ steps.python-path.outputs.executable }}
 
       # ---- Build ----
