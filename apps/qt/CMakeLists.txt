@@ -169,6 +169,7 @@ target_link_libraries(aoqt PRIVATE
 # readiness, state restoration, texture format); the renderer plugin provides
 # create_renderer() and transitively pulls in aoengine.
 if(APPLE)
+    set_target_properties(aoqt PROPERTIES MACOSX_BUNDLE TRUE)
     target_sources(aoqt PRIVATE render/MetalRenderBackend.mm)
     target_link_libraries(aoqt PRIVATE aorender_metal
         "-framework Metal"
@@ -176,6 +177,7 @@ if(APPLE)
         "-framework QuartzCore"
     )
 else()
+    find_package(OpenGL REQUIRED)
     target_sources(aoqt PRIVATE render/GLRenderBackend.cpp)
     target_link_libraries(aoqt PRIVATE aorender_gl OpenGL::GL)
 endif()
