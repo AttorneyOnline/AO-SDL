@@ -79,7 +79,7 @@ option(AO_BUILD_SERVER_ONLY "Build only the Kagami server (no SDL client, render
 # =============================================================================
 
 # --- SDL2 — only needed for the desktop SDL app, not for Flutter/mobile ------
-if(NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
+if(AO_BUILD_SDL AND NOT AO_BUILD_FLUTTER AND NOT AO_BUILD_SERVER_ONLY)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
