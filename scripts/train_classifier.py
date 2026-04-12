@@ -665,28 +665,69 @@ def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
         n_neg = max(float(len(y_tr) - n_pos), 1.0)
         pos_weight = torch.tensor([n_neg / max(n_pos, 1)], device=device)
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-        optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
+        # AdamW: decoupled weight decay (not L2 penalty baked into gradient).
+        # Critical for grokking — L2 in Adam doesn't actually push weights
+        # toward zero the same way because the adaptive learning rate
+        # rescales the penalty per-parameter.
+        optimizer = optim.AdamW(model.parameters(), lr=args.lr,
+                                weight_decay=args.weight_decay)
 
-        best_loss, best_state, patience = float("inf"), None, 0
-        for _ in range(300):
+        max_epochs = args.epochs
+        max_patience = args.patience
+        # Early stop on val AUC (not val loss). In the grokking regime,
+        # val loss can increase (weight decay penalty grows) while val
+        # AUC improves (decision boundary sharpens). AUC is what we
+        # actually care about — ranking quality, not loss magnitude.
+        best_val_auc = -1.0
+        best_state = None
+        stale_epochs = 0
+        has_both_classes_val = len(np.unique(y_va)) >= 2
+
+        for epoch in range(max_epochs):
             model.train()
             optimizer.zero_grad()
-            criterion(model(X_t), y_t).backward()
+            train_loss = criterion(model(X_t), y_t)
+            train_loss.backward()
             optimizer.step()
+
+            # Evaluate val AUC periodically (every epoch is cheap on this scale)
             model.eval()
             with torch.no_grad():
-                vl = criterion(model(X_v), y_v).item()
-            if vl < best_loss - 1e-4:
-                best_loss = vl
-                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-                patience = 0
+                val_logits = model(X_v).cpu().numpy()
+            val_probs = 1.0 / (1.0 + np.exp(-val_logits))
+
+            if has_both_classes_val:
+                val_auc = roc_auc_score(y_va, val_probs)
+                if val_auc > best_val_auc + 1e-4:
+                    best_val_auc = val_auc
+                    best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                    stale_epochs = 0
+                else:
+                    stale_epochs += 1
             else:
-                patience += 1
-                if patience >= 20:
-                    break
+                # Can't compute AUC — fall back to val loss for early stopping
+                val_loss = criterion(model(X_v), y_v).item()
+                if best_val_auc < 0:  # never set
+                    best_val_auc = -val_loss  # hack: use negative loss as proxy
+                    best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                stale_epochs += 1
+
+            # Progress logging (every 100 epochs, or grok milestones)
+            if epoch % 100 == 0 or (epoch > 0 and epoch % 500 == 0):
+                w_norm = sum(p.data.norm().item() ** 2 for p in model.parameters()) ** 0.5
+                print(f"        epoch {epoch:>5d}: train_loss={train_loss.item():.4f} "
+                      f"val_auc={best_val_auc:.4f} w_norm={w_norm:.2f} "
+                      f"stale={stale_epochs}")
+
+            if stale_epochs >= max_patience:
+                break
+
         if best_state:
             model.load_state_dict(best_state)
         model.eval()
+        final_epoch = epoch + 1
+        print(f"        stopped at epoch {final_epoch} "
+              f"(best val_auc={best_val_auc:.4f})")
 
         # Platt calibration
         with torch.no_grad():
@@ -957,6 +998,28 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--epochs", type=int, default=500,
+        help="Max training epochs per axis (default: 500). For grokking regime, use 3000-5000.",
+    )
+    parser.add_argument(
+        "--patience", type=int, default=50,
+        help="Early stopping patience — epochs without val AUC improvement before stopping (default: 50). Set very high (500+) for grokking.",
+    )
+    parser.add_argument(
+        "--lr", type=float, default=1e-3,
+        help="Learning rate (default: 1e-3).",
+    )
+    parser.add_argument(
+        "--weight-decay", type=float, default=None,
+        help="AdamW weight decay (default: 0.01 normal, 0.5 with --grok).",
+    )
+    parser.add_argument(
+        "--grok", action="store_true",
+        help="Grokking regime: high weight decay (0.5), long training (5000 epochs), "
+             "patient early stopping (500), AdamW. Trains past memorization to find "
+             "simpler generalizing solutions via weight compression.",
+    )
+    parser.add_argument(
         "--ao-labels", default=None,
         help=(
             "Path to the labeler SQLite database with AO-specific labels. "
@@ -967,6 +1030,15 @@ def main() -> int:
     args = parser.parse_args()
     if args.output is None:
         args.output = DEFAULT_OUTPUT_V2 if args.architecture == "mlp" else DEFAULT_OUTPUT_V1
+    # Grokking presets: override epochs/patience/weight-decay if --grok
+    if args.grok:
+        if args.epochs == 500:   args.epochs = 5000
+        if args.patience == 50:  args.patience = 500
+        if args.weight_decay is None: args.weight_decay = 0.5
+        print(f"[grok] regime: epochs={args.epochs}, patience={args.patience}, "
+              f"weight_decay={args.weight_decay}, lr={args.lr}")
+    if args.weight_decay is None:
+        args.weight_decay = 0.01
     return train(args)
 
 
