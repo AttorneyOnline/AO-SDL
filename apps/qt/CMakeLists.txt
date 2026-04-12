@@ -3,26 +3,38 @@ qt_standard_project_setup(REQUIRES 6.11)
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui GuiPrivate Quick Qml QuickControls2)
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 
+# Common output root for all AO.* QML modules — Qt Creator uses this to
+# discover sub-modules for code completion and navigation.
+set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml")
+
 qt_add_executable(aoqt main.cpp)
 
-# SceneTextureItem carries QML_ELEMENT so it must be listed as a SOURCES
-# entry of the QML module — Qt's moc scanner picks it up there.
-qt_add_qml_module(aoqt
-    URI "AO"
+# ── AO.Components — generic, reusable layout primitives (no controllers) ───
+qt_add_library(ao_components STATIC)
+qt_add_qml_module(ao_components
+    URI "AO.Components"
     VERSION 1.0
     QML_FILES
-        # Entry point
-        qml/Main.qml
+        qml/components/DockPanel.qml
+        qml/components/ExpandingBox.qml
+        qml/components/OverlayPanel.qml
+)
 
-        # Tier 1 — stylable, property-driven components (no controller access)
-        qml/components/HealthBarDisplay.qml
-        qml/components/TimerDisplay.qml
-        qml/components/InterjectionOverlay.qml
-        qml/components/UndockablePanel.qml
-
-        # Tier 2 — data-aware panels (receive controller via required property)
-        qml/panels/GameViewport.qml
+# ── AO.Panels — concrete UI panels (controller-aware or pure display) ─────
+qt_add_library(ao_panels STATIC)
+qt_add_qml_module(ao_panels
+    URI "AO.Panels"
+    VERSION 1.0
+    DEPENDENCIES
+        AO.Components
+    QML_FILES
+        # HUD / overlay panels
+        qml/panels/HealthBarDisplay.qml
+        qml/panels/TimerDisplay.qml
+        qml/panels/InterjectionOverlay.qml
         qml/panels/HealthPanel.qml
+
+        # Courtroom panels
         qml/panels/OOCChatPanel.qml
         qml/panels/ICInputPanel.qml
         qml/panels/ICLogPanel.qml
@@ -34,12 +46,30 @@ qt_add_qml_module(aoqt
         qml/panels/SideSelectPanel.qml
         qml/panels/DisconnectModal.qml
         qml/panels/DebugOverlay.qml
+)
 
-        # Tier 3 — full interactive screens (own controller ref, wire it to panels)
+# ── AO — root module (entry point, screens, render integration) ────────────
+# SceneTextureItem carries QML_ELEMENT so it must be listed as a SOURCES
+# entry of the QML module — Qt's moc scanner picks it up there.
+# GameViewport wraps SceneTextureItem and therefore stays in the root module
+# to avoid leaking render-pipeline dependencies into a pure-QML static lib.
+qt_add_qml_module(aoqt
+    URI "AO"
+    VERSION 1.0
+    DEPENDENCIES
+        AO.Components
+        AO.Panels
+    QML_FILES
+        qml/Main.qml
+
+        # GameViewport wraps the C++ SceneTextureItem — keep in root module.
+        qml/panels/GameViewport.qml
+
+        # Screens compose panels + components into full interactive views.
         qml/screens/CourtroomScreen.qml
         qml/screens/ServerListScreen.qml
         qml/screens/CharSelectScreen.qml
-SOURCES
+    SOURCES
         render/SceneTextureItem.h
         render/SceneTextureItem.cpp
 )
@@ -126,6 +156,9 @@ target_link_libraries(aoqt PRIVATE
     Qt6::Qml
     Qt6::QuickControls2
     Qt6::GuiPrivate
+    # Sub-module plugins (static registration into the executable)
+    ao_componentsplugin
+    ao_panelsplugin
     # ao_protocol provides ServerListScreen, ao::create_protocol(), ao::create_presenter(),
     # and transitively pulls in ao_net and ao_game.
     ao_protocol

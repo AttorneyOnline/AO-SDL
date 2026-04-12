@@ -2,6 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+import AO.Components
+import AO.Panels
+
 /**
  * Courtroom screen.
  *
@@ -62,27 +65,26 @@ Page {
         }
 
         // ── Right sidebar: player list, music, OOC chat ──────────────────
-        ColumnLayout {
+        SplitView {
             id: rightSidebar
+            orientation: Qt.Vertical
             anchors {
                 right:  parent.right
                 top:    parent.top
                 bottom: parent.bottom
             }
             width: 220
-            spacing: 4
 
             PlayerListPanel {
                 controller: app.playerController
-                Layout.fillWidth:       true
-                Layout.preferredHeight: 120
+                SplitView.preferredHeight: 120
+                SplitView.minimumHeight:   60
             }
 
-            UndockablePanel {
-                title:        "Music & Areas"
-                undockedSize: Qt.size(280, 400)
-                Layout.fillWidth:  true
-                Layout.fillHeight: true
+            DockPanel {
+                title:             "Music & Areas"
+                dockedHeight:      200
+                undockedSize:      Qt.size(280, 400)
                 panelComponent: Component {
                     MusicAreaPanel {
                         controller:      app.musicAreaController
@@ -94,8 +96,8 @@ Page {
             OOCChatPanel {
                 controller: app.chatController
                 oocName:    app.icController.charName
-                Layout.fillWidth:       true
-                Layout.preferredHeight: 160
+                SplitView.fillHeight: true
+                SplitView.minimumHeight: 60
             }
         }
 
@@ -184,9 +186,10 @@ Page {
         // ── Floating overlay panels, centred over mainArea ───────────────
         // Shown via ICInputPanel signals; can be undocked to tool windows.
 
-        UndockablePanel {
+        DockPanel {
             id: emoteOverlay
             title:        "Emotes"
+            overlay:      true
             visible:      false
             undockedSize: Qt.size(400, 300)
             anchors.centerIn: parent

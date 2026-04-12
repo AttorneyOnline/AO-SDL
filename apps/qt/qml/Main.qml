@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 
-import AO
+import AO.Panels
 
 ApplicationWindow {
     id: root
