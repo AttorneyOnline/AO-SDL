@@ -51,6 +51,25 @@ class LokiSink {
         flush();
     }
 
+    /// Map LogLevel to Grafana-recognized level name for colored badges.
+    static const char* level_string(LogLevel level) {
+        switch (level) {
+        case VERBOSE:
+        case DEBUG:
+            return "debug";
+        case INFO:
+            return "info";
+        case WARNING:
+            return "warn";
+        case ERR:
+            return "error";
+        case FATAL:
+            return "critical";
+        default:
+            return "unknown";
+        }
+    }
+
     /// Queue a log event. Called from Log's sink callback.
     void push(LogLevel level, const std::string& timestamp, const std::string& message) {
         auto now_ns = std::to_string(
@@ -60,31 +79,20 @@ class LokiSink {
         // Omit [LEVEL] prefix — Grafana renders it as a colored badge from the label
         std::string formatted = "[" + timestamp + "] " + message;
 
-        // Map to Grafana-recognized level names for colored badges
-        const char* loki_level = "unknown";
-        switch (level) {
-        case VERBOSE:
-        case DEBUG:
-            loki_level = "debug";
-            break;
-        case INFO:
-            loki_level = "info";
-            break;
-        case WARNING:
-            loki_level = "warn";
-            break;
-        case ERR:
-            loki_level = "error";
-            break;
-        case FATAL:
-            loki_level = "critical";
-            break;
-        default:
-            break;
-        }
+        std::lock_guard lock(buffer_mutex_);
+        buffer_.push_back({level_string(level), std::move(now_ns), std::move(formatted)});
+    }
+
+    /// Queue a raw line without timestamp formatting. Used by
+    /// structured-JSON sinks (e.g. moderation traces) where LogQL's
+    /// `| json` parser needs the stored line to be pure JSON.
+    void push_raw(LogLevel level, std::string line) {
+        auto now_ns = std::to_string(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count());
 
         std::lock_guard lock(buffer_mutex_);
-        buffer_.push_back({loki_level, std::move(now_ns), std::move(formatted)});
+        buffer_.push_back({level_string(level), std::move(now_ns), std::move(line)});
     }
 
   private:
