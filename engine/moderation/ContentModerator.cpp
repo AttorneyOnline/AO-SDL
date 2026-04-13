@@ -673,16 +673,17 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         trace_log_->record(tr);
     };
 
-    if (v.heat_delta <= 0.0) {
-        // No meaningful contribution from this message — accrue a
-        // drop of trust if the feature is enabled (moves heat toward
-        // the negative floor, unlocking the trust_bank skip gate for
-        // this IPID), then peek the stored heat so the gauge reflects
-        // the updated value, and return NONE.
-        //
-        // accrue_trust() is a no-op when the user is currently in a
-        // positive-heat (suspicion) state, so this is safe to call
-        // unconditionally on every clean message.
+    // The sub-floor quadratic regime means every message produces a
+    // tiny positive delta from classifier noise (~0.0006 for typical
+    // clean text). Treat deltas below this epsilon as "effectively
+    // clean" so the trust bank can accrue negative heat for sustained
+    // good behavior. Without this, the trust path never fires.
+    constexpr double kCleanEpsilon = 0.01;
+
+    if (v.heat_delta < kCleanEpsilon) {
+        v.heat_delta = 0.0; // snap to zero — don't accumulate noise
+        // Accrue trust: moves heat toward the negative floor,
+        // rewarding sustained clean behavior.
         if (cfg->trust_bank.enabled) {
             v.heat_after = heat_.accrue_trust(ipid, cfg->trust_bank.clean_reward, -cfg->trust_bank.max_trust);
         }
