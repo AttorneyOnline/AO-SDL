@@ -105,27 +105,27 @@ Item {
     on_TargetHChanged: _animH = _targetH
 
     // ── Universal sizing ───────────────────────────────────────────────
-    implicitWidth:  _expandsH ? _animW : undefined
-    implicitHeight: _expandsV ? _animH : undefined
+    implicitWidth:  _expandsH ? _animW : -1
+    implicitHeight: _expandsV ? _animH : -1
 
     // ── SplitView parent ───────────────────────────────────────────────
-    SplitView.preferredHeight: _expandsV ? _animH : undefined
-    SplitView.minimumHeight:   _expandsV ? _animH : undefined
-    SplitView.maximumHeight:   _expandsV ? _animH : undefined
+    SplitView.preferredHeight: _expandsV ? _animH : -1
+    SplitView.minimumHeight:   _expandsV ? _animH : -1
+    SplitView.maximumHeight:   _expandsV ? _animH : -1
 
-    SplitView.preferredWidth:  _expandsH ? _animW : undefined
-    SplitView.minimumWidth:    _expandsH ? _animW : undefined
-    SplitView.maximumWidth:    _expandsH ? _animW : undefined
+    SplitView.preferredWidth:  _expandsH ? _animW : -1
+    SplitView.minimumWidth:    _expandsH ? _animW : -1
+    SplitView.maximumWidth:    _expandsH ? _animW : -1
 
     // ── Layout parent ──────────────────────────────────────────────────
-    Layout.preferredHeight: _expandsV ? _animH : undefined
-    Layout.minimumHeight:   _expandsV ? _animH : undefined
-    Layout.maximumHeight:   _expandsV ? _animH : undefined
+    Layout.preferredHeight: _expandsV ? _animH : -1
+    Layout.minimumHeight:   _expandsV ? _animH : -1
+    Layout.maximumHeight:   _expandsV ? _animH : -1
     Layout.fillWidth:       !_expandsH
 
-    Layout.preferredWidth:  _expandsH ? _animW : undefined
-    Layout.minimumWidth:    _expandsH ? _animW : undefined
-    Layout.maximumWidth:    _expandsH ? _animW : undefined
+    Layout.preferredWidth:  _expandsH ? _animW : -1
+    Layout.minimumWidth:    _expandsH ? _animW : -1
+    Layout.maximumWidth:    _expandsH ? _animW : -1
     Layout.fillHeight:      !_expandsV
 
     // ── Helpers for anchor selection ──────────────────────────────────

@@ -15,6 +15,8 @@ qt_add_qml_module(ao_components
     URI "AO.Components"
     VERSION 1.0
     QML_FILES
+        qml/components/AccordionDrawer.qml
+        qml/components/AccordionSection.qml
         qml/components/DockPanel.qml
         qml/components/ExpandingBox.qml
         qml/components/OverlayPanel.qml
@@ -180,4 +182,13 @@ else()
     find_package(OpenGL REQUIRED)
     target_sources(aoqt PRIVATE render/GLRenderBackend.cpp)
     target_link_libraries(aoqt PRIVATE aorender_gl OpenGL::GL)
+
+    add_custom_command(
+        TARGET aoqt POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/third-party/glew/bin/Release/x64/glew32.dll
+            "$<TARGET_FILE_DIR:aoqt>"
+        VERBATIM
+    )
+
 endif()

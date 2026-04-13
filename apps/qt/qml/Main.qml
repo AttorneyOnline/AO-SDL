@@ -274,6 +274,110 @@ ApplicationWindow {
         }
     }
 
+    // ── AccordionDrawer demo — toggled with F9 ─────────────────────
+    Window {
+        id: accordionDemoWindow
+        visible: false
+        width: 400
+        height: 500
+        title: "AccordionDrawer Demo"
+        color: "#1e1e1e"
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 8
+
+            Label {
+                text: "AccordionDrawer"
+                color: "white"
+                font.pixelSize: 14
+                font.bold: true
+            }
+
+            Label {
+                text: "Only one section can be open at a time."
+                color: "#999999"
+                font.pixelSize: 11
+            }
+
+            AccordionDrawer {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                expandedIndex: 0
+
+                AccordionSection {
+                    title: "General Settings"
+
+                    ColumnLayout {
+                        anchors { left: parent.left; right: parent.right }
+                        anchors.margins: 8
+                        spacing: 4
+
+                        CheckBox { text: "Show timestamps"; checked: true }
+                        CheckBox { text: "Enable notifications" }
+                        CheckBox { text: "Auto-reconnect"; checked: true }
+                    }
+                }
+
+                AccordionSection {
+                    title: "Audio"
+
+                    GridLayout {
+                        anchors { left: parent.left; right: parent.right }
+                        anchors.margins: 8
+                        columns: 2
+                        columnSpacing: 8
+                        rowSpacing: 4
+
+                        Label { text: "Music"; color: "white" }
+                        Slider { Layout.fillWidth: true; value: 0.7 }
+                        Label { text: "SFX"; color: "white" }
+                        Slider { Layout.fillWidth: true; value: 0.9 }
+                        Label { text: "Blips"; color: "white" }
+                        Slider { Layout.fillWidth: true; value: 0.5 }
+                    }
+                }
+
+                AccordionSection {
+                    title: "Appearance"
+
+                    ColumnLayout {
+                        anchors { left: parent.left; right: parent.right }
+                        anchors.margins: 8
+                        spacing: 4
+
+                        Label { text: "Theme"; color: "white"; font.bold: true }
+                        ComboBox {
+                            Layout.fillWidth: true
+                            model: ["Dark", "Light", "Classic"]
+                        }
+
+                        Label { text: "Font size"; color: "white"; font.bold: true }
+                        SpinBox { from: 8; to: 24; value: 12 }
+                    }
+                }
+
+                AccordionSection {
+                    title: "About"
+
+                    Label {
+                        anchors {
+                            left: parent.left; right: parent.right
+                            margins: 8
+                        }
+                        wrapMode: Text.Wrap
+                        color: "#cccccc"
+                        text: "Attorney Online — open-source courtroom simulator.\n\n"
+                            + "This is a demo of the AccordionDrawer component. "
+                            + "Click any section header above to expand it and "
+                            + "collapse the currently open one."
+                    }
+                }
+            }
+        }
+    }
+
     // ── Normal app below ─────────────────────────────────────────────
 
     // Navigation: swap screens by mapping UIManager's active screen id.
@@ -297,6 +401,11 @@ ApplicationWindow {
     DebugOverlay {
         id: debugOverlay
         visible: false
+    }
+
+    Shortcut {
+        sequence: "F9"
+        onActivated: accordionDemoWindow.visible = !accordionDemoWindow.visible
     }
 
     Shortcut {
