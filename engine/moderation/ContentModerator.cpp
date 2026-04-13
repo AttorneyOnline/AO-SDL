@@ -507,6 +507,10 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // the MLP makes noisy predictions on. Suppress classifier scores
     // to zero for these — they're not meaningful content, and Layer 1
     // UnicodeClassifier handles the visual-noise aspect.
+    //
+    // NOTE: only counts ASCII vowels (aeiou). Non-English text with
+    // heavy consonant clusters (some Slavic phrases) could false-fire.
+    // Acceptable for an English-primary server.
     {
         // --- Keysmash detection ------------------------------------
         bool keysmash_suppressed = false;

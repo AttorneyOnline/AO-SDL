@@ -883,35 +883,6 @@
           "unit": "short"
         }
       }
-    },
-    {
-      "id": 30,
-      "title": "Keysmash suppression rate (5m)",
-      "type": "stat",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(kagami_moderation_events_total{action=\"NONE\"}[5m]))",
-          "legendFormat": "clean rate"
-        }
-      ],
-      "description": "Messages where keysmash or noheat suppression prevented enforcement. Monitor via traces for now \u2014 Prometheus metric TBD.",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "decimals": 2
-        }
-      }
     }
   ]
 }
