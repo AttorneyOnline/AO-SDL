@@ -139,29 +139,29 @@ class LocalClassifierLayer {
 
     // === v1 (linear) storage ===
     // Flat row-major: [num_categories_ x embedding_dim_]
-    std::vector<float> weights_;   // W for v1
-    std::vector<float> biases_;    // b for v1
+    std::vector<float> weights_; // W for v1
+    std::vector<float> biases_;  // b for v1
 
     // === v2 (MLP) storage ===
     // Per-axis independent MLPs: each axis has its own W1/b1/W2/b2/W_skip.
     // Stored contiguously per-layer across axes for cache-friendly access.
-    std::vector<float> w1_;        // [num_cat × embedding_dim × hidden_dim]
-    std::vector<float> b1_;        // [num_cat × hidden_dim]
-    std::vector<float> w2_;        // [num_cat × hidden_dim]
-    std::vector<float> b2_;        // [num_cat]
-    std::vector<float> w_skip_;    // [num_cat × embedding_dim] (residual)
-    int calibration_type_ = 0;     // 0=raw sigmoid, 1=platt
-    std::vector<float> platt_a_;   // [num_cat] (platt scaling slope)
-    std::vector<float> platt_b_;   // [num_cat] (platt scaling intercept)
+    std::vector<float> w1_;      // [num_cat × embedding_dim × hidden_dim]
+    std::vector<float> b1_;      // [num_cat × hidden_dim]
+    std::vector<float> w2_;      // [num_cat × hidden_dim]
+    std::vector<float> b2_;      // [num_cat]
+    std::vector<float> w_skip_;  // [num_cat × embedding_dim] (residual)
+    int calibration_type_ = 0;   // 0=raw sigmoid, 1=platt
+    std::vector<float> platt_a_; // [num_cat] (platt scaling slope)
+    std::vector<float> platt_b_; // [num_cat] (platt scaling intercept)
 
     // Internal dispatch
     LocalClassifierResult classify_v1(const EmbeddingResult& embedding) const;
     LocalClassifierResult classify_v2(const EmbeddingResult& embedding) const;
 
-    bool load_weights_v1(const uint8_t* blob, size_t blob_size, uint32_t num_cat,
-                         uint32_t dim, uint32_t name_len, const std::string& runtime_model_name);
-    bool load_weights_v2(const uint8_t* blob, size_t blob_size, uint32_t num_cat,
-                         uint32_t dim, uint32_t name_len, const std::string& runtime_model_name);
+    bool load_weights_v1(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim, uint32_t name_len,
+                         const std::string& runtime_model_name);
+    bool load_weights_v2(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim, uint32_t name_len,
+                         const std::string& runtime_model_name);
 };
 
 } // namespace moderation
