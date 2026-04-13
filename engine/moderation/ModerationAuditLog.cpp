@@ -85,7 +85,6 @@ void ModerationAuditLog::to_json(const ModerationEvent& event, nlohmann::json& j
          {
              {"visual_noise", event.scores.visual_noise},
              {"link_risk", event.scores.link_risk},
-             {"toxicity", event.scores.toxicity},
              {"hate", event.scores.hate},
              {"sexual", event.scores.sexual},
              {"sexual_minors", event.scores.sexual_minors},

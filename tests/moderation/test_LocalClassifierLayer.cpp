@@ -222,11 +222,11 @@ TEST(LocalClassifierLayerTest, ClassifyProducesMonotonicOutput) {
     EXPECT_TRUE(r.ran);
     EXPECT_EQ(r.max_category_index, 0);
     // Logit = 5.0 * 0.99 = 4.95, sigmoid(4.95) ≈ 0.993
-    EXPECT_GT(r.scores.toxicity, 0.99);
-    EXPECT_NEAR(r.max_confidence, r.scores.toxicity, 1e-9);
+    EXPECT_GT(r.scores.hate, 0.99);
+    EXPECT_NEAR(r.max_confidence, r.scores.hate, 1e-9);
     // All other axes should be sigmoid(0) = 0.5
-    EXPECT_NEAR(r.scores.hate, 0.5, 1e-6);
     EXPECT_NEAR(r.scores.sexual, 0.5, 1e-6);
+    EXPECT_NEAR(r.scores.violence, 0.5, 1e-6);
 }
 
 TEST(LocalClassifierLayerTest, ClassifySigmoidStaysInRange) {
@@ -248,13 +248,13 @@ TEST(LocalClassifierLayerTest, ClassifySigmoidStaysInRange) {
     auto r = layer.classify(make_embedding({1.0f, 0.0f, 0.0f}));
     ASSERT_TRUE(r.ran);
     // All axes in [0, 1]
-    EXPECT_GE(r.scores.toxicity, 0.0);
-    EXPECT_LE(r.scores.toxicity, 1.0);
     EXPECT_GE(r.scores.hate, 0.0);
     EXPECT_LE(r.scores.hate, 1.0);
+    EXPECT_GE(r.scores.sexual, 0.0);
+    EXPECT_LE(r.scores.sexual, 1.0);
     // Category 0 should be ~0, category 1 should be ~1
-    EXPECT_LT(r.scores.toxicity, 1e-10);
-    EXPECT_GT(r.scores.hate, 1.0 - 1e-10);
+    EXPECT_LT(r.scores.hate, 1e-10);
+    EXPECT_GT(r.scores.sexual, 1.0 - 1e-10);
 }
 
 TEST(LocalClassifierLayerTest, ClassifyZeroEmbeddingProducesHalf) {
@@ -273,7 +273,7 @@ TEST(LocalClassifierLayerTest, ClassifyZeroEmbeddingProducesHalf) {
     auto r = layer.classify(make_embedding({0.0f, 0.0f, 0.0f}));
     ASSERT_TRUE(r.ran);
     EXPECT_NEAR(r.max_confidence, 0.5, 1e-9);
-    EXPECT_NEAR(r.scores.toxicity, 0.5, 1e-9);
+    EXPECT_NEAR(r.scores.hate, 0.5, 1e-9);
 }
 
 TEST(LocalClassifierLayerTest, ClassifyRejectsDimMismatch) {

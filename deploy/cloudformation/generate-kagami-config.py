@@ -229,7 +229,6 @@ cfg = {
             # Roleplay-friendly defaults. Per-axis floors in
             # ContentModerator.cpp filter sub-dramatic in-character
             # language before these weights apply.
-            'weight_toxicity': 1.0,
             'weight_hate': 4.0,
             'weight_sexual': 1.5,
             'weight_sexual_minors': 100.0,

@@ -39,19 +39,33 @@ double sigmoid(double x) {
 
 /// Assign a probability to the appropriate axis field by category index.
 /// Canonical order from scripts/train_classifier.py:
-///   0=toxicity 1=hate 2=sexual 3=sexual_minors 4=violence 5=self_harm
-///   6=visual_noise 7=link_risk (sentinel-biased, effectively unused)
+///   0=hate 1=sexual 2=sexual_minors 3=violence 4=self_harm
+///   5=visual_noise 6=link_risk (sentinel-biased, effectively unused)
 void set_axis(ModerationAxisScores& scores, int index, double prob) {
     switch (index) {
-    case 0: scores.toxicity = prob; break;
-    case 1: scores.hate = prob; break;
-    case 2: scores.sexual = prob; break;
-    case 3: scores.sexual_minors = prob; break;
-    case 4: scores.violence = prob; break;
-    case 5: scores.self_harm = prob; break;
-    case 6: scores.visual_noise = prob; break;
-    case 7: scores.link_risk = prob; break;
-    default: break;
+    case 0:
+        scores.hate = prob;
+        break;
+    case 1:
+        scores.sexual = prob;
+        break;
+    case 2:
+        scores.sexual_minors = prob;
+        break;
+    case 3:
+        scores.violence = prob;
+        break;
+    case 4:
+        scores.self_harm = prob;
+        break;
+    case 5:
+        scores.visual_noise = prob;
+        break;
+    case 6:
+        scores.link_risk = prob;
+        break;
+    default:
+        break;
     }
 }
 
@@ -78,9 +92,15 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, c
     std::lock_guard lock(mu_);
     loaded_ = false;
     format_version_ = 0;
-    weights_.clear(); biases_.clear();
-    w1_.clear(); b1_.clear(); w2_.clear(); b2_.clear(); w_skip_.clear();
-    platt_a_.clear(); platt_b_.clear();
+    weights_.clear();
+    biases_.clear();
+    w1_.clear();
+    b1_.clear();
+    w2_.clear();
+    b2_.clear();
+    w_skip_.clear();
+    platt_a_.clear();
+    platt_b_.clear();
     num_categories_ = 0;
     embedding_dim_ = 0;
     hidden_dim_ = 0;
@@ -121,7 +141,8 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, c
     if (version == 1) {
         const uint32_t name_len = read_u32_le(blob, 20);
         return load_weights_v1(blob, blob_size, num_cat, dim, name_len, runtime_model_name);
-    } else if (version == 2) {
+    }
+    else if (version == 2) {
         if (blob_size < kV2HeaderFixedSize) {
             Log::warn("LocalClassifier: v2 blob too short for header ({} bytes)", blob_size);
             return false;
@@ -139,9 +160,8 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, c
     return false;
 }
 
-bool LocalClassifierLayer::load_weights_v1(const uint8_t* blob, size_t blob_size,
-                                            uint32_t num_cat, uint32_t dim, uint32_t name_len,
-                                            const std::string& runtime_model_name) {
+bool LocalClassifierLayer::load_weights_v1(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim,
+                                           uint32_t name_len, const std::string& runtime_model_name) {
     if (name_len > 512) {
         Log::warn("LocalClassifier v1: model_name_len too long: {}", name_len);
         return false;
@@ -170,14 +190,13 @@ bool LocalClassifierLayer::load_weights_v1(const uint8_t* blob, size_t blob_size
     embedding_dim_ = static_cast<int>(dim);
     model_name_ = std::move(file_model);
     loaded_ = true;
-    Log::info("LocalClassifier: loaded v1 linear {} categories x {}-dim (model={})",
-              num_categories_, embedding_dim_, model_name_);
+    Log::info("LocalClassifier: loaded v1 linear {} categories x {}-dim (model={})", num_categories_, embedding_dim_,
+              model_name_);
     return true;
 }
 
-bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size,
-                                            uint32_t num_cat, uint32_t dim, uint32_t name_len,
-                                            const std::string& runtime_model_name) {
+bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim,
+                                           uint32_t name_len, const std::string& runtime_model_name) {
     const uint32_t hidden = read_u32_le(blob, 20);
     if (name_len > 512) {
         Log::warn("LocalClassifier v2: model_name_len too long: {}", name_len);
@@ -196,8 +215,8 @@ bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size
     const size_t w2_bytes = nc * h * sizeof(float);
     const size_t b2_bytes = nc * sizeof(float);
     const size_t wskip_bytes = nc * d * sizeof(float);
-    const size_t min_size = kV2HeaderFixedSize + name_len +
-                            w1_bytes + b1_bytes + w2_bytes + b2_bytes + wskip_bytes + 1; // +1 for calibration_type
+    const size_t min_size = kV2HeaderFixedSize + name_len + w1_bytes + b1_bytes + w2_bytes + b2_bytes + wskip_bytes +
+                            1; // +1 for calibration_type
     if (blob_size < min_size) {
         Log::warn("LocalClassifier v2: blob too small {} vs minimum {}", blob_size, min_size);
         return false;
@@ -212,21 +231,27 @@ bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size
     const uint8_t* cursor = blob + kV2HeaderFixedSize + name_len;
 
     w1_.resize(nc * d * h);
-    std::memcpy(w1_.data(), cursor, w1_bytes); cursor += w1_bytes;
+    std::memcpy(w1_.data(), cursor, w1_bytes);
+    cursor += w1_bytes;
 
     b1_.resize(nc * h);
-    std::memcpy(b1_.data(), cursor, b1_bytes); cursor += b1_bytes;
+    std::memcpy(b1_.data(), cursor, b1_bytes);
+    cursor += b1_bytes;
 
     w2_.resize(nc * h);
-    std::memcpy(w2_.data(), cursor, w2_bytes); cursor += w2_bytes;
+    std::memcpy(w2_.data(), cursor, w2_bytes);
+    cursor += w2_bytes;
 
     b2_.resize(nc);
-    std::memcpy(b2_.data(), cursor, b2_bytes); cursor += b2_bytes;
+    std::memcpy(b2_.data(), cursor, b2_bytes);
+    cursor += b2_bytes;
 
     w_skip_.resize(nc * d);
-    std::memcpy(w_skip_.data(), cursor, wskip_bytes); cursor += wskip_bytes;
+    std::memcpy(w_skip_.data(), cursor, wskip_bytes);
+    cursor += wskip_bytes;
 
-    calibration_type_ = static_cast<int>(*cursor); cursor += 1;
+    calibration_type_ = static_cast<int>(*cursor);
+    cursor += 1;
 
     if (calibration_type_ == 1) {
         const size_t platt_bytes = nc * sizeof(float);
@@ -235,7 +260,8 @@ bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size
             return false;
         }
         platt_a_.resize(nc);
-        std::memcpy(platt_a_.data(), cursor, platt_bytes); cursor += platt_bytes;
+        std::memcpy(platt_a_.data(), cursor, platt_bytes);
+        cursor += platt_bytes;
         platt_b_.resize(nc);
         std::memcpy(platt_b_.data(), cursor, platt_bytes);
     }
@@ -248,8 +274,7 @@ bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size
     loaded_ = true;
     Log::info("LocalClassifier: loaded v2 MLP {} categories x {}-dim → {}-hidden "
               "(model={}, calibration={})",
-              num_categories_, embedding_dim_, hidden_dim_, model_name_,
-              calibration_type_ == 1 ? "platt" : "none");
+              num_categories_, embedding_dim_, hidden_dim_, model_name_, calibration_type_ == 1 ? "platt" : "none");
     return true;
 }
 
@@ -367,9 +392,9 @@ LocalClassifierResult LocalClassifierLayer::classify_v2(const EmbeddingResult& e
         double prob;
         if (calibration_type_ == 1 && static_cast<size_t>(i) < platt_a_.size()) {
             // Platt scaling: sigmoid(a * logit + b)
-            prob = sigmoid(static_cast<double>(platt_a_[i]) * logit +
-                           static_cast<double>(platt_b_[i]));
-        } else {
+            prob = sigmoid(static_cast<double>(platt_a_[i]) * logit + static_cast<double>(platt_b_[i]));
+        }
+        else {
             prob = sigmoid(logit);
         }
 

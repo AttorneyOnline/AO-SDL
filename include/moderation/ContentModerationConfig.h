@@ -49,38 +49,33 @@ struct HeatConfig {
 
     // Per-axis weight. Multiply axis score in [0,1] by weight to get
     // heat contribution. Defaults are tuned for a roleplay-heavy
-    // audience (Ace Attorney courtroom drama) where harassment-axis
-    // language is expected in-character — the per-axis visibility
-    // floors in ContentModerator.cpp filter sub-floor noise before
-    // these weights apply, so lowering the toxicity weight here
-    // doesn't make kagami soft on actual abuse (the floor handles
-    // separating drama from real hostility).
+    // audience (Ace Attorney courtroom drama) where in-character
+    // aggression is expected — the per-axis visibility floors filter
+    // sub-floor noise before these weights apply.
     double weight_visual_noise = 0.5;
     double weight_link_risk = 5.0;
-    double weight_slurs = 6.0;
-    double weight_toxicity = 1.0;
-    double weight_hate = 4.0;
-    double weight_sexual = 1.5;
-    double weight_sexual_minors = 100.0;
-    double weight_violence = 0.3;   // contextual — RP violence is common, slow accum
-    double weight_self_harm = 1.0;
+    double weight_slurs = 6.0;          // floor=0 → 1 hit × 6.0 = mute
+    double weight_hate = 10.0;          // 1 msg@99% → censor, 3 → drop, 10 → ban
+    double weight_sexual = 7.0;         // 1 msg@99% → censor, 3 → drop, 10 → kick
+    double weight_sexual_minors = 43.0; // 1 msg@99% → mute, 2 → ban, 5 → permaban
+    double weight_violence = 2.0;       // slow — RP violence is normal
+    double weight_self_harm = 7.0;      // same pace as sexual
     double weight_semantic_echo = 2.0;
 
     // Per-axis visibility floors: an axis only contributes heat when its
-    // score exceeds this threshold. Prevents classifier noise from
-    // accumulating — clean messages with floor-level scores (toxicity
-    // ~1e-5) produce delta=0. Defaults are tuned for roleplay-heavy AO
-    // servers where courtroom aggression is in-character. General chat
-    // servers should lower toxicity/violence floors to 0.3-0.5.
+    // classifier score exceeds this threshold. 0.85 baseline means the
+    // classifier must be 85%+ confident before any moderation action.
+    // The weights above then set enforcement policy (how fast heat
+    // accumulates). Rule-based axes (visual_noise, link_risk, slurs)
+    // have no floor — they fire on match.
     double floor_visual_noise = 0.0;
     double floor_link_risk = 0.0;
     double floor_slurs = 0.0;
-    double floor_toxicity = 0.85;       // high — RP harassment is canon
-    double floor_hate = 0.1;            // low — hate is never RP
-    double floor_sexual = 0.7;          // 16+ audience
-    double floor_sexual_minors = 0.8;   // high confidence required — classifier cross-fires on "child" + violence/hate patterns
-    double floor_violence = 0.85;       // high — courtroom violence is canon
-    double floor_self_harm = 0.5;       // moderate — catches grooming
+    double floor_hate = 0.85;
+    double floor_sexual = 0.85;
+    double floor_sexual_minors = 0.85;
+    double floor_violence = 0.85;
+    double floor_self_harm = 0.85;
     double floor_semantic_echo = 0.0;
 
     /// Prune heat entries that have decayed below this value AND haven't
@@ -175,96 +170,6 @@ struct SlurLayerConfig {
     /// (or the weight) if you want a "one warning, then action"
     /// behavior instead.
     double match_score = 1.0;
-};
-
-/// Layer 2: remote classifier (e.g. OpenAI omni-moderation).
-///
-/// Phase 1 declares this config shape but ContentModerator does NOT
-/// yet make remote calls — Phase 2 wires it up. An empty api_key or
-/// enabled=false both short-circuit the layer.
-struct RemoteClassifierConfig {
-    bool enabled = false;
-
-    /// Provider name. Only "openai" is recognized today.
-    std::string provider = "openai";
-
-    /// API key. If empty, the layer is automatically disabled regardless
-    /// of `enabled`, to prevent accidental deploys with a missing secret.
-    std::string api_key;
-
-    /// Endpoint URL. The default works for openai.
-    std::string endpoint = "https://api.openai.com/v1/moderations";
-
-    /// Model name sent in the request body. Defaults to the
-    /// text-only model because kagami is a text-only chat server
-    /// and the multimodal `omni-moderation-latest` just burns
-    /// more tokens and has stricter rate limits for no benefit
-    /// here. Operators who specifically want multimodal can
-    /// override this to "omni-moderation-latest" in kagami.json.
-    std::string model = "text-moderation-latest";
-
-    /// Timeout after which we give up and fall back to Layer 1 only.
-    int timeout_ms = 500;
-
-    /// If the classifier is unreachable or times out, should we let
-    /// messages through (`true`, fail-open) or treat it as a failure
-    /// signal (`false`, fail-closed)? Fail-open is the sane default
-    /// for a chat server: better to miss a bad message than to brick
-    /// the whole channel on an OpenAI incident.
-    bool fail_open = true;
-
-    /// Dedup cache for repeat messages. Eliminates duplicate OpenAI
-    /// calls for identical (lightly-normalized) inputs. See
-    /// RemoteDedupCache.h for the full design rationale. Opt-in to
-    /// avoid quietly introducing cross-request state on existing
-    /// deployments.
-    bool cache_enabled = false;
-
-    /// Max age of a cached verdict. OpenAI omni-moderation's output
-    /// is stable for the same input over short intervals but can
-    /// shift with policy/model updates; a TTL caps the staleness.
-    int cache_ttl_seconds = 300;
-
-    /// Max cached entries. FIFO eviction past this cap. 1000 fits in
-    /// ~150 KB of RAM on a typical server.
-    int cache_max_entries = 1000;
-};
-
-/// Layer 2 shortcut: embedding-similarity "safe hint" that bypasses
-/// the remote classifier on messages near a known-harmless anchor.
-///
-/// Not a standalone layer — it short-circuits the Layer 2 call when
-/// the message embeds close to any anchor. Requires the Layer 3
-/// embedding backend to be loaded; without it the shortcut is inert
-/// and every message goes to the remote classifier as usual.
-///
-/// The anchor list is operator-supplied, fetched from an https URL
-/// by TextListFetcher at startup in the same background thread that
-/// fetches the slur wordlist. An empty URL keeps the shortcut off.
-struct SafeHintConfig {
-    bool enabled = false;
-
-    /// https URL of the newline-delimited anchor list. Each non-
-    /// comment, non-blank line is one anchor phrase. Fetched once
-    /// at startup, cached to disk, then run through the embedding
-    /// backend to produce unit vectors.
-    std::string anchors_url;
-
-    /// Filesystem directory for the TextListFetcher cache file.
-    /// Shares the same directory as the slur wordlist cache by
-    /// default — both are small text lists.
-    std::string cache_dir = "/tmp/kagami-moderation";
-
-    /// Cosine similarity threshold above which the remote classifier
-    /// is skipped. Default 0.7 is a moderately aggressive cutoff:
-    /// tuned in staging, expected to cover most mundane chatter while
-    /// letting "close but off-topic" messages still reach Layer 2.
-    /// Raising it past 0.85 typically makes the shortcut useless
-    /// because only near-verbatim matches qualify; dropping below
-    /// 0.5 starts letting harassment through when it happens to
-    /// share vocabulary with a safe anchor (not a safety issue
-    /// because Layer 1 still runs, but it costs recall).
-    double similarity_threshold = 0.7;
 };
 
 /// Layer 3: local embeddings for cross-message spam clustering.
@@ -508,8 +413,6 @@ struct ContentModerationConfig {
     UnicodeLayerConfig unicode;
     UrlLayerConfig urls;
     SlurLayerConfig slurs;
-    RemoteClassifierConfig remote;
-    SafeHintConfig safe_hint;
     EmbeddingsLayerConfig embeddings;
     HeatConfig heat;
     TrustBankConfig trust_bank;

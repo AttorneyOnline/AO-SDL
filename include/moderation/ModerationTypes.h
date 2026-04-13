@@ -72,7 +72,7 @@ inline const char* to_string(ModerationAction a) {
 /// Axes are independent: a message can score high on multiple axes.
 ///
 /// Layer 1 (rules) populates visual_noise and link_risk.
-/// Layer 2 (remote classifier) populates toxicity through self_harm.
+/// Layer 2 (local classifier) populates hate through self_harm.
 /// Layer 3 (embeddings) populates semantic_echo.
 struct ModerationAxisScores {
     // Layer 1: rule-based
@@ -80,8 +80,7 @@ struct ModerationAxisScores {
     double link_risk = 0.0;    ///< URLs against a blocklist or suspicious TLDs.
     double slurs = 0.0;        ///< Operator-supplied slur wordlist hits (Layer 1c).
 
-    // Layer 2: remote classifier
-    double toxicity = 0.0;      ///< General harassment / abuse.
+    // Layer 2: local classifier
     double hate = 0.0;          ///< Identity-based hate (covers slurs).
     double sexual = 0.0;        ///< Sexual content (adult).
     double sexual_minors = 0.0; ///< Sexual content involving minors. Always catastrophic.

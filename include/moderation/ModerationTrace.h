@@ -121,37 +121,6 @@ struct BadHintTrace {
     bool is_bad = false;
 };
 
-struct SafeHintTrace {
-    bool ran = false;
-    int64_t ns = 0;
-    double max_similarity = 0.0;
-    int best_anchor_index = -1;
-    bool is_safe = false;
-};
-
-struct TrustBankTrace {
-    bool ran = false;
-    /// Stored heat at check time (negative means trust credit).
-    double current_heat = 0.0;
-    /// Computed skip probability. 0 = always call remote, 1 = always skip.
-    double skip_rate = 0.0;
-    /// Did trust_bank actually fire and short-circuit the remote?
-    bool skipped = false;
-};
-
-struct RemoteClassifierTrace {
-    bool ran = false;
-    int64_t ns = 0;
-    int http_status = 0;
-    bool cache_hit = false;
-    bool ok = false;
-    /// Scores returned by the remote classifier. Zero when !ran or
-    /// when the call failed.
-    ModerationAxisScores scores;
-    /// Error string when !ok, empty otherwise. Bounded length.
-    std::string error;
-};
-
 struct SemanticClusterTrace {
     bool ran = false;
     int64_t ns = 0;
@@ -181,9 +150,6 @@ struct ModerationTrace {
     Layer2EmbeddingTrace layer2_embedding;
     LocalClassifierTrace local_classifier;
     BadHintTrace bad_hint;
-    SafeHintTrace safe_hint;       // retained for trace compat, no longer populated
-    TrustBankTrace trust_bank;     // retained for trace compat, no longer populated
-    RemoteClassifierTrace remote;  // retained for trace compat, no longer populated
     SemanticClusterTrace semantic_cluster;
 
     /// True if the message was suppressed as OOD keyboard mash (low

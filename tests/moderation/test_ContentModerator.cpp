@@ -145,12 +145,12 @@ TEST_F(ContentModeratorTest, AuditLogReceivesEvent) {
     EXPECT_GT(seen[0].scores.link_risk, 0.0);
 }
 
-TEST_F(ContentModeratorTest, RoleplayToxicityBelowFloorIsClean) {
+TEST_F(ContentModeratorTest, RoleplayLineBelowFloorIsClean) {
     // "Do you have cotton between your ears, spiky boy?" is a
     // canonical Ace Attorney Edgeworth-to-Phoenix cross-examination
     // line. OpenAI's harassment classifier scores it ~0.65.
-    // kagami's roleplay-tuned toxicity floor is 0.85, so this line
-    // must contribute ZERO heat on its own — it's below the floor.
+    // kagami's roleplay-tuned floors ensure this line contributes
+    // ZERO heat on its own — it's below the threshold.
     //
     // We simulate the remote classifier output by feeding axis
     // scores directly to heat_delta_from via a wrapper test.
@@ -168,9 +168,9 @@ TEST_F(ContentModeratorTest, RoleplayToxicityBelowFloorIsClean) {
     EXPECT_DOUBLE_EQ(v.heat_delta, 0.0);
 }
 
-// Tests for remote-classifier-dependent behavior (ToxicityBelowFloor,
-// ToxicityAboveFloor, SexualMinors, TrustBank*) were removed alongside
-// the remote classifier in the MLP v2 branch.
+// Tests for remote-classifier-dependent behavior (SexualMinors,
+// TrustBank*) were removed alongside the remote classifier in the
+// MLP v2 branch.
 
 TEST_F(ContentModeratorTest, JsonSerializationRoundTrip) {
     moderation::ModerationEvent ev;
