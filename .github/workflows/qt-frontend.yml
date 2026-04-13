@@ -89,7 +89,7 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel 4 --target aoqt
 
-      # ---- Package (Windows) — windeployqt + zip ----
+      # ---- Package (Windows) — windeployqt ----
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -116,16 +116,12 @@ jobs:
             --no-compiler-runtime \
             artifact/aoqt.exe
 
-          # Zip the whole artifact folder
-          cd artifact
-          7z a ../aoqt-windows-x64.zip .
-
       - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: aoqt-windows-x64
-          path: aoqt-windows-x64.zip
+          path: artifact/
 
       # ---- Package (Linux) ----
       - name: Package (Linux)
@@ -134,14 +130,13 @@ jobs:
           mkdir -p artifact
           cp build/apps/qt/aoqt artifact/
           strip artifact/aoqt
-          tar czf aoqt-linux-x64.tar.gz -C artifact .
 
       - name: Upload artifact (Linux)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: aoqt-linux-x64
-          path: aoqt-linux-x64.tar.gz
+          path: artifact/
 
       # ---- Package (macOS) ----
       - name: Package (macOS)
