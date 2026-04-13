@@ -55,16 +55,13 @@ class NoHeatCommand : public CommandHandler {
             // For now, just clear the invoking user.
             cm->set_noheat(ctx.session.ipid, false);
             ctx.send_system_message("Noheat exemption cleared for your IPID.");
-            Log::log_print(INFO, "NoHeat: %s [%s] cleared own exemption",
-                           ctx.session.display_name.c_str(),
+            Log::log_print(INFO, "NoHeat: %s [%s] cleared own exemption", ctx.session.display_name.c_str(),
                            ctx.session.ipid.c_str());
             return;
         }
 
         // Determine target IPID
-        const std::string& target = (ctx.args.size() >= 2)
-                                        ? ctx.args[1]
-                                        : ctx.session.ipid;
+        const std::string& target = (ctx.args.size() >= 2) ? ctx.args[1] : ctx.session.ipid;
 
         const bool currently_exempt = cm->is_noheat(target);
         cm->set_noheat(target, !currently_exempt);
@@ -77,10 +74,8 @@ class NoHeatCommand : public CommandHandler {
         }
         ctx.send_system_message(msg);
 
-        Log::log_print(INFO, "NoHeat: %s [%s] set noheat %s for IPID %s",
-                       ctx.session.display_name.c_str(),
-                       ctx.session.ipid.c_str(),
-                       state, target.c_str());
+        Log::log_print(INFO, "NoHeat: %s [%s] set noheat %s for IPID %s", ctx.session.display_name.c_str(),
+                       ctx.session.ipid.c_str(), state, target.c_str());
     }
 };
 
@@ -90,4 +85,5 @@ static CommandRegistrar reg(std::make_unique<NoHeatCommand>());
 
 // Linker anchor — called from RegisterCommands.cpp to prevent
 // dead-stripping of the static CommandRegistrar above.
-void ao_cmd_noheat() { }
+void ao_cmd_noheat() {
+}

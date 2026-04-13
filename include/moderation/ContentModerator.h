@@ -121,7 +121,7 @@ class ContentModerator {
     /// @param channel   "ic" or "ooc"
     /// @param message   the raw message text (UTF-8)
     ModerationVerdict check(const std::string& ipid, std::string_view channel, std::string_view message,
-                           std::string_view area = "");
+                            std::string_view area = "");
 
     /// Information about an active mute — reason and remaining time.
     /// Populated by get_mute_info(); empty optional means not muted.
