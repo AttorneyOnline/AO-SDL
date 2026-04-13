@@ -488,7 +488,7 @@ ApplicationWindow {
                         placeholderText: "Paste a .qml path here, then press Load"
                         color: "#cccccc"
                         Layout.fillWidth: true
-                        background: Rectangle { color: "#1a1a1a"; radius: 3; border.color: pathField.activeFocus ? "#555" : "#333" }
+                        palette.base: "#1a1a1a"
                         onAccepted: playgroundWindow.loadUrl(playgroundWindow.pathToUrl(text))
                     }
 
@@ -517,20 +517,23 @@ ApplicationWindow {
                     height: Math.max(previewLoader.implicitHeight + 40, playgroundWindow.height - toolRow.height - statusBar.height - 40)
                     color: "transparent"
 
-                    // Checker pattern via two stacked repeaters.
-                    Grid {
+                    // Checker pattern via canvas (avoids Grid item-count warnings on resize).
+                    Canvas {
                         anchors.fill: parent
                         property int sz: 16
-                        columns: Math.ceil(parent.width  / sz)
-                        rows:    Math.ceil(parent.height / sz)
-                        Repeater {
-                            model: parent.columns * parent.rows
-                            Rectangle {
-                                width: parent.sz; height: parent.sz
-                                color: ((Math.floor(index / parent.columns) + index % parent.columns) % 2)
-                                    ? "#2a2a2a" : "#222222"
+                        onPaint: {
+                            var ctx = getContext("2d");
+                            var cols = Math.ceil(width / sz);
+                            var rows = Math.ceil(height / sz);
+                            for (var r = 0; r < rows; r++) {
+                                for (var c = 0; c < cols; c++) {
+                                    ctx.fillStyle = ((r + c) % 2) ? "#2a2a2a" : "#222222";
+                                    ctx.fillRect(c * sz, r * sz, sz, sz);
+                                }
                             }
                         }
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
                     }
 
                     // The user's loaded component, centered.

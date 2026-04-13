@@ -101,6 +101,11 @@ Item {
     readonly property bool _isHorizontal: direction === AccordionDrawer.LeftToRight || direction === AccordionDrawer.RightToLeft
     readonly property bool _isReverse:    direction === AccordionDrawer.BottomToTop  || direction === AccordionDrawer.RightToLeft
 
+    // Width available for content in horizontal mode (total width minus all headers).
+    readonly property real _horizontalContentWidth: _isHorizontal
+        ? Math.max(width - _wiredSections.length * 28, 0)
+        : -1
+
     // ── Staging area — children are reparented to the active layout ────
     Item {
         id: _staging
@@ -136,6 +141,7 @@ Item {
 
     // ── Wiring ─────────────────────────────────────────────────────────
     onExpandedIndexChanged: _syncSections()
+    on_HorizontalContentWidthChanged: _syncSections()
 
     Component.onCompleted: Qt.callLater(_wireUp)
     onSectionsChanged:     Qt.callLater(_wireUp)
@@ -153,6 +159,8 @@ Item {
             s.parent = root._activeLayout
             if (s.direction !== undefined)
                 s.direction = root.direction
+            if (s._drawerContentWidth !== undefined)
+                s._drawerContentWidth = root._horizontalContentWidth
         }
 
         // Propagate direction to children already in the active layout.
@@ -191,7 +199,10 @@ Item {
     }
 
     function _syncSections() {
-        for (let i = 0; i < _wiredSections.length; i++)
+        for (let i = 0; i < _wiredSections.length; i++) {
             _wiredSections[i].expanded = (i === expandedIndex)
+            if (_wiredSections[i]._drawerContentWidth !== undefined)
+                _wiredSections[i]._drawerContentWidth = root._horizontalContentWidth
+        }
     }
 }

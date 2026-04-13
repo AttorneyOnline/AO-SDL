@@ -105,9 +105,17 @@ Item {
     // ── Size animation ─────────────────────────────────────────────────
     readonly property real _headerSize: 28
 
+    // Set by AccordionDrawer for horizontal mode: the width available for
+    // content after all headers are accounted for.  -1 = standalone mode,
+    // falls back to childrenRect.width.
+    property real _drawerContentWidth: -1
+
     // The "natural" size of the content along the expanding axis.
+    // Vertical: measured from childrenRect (children set their own height).
+    // Horizontal: provided by the parent drawer, because children typically
+    // anchor left/right and have no intrinsic width to measure.
     readonly property real _contentSize: _isHorizontal
-        ? contentArea.childrenRect.width
+        ? (_drawerContentWidth >= 0 ? _drawerContentWidth : contentArea.childrenRect.width)
         : contentArea.childrenRect.height
 
     readonly property real _targetSize: _headerSize + (expanded ? _contentSize : 0)
@@ -126,29 +134,25 @@ Item {
     clip: true
 
     // ── Arrow indicator ────────────────────────────────────────────────
-    readonly property string _arrowChar: {
-        switch (direction) {
-        case AccordionSection.TopToBottom: return expanded ? "\u25BE" : "\u25B8"   // ▾ / ▸
-        case AccordionSection.BottomToTop: return expanded ? "\u25B4" : "\u25B8"   // ▴ / ▸
-        case AccordionSection.LeftToRight: return expanded ? "\u25B8" : "\u25BE"   // ▸ / ▾
-        case AccordionSection.RightToLeft: return expanded ? "\u25C2" : "\u25BE"   // ◂ / ▾
-        default:                           return expanded ? "\u25BE" : "\u25B8"
-        }
-    }
+    // Rows: TB, BT, LR, RL.  Columns: [expanded, collapsed].
+    readonly property var _arrows: [
+        ["\u25BE", "\u25B8"],   // TB:  ▾ / ▸
+        ["\u25B4", "\u25B8"],   // BT:  ▴ / ▸
+        ["\u25B8", "\u25BE"],   // LR:  ▸ / ▾
+        ["\u25C2", "\u25BE"]    // RL:  ◂ / ▾
+    ]
+    readonly property string _arrowChar: _arrows[direction][expanded ? 0 : 1]
 
     // ── Header bar ─────────────────────────────────────────────────────
     Rectangle {
         id: header
         color: headerMouse.containsMouse ? "#363636" : "#2a2a2a"
 
-        // For vertical modes: full-width strip at top or bottom.
-        // For horizontal modes: full-height strip at left or right.
         width:  root._isHorizontal ? root._headerSize : parent.width
         height: root._isHorizontal ? parent.height    : root._headerSize
 
-        // Label row for vertical modes (topToBottom / bottomToTop)
+        // Label for vertical modes (topToBottom / bottomToTop).
         RowLayout {
-            id: vLabel
             visible: !root._isHorizontal
             anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
             spacing: 4
@@ -168,24 +172,18 @@ Item {
             }
         }
 
-        // Label for horizontal modes — laid out as if horizontal then rotated
-        // so the text reads naturally along the header strip.
+        // Label for horizontal modes — rotated to read along the strip.
         Item {
             visible: root._isHorizontal
             anchors.fill: parent
             clip: true
 
             Row {
-                id: hLabel
-                // Occupy a "virtual" bar that is header.height wide × _headerSize tall,
-                // then rotate it into the actual 28-wide × full-height strip.
                 width:  header.height
                 height: root._headerSize
                 anchors.centerIn: parent
                 spacing: 4
-
                 rotation: direction === AccordionSection.LeftToRight ? -90 : 90
-
                 leftPadding:  6
                 rightPadding: 6
 
@@ -201,7 +199,7 @@ Item {
                     font.pixelSize: 11
                     color: "#cccccc"
                     elide: Text.ElideRight
-                    width: header.height - 28   // leave room for arrow + padding
+                    width: header.height - 28
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -219,86 +217,63 @@ Item {
     // ── Content area ───────────────────────────────────────────────────
     Item {
         id: contentArea
+        clip: true
         // Size and anchors set by the state machine below.
     }
 
     // ── Layout states ──────────────────────────────────────────────────
+    // Anchors must be swapped via AnchorChanges — ternary bindings on
+    // anchors do not reliably clear the previous anchor in QML.
+    // PropertyChanges only sets the expanding-axis size; the cross axis
+    // is fully determined by its two anchors.
     states: [
         State {
-            name: "topToBottom"
-            when: direction === AccordionSection.TopToBottom
+            name: "topToBottom"; when: direction === AccordionSection.TopToBottom
             AnchorChanges {
                 target: header
-                anchors.top:    root.top
-                anchors.left:   root.left
-                anchors.right:  root.right
-                anchors.bottom: undefined
+                anchors { top: root.top; left: root.left; right: root.right; bottom: undefined }
             }
             AnchorChanges {
                 target: contentArea
-                anchors.top:    header.bottom
-                anchors.left:   root.left
-                anchors.right:  root.right
-                anchors.bottom: undefined
+                anchors { top: header.bottom; left: root.left; right: root.right; bottom: undefined }
             }
-            PropertyChanges { target: contentArea; width: root.width; height: root._contentSize }
+            PropertyChanges { target: contentArea; height: root._contentSize }
         },
         State {
-            name: "bottomToTop"
-            when: direction === AccordionSection.BottomToTop
+            name: "bottomToTop"; when: direction === AccordionSection.BottomToTop
             AnchorChanges {
                 target: header
-                anchors.bottom: root.bottom
-                anchors.left:   root.left
-                anchors.right:  root.right
-                anchors.top:    undefined
+                anchors { bottom: root.bottom; left: root.left; right: root.right; top: undefined }
             }
             AnchorChanges {
                 target: contentArea
-                anchors.bottom: header.top
-                anchors.left:   root.left
-                anchors.right:  root.right
-                anchors.top:    undefined
+                anchors { bottom: header.top; left: root.left; right: root.right; top: undefined }
             }
-            PropertyChanges { target: contentArea; width: root.width; height: root._contentSize }
+            PropertyChanges { target: contentArea; height: root._contentSize }
         },
         State {
-            name: "leftToRight"
-            when: direction === AccordionSection.LeftToRight
+            name: "leftToRight"; when: direction === AccordionSection.LeftToRight
             AnchorChanges {
                 target: header
-                anchors.left:   root.left
-                anchors.top:    root.top
-                anchors.bottom: root.bottom
-                anchors.right:  undefined
+                anchors { left: root.left; top: root.top; bottom: root.bottom; right: undefined }
             }
             AnchorChanges {
                 target: contentArea
-                anchors.left:   header.right
-                anchors.top:    root.top
-                anchors.bottom: root.bottom
-                anchors.right:  undefined
+                anchors { left: header.right; top: root.top; bottom: root.bottom; right: undefined }
             }
-            PropertyChanges { target: contentArea; height: root.height; width: root._contentSize }
+            PropertyChanges { target: contentArea; width: Math.max(root.width - root._headerSize, 0) }
         },
         State {
-            name: "rightToLeft"
-            when: direction === AccordionSection.RightToLeft
+            name: "rightToLeft"; when: direction === AccordionSection.RightToLeft
             AnchorChanges {
                 target: header
-                anchors.right:  root.right
-                anchors.top:    root.top
-                anchors.bottom: root.bottom
-                anchors.left:   undefined
+                anchors { right: root.right; top: root.top; bottom: root.bottom; left: undefined }
             }
             AnchorChanges {
                 target: contentArea
-                anchors.right:  header.left
-                anchors.top:    root.top
-                anchors.bottom: root.bottom
-                anchors.left:   undefined
+                anchors { right: header.left; top: root.top; bottom: root.bottom; left: undefined }
             }
-            PropertyChanges { target: contentArea; height: root.height; width: root._contentSize }
+            PropertyChanges { target: contentArea; width: Math.max(root.width - root._headerSize, 0) }
         }
     ]
 }
