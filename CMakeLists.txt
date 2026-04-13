@@ -560,9 +560,10 @@ if(KAGAMI_WITH_LLAMA_CPP)
         # Pinned to a full SHA rather than a tag so a re-tag on the
         # upstream side (ggerganov's release process sometimes re-
         # issues tags) can't change what we compile. This SHA is
-        # tag b6000 at the time of writing — bump both together on
-        # llama.cpp upgrades.
-        GIT_TAG        4762ad7316dcdec20016ab5985fb46a27902204d
+        # tag b8772 at the time of writing — bump both together on
+        # llama.cpp upgrades. Bumped from b6000 to get ModernBERT
+        # architecture support for Granite embedding models.
+        GIT_TAG        bafae276541279aca751c25651462bc7b9134be3
         GIT_SHALLOW    TRUE)
     FetchContent_MakeAvailable(llama_cpp)
     target_link_libraries(aoengine PRIVATE llama)
