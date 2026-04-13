@@ -242,7 +242,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.instance.outputs.id }}" \
             --document-name AWS-RunShellScript \
-            --parameters 'commands=["cd /opt/kagami && sed -i \"s|^KAGAMI_IMAGE=.*|KAGAMI_IMAGE=ghcr.io/attorneyonline/kagami:latest|\" .env && . ./.env && docker pull $KAGAMI_IMAGE && docker compose up -d --force-recreate kagami"]' \
+            --parameters 'commands=["cd /opt/kagami && sed -i \"s|^KAGAMI_IMAGE=.*|KAGAMI_IMAGE=ghcr.io/attorneyonline/kagami:latest|\" .env && . ./.env && docker pull $KAGAMI_IMAGE && docker compose up -d --force-recreate kagami && docker image prune -af"]' \
             --query 'Command.CommandId' \
             --output text)
           echo "SSM Command: $COMMAND_ID"
