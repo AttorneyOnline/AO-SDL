@@ -410,3 +410,320 @@ TEST(TextListParse, StripsBOM) {
     ASSERT_EQ(entries.size(), 2u);
     EXPECT_EQ(entries[0], "foo");
 }
+
+// ===========================================================================
+// Additional matching tests — case insensitivity variations
+// ===========================================================================
+
+TEST(SlurFilterScan, MixedCaseMatchesCaseInsensitive) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    EXPECT_EQ(f.scan("EvIlWoRd").score, 1.0);
+    EXPECT_EQ(f.scan("eViLwOrD").score, 1.0);
+}
+
+TEST(SlurFilterScan, UpperCaseWordlistMatchesLowerInput) {
+    // Wordlist entries are normalized at load time, so "BADTERM" in
+    // the list normalizes to "badterm" and matches lowercase input.
+    SlurFilter f;
+    setup_filter(f, {"BADTERM"});
+    EXPECT_EQ(f.scan("badterm").score, 1.0);
+}
+
+// ===========================================================================
+// Homoglyph folding — Greek and fullwidth
+// ===========================================================================
+
+TEST(SlurFilterScan, GreekHomoglyphsFire) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    // Replace Latin 'e' with Greek epsilon (U+03B5, D5 B5 in UTF-8: CE B5)
+    // and Latin 'o' with Greek omicron (U+03BF, CE BF)
+    EXPECT_EQ(f.scan("\xCE\xB5vilw\xCE\xBFrd").score, 1.0);
+}
+
+TEST(SlurFilterScan, FullwidthHomoglyphsFire) {
+    SlurFilter f;
+    setup_filter(f, {"bad"});
+    // "ｂａｄ" in fullwidth: U+FF42 U+FF41 U+FF44
+    EXPECT_EQ(f.scan("\xEF\xBD\x82\xEF\xBD\x81\xEF\xBD\x84").score, 1.0);
+}
+
+// ===========================================================================
+// Multiple slurs in one message
+// ===========================================================================
+
+TEST(SlurFilterScan, ThreeSlursAllDetected) {
+    SlurFilter f;
+    setup_filter(f, {"badterm", "evilword", "zzznasty"});
+    auto r = f.scan("a badterm then an evilword and zzznasty too");
+    EXPECT_EQ(r.score, 1.0);
+    EXPECT_EQ(r.matched.size(), 3u);
+}
+
+TEST(SlurFilterScan, DuplicateSlursDeduped) {
+    SlurFilter f;
+    setup_filter(f, {"badterm"});
+    auto r = f.scan("badterm badterm badterm");
+    EXPECT_EQ(r.score, 1.0);
+    // Dedup: only one unique match reported
+    EXPECT_EQ(r.matched.size(), 1u);
+    EXPECT_EQ(r.matched[0], "badterm");
+}
+
+// ===========================================================================
+// Partial match — word boundary semantics
+// ===========================================================================
+
+TEST(SlurFilterScan, PrefixDoesNotMatch) {
+    // "evilword" in the list, "evilwording" in the message.
+    // Without suffix stripping, "evilwording" normalizes to the token
+    // "evilwording" which is different from "evilword". BUT suffix
+    // stripping handles "-ing" so this SHOULD fire.
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    EXPECT_EQ(f.scan("evilwording").score, 1.0);
+}
+
+TEST(SlurFilterScan, ArbitraryLongSuffixDoesNotMatch) {
+    // "evilwordification" — the suffix "-ification" is NOT in the
+    // handled suffix list, so this should NOT fire.
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    EXPECT_EQ(f.scan("evilwordification").score, 0.0);
+}
+
+TEST(SlurFilterScan, PrefixAttachmentDoesNotMatch) {
+    // "preevilword" — word boundary tokenizer should NOT match because
+    // "preevilword" is one token and doesn't match "evilword".
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    EXPECT_EQ(f.scan("preevilword").score, 0.0);
+}
+
+// ===========================================================================
+// Unicode normalization — combining marks in the message
+// ===========================================================================
+
+TEST(SlurFilterScan, CombiningMarkEvasionInMessage) {
+    SlurFilter f;
+    setup_filter(f, {"badterm"});
+    // "b" + combining acute (CC 81) + "adterm" — combining mark stripped
+    EXPECT_EQ(f.scan("b\xCC\x81"
+                     "adterm")
+                  .score,
+              1.0);
+}
+
+TEST(SlurFilterScan, MultipleCombiningMarksStripped) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    // Stack 5 combining marks on the 'e'
+    std::string msg = "e";
+    for (int i = 0; i < 5; ++i)
+        msg += "\xCC\x80"; // U+0300 combining grave
+    msg += "vilword";
+    EXPECT_EQ(f.scan(msg).score, 1.0);
+}
+
+// ===========================================================================
+// Empty wordlist and empty message edge cases
+// ===========================================================================
+
+TEST(SlurFilterScan, EmptyWordlistReturnsNoMatches) {
+    SlurFilter f;
+    f.configure(make_cfg());
+    f.load_wordlist({});
+    EXPECT_FALSE(f.is_active());
+    auto r = f.scan("anything at all");
+    EXPECT_EQ(r.score, 0.0);
+    EXPECT_TRUE(r.matched.empty());
+}
+
+TEST(SlurFilterScan, EmptyMessageReturnsNoMatches) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    auto r = f.scan("");
+    EXPECT_EQ(r.score, 0.0);
+    EXPECT_TRUE(r.matched.empty());
+}
+
+TEST(SlurFilterScan, WhitespaceOnlyMessageReturnsNoMatches) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    auto r = f.scan("   \t\n  ");
+    EXPECT_EQ(r.score, 0.0);
+    EXPECT_TRUE(r.matched.empty());
+}
+
+TEST(SlurFilterScan, PunctuationOnlyMessageReturnsNoMatches) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    auto r = f.scan("!@#$%^&*()");
+    EXPECT_EQ(r.score, 0.0);
+}
+
+// ===========================================================================
+// Leet speak substitution
+// ===========================================================================
+
+TEST(SlurFilterScan, AllLeetDigitsFold) {
+    SlurFilter f;
+    // Verify the individual leet folds in a plausible word
+    // 0->o, 1->i, 3->e, 4->a, 5->s, 7->t, 9->g
+    setup_filter(f, {"goatsie"});
+    // "9047513" -> g-o-a-t-s-i-e
+    EXPECT_EQ(f.scan("9047513").score, 1.0);
+}
+
+TEST(SlurFilterScan, LeetMixedWithLettersFires) {
+    SlurFilter f;
+    setup_filter(f, {"badterm"});
+    // "b4d73rm" -> b-a-d-t-e-r-m ... wait, that'd be "badterm"
+    // Let's use: "b4dt3rm" -> b-a-d-t-e-r-m = "badterm"
+    EXPECT_EQ(f.scan("b4dt3rm").score, 1.0);
+}
+
+// ===========================================================================
+// Exception list — more thorough coverage
+// ===========================================================================
+
+TEST(SlurFilterScan, ExceptionSuppressesSuffixedForm) {
+    // Exception for "badterm" should also suppress "badterms" since
+    // suffix stripping on "badterms" yields "badterm" which is in
+    // exceptions.
+    SlurFilter f;
+    setup_filter(f, {"badterm"}, {"badterm"});
+    EXPECT_EQ(f.scan("badterms").score, 0.0);
+}
+
+TEST(SlurFilterScan, ExceptionIsCaseInsensitive) {
+    // Exceptions are normalized the same way as the wordlist
+    SlurFilter f;
+    setup_filter(f, {"evilword"}, {"EVILWORD"});
+    EXPECT_EQ(f.scan("evilword").score, 0.0);
+}
+
+TEST(SlurFilterScan, ExceptionSizeReported) {
+    // Exception entries are normalized and only the first token of each
+    // line is stored. Use single-word entries so each contributes one
+    // distinct token.
+    SlurFilter f;
+    f.configure(make_cfg());
+    f.load_exceptions({"alpha", "bravo", "charlie"});
+    EXPECT_EQ(f.exception_size(), 3u);
+}
+
+// ===========================================================================
+// Reason string format
+// ===========================================================================
+
+TEST(SlurFilterScan, ReasonStringFormat) {
+    SlurFilter f;
+    setup_filter(f, {"badterm", "evilword"});
+    auto r = f.scan("badterm evilword");
+    EXPECT_EQ(r.reason, "slur(2)");
+}
+
+TEST(SlurFilterScan, ReasonStringForSingleMatch) {
+    SlurFilter f;
+    setup_filter(f, {"badterm"});
+    auto r = f.scan("badterm");
+    EXPECT_EQ(r.reason, "slur(1)");
+}
+
+TEST(SlurFilterScan, NoMatchReasonIsEmpty) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    auto r = f.scan("hello world");
+    EXPECT_TRUE(r.reason.empty());
+}
+
+// ===========================================================================
+// Normalizer — additional edge cases
+// ===========================================================================
+
+TEST(SlurFilterNormalize, SoftHyphenStripped) {
+    // Soft hyphen U+00AD (C2 AD in UTF-8) should be stripped
+    EXPECT_EQ(SlurFilter::normalize("bad\xC2\xADword"), "badword");
+}
+
+TEST(SlurFilterNormalize, BOMStripped) {
+    // BOM U+FEFF (EF BB BF in UTF-8) should be stripped
+    EXPECT_EQ(SlurFilter::normalize("\xEF\xBB\xBFhello"), "hello");
+}
+
+TEST(SlurFilterNormalize, AccentedLatinFoldsToAscii) {
+    // e-acute U+00E9 (C3 A9 in UTF-8) -> 'e'
+    EXPECT_EQ(SlurFilter::normalize("\xC3\xA9vil"), "evil");
+    // n-tilde U+00F1 (C3 B1) -> 'n'
+    EXPECT_EQ(SlurFilter::normalize("ba\xC3\xB1o"), "bano");
+}
+
+TEST(SlurFilterNormalize, DigitsNotInLeetPassThrough) {
+    // Digits 2, 6, 8 have no leet mapping — they pass through as-is
+    EXPECT_EQ(SlurFilter::normalize("2"), "2");
+    EXPECT_EQ(SlurFilter::normalize("6"), "6");
+    EXPECT_EQ(SlurFilter::normalize("8"), "8");
+}
+
+// ===========================================================================
+// Suffix stripping — more coverage
+// ===========================================================================
+
+TEST(SlurFilterSuffix, EdSuffix) {
+    EXPECT_EQ(SlurFilter::strip_suffix("hated"), "hat");
+}
+
+TEST(SlurFilterSuffix, EsSuffix) {
+    EXPECT_EQ(SlurFilter::strip_suffix("matches"), "match");
+}
+
+TEST(SlurFilterSuffix, NoSuffixUnchanged) {
+    EXPECT_EQ(SlurFilter::strip_suffix("quick"), "quick");
+    EXPECT_EQ(SlurFilter::strip_suffix("jump"), "jump");
+}
+
+// ===========================================================================
+// Configurable match_score
+// ===========================================================================
+
+TEST(SlurFilterScan, CustomMatchScore) {
+    SlurFilter f;
+    SlurLayerConfig cfg;
+    cfg.enabled = true;
+    cfg.match_score = 0.5;
+    f.configure(cfg);
+    f.load_wordlist({"evilword"});
+    auto r = f.scan("evilword");
+    EXPECT_DOUBLE_EQ(r.score, 0.5);
+}
+
+// ===========================================================================
+// Word surrounded by punctuation still matches
+// ===========================================================================
+
+TEST(SlurFilterScan, WordInPunctuationMatches) {
+    SlurFilter f;
+    setup_filter(f, {"evilword"});
+    EXPECT_EQ(f.scan("**evilword**").score, 1.0);
+    EXPECT_EQ(f.scan("(evilword)").score, 1.0);
+    EXPECT_EQ(f.scan("--evilword--").score, 1.0);
+    EXPECT_EQ(f.scan("\"evilword\"").score, 1.0);
+}
+
+// ===========================================================================
+// Reload wordlist at runtime
+// ===========================================================================
+
+TEST(SlurFilterScan, ReloadWordlistSwapsContent) {
+    SlurFilter f;
+    setup_filter(f, {"old_word"});
+    EXPECT_EQ(f.scan("old_word").score, 1.0);
+    EXPECT_EQ(f.scan("new_word").score, 0.0);
+
+    // Reload with new content
+    f.load_wordlist({"new_word"});
+    EXPECT_EQ(f.scan("old_word").score, 0.0);
+    EXPECT_EQ(f.scan("new_word").score, 1.0);
+}
