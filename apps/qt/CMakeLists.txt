@@ -192,3 +192,12 @@ else()
     )
 
 endif()
+
+# ── Copy playground sample files next to the executable ──────────────────
+add_custom_command(
+    TARGET aoqt POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples"
+        "$<TARGET_FILE_DIR:aoqt>/samples"
+    VERBATIM
+)
