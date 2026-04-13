@@ -226,14 +226,13 @@ cfg = {
             # 6.0 = mute_threshold → single slur match = instant mute.
             # Lower to 3.0 for a drop-then-escalate policy.
             'weight_slurs': 6.0,
-            # Roleplay-friendly defaults. Per-axis floors in
-            # ContentModerator.cpp filter sub-dramatic in-character
-            # language before these weights apply.
-            'weight_hate': 4.0,
-            'weight_sexual': 1.5,
-            'weight_sexual_minors': 100.0,
-            'weight_violence': 1.0,
-            'weight_self_harm': 1.0,
+            # Calibrated for two-regime heat formula (excess confidence
+            # above 0.85 floor). A 99% message contributes 0.14 × weight.
+            'weight_hate': 10.0,
+            'weight_sexual': 7.0,
+            'weight_sexual_minors': 43.0,
+            'weight_violence': 2.0,
+            'weight_self_harm': 7.0,
             'weight_semantic_echo': 2.0,
         },
         'local_classifier': {

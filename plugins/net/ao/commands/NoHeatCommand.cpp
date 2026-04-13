@@ -19,7 +19,7 @@
 /// Usage:
 ///   /noheat            — toggle for yourself
 ///   /noheat abc123     — toggle for a specific IPID
-///   /noheat off        — clear ALL noheat exemptions
+///   /noheat off        — clear your own noheat exemption
 
 namespace {
 

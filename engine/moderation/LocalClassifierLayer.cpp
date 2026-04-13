@@ -13,10 +13,7 @@ namespace {
 constexpr const char kMagicPrefix[] = "KGCLF";
 constexpr size_t kMagicTotalSize = 8;
 
-// V1 header: magic(8) + version(4) + num_cat(4) + dim(4) + name_len(4)
-constexpr size_t kV1HeaderFixedSize = 8 + 4 + 4 + 4 + 4;
-
-// V2 header adds hidden_dim: magic(8) + version(4) + num_cat(4) + dim(4) + hidden_dim(4) + name_len(4)
+// V2 header: magic(8) + version(4) + num_cat(4) + dim(4) + hidden_dim(4) + name_len(4)
 constexpr size_t kV2HeaderFixedSize = 8 + 4 + 4 + 4 + 4 + 4;
 
 uint32_t read_u32_le(const uint8_t* data, size_t off) {
@@ -91,9 +88,6 @@ void LocalClassifierLayer::configure(const LocalClassifierConfig& cfg) {
 bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, const std::string& runtime_model_name) {
     std::lock_guard lock(mu_);
     loaded_ = false;
-    format_version_ = 0;
-    weights_.clear();
-    biases_.clear();
     w1_.clear();
     b1_.clear();
     w2_.clear();
@@ -107,7 +101,7 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, c
     model_name_.clear();
     calibration_type_ = 0;
 
-    if (blob == nullptr || blob_size < kV1HeaderFixedSize) {
+    if (blob == nullptr || blob_size < kV2HeaderFixedSize) {
         Log::warn("LocalClassifier: weights blob missing or too short ({} bytes)", blob_size);
         return false;
     }
@@ -117,10 +111,8 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, c
         return false;
     }
 
-    // The 6th byte of the magic encodes the major version:
-    //   0x01 = v1 (linear), 0x02 = v2 (MLP)
     const uint8_t magic_version = blob[5];
-    if (magic_version != 0x01 && magic_version != 0x02) {
+    if (magic_version != 0x02) {
         Log::warn("LocalClassifier: unsupported magic version byte 0x{:02x}", magic_version);
         return false;
     }
@@ -138,61 +130,18 @@ bool LocalClassifierLayer::load_weights(const uint8_t* blob, size_t blob_size, c
         return false;
     }
 
-    if (version == 1) {
-        const uint32_t name_len = read_u32_le(blob, 20);
-        return load_weights_v1(blob, blob_size, num_cat, dim, name_len, runtime_model_name);
-    }
-    else if (version == 2) {
-        if (blob_size < kV2HeaderFixedSize) {
-            Log::warn("LocalClassifier: v2 blob too short for header ({} bytes)", blob_size);
-            return false;
-        }
-        const uint32_t hidden = read_u32_le(blob, 20);
-        const uint32_t name_len = read_u32_le(blob, 24);
-        if (hidden == 0 || hidden > 1024) {
-            Log::warn("LocalClassifier: hidden_dim out of range: {}", hidden);
-            return false;
-        }
-        return load_weights_v2(blob, blob_size, num_cat, dim, name_len, runtime_model_name);
-    }
-
-    Log::warn("LocalClassifier: unsupported format version {}", version);
-    return false;
-}
-
-bool LocalClassifierLayer::load_weights_v1(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim,
-                                           uint32_t name_len, const std::string& runtime_model_name) {
-    if (name_len > 512) {
-        Log::warn("LocalClassifier v1: model_name_len too long: {}", name_len);
-        return false;
-    }
-    const size_t weights_bytes = static_cast<size_t>(num_cat) * dim * sizeof(float);
-    const size_t biases_bytes = static_cast<size_t>(num_cat) * sizeof(float);
-    const size_t expected = kV1HeaderFixedSize + name_len + weights_bytes + biases_bytes;
-    if (blob_size != expected) {
-        Log::warn("LocalClassifier v1: size mismatch {} vs expected {}", blob_size, expected);
+    if (version != 2) {
+        Log::warn("LocalClassifier: unsupported format version {}", version);
         return false;
     }
 
-    std::string file_model(reinterpret_cast<const char*>(blob + kV1HeaderFixedSize), name_len);
-    if (!model_name_matches(file_model, runtime_model_name)) {
-        Log::warn("LocalClassifier v1: model mismatch '{}' vs runtime '{}'", file_model, runtime_model_name);
+    const uint32_t hidden = read_u32_le(blob, 20);
+    const uint32_t name_len = read_u32_le(blob, 24);
+    if (hidden == 0 || hidden > 1024) {
+        Log::warn("LocalClassifier: hidden_dim out of range: {}", hidden);
         return false;
     }
-
-    weights_.resize(static_cast<size_t>(num_cat) * dim);
-    biases_.resize(num_cat);
-    std::memcpy(weights_.data(), blob + kV1HeaderFixedSize + name_len, weights_bytes);
-    std::memcpy(biases_.data(), blob + kV1HeaderFixedSize + name_len + weights_bytes, biases_bytes);
-
-    format_version_ = 1;
-    num_categories_ = static_cast<int>(num_cat);
-    embedding_dim_ = static_cast<int>(dim);
-    model_name_ = std::move(file_model);
-    loaded_ = true;
-    Log::info("LocalClassifier: loaded v1 linear {} categories x {}-dim (model={})", num_categories_, embedding_dim_,
-              model_name_);
-    return true;
+    return load_weights_v2(blob, blob_size, num_cat, dim, name_len, runtime_model_name);
 }
 
 bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim,
@@ -266,7 +215,6 @@ bool LocalClassifierLayer::load_weights_v2(const uint8_t* blob, size_t blob_size
         std::memcpy(platt_b_.data(), cursor, platt_bytes);
     }
 
-    format_version_ = 2;
     num_categories_ = static_cast<int>(num_cat);
     embedding_dim_ = static_cast<int>(dim);
     hidden_dim_ = static_cast<int>(hidden);
@@ -307,32 +255,7 @@ LocalClassifierResult LocalClassifierLayer::classify(const EmbeddingResult& embe
     if (static_cast<int>(embedding.vector.size()) != embedding_dim_)
         return {};
 
-    if (format_version_ == 2)
-        return classify_v2(embedding);
-    return classify_v1(embedding);
-}
-
-LocalClassifierResult LocalClassifierLayer::classify_v1(const EmbeddingResult& embedding) const {
-    // mu_ is already held by classify().
-    LocalClassifierResult out;
-    out.max_confidence = 0.0;
-    out.max_category_index = -1;
-
-    const float* vec = embedding.vector.data();
-    const float* wrow = weights_.data();
-    for (int i = 0; i < num_categories_; ++i, wrow += embedding_dim_) {
-        double logit = biases_[i];
-        for (int j = 0; j < embedding_dim_; ++j)
-            logit += static_cast<double>(wrow[j]) * static_cast<double>(vec[j]);
-        const double prob = sigmoid(logit);
-        set_axis(out.scores, i, prob);
-        if (prob > out.max_confidence) {
-            out.max_confidence = prob;
-            out.max_category_index = i;
-        }
-    }
-    out.ran = true;
-    return out;
+    return classify_v2(embedding);
 }
 
 LocalClassifierResult LocalClassifierLayer::classify_v2(const EmbeddingResult& embedding) const {
