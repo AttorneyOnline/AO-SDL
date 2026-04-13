@@ -83,10 +83,6 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
         "Wall-clock nanoseconds spent in llama_decode (model forward pass) for embeddings");
     static auto& embed_errors = metrics::MetricsRegistry::instance().counter(
         "kagami_moderation_embedding_errors_total", "Embedding backend failures by reason", {"reason"});
-    static auto& cluster_fires = metrics::MetricsRegistry::instance().counter(
-        "kagami_moderation_semantic_cluster_fires_total",
-        "Times the semantic cluster detector crossed the cluster_threshold");
-
     SemanticClusterResult r;
     if (!cfg_.enabled)
         return r;
@@ -121,6 +117,21 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
     embed_tokenize_ns.get().inc(static_cast<uint64_t>(er.tokenize_ns));
     embed_decode_ns.get().inc(static_cast<uint64_t>(er.decode_ns));
 
+    return score_with_embedding(ipid, er);
+}
+
+SemanticClusterResult SemanticClusterer::score_with_embedding(const std::string& ipid,
+                                                              const EmbeddingResult& embedding) {
+    static auto& cluster_fires = metrics::MetricsRegistry::instance().counter(
+        "kagami_moderation_semantic_cluster_fires_total",
+        "Times the semantic cluster detector crossed the cluster_threshold");
+
+    SemanticClusterResult r;
+    if (!cfg_.enabled)
+        return r;
+    if (!embedding.ok || embedding.vector.empty())
+        return r;
+
     // Insert + compare under the lock. Scan the ring for near-dupes
     // and count distinct IPIDs in the match set, excluding self.
     std::unordered_set<std::string> distinct_others;
@@ -131,9 +142,9 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
         prune_locked(t);
 
         for (auto& entry : ring_) {
-            if (entry.vector.size() != er.vector.size())
+            if (entry.vector.size() != embedding.vector.size())
                 continue;
-            double sim = cosine(er.vector, entry.vector);
+            double sim = cosine(embedding.vector, entry.vector);
             if (sim >= cfg_.similarity_threshold) {
                 ++matched;
                 if (entry.ipid != ipid)
@@ -146,7 +157,7 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
         Entry e;
         e.timestamp_ms = t;
         e.ipid = ipid;
-        e.vector = std::move(er.vector);
+        e.vector = embedding.vector; // copy — embedding is const ref
         ring_.push_back(std::move(e));
         while (ring_.size() > static_cast<size_t>(std::max(1, cfg_.ring_size)))
             ring_.pop_front();
@@ -158,14 +169,6 @@ SemanticClusterResult SemanticClusterer::score(const std::string& ipid, std::str
     // Fire the signal only when we've seen the near-dupe from at
     // least cluster_threshold distinct IPIDs. Single-source echoes
     // are already handled by SpamDetector H1.
-    //
-    // The score is a flat 1.0 whenever the threshold is crossed —
-    // earlier versions had a `1.0 + excess * 0.2` clamp that was
-    // dead math because excess is always >= 0 in this branch and
-    // the clamp ceiling is 1.0. The cluster signal either fires or
-    // doesn't; we don't model "more distinct IPIDs = stronger
-    // signal" because the heat accumulator already escalates the
-    // response as the user repeats the pattern.
     if (r.distinct_ipids + 1 >= cfg_.cluster_threshold) {
         r.score = 1.0;
         r.reason = "semantic_cluster(" + std::to_string(r.distinct_ipids + 1) + "_ipids)";

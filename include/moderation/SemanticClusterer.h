@@ -53,6 +53,11 @@ class SemanticClusterer {
     /// layer is disabled.
     SemanticClusterResult score(const std::string& ipid, std::string_view message);
 
+    /// Score using a pre-computed embedding. Avoids a redundant embed()
+    /// call when the caller already has the vector (e.g., ContentModerator
+    /// shares one embedding across classifier + clusterer).
+    SemanticClusterResult score_with_embedding(const std::string& ipid, const EmbeddingResult& embedding);
+
     /// Periodic housekeeping: drop entries older than the window.
     void sweep();
 

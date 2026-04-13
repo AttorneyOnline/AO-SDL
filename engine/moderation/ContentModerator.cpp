@@ -511,6 +511,9 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // NOTE: only counts ASCII vowels (aeiou). Non-English text with
     // heavy consonant clusters (some Slavic phrases) could false-fire.
     // Acceptable for an English-primary server.
+    // Shared embedding — computed once, used by classifier + bad_hint + clusterer.
+    EmbeddingResult shared_embedding;
+
     {
         // --- Keysmash detection ------------------------------------
         bool keysmash_suppressed = false;
@@ -530,7 +533,6 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         tr.keysmash_suppressed = keysmash_suppressed;
 
         // --- Compute shared embedding ONCE -------------------------
-        EmbeddingResult shared_embedding;
         const bool need_embedding = embedding_backend_ && (local_classifier_.is_active() || bad_hint_.is_active());
         if (need_embedding) {
             auto t_emb = std::chrono::steady_clock::now();
@@ -609,7 +611,11 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // backend is installed OR if the layer is disabled in config.
     if (cfg->embeddings.enabled) {
         auto t0 = std::chrono::steady_clock::now();
-        auto sr = clusterer_.score(ipid, message);
+        // Reuse the embedding from Layer 2 if available, avoiding a
+        // redundant ~2ms embed() call. Falls back to clusterer's own
+        // embed() if Layer 2 didn't run (e.g., classifier disabled).
+        auto sr = shared_embedding.ok ? clusterer_.score_with_embedding(ipid, shared_embedding)
+                                      : clusterer_.score(ipid, message);
         if (sr.score > 0.0) {
             v.scores.semantic_echo = std::max(v.scores.semantic_echo, sr.score);
             v.triggered_axes.push_back(sr.reason);
