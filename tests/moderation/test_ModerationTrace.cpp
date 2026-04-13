@@ -60,7 +60,7 @@ TEST(ModerationTraceTest, PopulatedLayersRoundTrip) {
     t.local_classifier.max_confidence = 0.87;
     t.local_classifier.max_category_index = 1;
     t.local_classifier.scores.hate = 0.87;
-    t.local_classifier.scores.toxicity = 0.65;
+    t.local_classifier.scores.sexual = 0.65;
 
     t.bad_hint.ran = true;
     t.bad_hint.ns = 410;
@@ -69,14 +69,14 @@ TEST(ModerationTraceTest, PopulatedLayersRoundTrip) {
     t.bad_hint.is_bad = true;
 
     t.keysmash_suppressed = false;
-    t.triggered_axes = {"toxicity_lc", "hate_lc"};
+    t.triggered_axes = {"sexual_lc", "hate_lc"};
     t.final_scores.hate = 0.87;
-    t.final_scores.toxicity = 0.65;
+    t.final_scores.sexual = 0.65;
     t.heat_before = 0.0;
     t.heat_delta = 6.0;
     t.heat_after = 6.0;
     t.final_action = ModerationAction::MUTE;
-    t.reason = "hate=0.87,toxicity=0.65";
+    t.reason = "hate=0.87,sexual=0.65";
 
     auto line = trace_to_json_line(t);
     auto j = nlohmann::json::parse(line);
@@ -129,8 +129,8 @@ TEST(ModerationTraceTest, AllAxesEmittedEvenAtZero) {
     auto t = make_trace();
     auto line = trace_to_json_line(t);
     auto j = nlohmann::json::parse(line);
-    const char* axes[] = {"visual_noise", "link_risk",     "slurs",    "toxicity",  "hate",
-                          "sexual",       "sexual_minors", "violence", "self_harm", "semantic_echo"};
+    const char* axes[] = {"visual_noise",  "link_risk", "slurs",     "hate",         "sexual",
+                          "sexual_minors", "violence",  "self_harm", "semantic_echo"};
     for (const char* axis : axes) {
         EXPECT_TRUE(j["decision"]["final_scores"].contains(axis)) << "final_scores missing axis: " << axis;
         EXPECT_TRUE(j["layers"]["local_classifier"]["scores"].contains(axis))

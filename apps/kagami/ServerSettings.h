@@ -282,25 +282,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.slurs.cache_dir = value<std::string>("content_moderation/slurs/cache_dir");
         cfg.slurs.match_score = value<double>("content_moderation/slurs/match_score");
 
-        // Remote classifier layer (Phase 2 wiring — config only in Phase 1)
-        cfg.remote.enabled = value<bool>("content_moderation/remote/enabled");
-        cfg.remote.provider = value<std::string>("content_moderation/remote/provider");
-        cfg.remote.api_key = value<std::string>("content_moderation/remote/api_key");
-        cfg.remote.endpoint = value<std::string>("content_moderation/remote/endpoint");
-        cfg.remote.model = value<std::string>("content_moderation/remote/model");
-        cfg.remote.timeout_ms = value<int>("content_moderation/remote/timeout_ms");
-        cfg.remote.fail_open = value<bool>("content_moderation/remote/fail_open");
-        cfg.remote.cache_enabled = value<bool>("content_moderation/remote/cache_enabled");
-        cfg.remote.cache_ttl_seconds = value<int>("content_moderation/remote/cache_ttl_seconds");
-        cfg.remote.cache_max_entries = value<int>("content_moderation/remote/cache_max_entries");
-
-        // Safe-hint shortcut (Layer 2 optimization)
-        cfg.safe_hint.enabled = value<bool>("content_moderation/safe_hint/enabled");
-        cfg.safe_hint.anchors_url = value<std::string>("content_moderation/safe_hint/anchors_url");
-        cfg.safe_hint.cache_dir = value<std::string>("content_moderation/safe_hint/cache_dir");
-        cfg.safe_hint.similarity_threshold = value<double>("content_moderation/safe_hint/similarity_threshold");
-
-        // Bad-hint anchor matching (Layer 2 detection)
+        // Bad-hint anchor matching
         cfg.bad_hint.enabled = value<bool>("content_moderation/bad_hint/enabled");
         cfg.bad_hint.anchors_url = value<std::string>("content_moderation/bad_hint/anchors_url");
         cfg.bad_hint.cache_dir = value<std::string>("content_moderation/bad_hint/cache_dir");
@@ -330,7 +312,6 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.heat.weight_visual_noise = value<double>("content_moderation/heat/weight_visual_noise");
         cfg.heat.weight_link_risk = value<double>("content_moderation/heat/weight_link_risk");
         cfg.heat.weight_slurs = value<double>("content_moderation/heat/weight_slurs");
-        cfg.heat.weight_toxicity = value<double>("content_moderation/heat/weight_toxicity");
         cfg.heat.weight_hate = value<double>("content_moderation/heat/weight_hate");
         cfg.heat.weight_sexual = value<double>("content_moderation/heat/weight_sexual");
         cfg.heat.weight_sexual_minors = value<double>("content_moderation/heat/weight_sexual_minors");
@@ -342,7 +323,6 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         cfg.heat.floor_visual_noise = value<double>("content_moderation/heat/floor_visual_noise");
         cfg.heat.floor_link_risk = value<double>("content_moderation/heat/floor_link_risk");
         cfg.heat.floor_slurs = value<double>("content_moderation/heat/floor_slurs");
-        cfg.heat.floor_toxicity = value<double>("content_moderation/heat/floor_toxicity");
         cfg.heat.floor_hate = value<double>("content_moderation/heat/floor_hate");
         cfg.heat.floor_sexual = value<double>("content_moderation/heat/floor_sexual");
         cfg.heat.floor_sexual_minors = value<double>("content_moderation/heat/floor_sexual_minors");
@@ -577,43 +557,6 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       {"cache_dir", "/tmp/kagami-moderation"},
                       {"match_score", 1.0},
                   }},
-                 {"remote",
-                  nlohmann::json{
-                      // Remote classifier (OpenAI text-moderation by default).
-                      // Opt-in: requires enabled=true AND a non-empty
-                      // api_key. An empty api_key automatically disables
-                      // the layer regardless of the enabled flag.
-                      {"enabled", false},
-                      {"provider", "openai"},
-                      {"api_key", ""},
-                      {"endpoint", "https://api.openai.com/v1/moderations"},
-                      {"model", "text-moderation-latest"},
-                      // 3s default leaves headroom for OpenAI's cold-
-                      // start TLS handshake (observed ~1.6s on fresh
-                      // connections from EC2). Keep-alive reuse drops
-                      // subsequent calls to ~200ms; dropping timeout
-                      // below ~2000 causes cold-start false failures.
-                      {"timeout_ms", 3000},
-                      {"fail_open", true},
-                      // Dedup cache for repeat messages. Off by
-                      // default; see RemoteDedupCache.h.
-                      {"cache_enabled", false},
-                      {"cache_ttl_seconds", 300},
-                      {"cache_max_entries", 1000},
-                  }},
-                 {"safe_hint",
-                  nlohmann::json{
-                      // Layer 2 shortcut. Requires the embeddings layer
-                      // backend to be loaded; otherwise inert. Anchors
-                      // are fetched from the operator-supplied URL at
-                      // startup in the same background thread as the
-                      // slur wordlist. A 0.7 threshold is calibrated
-                      // for bge-small-en-v1.5 — tune per-model.
-                      {"enabled", false},
-                      {"anchors_url", ""},
-                      {"cache_dir", "/tmp/kagami-moderation"},
-                      {"similarity_threshold", 0.7},
-                  }},
                  {"bad_hint",
                   nlohmann::json{
                       // Mirror of safe_hint with inverted semantics.
@@ -664,38 +607,27 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
                       // an instant mute. See HeatConfig::weight_slurs
                       // inline docs for tuning options.
                       {"weight_slurs", 6.0},
-                      // Toxicity and violence weights default to the
-                      // roleplay-friendly tuning (1.0). The per-axis
-                      // floors in ContentModerator.cpp
-                      // (kAxisFloorToxicity=0.85, kAxisFloorViolence=0.85)
-                      // already filter out dramatic in-character
-                      // language, so a 1.0 weight gives a single
-                      // genuinely-hostile message roughly 1.0 heat —
-                      // LOG level, needs repetition to escalate. General
-                      // chat servers that want stricter defaults can
-                      // raise these to 2.0-3.0 via config.
-                      {"weight_toxicity", 1.0},
-                      {"weight_hate", 4.0},
-                      {"weight_sexual", 1.5},
-                      {"weight_sexual_minors", 100.0},
-                      {"weight_violence", 0.3},
-                      {"weight_self_harm", 1.0},
+                      // Weights calibrated for the two-regime heat
+                      // formula (excess confidence above 0.85 floor).
+                      // A 99% confident message contributes 0.14×weight.
+                      {"weight_hate", 10.0},
+                      {"weight_sexual", 7.0},
+                      {"weight_sexual_minors", 43.0},
+                      {"weight_violence", 2.0},
+                      {"weight_self_harm", 7.0},
                       {"weight_semantic_echo", 2.0},
                       // Per-axis visibility floors. An axis only
                       // contributes heat when its score exceeds this.
-                      // RP-friendly defaults: toxicity/violence at 0.85
-                      // (courtroom drama is expected), hate at 0.1
-                      // (never roleplay), sexual_minors at 0.01
-                      // (catastrophic). General chat: drop to 0.3.
+                      // 85% confidence baseline for all classifier
+                      // axes. Weights set enforcement policy from there.
                       {"floor_visual_noise", 0.0},
                       {"floor_link_risk", 0.0},
                       {"floor_slurs", 0.0},
-                      {"floor_toxicity", 0.85},
-                      {"floor_hate", 0.1},
-                      {"floor_sexual", 0.7},
-                      {"floor_sexual_minors", 0.8},
+                      {"floor_hate", 0.85},
+                      {"floor_sexual", 0.85},
+                      {"floor_sexual_minors", 0.85},
                       {"floor_violence", 0.85},
-                      {"floor_self_harm", 0.5},
+                      {"floor_self_harm", 0.85},
                       {"floor_semantic_echo", 0.0},
                   }},
                  {"trust_bank",

@@ -14,9 +14,14 @@ namespace {
 // would make per-axis range queries unreliable.
 nlohmann::json scores_to_json(const ModerationAxisScores& s) {
     return nlohmann::json{
-        {"visual_noise", s.visual_noise},   {"link_risk", s.link_risk}, {"slurs", s.slurs},
-        {"toxicity", s.toxicity},           {"hate", s.hate},           {"sexual", s.sexual},
-        {"sexual_minors", s.sexual_minors}, {"violence", s.violence},   {"self_harm", s.self_harm},
+        {"visual_noise", s.visual_noise},
+        {"link_risk", s.link_risk},
+        {"slurs", s.slurs},
+        {"hate", s.hate},
+        {"sexual", s.sexual},
+        {"sexual_minors", s.sexual_minors},
+        {"violence", s.violence},
+        {"self_harm", s.self_harm},
         {"semantic_echo", s.semantic_echo},
     };
 }

@@ -183,7 +183,6 @@ from pathlib import Path
 # expects the weights in this exact row order. Do not reorder without
 # also updating LocalClassifierLayer::load_weights.
 KAGAMI_AXES = [
-    "toxicity",
     "hate",
     "sexual",
     "sexual_minors",
@@ -210,6 +209,13 @@ HIDDEN_DIM = 64
 # The underlying model is the same; the GGUF is just a different
 # serialization of the same weights.
 SENTENCE_TRANSFORMER_ID = "BAAI/bge-small-en-v1.5"
+
+# Map GGUF repo names to their sentence-transformers equivalents.
+# The GGUF is just a different serialization; the underlying model is the same.
+GGUF_TO_ST = {
+    "ChristianAzinn/bge-small-en-v1.5-gguf": "BAAI/bge-small-en-v1.5",
+    "mykor/paraphrase-multilingual-MiniLM-L12-v2.gguf": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+}
 
 
 def die(msg: str, code: int = 1) -> "NoReturn":  # noqa: F821
@@ -291,7 +297,7 @@ def download_jigsaw(target_dir: Path) -> Path:
 def map_jigsaw_to_kagami_labels(df):
     """Map Jigsaw's 6 binary labels to kagami's 8 axes.
 
-    Returns an (N, 8) numpy float32 array. Axes with no direct Jigsaw
+    Returns an (N, 7) numpy float32 array. Axes with no direct Jigsaw
     source stay at 0.
     """
     import numpy as np
@@ -299,11 +305,6 @@ def map_jigsaw_to_kagami_labels(df):
     labels = np.zeros((len(df), len(KAGAMI_AXES)), dtype=np.float32)
     axis_idx = {name: i for i, name in enumerate(KAGAMI_AXES)}
 
-    # toxicity: union of toxic and severe_toxic
-    labels[:, axis_idx["toxicity"]] = np.maximum(
-        df["toxic"].values.astype(np.float32),
-        df["severe_toxic"].values.astype(np.float32),
-    )
     # hate: identity_hate in Jigsaw's schema
     labels[:, axis_idx["hate"]] = df["identity_hate"].values.astype(np.float32)
     # violence: threat
@@ -353,14 +354,6 @@ def load_rtp_arrays(args, require=None):
 
     def make_label_row(score_dict):
         row = np.zeros(len(KAGAMI_AXES), dtype=np.float32)
-        # toxicity: union of toxicity, severe_toxicity, insult, profanity
-        vals = [
-            score_dict.get("toxicity") or 0.0,
-            score_dict.get("severe_toxicity") or 0.0,
-            score_dict.get("insult") or 0.0,
-            score_dict.get("profanity") or 0.0,
-        ]
-        row[axis_idx["toxicity"]] = 1.0 if max(vals) > RTP_THRESHOLD else 0.0
         # hate: identity_attack
         ia = score_dict.get("identity_attack") or 0.0
         row[axis_idx["hate"]] = 1.0 if ia > RTP_THRESHOLD else 0.0
@@ -405,9 +398,7 @@ def load_toxigen_arrays(args, require=None):
       - group: the targeted demographic (e.g. "black", "asian")
 
     We use `generation` as the text and `roberta_prediction > 0.5`
-    as the binary label for BOTH `hate` and `toxicity` axes — hate
-    is a subset of toxicity, so a positive hate label should also
-    mark the example positive for toxicity.
+    as the binary label for the `hate` axis.
 
     Toxigen's one-sided focus (hate only) complements Jigsaw+RTP
     by increasing positive-class density on the hate axis, which
@@ -434,7 +425,6 @@ def load_toxigen_arrays(args, require=None):
         label = np.zeros(len(KAGAMI_AXES), dtype=np.float32)
         is_toxic = 1.0 if score > RTP_THRESHOLD else 0.0
         label[axis_idx["hate"]] = is_toxic
-        label[axis_idx["toxicity"]] = is_toxic
         texts.append(gen)
         labels_list.append(label)
 
@@ -472,9 +462,27 @@ def train(args) -> int:
     from sklearn.metrics import roc_auc_score
     from sklearn.model_selection import train_test_split
 
+    # source_mask tracks data provenance: 0=real, 1=synthetic
+    # Used for stratified evaluation so we can report AUC on real data
+    # separately from synthetic (synthetic AUC is inflated due to
+    # stylistic separability between LLM-generated and real chat text).
+    source_mask = None
+
     if args.ao_labels:
         print(f"[2/5] Loading AO labels from {args.ao_labels}")
         texts, labels = load_ao_labels(args.ao_labels, None)
+        source_mask = np.zeros(len(texts), dtype=np.int8)
+        if args.synthetic:
+            print(f"      Merging synthetic data from {args.synthetic}")
+            syn_texts, syn_labels = load_ao_labels(args.synthetic, None)
+            if len(syn_texts) > 0:
+                texts = texts + syn_texts
+                labels = np.concatenate([labels, syn_labels], axis=0)
+                source_mask = np.concatenate([
+                    source_mask, np.ones(len(syn_texts), dtype=np.int8)
+                ])
+                print(f"      merged total: {len(texts)} rows "
+                      f"({len(texts) - len(syn_texts)} real + {len(syn_texts)} synthetic)")
     else:
         label = f"{args.dataset}"
         if args.dataset == "combined" and args.add_toxigen:
@@ -516,8 +524,14 @@ def train(args) -> int:
         device = "cuda"
     else:
         device = "cpu"
-    print(f"[3/5] Loading embedding model {SENTENCE_TRANSFORMER_ID!r} on {device}")
-    model = SentenceTransformer(SENTENCE_TRANSFORMER_ID, device=device)
+    # Resolve the sentence-transformers model name from the embedding-model flag
+    if args.st_model:
+        st_model_id = args.st_model
+    else:
+        st_model_id = GGUF_TO_ST.get(args.embedding_model, SENTENCE_TRANSFORMER_ID)
+    print(f"[3/5] Loading embedding model {st_model_id!r} on {device}")
+    print(f"      (weight header will store {args.embedding_model!r})")
+    model = SentenceTransformer(st_model_id, device=device)
     # get_embedding_dimension is the supported name in
     # sentence-transformers 5.x; fall back to the older name for
     # 3.x / 4.x users.
@@ -543,13 +557,20 @@ def train(args) -> int:
         show_progress_bar=True,
     ).astype(np.float32)
 
-    # Train/val split for AUC reporting.
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, labels, test_size=0.1, random_state=42
-    )
+    # Train/val split for AUC reporting. Carry source_mask through
+    # so we can report AUC stratified by real vs synthetic.
+    if source_mask is not None:
+        X_train, X_val, y_train, y_val, src_train, src_val = train_test_split(
+            X, labels, source_mask, test_size=0.1, random_state=42
+        )
+    else:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, labels, test_size=0.1, random_state=42
+        )
+        src_val = None
 
     if args.architecture == "mlp":
-        return train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim)
+        return train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim, src_val)
     return train_linear(args, X_train, X_val, y_train, y_val, embedding_dim)
 
 
@@ -599,7 +620,8 @@ def train_linear(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
     return 0
 
 
-def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
+def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim,
+              src_val=None) -> int:
     """v2 MLP training: per-axis 2-layer MLP with residual + Platt."""
     import numpy as np
     import torch
@@ -607,7 +629,7 @@ def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
     import torch.nn.functional as F
     import torch.optim as optim
     from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import roc_auc_score
+    from sklearn.metrics import roc_auc_score, average_precision_score
 
     if torch.backends.mps.is_available():
         device = torch.device("mps")
@@ -745,6 +767,10 @@ def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
             auc = roc_auc_score(y_va, cal_probs)
         except ValueError:
             auc = float("nan")
+        try:
+            pr_auc = average_precision_score(y_va, cal_probs)
+        except ValueError:
+            pr_auc = float("nan")
         brier = float(np.mean((y_va - cal_probs) ** 2))
 
         sd = {k: v.cpu().numpy() for k, v in model.state_dict().items()}
@@ -756,8 +782,25 @@ def train_mlp(args, X_train, X_val, y_train, y_val, embedding_dim) -> int:
         all_platt_a[i] = pa
         all_platt_b[i] = pb
 
-        print(f"      {axis:16s}: AUC={auc:.4f}  Brier={brier:.4f}  "
-              f"(pos={n_pos}/{len(y_tr)})")
+        print(f"      {axis:16s}: AUC={auc:.4f}  PR-AUC={pr_auc:.4f}  "
+              f"Brier={brier:.4f}  (pos={n_pos}/{len(y_tr)})")
+
+        # Stratified eval: report AUC on real vs synthetic separately
+        if src_val is not None:
+            src_va = src_val[valid_val]
+            real_mask = src_va == 0
+            syn_mask = src_va == 1
+            for label, mask in [("real", real_mask), ("synth", syn_mask)]:
+                if mask.sum() < 2 or len(np.unique(y_va[mask])) < 2:
+                    continue
+                try:
+                    s_auc = roc_auc_score(y_va[mask], cal_probs[mask])
+                    s_pr = average_precision_score(y_va[mask], cal_probs[mask])
+                except ValueError:
+                    continue
+                n_pos_s = int(y_va[mask].sum())
+                print(f"        {label:>5s}: AUC={s_auc:.4f}  "
+                      f"PR-AUC={s_pr:.4f}  (pos={n_pos_s}/{int(mask.sum())})")
 
     output_path = Path(args.output).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -961,6 +1004,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--st-model", default=None,
+        help=(
+            "Sentence-transformers model name used for computing embeddings "
+            "during training. If not set, derived from --embedding-model by "
+            "mapping known GGUF repos to their ST equivalents."
+        ),
+    )
+    parser.add_argument(
         "--dataset-dir", default="./.kagami-train-data",
         help="Where to cache the downloaded Jigsaw dataset",
     )
@@ -1025,6 +1076,22 @@ def main() -> int:
             "Path to the labeler SQLite database with AO-specific labels. "
             "When provided, trains on AO labels only (ignores --dataset). "
             "Typically ~/Documents/notes-AOSDL/labeler/data/labels.sqlite."
+        ),
+    )
+    parser.add_argument(
+        "--synthetic", default=None,
+        help=(
+            "Path to a second SQLite database with synthetic labeled data. "
+            "Merged with --ao-labels data before training. Same schema. "
+            "Typically ~/Documents/notes-AOSDL/labeler/data/synthetic.sqlite."
+        ),
+    )
+    parser.add_argument(
+        "--eval-synthetic", default=None,
+        help=(
+            "Path to a held-out synthetic eval database (never trained on). "
+            "After training, evaluates the model on this data and reports "
+            "AUC/PR-AUC. Typically ~/Documents/notes-AOSDL/labeler/data/synthetic_eval.sqlite."
         ),
     )
     args = parser.parse_args()

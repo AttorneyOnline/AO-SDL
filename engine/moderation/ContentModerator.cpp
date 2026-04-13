@@ -261,31 +261,36 @@ std::shared_ptr<const ContentModerationConfig> ContentModerator::cfg_snapshot() 
 }
 
 double ContentModerator::heat_delta_from(const ModerationAxisScores& s, const HeatConfig& h) {
-    // Per-axis visibility floors are now configurable in HeatConfig
-    // (loaded from JSON). Each axis only contributes heat when its
-    // score exceeds the floor — prevents classifier noise from
-    // accumulating on clean messages.
+    // Two-regime heat contribution per axis:
+    //
+    //   Above floor: (score - floor) × weight
+    //     Linear with excess confidence. A 0.99 with floor 0.85
+    //     contributes 0.14 × weight.
+    //
+    //   Below floor: score² × weight × 0.01
+    //     Quadratic decay. Sustained borderline content accumulates
+    //     slowly but doesn't vanish — 5 messages at 0.25 register
+    //     more than 100 messages at 0.01 (the squaring separates
+    //     "actually borderline" from "classifier noise on clean text").
+    //
+    constexpr double kSubFloorRate = 0.01;
+    auto contrib = [](double score, double floor) -> double {
+        if (score <= 0.0)
+            return 0.0;
+        if (score > floor)
+            return score - floor;
+        return score * score * kSubFloorRate;
+    };
     double d = 0.0;
-    if (s.visual_noise > h.floor_visual_noise)
-        d += s.visual_noise * h.weight_visual_noise;
-    if (s.link_risk > h.floor_link_risk)
-        d += s.link_risk * h.weight_link_risk;
-    if (s.slurs > h.floor_slurs)
-        d += s.slurs * h.weight_slurs;
-    if (s.toxicity > h.floor_toxicity)
-        d += s.toxicity * h.weight_toxicity;
-    if (s.hate > h.floor_hate)
-        d += s.hate * h.weight_hate;
-    if (s.sexual > h.floor_sexual)
-        d += s.sexual * h.weight_sexual;
-    if (s.sexual_minors > h.floor_sexual_minors)
-        d += s.sexual_minors * h.weight_sexual_minors;
-    if (s.violence > h.floor_violence)
-        d += s.violence * h.weight_violence;
-    if (s.self_harm > h.floor_self_harm)
-        d += s.self_harm * h.weight_self_harm;
-    if (s.semantic_echo > h.floor_semantic_echo)
-        d += s.semantic_echo * h.weight_semantic_echo;
+    d += contrib(s.visual_noise, h.floor_visual_noise) * h.weight_visual_noise;
+    d += contrib(s.link_risk, h.floor_link_risk) * h.weight_link_risk;
+    d += contrib(s.slurs, h.floor_slurs) * h.weight_slurs;
+    d += contrib(s.hate, h.floor_hate) * h.weight_hate;
+    d += contrib(s.sexual, h.floor_sexual) * h.weight_sexual;
+    d += contrib(s.sexual_minors, h.floor_sexual_minors) * h.weight_sexual_minors;
+    d += contrib(s.violence, h.floor_violence) * h.weight_violence;
+    d += contrib(s.self_harm, h.floor_self_harm) * h.weight_self_harm;
+    d += contrib(s.semantic_echo, h.floor_semantic_echo) * h.weight_semantic_echo;
     return d;
 }
 
@@ -522,8 +527,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
 
         // --- Compute shared embedding ONCE -------------------------
         EmbeddingResult shared_embedding;
-        const bool need_embedding =
-            embedding_backend_ && (local_classifier_.is_active() || bad_hint_.is_active());
+        const bool need_embedding = embedding_backend_ && (local_classifier_.is_active() || bad_hint_.is_active());
         if (need_embedding) {
             auto t_emb = std::chrono::steady_clock::now();
             shared_embedding = embedding_backend_->embed(message);
@@ -546,7 +550,6 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
                 // Merge ALL classifier scores into the verdict. No
                 // confidence gating — per-axis floors in heat_delta_from()
                 // handle the "is this score meaningful?" decision.
-                v.scores.toxicity = std::max(v.scores.toxicity, lc_result.scores.toxicity);
                 v.scores.hate = std::max(v.scores.hate, lc_result.scores.hate);
                 v.scores.sexual = std::max(v.scores.sexual, lc_result.scores.sexual);
                 v.scores.sexual_minors = std::max(v.scores.sexual_minors, lc_result.scores.sexual_minors);
@@ -554,8 +557,6 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
                 v.scores.self_harm = std::max(v.scores.self_harm, lc_result.scores.self_harm);
 
                 // Tag axes that crossed their visibility floor.
-                if (lc_result.scores.toxicity > cfg->heat.floor_toxicity)
-                    v.triggered_axes.emplace_back("toxicity");
                 if (lc_result.scores.hate > cfg->heat.floor_hate)
                     v.triggered_axes.emplace_back("hate");
                 if (lc_result.scores.sexual > cfg->heat.floor_sexual)
@@ -582,9 +583,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
             if (bh_result.is_bad) {
                 const std::string& axis = cfg->bad_hint.inject_axis;
                 const double score = cfg->bad_hint.inject_score;
-                if (axis == "toxicity")
-                    v.scores.toxicity = std::max(v.scores.toxicity, score);
-                else if (axis == "hate")
+                if (axis == "hate")
                     v.scores.hate = std::max(v.scores.hate, score);
                 else if (axis == "sexual")
                     v.scores.sexual = std::max(v.scores.sexual, score);
@@ -700,7 +699,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     if (noheat) {
         // Simulate: compute hypothetical heat and action for logging
         const double hypothetical_heat = heat_.peek(ipid) + v.heat_delta;
-        v.heat_after = heat_.peek(ipid); // actual heat unchanged
+        v.heat_after = heat_.peek(ipid);            // actual heat unchanged
         v.action = heat_.decide(hypothetical_heat); // what would have happened
         v.reason = format_reason(v);
         if (!v.reason.empty())
@@ -726,8 +725,6 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
         axis_fires.labels({"link_risk"}).inc();
     if (v.scores.slurs > cfg->heat.floor_slurs)
         axis_fires.labels({"slurs"}).inc();
-    if (v.scores.toxicity > cfg->heat.floor_toxicity)
-        axis_fires.labels({"toxicity"}).inc();
     if (v.scores.hate > cfg->heat.floor_hate)
         axis_fires.labels({"hate"}).inc();
     if (v.scores.sexual > cfg->heat.floor_sexual)
@@ -746,8 +743,7 @@ ModerationVerdict ContentModerator::check(const std::string& ipid, std::string_v
     // above still recorded what WOULD have happened.
     if (noheat) {
         emit_trace_if_enabled();
-        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                      std::chrono::steady_clock::now() - check_start)
+        auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - check_start)
                       .count();
         check_ns_counter.get().inc(static_cast<uint64_t>(dt));
         check_calls_counter.get().inc();

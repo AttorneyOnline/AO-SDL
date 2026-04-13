@@ -79,23 +79,6 @@ class MockServerSettings : public JsonConfiguration<MockServerSettings> {
                       {"cache_dir", "/tmp/kagami-moderation"},
                       {"match_score", 1.0},
                   }},
-                 {"remote",
-                  nlohmann::json{
-                      {"enabled", false},
-                      {"provider", "openai"},
-                      {"api_key", ""},
-                      {"endpoint", "https://api.openai.com/v1/moderations"},
-                      {"model", "text-moderation-latest"},
-                      {"timeout_ms", 3000},
-                      {"fail_open", true},
-                  }},
-                 {"safe_hint",
-                  nlohmann::json{
-                      {"enabled", false},
-                      {"anchors_url", ""},
-                      {"cache_dir", "/tmp/kagami-moderation"},
-                      {"similarity_threshold", 0.7},
-                  }},
                  {"embeddings",
                   nlohmann::json{
                       {"enabled", false},
@@ -119,12 +102,11 @@ class MockServerSettings : public JsonConfiguration<MockServerSettings> {
                       {"weight_visual_noise", 0.5},
                       {"weight_link_risk", 5.0},
                       {"weight_slurs", 6.0},
-                      {"weight_toxicity", 1.0},
-                      {"weight_hate", 4.0},
-                      {"weight_sexual", 1.5},
-                      {"weight_sexual_minors", 100.0},
-                      {"weight_violence", 1.0},
-                      {"weight_self_harm", 1.0},
+                      {"weight_hate", 10.0},
+                      {"weight_sexual", 7.0},
+                      {"weight_sexual_minors", 43.0},
+                      {"weight_violence", 2.0},
+                      {"weight_self_harm", 7.0},
                       {"weight_semantic_echo", 2.0},
                   }},
              }},
@@ -164,33 +146,26 @@ TEST_F(ContentModerationDefaultsTest, EmptyJsonAllLayersDisabled) {
     EXPECT_FALSE(cfg().value<bool>("content_moderation/unicode/enabled"));
     EXPECT_FALSE(cfg().value<bool>("content_moderation/urls/enabled"));
     EXPECT_FALSE(cfg().value<bool>("content_moderation/slurs/enabled"));
-    EXPECT_FALSE(cfg().value<bool>("content_moderation/remote/enabled"));
-    EXPECT_FALSE(cfg().value<bool>("content_moderation/safe_hint/enabled"));
     EXPECT_FALSE(cfg().value<bool>("content_moderation/embeddings/enabled"));
 }
 
 TEST_F(ContentModerationDefaultsTest, EmptyJsonSecretsEmpty) {
     ASSERT_TRUE(load("{}"));
-    EXPECT_TRUE(cfg().value<std::string>("content_moderation/remote/api_key").empty());
     EXPECT_TRUE(cfg().value<std::string>("content_moderation/slurs/wordlist_url").empty());
     EXPECT_TRUE(cfg().value<std::string>("content_moderation/slurs/exceptions_url").empty());
-    EXPECT_TRUE(cfg().value<std::string>("content_moderation/safe_hint/anchors_url").empty());
     EXPECT_TRUE(cfg().value<std::string>("content_moderation/embeddings/hf_model_id").empty());
 }
 
 TEST_F(ContentModerationDefaultsTest, EmptyJsonRoleplayTuning) {
     // The inline comments in ContentModerator.cpp document
-    // weight_toxicity=1.0 and weight_violence=1.0 as the roleplay-
-    // friendly tuning. If someone bumps these in the defaults without
-    // updating the companion doc (or the per-axis floor), this test
-    // catches the drift.
+    // Weights calibrated for two-regime heat formula (excess confidence
+    // above 0.85 floor). These tests catch drift if someone changes the
+    // defaults without updating the companion escalation table.
     ASSERT_TRUE(load("{}"));
-    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_toxicity"), 1.0);
-    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_violence"), 1.0);
-    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_hate"), 4.0);
-    // Catastrophic on contact — any positive score on this axis must
-    // cross the perma-ban threshold in one shot.
-    EXPECT_GE(cfg().value<double>("content_moderation/heat/weight_sexual_minors"), 25.0);
+    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_violence"), 2.0);
+    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_hate"), 10.0);
+    // Progressive: 1 msg@99% → mute, 2 → ban, 5 → permaban.
+    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_sexual_minors"), 43.0);
     // New in the Wiktionary wordlist commit: weight_slurs defaults to
     // mute_threshold so a single hit mutes.
     EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/heat/weight_slurs"), 6.0);
@@ -260,39 +235,5 @@ TEST_F(ContentModerationDefaultsTest, SlurBlockOnlyLeavesOthersAtDefault) {
     // Everything else stays off.
     EXPECT_FALSE(cfg().value<bool>("content_moderation/unicode/enabled"));
     EXPECT_FALSE(cfg().value<bool>("content_moderation/urls/enabled"));
-    EXPECT_FALSE(cfg().value<bool>("content_moderation/remote/enabled"));
-    EXPECT_FALSE(cfg().value<bool>("content_moderation/safe_hint/enabled"));
     EXPECT_FALSE(cfg().value<bool>("content_moderation/embeddings/enabled"));
-}
-
-// ---------------------------------------------------------------------------
-// Partial JSON — safe_hint enabled without embeddings.
-// ---------------------------------------------------------------------------
-
-TEST_F(ContentModerationDefaultsTest, SafeHintEnabledWithoutEmbeddingsKeepsDefaults) {
-    // Documents the cross-layer dependency: SafeHintLayer's runtime
-    // code path requires a ready embedding backend (enforced in
-    // main.cpp's background fetch block, not in the config parser).
-    // The config itself will accept safe_hint.enabled=true — the
-    // inertness is a runtime property, not a config-time one.
-    const std::string partial = R"({
-        "content_moderation": {
-            "enabled": true,
-            "safe_hint": {
-                "enabled": true,
-                "anchors_url": "https://example.invalid/anchors.txt"
-            }
-        }
-    })";
-    ASSERT_TRUE(load(partial));
-
-    EXPECT_TRUE(cfg().value<bool>("content_moderation/safe_hint/enabled"));
-    EXPECT_EQ(cfg().value<std::string>("content_moderation/safe_hint/anchors_url"),
-              "https://example.invalid/anchors.txt");
-    // Threshold falls back to default 0.7.
-    EXPECT_DOUBLE_EQ(cfg().value<double>("content_moderation/safe_hint/similarity_threshold"), 0.7);
-
-    // Embeddings layer stays inert — operator didn't set an HF model id.
-    EXPECT_FALSE(cfg().value<bool>("content_moderation/embeddings/enabled"));
-    EXPECT_TRUE(cfg().value<std::string>("content_moderation/embeddings/hf_model_id").empty());
 }

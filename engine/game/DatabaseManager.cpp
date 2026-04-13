@@ -182,7 +182,6 @@ bool DatabaseManager::create_tables() {
               "  REASON          TEXT,"
               "  VISUAL_NOISE    REAL,"
               "  LINK_RISK       REAL,"
-              "  TOXICITY        REAL,"
               "  HATE            REAL,"
               "  SEXUAL          REAL,"
               "  SEXUAL_MINORS   REAL,"
@@ -648,9 +647,9 @@ std::future<int64_t> DatabaseManager::record_moderation_event(moderation::Modera
 
         auto stmt = prepare("INSERT INTO moderation_events ("
                             "  TIMESTAMP_MS, IPID, CHANNEL, MESSAGE_SAMPLE, ACTION, HEAT_AFTER, REASON,"
-                            "  VISUAL_NOISE, LINK_RISK, TOXICITY, HATE, SEXUAL, SEXUAL_MINORS,"
+                            "  VISUAL_NOISE, LINK_RISK, HATE, SEXUAL, SEXUAL_MINORS,"
                             "  VIOLENCE, SELF_HARM, SEMANTIC_ECHO"
-                            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         if (!stmt)
             return -1;
 
@@ -664,13 +663,12 @@ std::future<int64_t> DatabaseManager::record_moderation_event(moderation::Modera
         sqlite3_bind_text(stmt.get(), 7, event.reason.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_double(stmt.get(), 8, event.scores.visual_noise);
         sqlite3_bind_double(stmt.get(), 9, event.scores.link_risk);
-        sqlite3_bind_double(stmt.get(), 10, event.scores.toxicity);
-        sqlite3_bind_double(stmt.get(), 11, event.scores.hate);
-        sqlite3_bind_double(stmt.get(), 12, event.scores.sexual);
-        sqlite3_bind_double(stmt.get(), 13, event.scores.sexual_minors);
-        sqlite3_bind_double(stmt.get(), 14, event.scores.violence);
-        sqlite3_bind_double(stmt.get(), 15, event.scores.self_harm);
-        sqlite3_bind_double(stmt.get(), 16, event.scores.semantic_echo);
+        sqlite3_bind_double(stmt.get(), 10, event.scores.hate);
+        sqlite3_bind_double(stmt.get(), 11, event.scores.sexual);
+        sqlite3_bind_double(stmt.get(), 12, event.scores.sexual_minors);
+        sqlite3_bind_double(stmt.get(), 13, event.scores.violence);
+        sqlite3_bind_double(stmt.get(), 14, event.scores.self_harm);
+        sqlite3_bind_double(stmt.get(), 15, event.scores.semantic_echo);
 
         if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
             Log::log_print(WARNING, "DatabaseManager: record_moderation_event failed: %s", sqlite3_errmsg(db_));
@@ -690,7 +688,7 @@ std::future<std::vector<moderation::ModerationEvent>> DatabaseManager::query_mod
         // actually set, so the common "recent events" query hits the
         // primary timestamp index cleanly.
         std::string sql = "SELECT ID, TIMESTAMP_MS, IPID, CHANNEL, MESSAGE_SAMPLE, ACTION, HEAT_AFTER, REASON,"
-                          " VISUAL_NOISE, LINK_RISK, TOXICITY, HATE, SEXUAL, SEXUAL_MINORS,"
+                          " VISUAL_NOISE, LINK_RISK, HATE, SEXUAL, SEXUAL_MINORS,"
                           " VIOLENCE, SELF_HARM, SEMANTIC_ECHO FROM moderation_events";
         std::vector<std::string> clauses;
         if (query.ipid)
@@ -766,13 +764,12 @@ std::future<std::vector<moderation::ModerationEvent>> DatabaseManager::query_mod
             ev.reason = col_text(7);
             ev.scores.visual_noise = sqlite3_column_double(stmt.get(), 8);
             ev.scores.link_risk = sqlite3_column_double(stmt.get(), 9);
-            ev.scores.toxicity = sqlite3_column_double(stmt.get(), 10);
-            ev.scores.hate = sqlite3_column_double(stmt.get(), 11);
-            ev.scores.sexual = sqlite3_column_double(stmt.get(), 12);
-            ev.scores.sexual_minors = sqlite3_column_double(stmt.get(), 13);
-            ev.scores.violence = sqlite3_column_double(stmt.get(), 14);
-            ev.scores.self_harm = sqlite3_column_double(stmt.get(), 15);
-            ev.scores.semantic_echo = sqlite3_column_double(stmt.get(), 16);
+            ev.scores.hate = sqlite3_column_double(stmt.get(), 10);
+            ev.scores.sexual = sqlite3_column_double(stmt.get(), 11);
+            ev.scores.sexual_minors = sqlite3_column_double(stmt.get(), 12);
+            ev.scores.violence = sqlite3_column_double(stmt.get(), 13);
+            ev.scores.self_harm = sqlite3_column_double(stmt.get(), 14);
+            ev.scores.semantic_echo = sqlite3_column_double(stmt.get(), 15);
             result.push_back(std::move(ev));
         }
         return result;
