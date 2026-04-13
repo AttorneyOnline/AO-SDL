@@ -3,45 +3,76 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 /**
- * Wrapper that lets any panel be popped out into a floating tool window.
+ * Wrapper that lets any panel be popped out into a draggable, resizable
+ * floating tool window with a single click.
  *
- * Usage inside a SplitView:
+ * While docked the panel renders inline inside its parent layout.  Clicking
+ * the ⤢ button pops it out: the inline slot collapses to a slim 22 px re-dock
+ * strip (so sibling panels reclaim the space) and the content moves into a
+ * frameless tool window the user can drag and resize freely.  Clicking ↩ in
+ * the strip or ✕ in the floating window re-docks the panel.
  *
- *   DockPanel {
- *       title:             "Music & Areas"
- *       dockedHeight:      200          // how tall when docked (default 200)
- *       dockedMinimumHeight: 80         // minimum resize height (default 60)
- *       undockedSize:      Qt.size(280, 400)
+ * DockPanel sets the correct SplitView.*, Layout.*, and implicitHeight
+ * attached properties automatically, so it works in SplitView,
+ * ColumnLayout, RowLayout, or a plain Item without any extra wiring.
+ * Do NOT set SplitView.* or Layout.* height properties on this item
+ * yourself — they are managed internally.
  *
- *       panelComponent: Component {
- *           MusicAreaPanel { controller: root.controller }
+ * ── Inside a SplitView ──────────────────────────────────────────────────
+ *
+ *   SplitView {
+ *       orientation: Qt.Vertical
+ *
+ *       DockPanel {
+ *           title:               "Music & Areas"
+ *           dockedHeight:        200     // preferred height while docked
+ *           dockedMinimumHeight: 80      // user can't drag below this
+ *           undockedSize:        Qt.size(280, 400)
+ *
+ *           panelComponent: Component {
+ *               MusicAreaPanel { controller: root.controller }
+ *           }
  *       }
- *   }
  *
- * Works in SplitView, ColumnLayout, RowLayout, or a plain Item — the
- * component sets the right attached properties for each automatically.
- * Callers should not set SplitView.* or Layout.* height properties on
- * this item.  When undocked, it collapses to a slim re-dock strip so
- * sibling panels can reclaim the space.
- *
- * Usage inside a ColumnLayout:
- *
- *   ColumnLayout {
  *       DockPanel {
  *           title:        "Chat"
  *           dockedHeight: 180
- *           panelComponent: Component { ChatPanel { } }
+ *           panelComponent: Component { OOCChatPanel { } }
  *       }
  *   }
  *
- * Usage as a floating overlay (outside a layout):
+ * ── Inside a ColumnLayout ────────────────────────────────────────────────
+ *
+ *   ColumnLayout {
+ *       DockPanel {
+ *           title:        "Player List"
+ *           dockedHeight: 160
+ *           panelComponent: Component { PlayerListPanel { } }
+ *       }
+ *   }
+ *
+ * ── Controlling the docked state from code ───────────────────────────────
  *
  *   DockPanel {
- *       title:        "Emotes"
- *       visible:      false
- *       overlay:      true              // disables SplitView collapse behaviour
- *       undockedSize: Qt.size(400, 300)
- *       width: 400; height: 300
+ *       id: evidencePanel
+ *       title: "Evidence"
+ *       …
+ *   }
+ *
+ *   Button { text: "Pop out"; onClicked: evidencePanel.docked = false }
+ *   Button { text: "Re-dock"; onClicked: evidencePanel.docked = true  }
+ *
+ * ── Overlay mode (panel lives outside a layout) ──────────────────────────
+ *
+ * Set `overlay: true` when the DockPanel is used as a centred overlay
+ * rather than part of a SplitView or Layout.  This disables the
+ * collapse-to-strip behaviour so the panel always shows at its full size.
+ *
+ *   DockPanel {
+ *       title:        "Emote Selector"
+ *       overlay:      true
+ *       undockedSize: Qt.size(400, 320)
+ *       width: 400; height: 320
  *       anchors.centerIn: parent
  *
  *       panelComponent: Component { EmoteSelectorPanel { } }

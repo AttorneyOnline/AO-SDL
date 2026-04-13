@@ -6,46 +6,94 @@ import QtQuick.Layouts
  * Collapsible container that toggles between a compact button and an
  * expanded content area, with a smooth animation.
  *
- * Set expandedHeight, expandedWidth, or both to control which axes grow.
- * A value of -1 (default) means that axis stays at its natural size and
- * defers to the parent layout.
+ * Provide a `buttonComponent` — any clickable QML item — and place content
+ * inside the ExpandingBox as normal children.  Clicking the button toggles
+ * `expanded` automatically; no signal wiring is required.
  *
- * Vertical (expands downward):
+ * Set `expandedHeight`, `expandedWidth`, or both to control which axes grow.
+ * Leave an axis at -1 (default) to keep it at its natural size and defer
+ * sizing on that axis to the parent layout.
+ *
+ * ExpandingBox sets the correct SplitView.*, Layout.*, and implicit size
+ * properties automatically for every supported parent type.
+ *
+ * ── Vertical — expands downward ─────────────────────────────────────────
  *
  *   ExpandingBox {
  *       expandedHeight: 180
  *       buttonComponent: Component { Button { text: "Filters" } }
- *       CheckBox { text: "Option A" }
+ *
+ *       ColumnLayout {
+ *           anchors.fill: parent
+ *           anchors.margins: 4
+ *           CheckBox { text: "Show taken"; checked: true }
+ *           CheckBox { text: "Favourites only" }
+ *       }
  *   }
  *
- * Horizontal (expands rightward):
+ * ── Horizontal — expands rightward ──────────────────────────────────────
  *
  *   ExpandingBox {
  *       expandedWidth: 260
  *       buttonComponent: Component { ToolButton { text: "\u25B8" } }
- *       ListView { anchors.fill: parent; model: myModel }
+ *
+ *       ListView {
+ *           anchors.fill: parent
+ *           model: playerModel
+ *           delegate: ItemDelegate { width: ListView.view.width; text: modelData }
+ *       }
  *   }
  *
- * Bi-directional (expands to bottom-right):
+ * ── Bi-directional — expands to bottom-right ────────────────────────────
  *
  *   ExpandingBox {
  *       expandedWidth:  300
  *       expandedHeight: 200
- *       buttonComponent: Component { Button { text: "Panel" } }
- *       Label { text: "Content here" }
+ *       buttonComponent: Component { Button { text: "Evidence" } }
+ *
+ *       GridLayout { anchors.fill: parent; anchors.margins: 6; columns: 3
+ *           Repeater { model: 9; delegate: Rectangle { width: 72; height: 72 } }
+ *       }
  *   }
  *
- * Inverted (expands leftward from a right-aligned button):
+ * ── Inverted — expands leftward / upward ────────────────────────────────
+ *
+ * Use `invertHorizontal` or `invertVertical` when the button sits on the
+ * far edge and the content should open toward the centre of the screen.
+ *
+ *   // Content grows leftward from a right-edge button:
+ *   ExpandingBox {
+ *       expandedWidth:    260
+ *       invertHorizontal: true
+ *       buttonComponent: Component { ToolButton { text: "\u25C0" } }
+ *       Label { text: "Right-edge panel" }
+ *   }
+ *
+ *   // Content grows upward from a bottom button:
+ *   ExpandingBox {
+ *       expandedHeight: 140
+ *       invertVertical:  true
+ *       buttonComponent: Component { Button { text: "\u25B2 History" } }
+ *       ListView { anchors.fill: parent; model: historyModel }
+ *   }
+ *
+ * ── Controlling expanded state from code ────────────────────────────────
  *
  *   ExpandingBox {
- *       expandedWidth:     260
- *       invertHorizontal:  true
- *       buttonComponent: Component { ToolButton { text: "\u25C0" } }
- *       Label { text: "Content here" }
+ *       id: filterBox
+ *       expandedHeight: 160
+ *       expanded: true          // start open
+ *       …
  *   }
  *
- * Works in SplitView, ColumnLayout, RowLayout, or a plain Item — the
- * component sets the right attached properties for each automatically.
+ *   Button { text: "Toggle filters"; onClicked: filterBox.expanded = !filterBox.expanded }
+ *
+ * ── Disabling animation ──────────────────────────────────────────────────
+ *
+ *   ExpandingBox {
+ *       animationDuration: 0    // instant open/close, no transition
+ *       …
+ *   }
  */
 Item {
     id: root

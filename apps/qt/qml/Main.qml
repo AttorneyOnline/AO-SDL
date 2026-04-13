@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 import AO.Components
 import AO.Panels
@@ -278,8 +279,8 @@ ApplicationWindow {
     Window {
         id: accordionDemoWindow
         visible: false
-        width: 400
-        height: 500
+        width: 560
+        height: 600
         title: "AccordionDrawer Demo"
         color: "#1e1e1e"
 
@@ -288,91 +289,303 @@ ApplicationWindow {
             anchors.margins: 8
             spacing: 8
 
-            Label {
-                text: "AccordionDrawer"
-                color: "white"
-                font.pixelSize: 14
-                font.bold: true
+            // ── Title + direction selector ───────────────────────────
+            RowLayout {
+                Layout.fillWidth: true
+
+                Label {
+                    text: "AccordionDrawer"
+                    color: "white"
+                    font.pixelSize: 14
+                    font.bold: true
+                    Layout.fillWidth: true
+                }
+
+                Label {
+                    text: "Direction:"
+                    color: "#999999"
+                    font.pixelSize: 11
+                }
+
+                ComboBox {
+                    id: directionPicker
+                    // Display names match enum order: 0=TopToBottom … 3=RightToLeft
+                    model: ["Top to Bottom", "Bottom to Top", "Left to Right", "Right to Left"]
+                    currentIndex: 0
+                    implicitWidth: 140
+                }
             }
 
             Label {
-                text: "Only one section can be open at a time."
+                text: "Only one section can be open at a time.  Change the direction above to see all four orientations."
                 color: "#999999"
                 font.pixelSize: 11
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
             }
 
-            AccordionDrawer {
+            // ── Live preview — recreated whenever direction changes ───
+            // A Loader lets us swap the whole AccordionDrawer (and its
+            // children) so the new direction takes effect cleanly.
+            Loader {
+                id: accordionLoader
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                expandedIndex: 0
 
-                AccordionSection {
-                    title: "General Settings"
+                // Rebuild when direction changes so sections re-parent
+                // into the correct Column / Row from scratch.
+                // currentIndex maps directly to the AccordionDrawer.Direction enum values.
+                property int chosenDirection: directionPicker.currentIndex
+                onChosenDirectionChanged: { sourceComponent = null; sourceComponent = accordionComponent }
+                Component.onCompleted:    sourceComponent = accordionComponent
 
-                    ColumnLayout {
-                        anchors { left: parent.left; right: parent.right }
-                        anchors.margins: 8
-                        spacing: 4
+                Component {
+                    id: accordionComponent
 
-                        CheckBox { text: "Show timestamps"; checked: true }
-                        CheckBox { text: "Enable notifications" }
-                        CheckBox { text: "Auto-reconnect"; checked: true }
-                    }
-                }
+                    AccordionDrawer {
+                        direction: accordionLoader.chosenDirection
+                        expandedIndex: 0
 
-                AccordionSection {
-                    title: "Audio"
+                        AccordionSection {
+                            title: "General Settings"
 
-                    GridLayout {
-                        anchors { left: parent.left; right: parent.right }
-                        anchors.margins: 8
-                        columns: 2
-                        columnSpacing: 8
-                        rowSpacing: 4
+                            ColumnLayout {
+                                anchors { left: parent.left; right: parent.right }
+                                anchors.margins: 8
+                                spacing: 4
 
-                        Label { text: "Music"; color: "white" }
-                        Slider { Layout.fillWidth: true; value: 0.7 }
-                        Label { text: "SFX"; color: "white" }
-                        Slider { Layout.fillWidth: true; value: 0.9 }
-                        Label { text: "Blips"; color: "white" }
-                        Slider { Layout.fillWidth: true; value: 0.5 }
-                    }
-                }
-
-                AccordionSection {
-                    title: "Appearance"
-
-                    ColumnLayout {
-                        anchors { left: parent.left; right: parent.right }
-                        anchors.margins: 8
-                        spacing: 4
-
-                        Label { text: "Theme"; color: "white"; font.bold: true }
-                        ComboBox {
-                            Layout.fillWidth: true
-                            model: ["Dark", "Light", "Classic"]
+                                CheckBox { text: "Show timestamps"; checked: true }
+                                CheckBox { text: "Enable notifications" }
+                                CheckBox { text: "Auto-reconnect"; checked: true }
+                            }
                         }
 
-                        Label { text: "Font size"; color: "white"; font.bold: true }
-                        SpinBox { from: 8; to: 24; value: 12 }
+                        AccordionSection {
+                            title: "Audio"
+
+                            GridLayout {
+                                anchors { left: parent.left; right: parent.right }
+                                anchors.margins: 8
+                                columns: 2
+                                columnSpacing: 8
+                                rowSpacing: 4
+
+                                Label { text: "Music"; color: "white" }
+                                Slider { Layout.fillWidth: true; value: 0.7 }
+                                Label { text: "SFX"; color: "white" }
+                                Slider { Layout.fillWidth: true; value: 0.9 }
+                                Label { text: "Blips"; color: "white" }
+                                Slider { Layout.fillWidth: true; value: 0.5 }
+                            }
+                        }
+
+                        AccordionSection {
+                            title: "Appearance"
+
+                            ColumnLayout {
+                                anchors { left: parent.left; right: parent.right }
+                                anchors.margins: 8
+                                spacing: 4
+
+                                Label { text: "Theme"; color: "white"; font.bold: true }
+                                ComboBox {
+                                    Layout.fillWidth: true
+                                    model: ["Dark", "Light", "Classic"]
+                                }
+
+                                Label { text: "Font size"; color: "white"; font.bold: true }
+                                SpinBox { from: 8; to: 24; value: 12 }
+                            }
+                        }
+
+                        AccordionSection {
+                            title: "About"
+
+                            Label {
+                                anchors { left: parent.left; right: parent.right; margins: 8 }
+                                wrapMode: Text.Wrap
+                                color: "#cccccc"
+                                text: "Attorney Online — open-source courtroom simulator.\n\n"
+                                    + "Select a direction above to see the accordion open "
+                                    + "in all four orientations."
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
 
-                AccordionSection {
-                    title: "About"
+    // ── QML Playground — toggled with F8 ──────────────────────────
+    Window {
+        id: playgroundWindow
+        visible: false
+        width: 900
+        height: 650
+        title: "QML Playground"
+        color: "#1e1e1e"
 
-                    Label {
-                        anchors {
-                            left: parent.left; right: parent.right
-                            margins: 8
-                        }
-                        wrapMode: Text.Wrap
+        // ── State ────────────────────────────────────────────────────
+        property url   loadedUrl:   ""
+        property string statusText: "No file loaded.  Click Browse or paste a path and press Load."
+        property bool  hasError:    false
+
+        function loadUrl(url) {
+            if (!url || url.toString() === "") return
+            loadedUrl   = url
+            hasError    = false
+            statusText  = "Loading…"
+            previewLoader.source = ""        // force reload even if same url
+            previewLoader.source = url
+        }
+
+        // Convert a plain filesystem path typed by the user into a file:// URL.
+        function pathToUrl(path) {
+            let s = path.trim()
+            if (s === "") return ""
+            if (s.startsWith("file://")) return s
+            // Windows absolute path  C:\… or C:/…
+            if (/^[A-Za-z]:/.test(s)) return "file:///" + s.replace(/\\/g, "/")
+            return "file://" + s
+        }
+
+        // ── File picker dialog ───────────────────────────────────────
+        FileDialog {
+            id: filePicker
+            title: "Open QML File"
+            nameFilters: ["QML files (*.qml)", "All files (*)"]
+            onAccepted: {
+                pathField.text = selectedFile.toString()
+                playgroundWindow.loadUrl(selectedFile)
+            }
+        }
+
+        // ── Layout ───────────────────────────────────────────────────
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 0
+
+            // ── Toolbar ──────────────────────────────────────────────
+            Rectangle {
+                color: "#252525"
+                Layout.fillWidth: true
+                implicitHeight: toolRow.implicitHeight + 12
+
+                RowLayout {
+                    id: toolRow
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    spacing: 6
+
+                    Button {
+                        text: "Browse…"
+                        onClicked: filePicker.open()
+                    }
+
+                    TextField {
+                        id: pathField
+                        placeholderText: "Paste a .qml path here, then press Load"
                         color: "#cccccc"
-                        text: "Attorney Online — open-source courtroom simulator.\n\n"
-                            + "This is a demo of the AccordionDrawer component. "
-                            + "Click any section header above to expand it and "
-                            + "collapse the currently open one."
+                        Layout.fillWidth: true
+                        background: Rectangle { color: "#1a1a1a"; radius: 3; border.color: pathField.activeFocus ? "#555" : "#333" }
+                        onAccepted: playgroundWindow.loadUrl(playgroundWindow.pathToUrl(text))
                     }
+
+                    Button {
+                        text: "Load"
+                        onClicked: playgroundWindow.loadUrl(playgroundWindow.pathToUrl(pathField.text))
+                    }
+
+                    Button {
+                        text: "Reload"
+                        enabled: playgroundWindow.loadedUrl.toString() !== ""
+                        onClicked: playgroundWindow.loadUrl(playgroundWindow.loadedUrl)
+                    }
+                }
+            }
+
+            // ── Preview area ─────────────────────────────────────────
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+
+                // Checker-board background so transparent items are visible.
+                Rectangle {
+                    width:  Math.max(previewLoader.implicitWidth  + 40, playgroundWindow.width)
+                    height: Math.max(previewLoader.implicitHeight + 40, playgroundWindow.height - toolRow.height - statusBar.height - 40)
+                    color: "transparent"
+
+                    // Checker pattern via two stacked repeaters.
+                    Grid {
+                        anchors.fill: parent
+                        property int sz: 16
+                        columns: Math.ceil(parent.width  / sz)
+                        rows:    Math.ceil(parent.height / sz)
+                        Repeater {
+                            model: parent.columns * parent.rows
+                            Rectangle {
+                                width: parent.sz; height: parent.sz
+                                color: ((Math.floor(index / parent.columns) + index % parent.columns) % 2)
+                                    ? "#2a2a2a" : "#222222"
+                            }
+                        }
+                    }
+
+                    // The user's loaded component, centered.
+                    Loader {
+                        id: previewLoader
+                        anchors.centerIn: parent
+
+                        onStatusChanged: {
+                            switch (status) {
+                            case Loader.Ready:
+                                playgroundWindow.hasError   = false
+                                playgroundWindow.statusText = "Loaded: " + playgroundWindow.loadedUrl.toString().replace(/.*\//, "")
+                                break
+                            case Loader.Error:
+                                playgroundWindow.hasError   = true
+                                playgroundWindow.statusText = errorString
+                                break
+                            case Loader.Loading:
+                                playgroundWindow.statusText = "Loading…"
+                                break
+                            default:
+                                break
+                            }
+                        }
+                    }
+
+                    // Placeholder shown before any file is loaded.
+                    Label {
+                        visible: previewLoader.status === Loader.Null
+                        anchors.centerIn: parent
+                        text: "Open a .qml file to preview it here.\n\nAll AO.Components and AO.Panels imports are available."
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "#555555"
+                        font.pixelSize: 13
+                    }
+                }
+            }
+
+            // ── Status bar ───────────────────────────────────────────
+            Rectangle {
+                id: statusBar
+                color: "#1a1a1a"
+                Layout.fillWidth: true
+                implicitHeight: statusLabel.implicitHeight + 8
+
+                Label {
+                    id: statusLabel
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    text: playgroundWindow.statusText
+                    color: playgroundWindow.hasError ? "#e06c75" : "#888888"
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    wrapMode: Text.NoWrap
                 }
             }
         }
@@ -401,6 +614,11 @@ ApplicationWindow {
     DebugOverlay {
         id: debugOverlay
         visible: false
+    }
+
+    Shortcut {
+        sequence: "F8"
+        onActivated: playgroundWindow.visible = !playgroundWindow.visible
     }
 
     Shortcut {
