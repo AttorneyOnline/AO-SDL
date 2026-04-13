@@ -215,6 +215,8 @@ SENTENCE_TRANSFORMER_ID = "BAAI/bge-small-en-v1.5"
 GGUF_TO_ST = {
     "ChristianAzinn/bge-small-en-v1.5-gguf": "BAAI/bge-small-en-v1.5",
     "mykor/paraphrase-multilingual-MiniLM-L12-v2.gguf": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "mradermacher/granite-embedding-small-english-r2-GGUF": "ibm-granite/granite-embedding-small-english-r2",
+    "mradermacher/granite-embedding-english-r2-GGUF": "ibm-granite/granite-embedding-english-r2",
 }
 
 

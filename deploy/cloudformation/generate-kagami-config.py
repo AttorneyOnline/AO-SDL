@@ -240,8 +240,8 @@ cfg = {
             # Local linear classifier on top of the embedding layer.
             # Bundled weights are built into the image by EmbedAssets
             # at configure time; they're trained against the same
-            # bge-small-en-v1.5 model kagami uses for embeddings, so
-            # the compatibility check in LocalClassifierLayer passes.
+            # embedding model kagami uses, so the compatibility check
+            # in LocalClassifierLayer passes.
             # Opt-in per feature — operators enable after confirming
             # their traffic mix benefits.
             'enabled': False,
