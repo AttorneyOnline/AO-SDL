@@ -17,7 +17,7 @@ class UIManager;
  *
  * Matches case-insensitively against both the server name and description so
  * that partial searches work across either field.  Call setFilter() to update
- * the query; invalidateFilter() notifies the view immediately.
+ * the query; begin/endFilterChange() notifies the view immediately.
  */
 class ServerListFilterProxy : public QSortFilterProxyModel {
     Q_OBJECT
@@ -25,8 +25,9 @@ public:
     explicit ServerListFilterProxy(QObject* parent = nullptr) : QSortFilterProxyModel(parent) {}
 
     void setFilter(const QString& text) {
+        beginFilterChange();
         m_filter = text.trimmed();
-        invalidateFilter();
+        endFilterChange();
     }
 
 protected:

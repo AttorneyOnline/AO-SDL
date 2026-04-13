@@ -26,13 +26,15 @@ public:
     explicit CharListFilterProxy(QObject* parent = nullptr) : QSortFilterProxyModel(parent) {}
 
     void setFilter(const QString& text) {
+        beginFilterChange();
         m_filter = text.trimmed();
-        invalidateFilter();
+        endFilterChange();
     }
 
     void setHideTaken(bool hide) {
+        beginFilterChange();
         m_hideTaken = hide;
-        invalidateFilter();
+        endFilterChange();
     }
 
 protected:
