@@ -32,12 +32,23 @@
  *   calibration_type(1 byte) |
  *   platt_a[num_cat] | platt_b[num_cat] (if calibration_type==1)
  *
+ * Note: W1 is stored on disk as [dim×hidden] but transposed to
+ * [hidden×dim] in memory for cache-friendly inner-loop access.
+ *
  * === Embedding-model compatibility (critical) ===
  *
  * The classifier weights are ONLY meaningful in the latent space of
  * the specific embedding model they were trained against. The weights
  * file stores the HF model identifier; on mismatch, the layer
  * disables itself with a WARNING.
+ *
+ * === Concurrency ===
+ *
+ * Weights are loaded into an immutable struct behind shared_ptr.
+ * classify() snapshots the pointer (atomic load) and reads without
+ * any lock. load_weights() builds a new struct and atomically swaps
+ * the pointer. This is the standard "rarely updated, frequently read"
+ * pattern — no serialization on the hot path.
  */
 #pragma once
 
@@ -47,7 +58,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -64,74 +77,46 @@ class LocalClassifierLayer {
   public:
     LocalClassifierLayer() = default;
 
-    /// Apply scalar configuration (thresholds, enabled flag). Must be
-    /// called before load_weights() so the thresholds are ready by
-    /// the time the first classify() runs.
     void configure(const LocalClassifierConfig& cfg);
 
-    /// Parse a v2 (MLP) weights blob into the in-memory matrix
-    /// representation. See the class docstring for the binary format.
-    ///
-    /// @p runtime_model_name is the embedding model id that kagami
-    /// will actually use for message embeddings. If this mismatches
-    /// the id stored in the weights file, the layer disables itself
-    /// and logs a WARNING; the graceful-degrade path keeps the rest
-    /// of the moderation stack running.
-    ///
-    /// Returns true on successful load (layer armed), false on any
-    /// validation failure (layer remains inactive).
     bool load_weights(const uint8_t* blob, size_t blob_size, const std::string& runtime_model_name);
 
-    /// Is the layer actually ready to classify? True only if
-    /// configure() was called with enabled=true AND load_weights()
-    /// succeeded with a model-name match.
     bool is_active() const;
-
-    /// Number of categories in the loaded model. 0 when inactive.
     int num_categories() const;
-
-    /// Embedding dimensionality the loaded weights expect. 0 when
-    /// inactive. Used by the caller to sanity-check against the
-    /// embedding backend's dimension().
     int embedding_dim() const;
-
-    /// The HF model identifier stored in the loaded weights file.
-    /// Empty when inactive. Exposed primarily so the caller can log
-    /// it alongside mismatch warnings.
     const std::string& model_name() const;
 
-    /// Hot path: classify a pre-computed embedding vector. Expects
-    /// @p embedding to have is_ready=true, ok=true, and
-    /// vector.size() == embedding_dim(). Returns a zeroed result
-    /// with ran=false if the layer is inactive or the vector is
-    /// malformed.
+    /// Hot path: classify a pre-computed embedding vector. Lock-free —
+    /// snapshots the current weights via atomic shared_ptr load.
     LocalClassifierResult classify(const EmbeddingResult& embedding) const;
 
   private:
-    mutable std::mutex mu_;
+    /// Immutable weight data. Built once by load_weights(), then shared
+    /// across all classify() calls via shared_ptr. Never mutated after
+    /// construction.
+    struct Weights {
+        int num_categories = 0;
+        int embedding_dim = 0;
+        int hidden_dim = 0;
+        std::string model_name;
+
+        // W1 is transposed from on-disk [dim×hidden] to in-memory
+        // [hidden×dim] for cache-friendly access in the inner loop.
+        std::vector<float> w1;      // [num_cat × hidden_dim × embedding_dim]
+        std::vector<float> b1;      // [num_cat × hidden_dim]
+        std::vector<float> w2;      // [num_cat × hidden_dim]
+        std::vector<float> b2;      // [num_cat]
+        std::vector<float> w_skip;  // [num_cat × embedding_dim] (residual)
+        int calibration_type = 0;   // 0=raw sigmoid, 1=platt
+        std::vector<float> platt_a; // [num_cat]
+        std::vector<float> platt_b; // [num_cat]
+    };
+
+    mutable std::shared_mutex mu_;
     LocalClassifierConfig cfg_{};
+    std::shared_ptr<const Weights> weights_{};
 
-    int num_categories_ = 0;
-    int embedding_dim_ = 0;
-    int hidden_dim_ = 0;
-    std::string model_name_;
-    bool loaded_ = false;
-
-    // Per-axis independent MLPs: each axis has its own W1/b1/W2/b2/W_skip.
-    // Stored contiguously per-layer across axes for cache-friendly access.
-    std::vector<float> w1_;      // [num_cat × embedding_dim × hidden_dim]
-    std::vector<float> b1_;      // [num_cat × hidden_dim]
-    std::vector<float> w2_;      // [num_cat × hidden_dim]
-    std::vector<float> b2_;      // [num_cat]
-    std::vector<float> w_skip_;  // [num_cat × embedding_dim] (residual)
-    int calibration_type_ = 0;   // 0=raw sigmoid, 1=platt
-    std::vector<float> platt_a_; // [num_cat] (platt scaling slope)
-    std::vector<float> platt_b_; // [num_cat] (platt scaling intercept)
-
-    LocalClassifierResult classify_v2(const EmbeddingResult& embedding) const;
-
-    bool load_weights_v2(const uint8_t* blob, size_t blob_size, uint32_t num_cat, uint32_t dim, uint32_t name_len,
-                         const std::string& runtime_model_name);
+    static LocalClassifierResult classify_impl(const Weights& w, const EmbeddingResult& embedding);
 };
 
 } // namespace moderation
