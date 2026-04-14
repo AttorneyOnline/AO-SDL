@@ -637,8 +637,8 @@ int main(int /*argc*/, char* argv[]) {
     ReplCommandRegistry repl;
     ReplCommandFactory::instance().populate(repl);
 
-    ServerContext ctx{stop_src,      db,          cfg,     ui,          room,    ao_backend, nx_backend,
-                      http,          rest_router, &ws,     &repl,       cfg_path, content_dir, &rate_limiter};
+    ServerContext ctx{stop_src, db,          cfg, ui,    room,     ao_backend,  nx_backend,
+                      http,     rest_router, &ws, &repl, cfg_path, content_dir, &rate_limiter};
 
     // Bind the hot-reload function for in-game /reload commands.
     // The lambda runs inside the dispatch lock (the in-game command handler

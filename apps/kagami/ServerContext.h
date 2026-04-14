@@ -36,7 +36,7 @@ struct ServerContext {
     WebSocketServer* ws;
     ReplCommandRegistry* repl;
 
-    std::string cfg_path;            ///< Path to kagami.json on disk.
-    std::string content_dir;         ///< Path to content config directory.
-    net::RateLimiter* rate_limiter;  ///< Rate limiter for hot-reload.
+    std::string cfg_path;           ///< Path to kagami.json on disk.
+    std::string content_dir;        ///< Path to content config directory.
+    net::RateLimiter* rate_limiter; ///< Rate limiter for hot-reload.
 };
