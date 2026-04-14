@@ -1,5 +1,5 @@
 <script>
-  import { auth, logout } from '../lib/auth.js';
+  import { auth, logout } from '../lib/auth.svelte.js';
 
   let { currentPage = 'dashboard' } = $props();
   let mobileOpen = $state(false);

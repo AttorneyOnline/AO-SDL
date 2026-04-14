@@ -1,5 +1,5 @@
 <script>
-  import { login } from '../lib/auth.js';
+  import { login } from '../lib/auth.svelte.js';
 
   let username = $state('');
   let password = $state('');
