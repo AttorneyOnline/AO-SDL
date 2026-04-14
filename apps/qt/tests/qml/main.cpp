@@ -1,11 +1,11 @@
 #include <QQmlEngine>
-#include <QtPlugin>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtQuickTest/quicktest.h>
 
-// Register the static AO.Components QML plugin so that
-// "import AO.Components" resolves inside the test engine.
-Q_IMPORT_QML_PLUGIN(ao_componentsplugin)
+// The AO.Components static QML plugin is registered by linking the
+// Qt-generated `ao_componentsplugin_init` object library in
+// CMakeLists.txt — that object contains the Q_IMPORT_PLUGIN expansion
+// and force-loads qt_static_plugin_ao_componentsplugin() into the
+// binary, so "import AO.Components" resolves inside the test engine.
 
 // Setup runs before any test QML file is loaded.
 // It adds the build-tree QML import path so the engine can locate

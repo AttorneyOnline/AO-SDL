@@ -20,7 +20,12 @@ target_link_libraries(tst_qml_components PRIVATE
     Qt6::QuickTest
     Qt6::Qml
     Qt6::QuickControls2
+    # ao_componentsplugin provides qt_static_plugin_ao_componentsplugin();
+    # ao_componentsplugin_init is the Qt-generated OBJECT library that
+    # emits the Q_IMPORT_PLUGIN reference, which is what keeps the static
+    # plugin symbol from being dead-stripped by the linker.
     ao_componentsplugin
+    ao_componentsplugin_init
 )
 
 add_test(NAME tst_qml_components COMMAND tst_qml_components)
