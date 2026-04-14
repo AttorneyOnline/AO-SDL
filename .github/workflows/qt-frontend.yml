@@ -83,11 +83,20 @@ jobs:
           -DAO_BUILD_QT=ON
           -DAO_BUILD_SDL=OFF
           -DKAGAMI_WITH_LLAMA_CPP=OFF
+          -DAO_QT_TESTS=ON
           -DPython3_EXECUTABLE=${{ steps.python-path.outputs.executable }}
 
       # ---- Build ----
       - name: Build
-        run: cmake --build build --config Release --parallel 4 --target aoqt
+        run: cmake --build build --config Release --parallel 4 --target aoqt ao_qt_tests_all
+
+      # ---- Test ----
+      # QT_QPA_PLATFORM=offscreen lets the QML tests create windows without a
+      # physical display (required on Linux; harmless on Windows/macOS).
+      - name: Run tests
+        run: ctest --test-dir build --label-regex qt_frontend --output-on-failure -j4
+        env:
+          QT_QPA_PLATFORM: offscreen
 
       # ---- Package (Windows) — windeployqt ----
       - name: Package (Windows)

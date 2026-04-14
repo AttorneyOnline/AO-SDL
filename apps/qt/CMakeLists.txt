@@ -133,23 +133,27 @@ target_sources(aoqt PRIVATE
     ui/controllers/DebugController.h
     ui/controllers/DebugController.cpp
 
-    ui/models/CharListModel.h
-    ui/models/CharListModel.cpp
-    ui/models/ServerListModel.h
-    ui/models/ServerListModel.cpp
-    ui/models/ChatModel.h
-    ui/models/ChatModel.cpp
-    ui/models/EvidenceModel.h
-    ui/models/EvidenceModel.cpp
-    ui/models/MusicAreaModel.h
-    ui/models/MusicAreaModel.cpp
-    ui/models/PlayerListModel.h
-    ui/models/PlayerListModel.cpp
-    ui/models/EmoteModel.h
-    ui/models/EmoteModel.cpp
-    ui/models/ICLogModel.h
-    ui/models/ICLogModel.cpp
 )
+
+# ── ao_qt_models — compiled separately so tests can link against it ────────────
+add_library(ao_qt_models STATIC
+    ui/models/CharListModel.h    ui/models/CharListModel.cpp
+    ui/models/ServerListModel.h  ui/models/ServerListModel.cpp
+    ui/models/ChatModel.h        ui/models/ChatModel.cpp
+    ui/models/EvidenceModel.h    ui/models/EvidenceModel.cpp
+    ui/models/MusicAreaModel.h   ui/models/MusicAreaModel.cpp
+    ui/models/PlayerListModel.h  ui/models/PlayerListModel.cpp
+    ui/models/EmoteModel.h       ui/models/EmoteModel.cpp
+    ui/models/ICLogModel.h       ui/models/ICLogModel.cpp
+)
+set_property(TARGET ao_qt_models PROPERTY CXX_STANDARD 20)
+target_include_directories(ao_qt_models PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/models
+)
+target_link_libraries(ao_qt_models PUBLIC Qt6::Core ao_protocol)
+
+target_link_libraries(aoqt PRIVATE ao_qt_models)
 
 target_link_libraries(aoqt PRIVATE
     Qt6::Core
@@ -201,3 +205,10 @@ add_custom_command(
         "$<TARGET_FILE_DIR:aoqt>/samples"
     VERBATIM
 )
+
+# ── Optional Qt frontend tests ─────────────────────────────────────────────────
+option(AO_QT_TESTS "Build Qt frontend unit tests (requires Qt6::Test)" OFF)
+if(AO_QT_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
