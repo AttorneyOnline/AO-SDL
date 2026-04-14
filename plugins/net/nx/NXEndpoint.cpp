@@ -103,6 +103,7 @@ void nx_ep_moderation_actions();
 void nx_ep_admin_sessions();
 void nx_ep_admin_config();
 void nx_ep_admin_data();
+void nx_ep_admin_content_put();
 
 // Force all endpoint TUs to link. Same pattern as ao_register_packet_types().
 void nx_register_endpoints() {
@@ -130,4 +131,5 @@ void nx_register_endpoints() {
     nx_ep_admin_sessions();
     nx_ep_admin_config();
     nx_ep_admin_data();
+    nx_ep_admin_content_put();
 }
