@@ -206,6 +206,15 @@ add_custom_command(
     VERBATIM
 )
 
+# ── Copy documentation next to the executable ────────────────────────────
+add_custom_command(
+    TARGET aoqt POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+        "$<TARGET_FILE_DIR:aoqt>/doc"
+    VERBATIM
+)
+
 # ── Optional Qt frontend tests ─────────────────────────────────────────────────
 option(AO_QT_TESTS "Build Qt frontend unit tests (requires Qt6::Test)" OFF)
 if(AO_QT_TESTS)
