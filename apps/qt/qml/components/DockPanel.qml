@@ -118,18 +118,20 @@ Item {
     // Universal — any parent that reads implicit size
     implicitHeight: _currentHeight
 
-    // SplitView parent
-    SplitView.preferredHeight: overlay ? undefined : _currentHeight
-    SplitView.minimumHeight:   overlay ? undefined
+    // SplitView / Layout parent.  -1 is the "no preference" sentinel both
+    // SplitView and QtQuick.Layouts use — assigning `undefined` to these
+    // double-typed attached properties is rejected by the QML engine and
+    // leaves stale values behind.
+    SplitView.preferredHeight: overlay ? -1 : _currentHeight
+    SplitView.minimumHeight:   overlay ? -1
                              : (docked ? dockedMinimumHeight : _collapsedHeight)
-    SplitView.maximumHeight:   overlay ? undefined
+    SplitView.maximumHeight:   overlay ? -1
                              : (docked ? Number.POSITIVE_INFINITY : _collapsedHeight)
 
-    // ColumnLayout / RowLayout parent
-    Layout.preferredHeight: overlay ? undefined : _currentHeight
-    Layout.minimumHeight:   overlay ? undefined
+    Layout.preferredHeight: overlay ? -1 : _currentHeight
+    Layout.minimumHeight:   overlay ? -1
                           : (docked ? dockedMinimumHeight : _collapsedHeight)
-    Layout.maximumHeight:   overlay ? undefined
+    Layout.maximumHeight:   overlay ? -1
                           : (docked ? Number.POSITIVE_INFINITY : _collapsedHeight)
     Layout.fillWidth: !overlay
 

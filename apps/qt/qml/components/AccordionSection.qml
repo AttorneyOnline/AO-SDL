@@ -207,6 +207,7 @@ Item {
 
         MouseArea {
             id: headerMouse
+            objectName: "headerMouse"
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor

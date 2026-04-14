@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 import QtTest
 import AO.Components
 
@@ -120,11 +122,10 @@ TestCase {
         compare(p.SplitView.preferredHeight, p._collapsedHeight)
     }
 
-    function test_splitViewPreferredHeight_overlay_isUndefined() {
+    function test_splitViewPreferredHeight_overlay_isUnset() {
         var p = createTemporaryObject(overlayPanel, this)
-        // overlay: true → SplitView.preferredHeight: undefined
-        verify(p.SplitView.preferredHeight === undefined || isNaN(p.SplitView.preferredHeight),
-               "overlay panel must not set SplitView.preferredHeight")
+        // overlay: true → SplitView.preferredHeight: -1 ("no preference" sentinel)
+        compare(p.SplitView.preferredHeight, -1)
     }
 
     // ── Layout attached properties ───────────────────────────────────────────

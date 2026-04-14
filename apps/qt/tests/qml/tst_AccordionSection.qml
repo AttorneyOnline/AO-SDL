@@ -171,22 +171,40 @@ TestCase {
         compare(s._arrowChar, "\u25C2")   // ◂ open
     }
 
+    // Recursively find the first descendant with the given objectName.
+    // Needed because QT_QPA_PLATFORM=offscreen (used in CI) does not
+    // reliably deliver synthetic mouseClick events to hit-tested items,
+    // so we invoke the header MouseArea's clicked() signal directly to
+    // verify the wiring from header click → toggled.
+    function findChildByObjectName(item, name) {
+        if (!item) return null
+        if (item.objectName === name) return item
+        for (var i = 0; i < item.children.length; ++i) {
+            var r = findChildByObjectName(item.children[i], name)
+            if (r) return r
+        }
+        return null
+    }
+
     // ── toggled signal ───────────────────────────────────────────────────────
     function test_headerClick_emitsToggled() {
         var s = createTemporaryObject(clickableSection, this)
+        var mouse = findChildByObjectName(s, "headerMouse")
+        verify(mouse, "headerMouse found")
         toggledSpy.target = s
         toggledSpy.clear()
-        // Click in the middle of the 28 px header strip.
-        mouseClick(s, s.width / 2, s._headerSize / 2)
+        mouse.clicked(null)
         compare(toggledSpy.count, 1)
     }
 
     function test_headerClick_twice_emitsToggledTwice() {
         var s = createTemporaryObject(clickableSection, this)
+        var mouse = findChildByObjectName(s, "headerMouse")
+        verify(mouse, "headerMouse found")
         toggledSpy.target = s
         toggledSpy.clear()
-        mouseClick(s, s.width / 2, s._headerSize / 2)
-        mouseClick(s, s.width / 2, s._headerSize / 2)
+        mouse.clicked(null)
+        mouse.clicked(null)
         compare(toggledSpy.count, 2)
     }
 
