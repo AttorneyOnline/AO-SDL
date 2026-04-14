@@ -22,6 +22,10 @@ class NXEndpoint : public RestEndpoint {
     static void set_rate_limiter(net::RateLimiter* limiter) {
         rate_limiter_.store(limiter, std::memory_order_release);
     }
+    /// Set the path to kagami.json for config CRUD endpoints.
+    static void set_cfg_path(const std::string& path) {
+        cfg_path_ = path;
+    }
 
   public:
     /// Outcome of applying a content moderation verdict to an NX
@@ -72,10 +76,14 @@ class NXEndpoint : public RestEndpoint {
     static net::RateLimiter* rate_limiter() {
         return rate_limiter_.load(std::memory_order_acquire);
     }
+    static const std::string& cfg_path() {
+        return cfg_path_;
+    }
 
   private:
     inline static std::atomic<NXServer*> server_ = nullptr;
     inline static std::atomic<net::RateLimiter*> rate_limiter_ = nullptr;
+    inline static std::string cfg_path_;
 };
 
 /// Call once at startup to ensure all EndpointRegistrar statics are

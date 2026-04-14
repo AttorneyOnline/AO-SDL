@@ -516,6 +516,7 @@ int main(int /*argc*/, char* argv[]) {
     // --- REST API ---
     nx_register_endpoints();
     NXEndpoint::set_server(&nx_backend);
+    NXEndpoint::set_cfg_path(cfg_path);
 
     RestRouter rest_router;
     rest_router.set_cors_origins(cfg.cors_origins());
