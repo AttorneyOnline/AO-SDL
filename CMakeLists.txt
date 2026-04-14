@@ -730,6 +730,7 @@ add_library(nx_net STATIC
     plugins/net/nx/endpoints/AreaIcEndpoint.cpp
     plugins/net/nx/endpoints/AreaOocEndpoint.cpp
     plugins/net/nx/endpoints/AdminSessionsEndpoint.cpp
+    plugins/net/nx/endpoints/AdminConfigEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net

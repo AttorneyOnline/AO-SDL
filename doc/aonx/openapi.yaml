@@ -1657,6 +1657,160 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /admin/config:
+    get:
+      tags: [Admin]
+      operationId: getConfig
+      summary: Get Server Configuration
+      description: |
+        Returns the full server configuration (defaults merged with
+        operator overrides). Optionally filter to a single key using
+        the `key` query parameter with JSON-pointer-style paths
+        (e.g. `content_moderation/heat/decay_half_life_seconds`).
+
+        Requires SUPER (admin) privileges.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: key
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Optional JSON pointer path to a specific key. Uses `/` as
+            the separator (e.g. `content_moderation/heat/censor_threshold`).
+            When omitted, the full configuration object is returned.
+      responses:
+        "200":
+          description: Configuration value(s).
+          content:
+            application/json:
+              schema:
+                type: object
+                description: The full config object, or `{key, value}` when filtering.
+        "401":
+          description: Missing or invalid session token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not an admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Key not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [Admin]
+      operationId: updateConfig
+      summary: Update Server Configuration
+      description: |
+        Apply a JSON Merge Patch (RFC 7396) to the server configuration.
+        The patch is applied to the on-disk config file, then a hot-reload
+        is triggered to apply changes to all running subsystems.
+
+        Nested keys are supported naturally via JSON nesting:
+        ```json
+        {"content_moderation": {"heat": {"decay_half_life_seconds": 300}}}
+        ```
+
+        Requires SUPER (admin) privileges.
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: JSON Merge Patch to apply to the configuration.
+      responses:
+        "200":
+          description: Configuration updated and reloaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reload_summary:
+                    type: string
+                    description: Human-readable summary of the reload result.
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid session token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not an admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Admin]
+      operationId: deleteConfigKey
+      summary: Delete Configuration Key
+      description: |
+        Remove a key from the on-disk configuration, reverting it to its
+        built-in default. A hot-reload is triggered after the deletion.
+
+        Requires SUPER (admin) privileges.
+      security:
+        - sessionToken: []
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: |
+            JSON pointer path to the key to remove (e.g. `server_name`
+            or `content_moderation/heat/censor_threshold`).
+      responses:
+        "200":
+          description: Key removed and config reloaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reload_summary:
+                    type: string
+                    description: Human-readable summary of the reload result.
+        "401":
+          description: Missing or invalid session token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not an admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Key not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /events:
     get:
       tags: [Events]
