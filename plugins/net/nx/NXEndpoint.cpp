@@ -96,9 +96,13 @@ void nx_ep_area_ooc();
 void nx_ep_auth_login();
 void nx_ep_auth_logout();
 
+// Moderation
+void nx_ep_moderation_actions();
+
 // Admin endpoints
 void nx_ep_admin_sessions();
 void nx_ep_admin_config();
+void nx_ep_admin_data();
 
 // Force all endpoint TUs to link. Same pattern as ao_register_packet_types().
 void nx_register_endpoints() {
@@ -121,6 +125,9 @@ void nx_register_endpoints() {
     nx_ep_auth_login();
     nx_ep_auth_logout();
 
+    nx_ep_moderation_actions();
+
     nx_ep_admin_sessions();
     nx_ep_admin_config();
+    nx_ep_admin_data();
 }
