@@ -933,9 +933,9 @@ std::future<std::optional<AuthTokenEntry>> DatabaseManager::validate_auth_token(
 
         // Check expiry
         if (entry.expires_at > 0) {
-            auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
+            auto now =
+                std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
             if (now >= entry.expires_at)
                 return std::nullopt;
         }
@@ -976,8 +976,7 @@ std::future<void> DatabaseManager::touch_auth_token(std::string token) {
     return dispatch([this, token = std::move(token)]() {
         if (!db_)
             return;
-        auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                        .count();
         auto stmt = prepare("UPDATE auth_tokens SET LAST_USED = ? WHERE TOKEN = ?");
         if (!stmt)

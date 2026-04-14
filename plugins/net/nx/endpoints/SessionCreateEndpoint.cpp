@@ -93,8 +93,8 @@ class SessionCreateEndpoint : public NXEndpoint {
                 session->moderator_name = auth_entry->username;
                 session->auth_token_id = auth;
                 room().stats.moderators.fetch_add(1, std::memory_order_relaxed);
-                Log::log_print(INFO, "NX: session bound to auth token (user=%s, role=%s)",
-                               auth_entry->username.c_str(), auth_entry->acl.c_str());
+                Log::log_print(INFO, "NX: session bound to auth token (user=%s, role=%s)", auth_entry->username.c_str(),
+                               auth_entry->acl.c_str());
             }
         }
 

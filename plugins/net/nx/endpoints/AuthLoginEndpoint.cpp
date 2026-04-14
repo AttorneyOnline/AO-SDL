@@ -71,8 +71,7 @@ class AuthLoginEndpoint : public NXEndpoint {
         // Generate durable auth token
         auto token = NXServer::generate_auth_token();
 
-        auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                        .count();
 
         // Compute expiry from config. The TTL accessor is on ServerSettings

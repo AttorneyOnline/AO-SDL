@@ -67,12 +67,12 @@ struct AuthTokenEntry {
     int64_t id = 0;
     std::string token;
     std::string username;
-    std::string acl;          ///< ACL role at time of issuance.
-    int64_t created_at = 0;   ///< Seconds since epoch.
-    int64_t expires_at = 0;   ///< Seconds since epoch (0 = never).
+    std::string acl;        ///< ACL role at time of issuance.
+    int64_t created_at = 0; ///< Seconds since epoch.
+    int64_t expires_at = 0; ///< Seconds since epoch (0 = never).
     bool revoked = false;
-    int64_t last_used = 0;    ///< Seconds since epoch (updated on session creation).
-    std::string description;  ///< Optional label (e.g. "laptop", "api-key").
+    int64_t last_used = 0;   ///< Seconds since epoch (updated on session creation).
+    std::string description; ///< Optional label (e.g. "laptop", "api-key").
 };
 
 /// A row from the `users` table.
