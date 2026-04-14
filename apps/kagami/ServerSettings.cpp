@@ -28,9 +28,30 @@ bool ServerSettings::load_from_disk(const std::string& path) {
     return true;
 }
 
+/// Recursively fill missing keys from @p defaults into @p target.
+/// Existing keys in @p target are never overwritten. For nested objects,
+/// the merge recurses so that new sub-keys are added without clobbering
+/// sibling keys the operator may have edited on disk.
+static void fill_missing(nlohmann::json& target, const nlohmann::json& defaults) {
+    for (auto& [key, value] : defaults.items()) {
+        auto it = target.find(key);
+        if (it == target.end()) {
+            // Key absent on disk — add the default.
+            target[key] = value;
+        }
+        else if (it->is_object() && value.is_object()) {
+            // Both sides are objects — recurse to add missing sub-keys
+            // without touching existing ones.
+            fill_missing(*it, value);
+        }
+        // else: key exists on disk — leave it alone.
+    }
+}
+
 bool ServerSettings::save_to_disk(const std::string& path) {
-    // Read the existing file first so we preserve keys this binary doesn't
-    // know about (e.g., keys added by a newer build or manual edits).
+    // Read the file as it exists RIGHT NOW on disk. This is the
+    // authoritative copy — the operator may have edited it directly
+    // or via /reload since the server started.
     nlohmann::json on_disk;
     {
         std::ifstream existing(path, std::ios::binary);
@@ -42,15 +63,16 @@ bool ServerSettings::save_to_disk(const std::string& path) {
         }
     }
 
-    // Build our known state: defaults + loaded values
+    // Build the full default set (defaults + any in-memory overrides).
     auto data = instance().serialize();
     auto ours = nlohmann::json::parse(data, nullptr, false);
     if (!ours.is_object())
         return false;
 
-    // Merge: start with what's on disk, overlay our known values.
-    // This adds new default keys without removing unknown ones.
-    on_disk.update(ours);
+    // Fill-only merge: add keys the disk file is missing (e.g. new
+    // defaults from a binary upgrade) without overwriting anything
+    // the operator has set. The file on disk is the source of truth.
+    fill_missing(on_disk, ours);
 
     auto s = on_disk.dump(4) + "\n";
 

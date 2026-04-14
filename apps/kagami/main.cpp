@@ -113,6 +113,11 @@ int main(int /*argc*/, char* argv[]) {
     ServerSettings::load_from_disk(cfg_path);
     auto& cfg = ServerSettings::instance();
 
+    // Fill in any new default keys this binary introduces, so the file
+    // on disk always contains every known setting after first boot.
+    // Existing values are never overwritten — the file is authoritative.
+    ServerSettings::save_to_disk(cfg_path);
+
     // --- Terminal UI + log sinks ---
     bool interactive = IS_INTERACTIVE();
     TerminalUI ui;
@@ -690,9 +695,5 @@ int main(int /*argc*/, char* argv[]) {
     // copies and continue running until they complete on their own.
     room.set_content_moderator(nullptr);
 
-    // Sync runtime state back to settings before persisting.
-    cfg.set_value("mod_password", std::any(room.mod_password));
-    cfg.set_value("server_description", std::any(room.server_description));
-    ServerSettings::save_to_disk(cfg_path);
     return 0;
 }
