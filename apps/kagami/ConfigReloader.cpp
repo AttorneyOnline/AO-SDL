@@ -57,8 +57,12 @@ static void apply_content_changes(GameRoom& room, const ContentConfig& new_conte
                                   const std::vector<std::string>& old_characters,
                                   const std::vector<std::string>& old_areas, ReloadResult& result) {
     // --- Relocate players from removed areas ---
+    if (new_content.area_names.empty()) {
+        Log::log_print(WARNING, "Content reload: new area list is empty — skipping content changes");
+        return;
+    }
     std::unordered_set<std::string> new_area_set(new_content.area_names.begin(), new_content.area_names.end());
-    std::string safe_area = new_content.area_names.empty() ? "" : new_content.area_names[0];
+    const auto& safe_area = new_content.area_names[0];
 
     for (const auto& old_area : old_areas) {
         if (new_area_set.count(old_area) == 0) {
@@ -126,11 +130,12 @@ static void apply_content_changes(GameRoom& room, const ContentConfig& new_conte
         auto* area = room.find_area_by_name(ac.name);
         if (!area)
             continue;
-        // Only apply background from ini if area state wasn't preserved
-        // (preserved areas keep their runtime background).
-        if (preserved.count(ac.name) == 0)
+        // Only apply ini defaults for NEW areas — preserved areas keep
+        // their runtime background and bg_locked state.
+        if (preserved.count(ac.name) == 0) {
             area->background.name = ac.background;
-        area->bg_locked = ac.bg_locked;
+            area->bg_locked = ac.bg_locked;
+        }
     }
 
     // --- Re-map surviving character selections ---
@@ -231,42 +236,45 @@ ReloadResult perform_reload(ServerContext& ctx, LockWrapper lock_wrapper) {
         content_loaded = new_content.load(ctx.content_dir);
 
     // -----------------------------------------------------------------------
-    // Phase 2: Diff restart-required keys (before applying new config)
+    // Phase 2+3: Diff and Apply (inside dispatch lock)
+    //
+    // The deserialize, diff, and apply all run under the dispatch lock so
+    // that config values and room/subsystem state are never inconsistent
+    // from the perspective of packet handlers.
     // -----------------------------------------------------------------------
     std::unordered_map<std::string, std::string> old_snapshots;
     for (const auto& key : kRestartKeys)
         old_snapshots[key] = snapshot_value(cfg, key);
 
-    // Apply the new JSON into ServerSettings (thread-safe via shared_mutex).
-    if (!cfg.deserialize(json_bytes)) {
-        result.ok = false;
-        result.error = "ServerSettings::deserialize() failed";
-        return result;
-    }
-    result.reloaded.push_back("Re-read " + ctx.cfg_path);
-
-    // Check restart-required keys for changes.
-    for (const auto& key : kRestartKeys) {
-        auto new_val = snapshot_value(cfg, key);
-        if (old_snapshots[key] != new_val)
-            result.restart_warnings.push_back(key + ": " + old_snapshots[key] + " -> " + new_val);
-    }
-
-    if (content_loaded)
-        result.reloaded.push_back("Re-read content config (" + ctx.content_dir + ")");
-
-    // Snapshot old content lists for diffing.
-    auto old_characters = ctx.room.characters;
-    auto old_music = ctx.room.music;
-    auto old_areas = ctx.room.areas;
-
-    result.content_changed = content_loaded && (new_content.characters != old_characters ||
-                                                new_content.music != old_music || new_content.area_names != old_areas);
-
-    // -----------------------------------------------------------------------
-    // Phase 3: Apply (inside dispatch lock)
-    // -----------------------------------------------------------------------
     lock_wrapper([&] {
+        // Apply the new JSON into ServerSettings (also holds its own
+        // shared_mutex internally, but that's a different lock — no deadlock).
+        if (!cfg.deserialize(json_bytes)) {
+            result.ok = false;
+            result.error = "ServerSettings::deserialize() failed";
+            return;
+        }
+        result.reloaded.push_back("Re-read " + ctx.cfg_path);
+
+        // Check restart-required keys for changes.
+        for (const auto& key : kRestartKeys) {
+            auto new_val = snapshot_value(cfg, key);
+            if (old_snapshots[key] != new_val)
+                result.restart_warnings.push_back(key + ": " + old_snapshots[key] + " -> " + new_val);
+        }
+
+        if (content_loaded)
+            result.reloaded.push_back("Re-read content config (" + ctx.content_dir + ")");
+
+        // Snapshot old content lists for diffing.
+        auto old_characters = ctx.room.characters;
+        auto old_music = ctx.room.music;
+        auto old_areas = ctx.room.areas;
+
+        result.content_changed =
+            content_loaded && (new_content.characters != old_characters || new_content.music != old_music ||
+                               new_content.area_names != old_areas);
+
         auto& room = ctx.room;
 
         // --- Room fields ---
@@ -281,6 +289,7 @@ ReloadResult perform_reload(ServerContext& ctx, LockWrapper lock_wrapper) {
         // --- NX backend ---
         ctx.nx_backend.set_motd(cfg.motd());
         ctx.nx_backend.set_session_ttl_seconds(cfg.session_ttl_seconds());
+        ctx.nx_backend.set_auth_token_ttl_seconds(cfg.auth_token_ttl_seconds());
 
         // --- Subsystem reconfiguration (all are safe to call at runtime) ---
         if (auto* rep = room.reputation_service())

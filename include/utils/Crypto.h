@@ -518,17 +518,29 @@ inline std::string randbytes_hex(size_t count) {
     return ss.str();
 }
 
+/// Constant-time string comparison to prevent timing side-channels
+/// on hash verification. Both strings must be the same length for
+/// the comparison to be meaningful (hex hashes always are).
+inline bool constant_time_equal(const std::string& a, const std::string& b) {
+    if (a.size() != b.size())
+        return false;
+    volatile unsigned char result = 0;
+    for (size_t i = 0; i < a.size(); ++i)
+        result |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+    return result == 0;
+}
+
 /// Verify a password against a stored salt + hash (akashi-compatible).
 /// Salt >= 32 hex chars (16 bytes) → PBKDF2-SHA256 (100k iterations).
 /// Shorter salt → HMAC-SHA256 (legacy format).
-/// Returns true if the password matches.
+/// Uses constant-time comparison to prevent timing attacks.
 inline bool verify_password(const std::string& password, const std::string& hex_salt, const std::string& stored_hash) {
     std::string computed;
     if (hex_salt.size() >= 32)
         computed = pbkdf2_sha256_hex(password, hex_salt);
     else
         computed = hmac_sha256_hex(hex_salt, password);
-    return computed == stored_hash;
+    return constant_time_equal(computed, stored_hash);
 }
 
 } // namespace crypto

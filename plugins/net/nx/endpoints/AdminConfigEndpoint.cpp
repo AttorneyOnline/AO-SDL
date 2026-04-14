@@ -17,7 +17,6 @@ class ServerSettings;
 /// Helpers shared by all three config endpoints.
 namespace {
 
-/// Check SUPER privilege. Returns an error response if denied, nullopt if OK.
 /// Check SUPER privilege. Both SIMPLE-auth mods (who get acl_role="SUPER"
 /// on login) and ADVANCED-auth SUPER users pass this check. Non-SUPER
 /// moderators in ADVANCED mode are denied.
@@ -236,10 +235,8 @@ class AdminConfigDeleteEndpoint : public NXEndpoint {
 // -------------------------------------------------------------------------
 // Registration
 // -------------------------------------------------------------------------
-EndpointRegistrar reg_get("GET /aonx/v1/admin/config",
-                          [] { return std::make_unique<AdminConfigGetEndpoint>(); });
-EndpointRegistrar reg_patch("PATCH /aonx/v1/admin/config",
-                            [] { return std::make_unique<AdminConfigPatchEndpoint>(); });
+EndpointRegistrar reg_get("GET /aonx/v1/admin/config", [] { return std::make_unique<AdminConfigGetEndpoint>(); });
+EndpointRegistrar reg_patch("PATCH /aonx/v1/admin/config", [] { return std::make_unique<AdminConfigPatchEndpoint>(); });
 EndpointRegistrar reg_delete("DELETE /aonx/v1/admin/config",
                              [] { return std::make_unique<AdminConfigDeleteEndpoint>(); });
 

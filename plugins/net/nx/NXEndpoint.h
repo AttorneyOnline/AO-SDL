@@ -23,8 +23,9 @@ class NXEndpoint : public RestEndpoint {
         rate_limiter_.store(limiter, std::memory_order_release);
     }
     /// Set the path to kagami.json for config CRUD endpoints.
-    static void set_cfg_path(const std::string& path) {
-        cfg_path_ = path;
+    /// Must be called once at startup before any endpoint handles a request.
+    static void set_cfg_path(std::string path) {
+        cfg_path_ = std::move(path);
     }
 
   public:
