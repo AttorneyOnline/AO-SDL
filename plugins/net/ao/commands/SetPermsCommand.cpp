@@ -69,6 +69,13 @@ class SetPermsCommand : public CommandHandler {
             return;
         }
 
+        // Revoke auth tokens (stale ACL) and kill bound sessions.
+        db->revoke_all_tokens_for_user(username);
+        ctx.room.for_each_session([&](const ServerSession& s) {
+            if (s.moderator_name == username && !s.auth_token_id.empty())
+                ctx.send_kick_message(s.client_id, "Your permissions were updated. Please log in again.");
+        });
+
         Log::log_print(INFO, "Auth: %s set %s's role to %s", ctx.session.moderator_name.c_str(), username.c_str(),
                        role.c_str());
         ctx.send_system_message("Set " + username + "'s role to " + role + ".");

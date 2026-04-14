@@ -35,7 +35,8 @@ inline constexpr const char* DEFAULT_DB_FILE = "kagami.db";
 /// Current schema version. Bump when adding migrations.
 ///   v1 — bans, users.
 ///   v2 — moderation_events, mutes (content moderation subsystem).
-inline constexpr int DB_VERSION = 2;
+///   v3 — auth_tokens (REST auth tokens).
+inline constexpr int DB_VERSION = 3;
 
 /// A row from the `mutes` table. Not every mute is a row here — only
 /// ones that should survive restart. Short in-memory mutes (e.g. 60s
@@ -57,6 +58,21 @@ struct ModerationQuery {
     std::optional<int64_t> since_ms;    ///< Inclusive lower bound on timestamp_ms.
     std::optional<int64_t> until_ms;    ///< Inclusive upper bound on timestamp_ms.
     int limit = 100;
+};
+
+/// A row from the `auth_tokens` table. Durable, revocable tokens that
+/// prove identity. Created by POST /auth/login, consumed by POST /session
+/// via the `auth` field.
+struct AuthTokenEntry {
+    int64_t id = 0;
+    std::string token;
+    std::string username;
+    std::string acl;          ///< ACL role at time of issuance.
+    int64_t created_at = 0;   ///< Seconds since epoch.
+    int64_t expires_at = 0;   ///< Seconds since epoch (0 = never).
+    bool revoked = false;
+    int64_t last_used = 0;    ///< Seconds since epoch (updated on session creation).
+    std::string description;  ///< Optional label (e.g. "laptop", "api-key").
 };
 
 /// A row from the `users` table.
@@ -171,6 +187,23 @@ class DatabaseManager {
     /// Query moderation events by filter. Results are ordered newest
     /// first, limited by `query.limit` (cap 1000).
     std::future<std::vector<moderation::ModerationEvent>> query_moderation_events(ModerationQuery query);
+
+    // -- Auth tokens ----------------------------------------------------------
+
+    /// Store a new auth token. Future resolves to true on success.
+    std::future<bool> create_auth_token(AuthTokenEntry entry);
+
+    /// Look up an auth token. Returns nullopt if not found, revoked, or expired.
+    std::future<std::optional<AuthTokenEntry>> validate_auth_token(std::string token);
+
+    /// Revoke a single auth token. Returns true if the token was found and revoked.
+    std::future<bool> revoke_auth_token(std::string token);
+
+    /// Revoke all auth tokens for a user. Returns the number of tokens revoked.
+    std::future<int> revoke_all_tokens_for_user(std::string username);
+
+    /// Update last_used timestamp on a token. Fire-and-forget.
+    std::future<void> touch_auth_token(std::string token);
 
     // -- Mutes ----------------------------------------------------------------
 

@@ -123,19 +123,7 @@ class LoginCommand : public CommandHandler {
 
         auto& user = *user_opt;
 
-        // Hash the provided password with the stored salt and compare.
-        // Compatible with akashi: salt >= 16 bytes (32 hex chars) → PBKDF2.
-        std::string computed_hash;
-        if (user.salt.size() >= 32) {
-            // PBKDF2-SHA256 with 100,000 iterations (akashi default)
-            computed_hash = crypto::pbkdf2_sha256_hex(password, user.salt);
-        }
-        else {
-            // Legacy: HMAC-SHA256 (salt < 16 bytes)
-            computed_hash = crypto::hmac_sha256_hex(user.salt, password);
-        }
-
-        if (computed_hash != user.password) {
+        if (!crypto::verify_password(password, user.salt, user.password)) {
             login_failed(ctx);
             return;
         }
