@@ -260,9 +260,8 @@ ReloadResult perform_reload(ServerContext& ctx, LockWrapper lock_wrapper) {
     auto old_music = ctx.room.music;
     auto old_areas = ctx.room.areas;
 
-    result.content_changed =
-        content_loaded && (new_content.characters != old_characters || new_content.music != old_music ||
-                           new_content.area_names != old_areas);
+    result.content_changed = content_loaded && (new_content.characters != old_characters ||
+                                                new_content.music != old_music || new_content.area_names != old_areas);
 
     // -----------------------------------------------------------------------
     // Phase 3: Apply (inside dispatch lock)
@@ -304,8 +303,7 @@ ReloadResult perform_reload(ServerContext& ctx, LockWrapper lock_wrapper) {
             for (auto& [action, params] : rl_cfg.items()) {
                 if (!params.is_object() || !params.contains("rate"))
                     continue;
-                ctx.rate_limiter->configure(action,
-                                            {params.value("rate", 10.0), params.value("burst", 20.0)});
+                ctx.rate_limiter->configure(action, {params.value("rate", 10.0), params.value("burst", 20.0)});
                 ++count;
             }
             result.reloaded.push_back("Rate limiter (" + std::to_string(count) + " rules)");
@@ -357,4 +355,3 @@ ReloadResult perform_reload(ServerContext& ctx, LockWrapper lock_wrapper) {
                    result.restart_warnings.size());
     return result;
 }
-
