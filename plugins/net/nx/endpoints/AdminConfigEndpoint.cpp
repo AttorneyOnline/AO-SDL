@@ -1,5 +1,6 @@
 #include "net/nx/NXEndpoint.h"
 
+#include "game/ACLFlags.h"
 #include "game/GameRoom.h"
 #include "game/ServerSession.h"
 #include "net/EndpointRegistrar.h"
@@ -17,11 +18,14 @@ class ServerSettings;
 namespace {
 
 /// Check SUPER privilege. Returns an error response if denied, nullopt if OK.
+/// Check SUPER privilege. Both SIMPLE-auth mods (who get acl_role="SUPER"
+/// on login) and ADVANCED-auth SUPER users pass this check. Non-SUPER
+/// moderators in ADVANCED mode are denied.
 std::optional<RestResponse> require_super(const RestRequest& req) {
     if (!req.session || !req.session->moderator)
-        return RestResponse::error(403, "Admin privileges required");
-    if (req.session->acl_role.empty() || req.session->acl_role == "SUPER")
-        return std::nullopt; // SIMPLE auth mods or SUPER role
+        return RestResponse::error(403, "Authentication required");
+    if (has_permission(acl_permissions_for_role(req.session->acl_role), ACLPermission::SUPER))
+        return std::nullopt;
     return RestResponse::error(403, "SUPER privileges required");
 }
 
