@@ -226,5 +226,4 @@ Page {
 
     // ── Application-modal dialogs and global overlays ─────────────────────
     DisconnectModal { id: disconnectModal }
-    DebugOverlay    { visible: false }
 }

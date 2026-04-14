@@ -1,5 +1,6 @@
 #include <QQmlEngine>
 #include <QtPlugin>
+#include <QtQml/qqmlextensionplugin.h>
 #include <QtQuickTest/quicktest.h>
 
 // Register the static AO.Components QML plugin so that
