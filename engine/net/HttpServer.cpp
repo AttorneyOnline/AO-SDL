@@ -712,7 +712,7 @@ static void poll_loop(Server* srv, Server::ServerState& state) {
                 {
                     SectionScope _s{state.poll_section_ns[ServerState::SSE_PUBLISH]};
                     while (auto sse = EventManager::instance().get_channel<SSEEvent>().get_event()) {
-                        srv->push_sse(sse->event, sse->data, sse->area);
+                        srv->push_sse(sse->event, sse->data, sse->area, sse->target_token);
                     }
                 }
 
@@ -1326,7 +1326,8 @@ void Server::set_sse_session_touch(SSESessionTouchFunc func) {
         state_->sse_session_touch = std::move(func);
 }
 
-void Server::push_sse(const std::string& event, const std::string& data, const std::string& area) {
+void Server::push_sse(const std::string& event, const std::string& data, const std::string& area,
+                      const std::string& target_token) {
     if (!state_)
         return;
 
@@ -1347,6 +1348,8 @@ void Server::push_sse(const std::string& event, const std::string& data, const s
     std::vector<int> dead_fds;
     int sent_count = 0;
     for (auto& [fd, sse] : state_->sse_by_fd) {
+        if (!target_token.empty() && sse.session_token != target_token)
+            continue;
         if (!area.empty() && !sse.area.empty() && sse.area != area)
             continue;
         if (!send_sse_frame(sse.socket, frame))

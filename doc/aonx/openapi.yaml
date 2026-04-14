@@ -6,6 +6,8 @@ info:
     REST API specification for the AONX protocol, the successor to the AO2 client-server protocol.
 
 tags:
+  - name: Auth
+    description: Authentication — login/logout to obtain durable auth tokens.
   - name: Session
     description: Session lifecycle — create, renew, and delete sessions.
   - name: Server
@@ -22,6 +24,8 @@ tags:
     description: Evidence CRUD within an area.
   - name: Moderation
     description: Moderation actions — kick, ban, mute, and server-defined extensions.
+  - name: Admin
+    description: Server administration — session listing, config management.
   - name: Events
     description: Server-sent event stream and event schemas.
 
@@ -35,6 +39,103 @@ servers:
         default: canary.yuurei.network
 
 paths:
+  # ---------------------------------------------------------------------------
+  # Auth — durable token management
+  # ---------------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: authLogin
+      summary: Authenticate and obtain an auth token
+      description: |
+        Verify credentials against the server's user database and return
+        a durable, revocable auth token. Pass this token in the `auth`
+        field when creating a session to bind identity to the session.
+
+        Auth tokens are long-lived (30 days by default, configurable)
+        and survive server restarts. Revoke them via POST /auth/logout.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                  maxLength: 32
+                password:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                description:
+                  type: string
+                  maxLength: 256
+                  description: |
+                    Optional label for this token (e.g. "laptop", "api-key").
+                    Useful for identifying tokens when managing multiple.
+      responses:
+        "201":
+          description: Auth token created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Durable auth token. Pass as `auth` in session creation.
+                  username:
+                    type: string
+                  acl:
+                    type: string
+                    description: ACL role (e.g. "SUPER", "MOD").
+                  expires_at:
+                    type: string
+                    description: ISO 8601 expiry timestamp, or null if no expiry.
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: authLogout
+      summary: Revoke an auth token
+      description: |
+        Revoke the auth token provided in the Authorization header.
+        Any active sessions created with this token are immediately
+        terminated.
+      security:
+        - sessionToken: []
+      responses:
+        "200":
+          description: Token revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked:
+                    type: boolean
+        "401":
+          description: Missing or invalid auth token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   # ---------------------------------------------------------------------------
   # Session
   # ---------------------------------------------------------------------------

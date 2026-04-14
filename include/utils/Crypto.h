@@ -518,4 +518,18 @@ inline std::string randbytes_hex(size_t count) {
     return ss.str();
 }
 
+/// Verify a password against a stored salt + hash (akashi-compatible).
+/// Salt >= 32 hex chars (16 bytes) → PBKDF2-SHA256 (100k iterations).
+/// Shorter salt → HMAC-SHA256 (legacy format).
+/// Returns true if the password matches.
+inline bool verify_password(const std::string& password, const std::string& hex_salt,
+                            const std::string& stored_hash) {
+    std::string computed;
+    if (hex_salt.size() >= 32)
+        computed = pbkdf2_sha256_hex(password, hex_salt);
+    else
+        computed = hmac_sha256_hex(hex_salt, password);
+    return computed == stored_hash;
+}
+
 } // namespace crypto

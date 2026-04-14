@@ -729,6 +729,8 @@ add_library(nx_net STATIC
     plugins/net/nx/endpoints/AreaJoinEndpoint.cpp
     plugins/net/nx/endpoints/AreaIcEndpoint.cpp
     plugins/net/nx/endpoints/AreaOocEndpoint.cpp
+    plugins/net/nx/endpoints/AuthLoginEndpoint.cpp
+    plugins/net/nx/endpoints/AuthLogoutEndpoint.cpp
     plugins/net/nx/endpoints/AdminSessionsEndpoint.cpp
     plugins/net/nx/endpoints/AdminConfigEndpoint.cpp
 )

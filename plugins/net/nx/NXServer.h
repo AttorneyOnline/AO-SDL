@@ -31,6 +31,9 @@ class NXServer {
                                const std::string& client_version, const std::string& remote_addr = "");
     void destroy_session(uint64_t client_id);
 
+    /// Generate a durable auth token (different prefix from session tokens).
+    static std::string generate_auth_token();
+
     /// Server configuration values, set once at startup by main.cpp
     /// before any HTTP threads are running. Getters are called from
     /// handler threads. The string is immutable after init; the TTL

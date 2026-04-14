@@ -86,6 +86,11 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
         return std::max(0, value<int>("session_ttl_seconds"));
     }
 
+    /// Auth token TTL in seconds. Default 30 days. 0 = never expires.
+    int auth_token_ttl_seconds() const {
+        return std::max(0, value<int>("auth_token_ttl_seconds"));
+    }
+
     // -- Message limits --
 
     /// Maximum length of an IC (in-character) message in characters. 0 = no limit.
@@ -434,6 +439,7 @@ class ServerSettings : public JsonConfiguration<ServerSettings> {
             {"asset_url", ""},
             {"mod_password", ""},
             {"session_ttl_seconds", 300},
+            {"auth_token_ttl_seconds", 30 * 24 * 60 * 60}, // 30 days
             {"max_ic_message_length", 256},
             {"max_ooc_message_length", 256},
             {"cors_origin", "https://web.aceattorneyonline.com"},

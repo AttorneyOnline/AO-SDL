@@ -92,6 +92,10 @@ void nx_ep_area_join();
 void nx_ep_area_ic();
 void nx_ep_area_ooc();
 
+// Auth endpoints
+void nx_ep_auth_login();
+void nx_ep_auth_logout();
+
 // Admin endpoints
 void nx_ep_admin_sessions();
 void nx_ep_admin_config();
@@ -113,6 +117,9 @@ void nx_register_endpoints() {
     nx_ep_area_join();
     nx_ep_area_ic();
     nx_ep_area_ooc();
+
+    nx_ep_auth_login();
+    nx_ep_auth_logout();
 
     nx_ep_admin_sessions();
     nx_ep_admin_config();

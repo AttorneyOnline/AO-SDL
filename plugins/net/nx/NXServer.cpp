@@ -39,6 +39,17 @@ static std::string generate_token() {
     return crypto::sha256("kagamitok:" + server_iv() + ":" + rand_hex);
 }
 
+static std::string generate_auth_token_impl() {
+    std::random_device rd;
+    char rand_hex[33];
+    std::snprintf(rand_hex, sizeof(rand_hex), "%08x%08x%08x%08x", rd(), rd(), rd(), rd());
+    return crypto::sha256("kagamiauth:" + server_iv() + ":" + rand_hex);
+}
+
+std::string NXServer::generate_auth_token() {
+    return generate_auth_token_impl();
+}
+
 // -- NXServer ----------------------------------------------------------------
 
 NXServer::NXServer(GameRoom& room) : room_(room) {

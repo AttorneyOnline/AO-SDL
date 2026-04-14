@@ -1,8 +1,11 @@
 #include "net/nx/NXEndpoint.h"
 #include "net/nx/NXTime.h"
 
+#include "game/DatabaseManager.h"
+#include "game/GameRoom.h"
 #include "net/EndpointRegistrar.h"
 #include "utils/GeneratedSchemas.h"
+#include "utils/Log.h"
 
 #include <chrono>
 
@@ -63,10 +66,40 @@ class SessionCreateEndpoint : public NXEndpoint {
         sanitize(client_version, 32);
         sanitize(hdid, 128);
 
+        // Validate auth token if provided (binds identity to session).
+        auto auth = req.body->value("auth", std::string{});
+        std::optional<AuthTokenEntry> auth_entry;
+        if (!auth.empty()) {
+            auto* db = room().db_manager();
+            if (!db || !db->is_open())
+                return RestResponse::error(503, "Database unavailable");
+
+            auth_entry = db->validate_auth_token(auth).get();
+            if (!auth_entry)
+                return RestResponse::error(401, "Invalid or expired auth token");
+
+            // Update last_used timestamp (fire-and-forget)
+            db->touch_auth_token(auth);
+        }
+
         auto info = server().create_session(hdid, client_name, client_version, req.remote_addr);
 
+        // Bind identity from auth token to session
+        if (auth_entry) {
+            auto* session = room().find_session_by_token(info.token);
+            if (session) {
+                session->moderator = true;
+                session->acl_role = auth_entry->acl;
+                session->moderator_name = auth_entry->username;
+                session->auth_token_id = auth;
+                room().stats.moderators.fetch_add(1, std::memory_order_relaxed);
+                Log::log_print(INFO, "NX: session bound to auth token (user=%s, role=%s)",
+                               auth_entry->username.c_str(), auth_entry->acl.c_str());
+            }
+        }
+
         auto roles = nlohmann::json::array({"player"});
-        if (info.moderator)
+        if (info.moderator || auth_entry)
             roles.push_back("moderator");
 
         nlohmann::json resp = {

@@ -711,7 +711,8 @@ class Server {
 
     /// Push an SSE event to all matching connections. Called by the poll loop;
     /// not intended for direct use — publish SSEEvent to EventManager instead.
-    void push_sse(const std::string& event, const std::string& data, const std::string& area);
+    void push_sse(const std::string& event, const std::string& data, const std::string& area,
+                  const std::string& target_token = {});
 
     /// Set a callback invoked during SSE keepalive to refresh session TTL.
     /// The callback receives the session token associated with each SSE connection.

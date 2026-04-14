@@ -4,6 +4,7 @@
 #include "game/CommandRegistrar.h"
 #include "game/DatabaseManager.h"
 #include "game/GameRoom.h"
+#include "game/ServerSession.h"
 
 #include "utils/Log.h"
 
@@ -46,6 +47,13 @@ class RemovePermsCommand : public CommandHandler {
             ctx.send_system_message("User '" + username + "' not found.");
             return;
         }
+
+        // Revoke auth tokens (stale ACL) and kill bound sessions.
+        db->revoke_all_tokens_for_user(username);
+        ctx.room.for_each_session([&](const ServerSession& s) {
+            if (s.moderator_name == username && !s.auth_token_id.empty())
+                ctx.send_kick_message(s.client_id, "Your permissions were updated. Please log in again.");
+        });
 
         Log::log_print(INFO, "Auth: %s removed permissions from %s", ctx.session.moderator_name.c_str(),
                        username.c_str());

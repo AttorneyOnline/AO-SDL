@@ -217,6 +217,24 @@ bool DatabaseManager::create_tables() {
         return false;
     ok = exec("CREATE INDEX IF NOT EXISTS idx_mutes_ipid ON mutes(IPID)") &&
          exec("CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(EXPIRES_AT)");
+    if (!ok)
+        return false;
+
+    ok = exec("CREATE TABLE IF NOT EXISTS auth_tokens ("
+              "  ID          INTEGER PRIMARY KEY AUTOINCREMENT,"
+              "  TOKEN       TEXT UNIQUE NOT NULL,"
+              "  USERNAME    TEXT NOT NULL,"
+              "  ACL         TEXT NOT NULL,"
+              "  CREATED_AT  INTEGER NOT NULL,"
+              "  EXPIRES_AT  INTEGER NOT NULL,"
+              "  REVOKED     INTEGER DEFAULT 0,"
+              "  LAST_USED   INTEGER DEFAULT 0,"
+              "  DESCRIPTION TEXT DEFAULT ''"
+              ")");
+    if (!ok)
+        return false;
+    ok = exec("CREATE INDEX IF NOT EXISTS idx_auth_tokens_username ON auth_tokens(USERNAME)") &&
+         exec("CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(TOKEN)");
     return ok;
 }
 
@@ -260,6 +278,12 @@ bool DatabaseManager::migrate() {
         // CREATE IF NOT EXISTS unconditionally every open(), so there
         // is nothing to do here beyond bumping user_version.
         if (!exec("PRAGMA user_version = 2"))
+            return rollback_and_fail();
+        [[fallthrough]];
+    case 2:
+        // v2 → v3: auth_tokens for REST authentication.
+        // Table is created by create_tables() unconditionally.
+        if (!exec("PRAGMA user_version = 3"))
             return rollback_and_fail();
         [[fallthrough]];
     default:
@@ -856,5 +880,110 @@ std::future<int> DatabaseManager::prune_expired_mutes() {
         if (sqlite3_step(stmt.get()) != SQLITE_DONE)
             return 0;
         return sqlite3_changes(db_);
+    });
+}
+
+// -- Auth token operations ----------------------------------------------------
+
+std::future<bool> DatabaseManager::create_auth_token(AuthTokenEntry entry) {
+    return dispatch([this, entry = std::move(entry)]() -> bool {
+        if (!db_)
+            return false;
+        auto stmt = prepare("INSERT INTO auth_tokens (TOKEN, USERNAME, ACL, CREATED_AT, EXPIRES_AT, DESCRIPTION) "
+                            "VALUES (?, ?, ?, ?, ?, ?)");
+        if (!stmt)
+            return false;
+        sqlite3_bind_text(stmt.get(), 1, entry.token.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 2, entry.username.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt.get(), 3, entry.acl.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(stmt.get(), 4, entry.created_at);
+        sqlite3_bind_int64(stmt.get(), 5, entry.expires_at);
+        sqlite3_bind_text(stmt.get(), 6, entry.description.c_str(), -1, SQLITE_TRANSIENT);
+        return sqlite3_step(stmt.get()) == SQLITE_DONE;
+    });
+}
+
+std::future<std::optional<AuthTokenEntry>> DatabaseManager::validate_auth_token(std::string token) {
+    return dispatch([this, token = std::move(token)]() -> std::optional<AuthTokenEntry> {
+        if (!db_)
+            return std::nullopt;
+        auto stmt = prepare("SELECT ID, TOKEN, USERNAME, ACL, CREATED_AT, EXPIRES_AT, REVOKED, LAST_USED, DESCRIPTION "
+                            "FROM auth_tokens WHERE TOKEN = ?");
+        if (!stmt)
+            return std::nullopt;
+        sqlite3_bind_text(stmt.get(), 1, token.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt.get()) != SQLITE_ROW)
+            return std::nullopt;
+
+        AuthTokenEntry entry;
+        entry.id = sqlite3_column_int64(stmt.get(), 0);
+        entry.token = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 1));
+        entry.username = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 2));
+        entry.acl = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 3));
+        entry.created_at = sqlite3_column_int64(stmt.get(), 4);
+        entry.expires_at = sqlite3_column_int64(stmt.get(), 5);
+        entry.revoked = sqlite3_column_int(stmt.get(), 6) != 0;
+        entry.last_used = sqlite3_column_int64(stmt.get(), 7);
+        auto* desc = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 8));
+        entry.description = desc ? desc : "";
+
+        // Check revocation
+        if (entry.revoked)
+            return std::nullopt;
+
+        // Check expiry
+        if (entry.expires_at > 0) {
+            auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+            if (now >= entry.expires_at)
+                return std::nullopt;
+        }
+
+        return entry;
+    });
+}
+
+std::future<bool> DatabaseManager::revoke_auth_token(std::string token) {
+    return dispatch([this, token = std::move(token)]() -> bool {
+        if (!db_)
+            return false;
+        auto stmt = prepare("UPDATE auth_tokens SET REVOKED = 1 WHERE TOKEN = ? AND REVOKED = 0");
+        if (!stmt)
+            return false;
+        sqlite3_bind_text(stmt.get(), 1, token.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE)
+            return false;
+        return sqlite3_changes(db_) > 0;
+    });
+}
+
+std::future<int> DatabaseManager::revoke_all_tokens_for_user(std::string username) {
+    return dispatch([this, username = std::move(username)]() -> int {
+        if (!db_)
+            return 0;
+        auto stmt = prepare("UPDATE auth_tokens SET REVOKED = 1 WHERE USERNAME = ? AND REVOKED = 0");
+        if (!stmt)
+            return 0;
+        sqlite3_bind_text(stmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt.get()) != SQLITE_DONE)
+            return 0;
+        return sqlite3_changes(db_);
+    });
+}
+
+std::future<void> DatabaseManager::touch_auth_token(std::string token) {
+    return dispatch([this, token = std::move(token)]() {
+        if (!db_)
+            return;
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+        auto stmt = prepare("UPDATE auth_tokens SET LAST_USED = ? WHERE TOKEN = ?");
+        if (!stmt)
+            return;
+        sqlite3_bind_int64(stmt.get(), 1, now);
+        sqlite3_bind_text(stmt.get(), 2, token.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(stmt.get());
     });
 }

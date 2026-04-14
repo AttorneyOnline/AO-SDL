@@ -4,6 +4,7 @@
 #include "game/CommandRegistrar.h"
 #include "game/DatabaseManager.h"
 #include "game/GameRoom.h"
+#include "game/ServerSession.h"
 
 #include "utils/Log.h"
 
@@ -47,6 +48,13 @@ class RemoveUserCommand : public CommandHandler {
             ctx.send_system_message("User '" + username + "' not found.");
             return;
         }
+
+        // Revoke all auth tokens for this user and kill bound sessions.
+        db->revoke_all_tokens_for_user(username);
+        ctx.room.for_each_session([&](const ServerSession& s) {
+            if (s.moderator_name == username && !s.auth_token_id.empty())
+                ctx.send_kick_message(s.client_id, "Your account has been deleted.");
+        });
 
         Log::log_print(INFO, "Auth: user '%s' deleted by %s", username.c_str(), ctx.session.moderator_name.c_str());
         ctx.send_system_message("User '" + username + "' deleted.");

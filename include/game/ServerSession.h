@@ -22,7 +22,8 @@ struct ServerSession {
           character_id(o.character_id), area(std::move(o.area)), ipid(std::move(o.ipid)),
           ip_address(std::move(o.ip_address)), hardware_id(std::move(o.hardware_id)), password(std::move(o.password)),
           casing_preferences(std::move(o.casing_preferences)), joined(o.joined), moderator(o.moderator),
-          acl_role(std::move(o.acl_role)), moderator_name(std::move(o.moderator_name)),
+          acl_role(std::move(o.acl_role)), auth_token_id(std::move(o.auth_token_id)),
+          moderator_name(std::move(o.moderator_name)),
           change_auth_started(o.change_auth_started), protocol(std::move(o.protocol)),
           last_activity_ns(o.last_activity_ns.load(std::memory_order_relaxed)),
           bytes_sent(o.bytes_sent.load(std::memory_order_relaxed)),
@@ -64,6 +65,10 @@ struct ServerSession {
 
     /// ACL role identifier (e.g. "SUPER", "MOD", "NONE"). Empty if not authenticated.
     std::string acl_role;
+
+    /// Auth token that created this session (for active kill on token revocation).
+    /// Empty for anonymous sessions and AO2 clients that authenticated via OOC /login.
+    std::string auth_token_id;
 
     /// Username from database auth (ADVANCED mode only). Empty in SIMPLE mode.
     std::string moderator_name;
