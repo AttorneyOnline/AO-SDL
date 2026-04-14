@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stop_token>
+#include <string>
 
 class DatabaseManager;
 class ServerSettings;
@@ -14,6 +15,10 @@ class ReplCommandRegistry;
 
 namespace http {
 class Server;
+}
+
+namespace net {
+class RateLimiter;
 }
 
 /// Non-owning bag of references to shared server state.
@@ -30,4 +35,8 @@ struct ServerContext {
     RestRouter& rest_router;
     WebSocketServer* ws;
     ReplCommandRegistry* repl;
+
+    std::string cfg_path;            ///< Path to kagami.json on disk.
+    std::string content_dir;         ///< Path to content config directory.
+    net::RateLimiter* rate_limiter;  ///< Rate limiter for hot-reload.
 };

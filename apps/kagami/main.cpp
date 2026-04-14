@@ -1,3 +1,4 @@
+#include "ConfigReloader.h"
 #include "ContentConfig.h"
 #include "LogSinkSetup.h"
 #include "MasterServerAdvertiser.h"
@@ -131,18 +132,16 @@ int main(int /*argc*/, char* argv[]) {
 
     // --- Content config (akashi-compatible) ---
     ContentConfig content;
-    {
-        auto bin_dir = std::filesystem::path(argv[0]).parent_path();
-        auto config_dir = (bin_dir / "config").string();
-        if (content.load(config_dir)) {
-            Log::log_print(INFO, "Loaded content config from %s", config_dir.c_str());
-        }
-        else {
-            Log::log_print(WARNING, "No content config in %s — using built-in defaults", config_dir.c_str());
-            content.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
-            content.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
-            content.area_names = {"Lobby", "Courtroom 1", "Courtroom 2"};
-        }
+    auto bin_dir = std::filesystem::path(argv[0]).parent_path();
+    std::string content_dir = (bin_dir / "config").string();
+    if (content.load(content_dir)) {
+        Log::log_print(INFO, "Loaded content config from %s", content_dir.c_str());
+    }
+    else {
+        Log::log_print(WARNING, "No content config in %s — using built-in defaults", content_dir.c_str());
+        content.characters = {"Phoenix", "Edgeworth", "Maya", "Godot", "Apollo"};
+        content.music = {"Trial.opus", "Objection.opus", "Pursuit.opus"};
+        content.area_names = {"Lobby", "Courtroom 1", "Courtroom 2"};
     }
 
     // --- Game state ---
@@ -638,7 +637,16 @@ int main(int /*argc*/, char* argv[]) {
     ReplCommandRegistry repl;
     ReplCommandFactory::instance().populate(repl);
 
-    ServerContext ctx{stop_src, db, cfg, ui, room, ao_backend, nx_backend, http, rest_router, &ws, &repl};
+    ServerContext ctx{stop_src,      db,          cfg,     ui,          room,    ao_backend, nx_backend,
+                      http,          rest_router, &ws,     &repl,       cfg_path, content_dir, &rate_limiter};
+
+    // Bind the hot-reload function for in-game /reload commands.
+    // The lambda runs inside the dispatch lock (the in-game command handler
+    // already holds it), so we pass an identity lock wrapper.
+    room.set_reload_func([&ctx]() -> std::string {
+        auto result = perform_reload(ctx, [](std::function<void()> fn) { fn(); });
+        return result.format();
+    });
 
     if (interactive) {
         std::string line;

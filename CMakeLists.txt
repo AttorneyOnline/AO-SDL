@@ -701,6 +701,7 @@ add_library(ao_net STATIC
     plugins/net/ao/commands/TestimonyCommand.cpp
     plugins/net/ao/commands/ModHeatCommand.cpp
     plugins/net/ao/commands/NoHeatCommand.cpp
+    plugins/net/ao/commands/ReloadCommand.cpp
 )
 set_property(TARGET ao_net PROPERTY CXX_STANDARD 20)
 target_include_directories(ao_net

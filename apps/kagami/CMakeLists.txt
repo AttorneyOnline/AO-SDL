@@ -1,5 +1,6 @@
 add_executable(kagami
     main.cpp
+    ConfigReloader.cpp
     ContentConfig.cpp
     MasterServerAdvertiser.cpp
     ServerSettings.cpp
@@ -12,6 +13,7 @@ add_executable(kagami
     commands/HelpCommand.cpp
     commands/SessionsCommand.cpp
     commands/StatusCommand.cpp
+    commands/ReloadCommand.cpp
 )
 set_property(TARGET kagami PROPERTY CXX_STANDARD 20)
 target_include_directories(kagami PRIVATE
