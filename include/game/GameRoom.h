@@ -264,6 +264,19 @@ class GameRoom {
         return area_states_;
     }
 
+    // --- Hot-reload support ---
+
+    /// Reload function bound by main.cpp after constructing ServerContext.
+    /// Returns a human-readable summary of what changed. Called by the
+    /// in-game /reload command (which has no access to ServerContext).
+    using ReloadFunc = std::function<std::string()>;
+    void set_reload_func(ReloadFunc func) {
+        reload_func_ = std::move(func);
+    }
+    const ReloadFunc& reload_func() const {
+        return reload_func_;
+    }
+
     // --- Actions (called by protocol backends) ---
 
     /// Process an IC message. Validates, then broadcasts to area via all delegates.
@@ -324,6 +337,8 @@ class GameRoom {
     std::unordered_map<std::string, AreaState> area_states_;       ///< area_id hash → state.
     std::unordered_map<std::string, std::string> area_name_to_id_; ///< name → area_id.
     std::unordered_map<std::string, int> area_name_to_index_;      ///< name → index in areas[].
+
+    ReloadFunc reload_func_;
 
     std::vector<ICBroadcast> ic_broadcasts_;
     std::vector<OOCBroadcast> ooc_broadcasts_;

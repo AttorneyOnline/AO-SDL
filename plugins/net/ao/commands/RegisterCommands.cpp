@@ -34,6 +34,7 @@ void ao_cmd_testimony();
 void ao_cmd_unban();
 void ao_cmd_modheat();
 void ao_cmd_noheat();
+void ao_cmd_reload();
 
 void ao_register_commands() {
     ao_cmd_adduser();
@@ -67,4 +68,5 @@ void ao_register_commands() {
     ao_cmd_unban();
     ao_cmd_modheat();
     ao_cmd_noheat();
+    ao_cmd_reload();
 }
