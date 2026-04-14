@@ -74,18 +74,7 @@ class AuthLoginEndpoint : public NXEndpoint {
         auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                        .count();
 
-        // Compute expiry from config. The TTL accessor is on ServerSettings
-        // which is a singleton -- but this endpoint lives in nx_net which
-        // doesn't link against the kagami app layer. Instead, read it from
-        // the config via the GameRoom's reload_func pattern... or just use
-        // a reasonable default. For now we'll read it from the global config
-        // singleton indirectly.
-        //
-        // Actually, NXServer already stores session_ttl_seconds as an atomic.
-        // We can add auth_token_ttl_seconds the same way, or just hardcode
-        // the 30-day default here since it's also the ServerSettings default.
-        // The config endpoint can be used to change it dynamically.
-        int64_t ttl = 30 * 24 * 60 * 60; // 30 days default
+        int64_t ttl = server().auth_token_ttl_seconds();
         int64_t expires_at = ttl > 0 ? now + ttl : 0;
 
         AuthTokenEntry entry;

@@ -1,5 +1,4 @@
 #include "net/nx/NXEndpoint.h"
-#include "net/nx/NXServer.h"
 
 #include "game/DatabaseManager.h"
 #include "game/GameRoom.h"
@@ -55,9 +54,7 @@ class AuthLogoutEndpoint : public NXEndpoint {
         // not a session token, so the standard session auth check won't work.
         return false;
     }
-    bool lock_free() const override {
-        return true;
-    }
+    // NOT lock_free — kill_sessions_for_token modifies session state.
 
     RestResponse handle(const RestRequest& req) override {
         if (req.bearer_token.empty())

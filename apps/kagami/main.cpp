@@ -499,6 +499,7 @@ int main(int /*argc*/, char* argv[]) {
     NXServer nx_backend(room);
     nx_backend.set_motd(cfg.motd());
     nx_backend.set_session_ttl_seconds(cfg.session_ttl_seconds());
+    nx_backend.set_auth_token_ttl_seconds(cfg.auth_token_ttl_seconds());
 
     // --- HTTP server ---
     http::Server http;

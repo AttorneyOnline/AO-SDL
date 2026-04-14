@@ -52,6 +52,13 @@ class NXServer {
         return session_ttl_seconds_.load(std::memory_order_relaxed);
     }
 
+    void set_auth_token_ttl_seconds(int ttl) {
+        auth_token_ttl_seconds_.store(ttl, std::memory_order_relaxed);
+    }
+    int auth_token_ttl_seconds() const {
+        return auth_token_ttl_seconds_.load(std::memory_order_relaxed);
+    }
+
   private:
     /// Resolve a transport-level client_id to the user_id string exposed to
     /// clients via the API. Returns nullopt if the session is gone.
@@ -70,4 +77,5 @@ class NXServer {
         0x8000'0000'0000'0000ULL; ///< High bit set to avoid collision with WS client IDs.
     std::string motd_;            ///< Set once before HTTP threads start.
     std::atomic<int> session_ttl_seconds_ = 300;
+    std::atomic<int> auth_token_ttl_seconds_ = 30 * 24 * 60 * 60; // 30 days
 };
