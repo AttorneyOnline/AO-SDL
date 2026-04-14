@@ -6,6 +6,12 @@
   import Config from './pages/Config.svelte';
   import Sessions from './pages/Sessions.svelte';
   import Traffic from './pages/Traffic.svelte';
+  import Bans from './pages/Bans.svelte';
+  import Moderation from './pages/Moderation.svelte';
+  import Areas from './pages/Areas.svelte';
+  import Users from './pages/Users.svelte';
+  import Firewall from './pages/Firewall.svelte';
+  import Content from './pages/Content.svelte';
 
   let hash = $state(window.location.hash || '#/login');
 
@@ -46,6 +52,18 @@
         <Sessions />
       {:else if page === 'traffic'}
         <Traffic />
+      {:else if page === 'bans'}
+        <Bans />
+      {:else if page === 'moderation'}
+        <Moderation />
+      {:else if page === 'areas'}
+        <Areas />
+      {:else if page === 'users'}
+        <Users />
+      {:else if page === 'firewall'}
+        <Firewall />
+      {:else if page === 'content'}
+        <Content />
       {:else}
         <div class="text-center text-gray-500 mt-20">
           <h2 class="text-2xl font-semibold mb-2">Coming Soon</h2>
