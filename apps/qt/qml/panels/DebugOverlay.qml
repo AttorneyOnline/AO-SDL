@@ -37,7 +37,6 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 6 * root.sc
         contentHeight: col.implicitHeight
-        clip: true
         flickableDirection: Flickable.VerticalFlick
 
         ColumnLayout {
@@ -52,20 +51,23 @@ Rectangle {
             DebugRow { label: "Tick rate"; value: dc ? dc.tickRateHz.toFixed(1) + " Hz" : "?" }
 
             // ── Engine tick breakdown (game-thread presenter) ───
-            SectionHeader { text: "Engine Tick"; visible: enginePie.hasData }
+            // Both pie sections keep their layout slot even when hasData is
+            // false — otherwise the Engine/Qt headers swap places during the
+            // first seconds while averages are still populating.
+            SectionHeader { text: "Engine Tick"; opacity: enginePie.hasData ? 1 : 0 }
             PieBreakdown {
                 id: enginePie
-                visible: hasData
+                opacity: hasData ? 1 : 0
                 sections: dc ? dc.tickSections : []
             }
 
             // ── Qt Scene Graph phase breakdown (render thread + gui gap) ──
             // gui_gap represents event-loop / binding-evaluation time between
             // frames; spikes there point at QML logic, not GPU work.
-            SectionHeader { text: "Qt Frame"; visible: qtPie.hasData }
+            SectionHeader { text: "Qt Frame"; opacity: qtPie.hasData ? 1 : 0 }
             PieBreakdown {
                 id: qtPie
-                visible: hasData
+                opacity: hasData ? 1 : 0
                 sections: dc ? dc.qtSections : []
             }
 
@@ -315,11 +317,23 @@ Rectangle {
     component PieBreakdown: RowLayout {
         id: pb
         property var sections: []
-        readonly property bool hasData: {
-            if (!sections || sections.length === 0) return false
-            for (var i = 0; i < sections.length; i++)
-                if (sections[i].avgUs > 0) return true
-            return false
+
+        // Cached snapshot of `sections` — updated at 15 Hz via the repaint
+        // timer below.  Without this, dc.tickSections is a fresh QVariantList
+        // every drain (~30 Hz), and the Repeater rebuilds all row delegates on
+        // every reference change, which reads as flicker.
+        property var _cachedSections: []
+
+        // Sticky once true: prevents the whole section from flapping
+        // visible/hidden when a single drain momentarily reports all zeros.
+        property bool _hasData: false
+        readonly property bool hasData: _hasData
+        onSectionsChanged: {
+            if (_hasData) return
+            if (!sections || sections.length === 0) return
+            for (var i = 0; i < sections.length; i++) {
+                if (sections[i].avgUs > 0) { _hasData = true; return }
+            }
         }
 
         Layout.fillWidth: true
@@ -331,9 +345,19 @@ Rectangle {
             implicitHeight: 64 * root.sc
             Layout.alignment: Qt.AlignTop
 
-            Connections {
-                target: dc
-                function onStatsChanged() { pieCanvas.requestPaint() }
+            // Drive both the Canvas repaint and the cached-sections snapshot
+            // at 15 Hz.  The rolling averages move slowly enough that matching
+            // the pie to the visible text labels at this rate is more than
+            // enough, and keeping the Repeater's model reference stable between
+            // ticks avoids delegate-churn flicker.
+            Timer {
+                interval: 1000 / 15
+                running: pb.visible && pb.hasData
+                repeat: true
+                onTriggered: {
+                    pb._cachedSections = pb.sections
+                    pieCanvas.requestPaint()
+                }
             }
 
             onPaint: {
@@ -343,14 +367,15 @@ Rectangle {
                 var cx = w / 2, cy = h / 2
                 var r = Math.min(w, h) / 2 - 2
 
+                var src = pb._cachedSections
                 var total = 0
-                for (var i = 0; i < pb.sections.length; i++)
-                    total += pb.sections[i].avgUs
+                for (var i = 0; i < src.length; i++)
+                    total += src[i].avgUs
                 if (total <= 0) return
 
                 var start = -Math.PI / 2
-                for (var j = 0; j < pb.sections.length; j++) {
-                    var frac = pb.sections[j].avgUs / total
+                for (var j = 0; j < src.length; j++) {
+                    var frac = src[j].avgUs / total
                     var end = start + frac * Math.PI * 2
                     ctx.beginPath()
                     ctx.moveTo(cx, cy)
@@ -374,7 +399,7 @@ Rectangle {
             spacing: 1 * root.sc
 
             Repeater {
-                model: pb.sections
+                model: pb._cachedSections
                 delegate: RowLayout {
                     required property var modelData
                     required property int index
@@ -393,7 +418,12 @@ Rectangle {
                         Layout.fillWidth: true
                     }
                     Label {
-                        text: modelData.avgUs.toFixed(0) + " us"
+                        // Show one decimal under 10 us so a 0.4 us slice doesn't
+                        // read "0 us" while still taking its real fraction of
+                        // the pie.
+                        text: (modelData.avgUs < 10
+                               ? modelData.avgUs.toFixed(1)
+                               : modelData.avgUs.toFixed(0)) + " us"
                         font.pixelSize: root.fs
                         font.family: "monospace"
                         color: root.valColor

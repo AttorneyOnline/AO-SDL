@@ -19,7 +19,8 @@
 DebugController::DebugController(QObject* parent)
     : QObject(parent), last_drain_(std::chrono::steady_clock::now()),
       last_cache_snapshot_(std::chrono::steady_clock::now() - std::chrono::seconds(10)),
-      last_event_snapshot_(std::chrono::steady_clock::now()) {
+      last_event_snapshot_(std::chrono::steady_clock::now()),
+      last_stats_emit_(std::chrono::steady_clock::now() - std::chrono::seconds(1)) {
 }
 
 DebugController::~DebugController() = default;
@@ -185,7 +186,16 @@ void DebugController::drain() {
         event_stats_ = std::move(list);
     }
 
-    emit statsChanged();
+    // Throttle statsChanged to ~30 Hz.  drain() runs on every event-loop wake
+    // (QAbstractEventDispatcher::awake), which on an idle UI can fire 200+ Hz.
+    // Every emit invalidates ~30 QML bindings in DebugOverlay and triggers two
+    // Canvas repaints, so rate-limiting here is the cheapest way to reclaim the
+    // GPU/CPU cost of the overlay.
+    auto since_stats = std::chrono::duration<float>(now - last_stats_emit_).count();
+    if (since_stats >= 1.0f / 30.0f) {
+        last_stats_emit_ = now;
+        emit statsChanged();
+    }
 }
 
 void DebugController::set_selected_cache_path(const QString& path) {

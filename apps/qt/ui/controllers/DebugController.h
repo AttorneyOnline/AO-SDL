@@ -260,4 +260,7 @@ class DebugController : public QObject {
     // Event Stats
     QVariantList event_stats_;
     std::chrono::steady_clock::time_point last_event_snapshot_;
+
+    // Throttle for statsChanged emits (drain runs per event-loop wake).
+    std::chrono::steady_clock::time_point last_stats_emit_;
 };
