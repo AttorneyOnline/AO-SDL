@@ -118,6 +118,7 @@ static void set_user_id(nlohmann::json& j, const std::optional<std::string>& uid
 void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
     auto& a = evt.action;
     nlohmann::json j;
+    j["area"] = area;
     set_user_id(j, resolve_user_id(a.sender_id));
     j["character"] = a.character;
     j["message"] = a.message;
@@ -149,7 +150,7 @@ void NXServer::broadcast_ic(const std::string& area, const ICEvent& evt) {
 }
 
 void NXServer::broadcast_ooc(const std::string& area, const OOCEvent& evt) {
-    nlohmann::json j = {{"name", evt.action.name}, {"message", evt.action.message}};
+    nlohmann::json j = {{"area", area}, {"name", evt.action.name}, {"message", evt.action.message}};
     set_user_id(j, resolve_user_id(evt.action.sender_id));
     publish_sse("ooc_message", std::move(j), area);
 }
