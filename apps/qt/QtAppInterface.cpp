@@ -3,6 +3,7 @@
 #include "EngineEventBridge.h"
 #include "EngineInterface.h"
 #include "asset/MediaManager.h"
+#include "ui/CachePreviewProvider.h"
 #include "ui/CharIconProvider.h"
 #include "ui/EmoteIconProvider.h"
 #include "ui/QtImageWatcher.h"
@@ -89,6 +90,8 @@ bool QtAppInterface::setup_qml() {
                                   new CharIconProvider(MediaManager::instance().assets(), *watcher_));
     qml_engine_->addImageProvider(QStringLiteral("emoteicon"),
                                   new EmoteIconProvider(MediaManager::instance().assets(), *watcher_));
+    qml_engine_->addImageProvider(QStringLiteral("cachepreview"),
+                                  new CachePreviewProvider(MediaManager::instance().assets()));
     Log::debug("[QtAppInterface] QML engine created");
 
     Log::info("[QtAppInterface] loading QML module");

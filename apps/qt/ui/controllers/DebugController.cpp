@@ -2,12 +2,14 @@
 
 #include "QtDebugContext.h"
 #include "asset/AssetCache.h"
+#include "asset/ImageAsset.h"
 #include "asset/MediaManager.h"
 #include "asset/MountManager.h"
 #include "event/EventManager.h"
 #include "event/PlayerCountEvent.h"
 #include "event/ServerInfoEvent.h"
 #include "game/GameThread.h"
+#include "game/IScenePresenter.h"
 
 #include <QVariantMap>
 
@@ -15,6 +17,7 @@
 
 DebugController::DebugController(QObject* parent)
     : QObject(parent), last_drain_(std::chrono::steady_clock::now()),
+      last_cache_snapshot_(std::chrono::steady_clock::now() - std::chrono::seconds(10)),
       last_event_snapshot_(std::chrono::steady_clock::now()) {
 }
 
@@ -61,7 +64,6 @@ void DebugController::drain() {
 
     if (delta > 0.0f) {
         float instant_fps = 1.0f / delta;
-        // Exponential moving average, heavier smoothing
         constexpr float alpha = 0.05f;
         fps_ = (fps_ < 1.0f) ? instant_fps : fps_ + alpha * (instant_fps - fps_);
     }
@@ -71,6 +73,25 @@ void DebugController::drain() {
     if (ctx.game_thread) {
         game_tick_ms_ = static_cast<float>(ctx.game_thread->last_tick_us()) / 1000.0f;
         tick_rate_hz_ = ctx.game_thread->tick_rate_hz();
+    }
+
+    // -- Tick breakdown (pie slices with rolling averages) --
+    if (ctx.presenter) {
+        auto profile = ctx.presenter->tick_profile();
+        QVariantList slices;
+        slices.reserve(static_cast<int>(profile.size()));
+        for (const auto& entry : profile) {
+            float us = static_cast<float>(entry.us->load(std::memory_order_relaxed));
+            tick_avg_[entry.name].push(us);
+
+            QVariantMap slice;
+            slice[QStringLiteral("name")] = QString::fromLatin1(entry.name);
+            slice[QStringLiteral("us")] = us;
+            slice[QStringLiteral("avgUs")] = tick_avg_[entry.name].average();
+            slices.append(slice);
+        }
+        tick_sections_ = std::move(slices);
+        frame_count_++;
     }
 
     // -- Connection events --
@@ -95,11 +116,39 @@ void DebugController::drain() {
     http_pool_pending_ = http.pool_pending;
     http_cached_size_ = format_bytes(http.cached_bytes);
 
-    // -- Asset cache --
+    // -- Asset cache summary --
     const auto& cache = MediaManager::instance().assets().cache();
     cache_entries_ = static_cast<int>(cache.entry_count());
     cache_used_ = format_bytes(cache.used_bytes());
     cache_max_ = format_bytes(cache.max_bytes());
+
+    // -- Asset cache list (resampled every ~2s to avoid UI flicker) --
+    auto since_cache_snapshot = std::chrono::duration<float>(now - last_cache_snapshot_).count();
+    if (since_cache_snapshot >= 2.0f) {
+        last_cache_snapshot_ = now;
+        auto snapshot = cache.snapshot_lru();
+        QVariantList list;
+        list.reserve(static_cast<int>(snapshot.size()));
+        for (const auto& e : snapshot) {
+            QVariantMap entry;
+            entry[QStringLiteral("path")] = QString::fromStdString(e.path);
+            entry[QStringLiteral("format")] = QString::fromStdString(e.format);
+            entry[QStringLiteral("bytes")] = static_cast<qulonglong>(e.bytes);
+            entry[QStringLiteral("bytesFmt")] = format_bytes(e.bytes);
+            entry[QStringLiteral("useCount")] = static_cast<qlonglong>(e.use_count);
+            entry[QStringLiteral("width")] = e.width;
+            entry[QStringLiteral("height")] = e.height;
+            entry[QStringLiteral("frameCount")] = e.frame_count;
+            list.append(entry);
+        }
+        cache_list_ = std::move(list);
+        emit cacheListChanged();
+
+        // Refresh selected entry's metadata (dimensions change when
+        // evicted/reloaded, though the path key stays the same).
+        if (!selected_cache_path_.isEmpty())
+            refresh_selected_cache_entry();
+    }
 
     // -- Event stats (refresh every ~1 second to avoid overhead) --
     auto since_snapshot = std::chrono::duration<float>(now - last_event_snapshot_).count();
@@ -118,6 +167,35 @@ void DebugController::drain() {
     }
 
     emit statsChanged();
+}
+
+void DebugController::set_selected_cache_path(const QString& path) {
+    if (path == selected_cache_path_)
+        return;
+    selected_cache_path_ = path;
+    refresh_selected_cache_entry();
+    emit selectedCachePathChanged();
+}
+
+void DebugController::refresh_selected_cache_entry() {
+    selected_cache_width_ = 0;
+    selected_cache_height_ = 0;
+    selected_cache_frame_count_ = 0;
+    selected_cache_format_.clear();
+
+    if (selected_cache_path_.isEmpty())
+        return;
+
+    auto asset = MediaManager::instance().assets().cache().peek(selected_cache_path_.toStdString());
+    if (!asset)
+        return;
+
+    selected_cache_format_ = QString::fromStdString(asset->format());
+    if (auto img = std::dynamic_pointer_cast<ImageAsset>(asset)) {
+        selected_cache_width_ = img->width();
+        selected_cache_height_ = img->height();
+        selected_cache_frame_count_ = img->frame_count();
+    }
 }
 
 // --- Helpers ----------------------------------------------------------------

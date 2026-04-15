@@ -108,6 +108,8 @@ target_sources(aoqt PRIVATE
     ui/CharIconProvider.cpp
     ui/EmoteIconProvider.h
     ui/EmoteIconProvider.cpp
+    ui/CachePreviewProvider.h
+    ui/CachePreviewProvider.cpp
     ui/QtImageWatcher.h
     ui/QtImageWatcher.cpp
 
