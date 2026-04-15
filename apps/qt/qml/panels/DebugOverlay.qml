@@ -51,100 +51,22 @@ Rectangle {
             DebugRow { label: "Game tick"; value: dc ? dc.gameTickMs.toFixed(2) + " ms" : "?" }
             DebugRow { label: "Tick rate"; value: dc ? dc.tickRateHz.toFixed(1) + " Hz" : "?" }
 
-            // ── Tick Breakdown (pie + legend) ───────────────────
-            SectionHeader { text: "Tick Breakdown"; visible: pie.hasData }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8 * root.sc
-                visible: pie.hasData
+            // ── Engine tick breakdown (game-thread presenter) ───
+            SectionHeader { text: "Engine Tick"; visible: enginePie.hasData }
+            PieBreakdown {
+                id: enginePie
+                visible: hasData
+                sections: dc ? dc.tickSections : []
+            }
 
-                // Pie chart
-                Canvas {
-                    id: pie
-                    readonly property var sections: dc ? dc.tickSections : []
-                    readonly property bool hasData: sections && sections.length > 0
-
-                    implicitWidth: 64 * root.sc
-                    implicitHeight: 64 * root.sc
-                    Layout.alignment: Qt.AlignTop
-
-                    Connections {
-                        target: dc
-                        function onStatsChanged() { pie.requestPaint() }
-                    }
-                    onSectionsChanged: requestPaint()
-
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        var w = width, h = height
-                        var cx = w / 2, cy = h / 2
-                        var r = Math.min(w, h) / 2 - 2
-
-                        var total = 0
-                        for (var i = 0; i < sections.length; i++)
-                            total += sections[i].avgUs
-                        if (total <= 0) return
-
-                        var start = -Math.PI / 2 // 12 o'clock
-                        for (var j = 0; j < sections.length; j++) {
-                            var frac = sections[j].avgUs / total
-                            var end = start + frac * Math.PI * 2
-
-                            ctx.beginPath()
-                            ctx.moveTo(cx, cy)
-                            ctx.arc(cx, cy, r, start, end, false)
-                            ctx.closePath()
-                            ctx.fillStyle = root.sliceColors[j % root.sliceColors.length]
-                            ctx.fill()
-
-                            start = end
-                        }
-
-                        // Outline
-                        ctx.beginPath()
-                        ctx.arc(cx, cy, r, 0, Math.PI * 2)
-                        ctx.strokeStyle = "#505050"
-                        ctx.lineWidth = 1
-                        ctx.stroke()
-                    }
-                }
-
-                // Legend
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
-                    spacing: 1 * root.sc
-
-                    Repeater {
-                        model: pie.sections
-                        delegate: RowLayout {
-                            required property var modelData
-                            required property int index
-                            spacing: 4 * root.sc
-                            Layout.fillWidth: true
-
-                            Rectangle {
-                                width: 10 * root.sc; height: 10 * root.sc
-                                color: root.sliceColors[index % root.sliceColors.length]
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-                            Label {
-                                text: modelData.name
-                                font.pixelSize: root.fs
-                                color: root.lblColor
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            Label {
-                                text: modelData.avgUs.toFixed(0) + " us"
-                                font.pixelSize: root.fs
-                                font.family: "monospace"
-                                color: root.valColor
-                            }
-                        }
-                    }
-                }
+            // ── Qt Scene Graph phase breakdown (render thread + gui gap) ──
+            // gui_gap represents event-loop / binding-evaluation time between
+            // frames; spikes there point at QML logic, not GPU work.
+            SectionHeader { text: "Qt Frame"; visible: qtPie.hasData }
+            PieBreakdown {
+                id: qtPie
+                visible: hasData
+                sections: dc ? dc.qtSections : []
             }
 
             DebugSep {}
@@ -384,6 +306,100 @@ Rectangle {
             color: root.valColor
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignRight
+        }
+    }
+
+    // Shared pie-chart + legend for a list of {name, avgUs} slices.  Used for
+    // both the engine tick and the Qt QSG phase breakdowns so their visuals
+    // stay in sync.
+    component PieBreakdown: RowLayout {
+        id: pb
+        property var sections: []
+        readonly property bool hasData: {
+            if (!sections || sections.length === 0) return false
+            for (var i = 0; i < sections.length; i++)
+                if (sections[i].avgUs > 0) return true
+            return false
+        }
+
+        Layout.fillWidth: true
+        spacing: 8 * root.sc
+
+        Canvas {
+            id: pieCanvas
+            implicitWidth: 64 * root.sc
+            implicitHeight: 64 * root.sc
+            Layout.alignment: Qt.AlignTop
+
+            Connections {
+                target: dc
+                function onStatsChanged() { pieCanvas.requestPaint() }
+            }
+
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                var w = width, h = height
+                var cx = w / 2, cy = h / 2
+                var r = Math.min(w, h) / 2 - 2
+
+                var total = 0
+                for (var i = 0; i < pb.sections.length; i++)
+                    total += pb.sections[i].avgUs
+                if (total <= 0) return
+
+                var start = -Math.PI / 2
+                for (var j = 0; j < pb.sections.length; j++) {
+                    var frac = pb.sections[j].avgUs / total
+                    var end = start + frac * Math.PI * 2
+                    ctx.beginPath()
+                    ctx.moveTo(cx, cy)
+                    ctx.arc(cx, cy, r, start, end, false)
+                    ctx.closePath()
+                    ctx.fillStyle = root.sliceColors[j % root.sliceColors.length]
+                    ctx.fill()
+                    start = end
+                }
+                ctx.beginPath()
+                ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                ctx.strokeStyle = "#505050"
+                ctx.lineWidth = 1
+                ctx.stroke()
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignTop
+            spacing: 1 * root.sc
+
+            Repeater {
+                model: pb.sections
+                delegate: RowLayout {
+                    required property var modelData
+                    required property int index
+                    spacing: 4 * root.sc
+                    Layout.fillWidth: true
+                    Rectangle {
+                        width: 10 * root.sc; height: 10 * root.sc
+                        color: root.sliceColors[index % root.sliceColors.length]
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    Label {
+                        text: modelData.name
+                        font.pixelSize: root.fs
+                        color: root.lblColor
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: modelData.avgUs.toFixed(0) + " us"
+                        font.pixelSize: root.fs
+                        font.family: "monospace"
+                        color: root.valColor
+                    }
+                }
+            }
         }
     }
 

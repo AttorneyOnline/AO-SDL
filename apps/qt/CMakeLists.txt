@@ -94,6 +94,8 @@ target_sources(aoqt PRIVATE
     render/IQtRenderBackend.h
     render/RenderBridge.h
     render/RenderBridge.cpp
+    render/QtRenderProfiler.h
+    render/QtRenderProfiler.cpp
 
     EngineInterface.h
     EngineInterface.cpp

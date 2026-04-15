@@ -1,6 +1,7 @@
 #include "DebugController.h"
 
 #include "QtDebugContext.h"
+#include "render/QtRenderProfiler.h"
 #include "asset/AssetCache.h"
 #include "asset/ImageAsset.h"
 #include "asset/MediaManager.h"
@@ -92,6 +93,24 @@ void DebugController::drain() {
         }
         tick_sections_ = std::move(slices);
         frame_count_++;
+    }
+
+    // -- Qt Scene Graph phase timings (sync/render/present/gui_gap) --
+    {
+        auto phases = QtRenderProfiler::instance().sections();
+        QVariantList slices;
+        slices.reserve(static_cast<int>(phases.size()));
+        for (const auto& p : phases) {
+            float us = static_cast<float>(p.us->load(std::memory_order_relaxed));
+            qt_avg_[p.name].push(us);
+
+            QVariantMap slice;
+            slice[QStringLiteral("name")] = QString::fromLatin1(p.name);
+            slice[QStringLiteral("us")] = us;
+            slice[QStringLiteral("avgUs")] = qt_avg_[p.name].average();
+            slices.append(slice);
+        }
+        qt_sections_ = std::move(slices);
     }
 
     // -- Connection events --

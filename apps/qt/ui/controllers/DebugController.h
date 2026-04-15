@@ -28,6 +28,12 @@ class DebugController : public QObject {
     /// 30-sample ring buffer; QML renders a pie chart from avgUs.
     Q_PROPERTY(QVariantList tickSections READ tick_sections NOTIFY statsChanged)
 
+    /// QSG per-phase timing slices (sync/render/present/gui_gap) with the same
+    /// 30-sample rolling average as tickSections.  Populated from
+    /// QtRenderProfiler, which samples QQuickWindow lifecycle signals on the
+    /// render thread.
+    Q_PROPERTY(QVariantList qtSections READ qt_sections NOTIFY statsChanged)
+
     // -- Renderer --
     Q_PROPERTY(QString backendName READ backend_name CONSTANT)
     Q_PROPERTY(int internalScale READ internal_scale WRITE set_internal_scale NOTIFY internalScaleChanged)
@@ -88,6 +94,10 @@ class DebugController : public QObject {
 
     QVariantList tick_sections() const {
         return tick_sections_;
+    }
+
+    QVariantList qt_sections() const {
+        return qt_sections_;
     }
 
     // -- Renderer --
@@ -212,6 +222,10 @@ class DebugController : public QObject {
     };
     std::unordered_map<const char*, RingBuffer> tick_avg_;
     QVariantList tick_sections_;
+
+    // Parallel averaging state for Qt render-side phases.
+    std::unordered_map<const char*, RingBuffer> qt_avg_;
+    QVariantList qt_sections_;
 
     // Connection
     QString conn_state_ = "Disconnected";

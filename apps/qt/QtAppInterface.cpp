@@ -2,6 +2,7 @@
 
 #include "EngineEventBridge.h"
 #include "EngineInterface.h"
+#include "render/QtRenderProfiler.h"
 #include "asset/MediaManager.h"
 #include "ui/CachePreviewProvider.h"
 #include "ui/CharIconProvider.h"
@@ -14,6 +15,7 @@
 
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickWindow>
 
 QtAppInterface::QtAppInterface(QObject* parent) : QObject(parent) {
 }
@@ -101,6 +103,15 @@ bool QtAppInterface::setup_qml() {
         return false;
     }
     Log::info("[QtAppInterface] QML loaded");
+
+    // Install QSG phase profiler on the first top-level window so the debug
+    // overlay can visualize sync/render/present/gui-gap costs.
+    for (QObject* obj : qml_engine_->rootObjects()) {
+        if (auto* w = qobject_cast<QQuickWindow*>(obj)) {
+            QtRenderProfiler::instance().install(w);
+            break;
+        }
+    }
     return true;
 }
 
