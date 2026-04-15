@@ -25,16 +25,16 @@
 </script>
 
 <div class="space-y-4">
-  <h2 class="text-2xl font-bold">Sessions <span class="text-base text-gray-500 font-normal">({sessions.length})</span></h2>
+  <h2 class="text-lg font-semibold">Players <span class="text-sm text-(--color-text-muted) font-normal">({sessions.length})</span></h2>
 
   {#if loading}
-    <p class="text-gray-500">Loading...</p>
+    <p class="text-(--color-text-muted) text-sm">Loading...</p>
   {:else}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-xs text-gray-500 border-b border-gray-800">
+            <tr class="text-left text-[10px] uppercase tracking-wider text-(--color-text-muted) border-b border-(--color-border)">
               <th class="px-4 py-2">Name</th>
               <th class="px-4 py-2">Protocol</th>
               <th class="px-4 py-2">Area</th>
@@ -44,19 +44,19 @@
               <th class="px-4 py-2 text-right">Idle</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-800/50">
+          <tbody class="divide-y divide-(--color-border)/50">
             {#each sessions as s}
               <tr
-                class="hover:bg-gray-800/30 cursor-pointer {selected?.session_id === s.session_id ? 'bg-gray-800/50' : ''}"
+                class="hover:bg-(--color-surface-2)/50 cursor-pointer {selected?.session_id === s.session_id ? 'bg-(--color-surface-2)' : ''}"
                 onclick={() => selected = selected?.session_id === s.session_id ? null : s}
               >
-                <td class="px-4 py-2 font-medium">{s.display_name || '(anonymous)'}</td>
-                <td class="px-4 py-2 text-gray-400">{s.protocol}</td>
-                <td class="px-4 py-2 text-gray-400">{s.area}</td>
-                <td class="px-4 py-2 text-gray-500 hidden sm:table-cell truncate max-w-32">{s.client_software}</td>
-                <td class="px-4 py-2 text-right text-gray-500 hidden md:table-cell tabular-nums">{formatBytes(s.bytes_sent)}</td>
-                <td class="px-4 py-2 text-right text-gray-500 hidden md:table-cell tabular-nums">{formatBytes(s.bytes_received)}</td>
-                <td class="px-4 py-2 text-right text-gray-500 tabular-nums">{s.idle_seconds}s</td>
+                <td class="px-4 py-1.5 font-medium">{s.display_name || '(anon)'}</td>
+                <td class="px-4 py-1.5 text-(--color-text-secondary)">{s.protocol}</td>
+                <td class="px-4 py-1.5 text-(--color-text-secondary)">{s.area}</td>
+                <td class="px-4 py-1.5 text-(--color-text-muted) hidden sm:table-cell truncate max-w-32">{s.client_software}</td>
+                <td class="px-4 py-1.5 text-right text-(--color-text-muted) hidden md:table-cell tabular-nums">{formatBytes(s.bytes_sent)}</td>
+                <td class="px-4 py-1.5 text-right text-(--color-text-muted) hidden md:table-cell tabular-nums">{formatBytes(s.bytes_received)}</td>
+                <td class="px-4 py-1.5 text-right text-(--color-text-muted) tabular-nums">{s.idle_seconds}s</td>
               </tr>
             {/each}
           </tbody>
@@ -64,11 +64,10 @@
       </div>
     </div>
 
-    <!-- Detail panel -->
     {#if selected}
-      <div class="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
+      <div class="bg-(--color-surface-1) border border-(--color-border) p-4 space-y-3">
         <h3 class="text-sm font-semibold">{selected.display_name || '(anonymous)'}</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
           {@render detail('Session ID', selected.session_id)}
           {@render detail('Protocol', selected.protocol)}
           {@render detail('Area', selected.area)}
@@ -89,7 +88,7 @@
 
 {#snippet detail(label, value)}
   <div>
-    <div class="text-gray-500">{label}</div>
-    <div class="text-gray-200 font-mono truncate">{value}</div>
+    <div class="text-(--color-text-muted) text-[10px] uppercase tracking-wider">{label}</div>
+    <div class="text-(--color-text-primary) font-mono mt-0.5 truncate">{value}</div>
   </div>
 {/snippet}

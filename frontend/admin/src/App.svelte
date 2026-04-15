@@ -1,5 +1,5 @@
 <script>
-  import { auth } from './lib/auth.svelte.js';
+  import { auth, startKeepalive, stopKeepalive } from './lib/auth.svelte.js';
   import Nav from './components/Nav.svelte';
   import Login from './pages/Login.svelte';
   import Dashboard from './pages/Dashboard.svelte';
@@ -24,6 +24,13 @@
     return () => window.removeEventListener('hashchange', onHashChange);
   });
 
+  // Start/stop session keepalive based on login state
+  $effect(() => {
+    if (auth.loggedIn) startKeepalive();
+    else stopKeepalive();
+    return () => stopKeepalive();
+  });
+
   // Redirect to login if not authenticated
   let page = $derived.by(() => {
     if (!auth.loggedIn && hash !== '#/login') {
@@ -41,7 +48,7 @@
 {#if !auth.loggedIn}
   <Login />
 {:else}
-  <div class="flex h-screen bg-gray-950 text-gray-100">
+  <div class="flex h-screen bg-(--color-surface-0) text-(--color-text-primary)">
     <Nav currentPage={page} />
     <main class="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
       {#if page === 'dashboard'}

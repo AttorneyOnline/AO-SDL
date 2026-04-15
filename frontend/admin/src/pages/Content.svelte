@@ -19,35 +19,46 @@
     if (tab === 'music') return content.music;
     return [];
   }
+
+  // Detect music categories (lines that don't contain file extensions)
+  function isCategory(item) {
+    return tab === 'music' && !item.includes('.');
+  }
 </script>
 
 <div class="space-y-4">
-  <h2 class="text-2xl font-bold">Content</h2>
+  <h2 class="text-lg font-semibold">Content</h2>
 
-  <div class="flex gap-1 border-b border-gray-800">
-    <button onclick={() => tab = 'areas'} class="px-4 py-2 text-sm {tab === 'areas' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}">
+  <div class="flex gap-4 border-b border-(--color-border)">
+    <button onclick={() => tab = 'areas'} class="pb-2 text-sm border-b-2 transition-colors {tab === 'areas' ? 'border-(--color-accent) text-(--color-accent)' : 'border-transparent text-(--color-text-muted)'}">
       Areas ({content.areas.length})
     </button>
-    <button onclick={() => tab = 'characters'} class="px-4 py-2 text-sm {tab === 'characters' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}">
+    <button onclick={() => tab = 'characters'} class="pb-2 text-sm border-b-2 transition-colors {tab === 'characters' ? 'border-(--color-accent) text-(--color-accent)' : 'border-transparent text-(--color-text-muted)'}">
       Characters ({content.characters.length})
     </button>
-    <button onclick={() => tab = 'music'} class="px-4 py-2 text-sm {tab === 'music' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}">
+    <button onclick={() => tab = 'music'} class="pb-2 text-sm border-b-2 transition-colors {tab === 'music' ? 'border-(--color-accent) text-(--color-accent)' : 'border-transparent text-(--color-text-muted)'}">
       Music ({content.music.length})
     </button>
   </div>
 
   {#if loading}
-    <p class="text-gray-500">Loading...</p>
+    <p class="text-(--color-text-muted) text-sm">Loading...</p>
   {:else}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-      <div class="max-h-[60vh] overflow-y-auto divide-y divide-gray-800/50">
+    <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
+      <div class="max-h-[65vh] overflow-y-auto">
         {#each currentList() as item, i}
-          <div class="px-4 py-2 flex items-center gap-3 text-sm hover:bg-gray-800/30">
-            <span class="text-xs text-gray-600 w-8 text-right tabular-nums">{i + 1}</span>
-            <span class="text-gray-200">{item}</span>
-          </div>
+          {#if isCategory(item)}
+            <div class="px-4 py-2 bg-(--color-surface-2) text-xs font-semibold uppercase tracking-wider text-(--color-text-secondary) border-b border-(--color-border) sticky top-0">
+              {item}
+            </div>
+          {:else}
+            <div class="px-4 py-1.5 flex items-center gap-3 text-sm hover:bg-(--color-surface-2)/50 border-b border-(--color-border)/30">
+              <span class="text-[10px] text-(--color-text-muted) w-6 text-right tabular-nums">{i + 1}</span>
+              <span>{item}</span>
+            </div>
+          {/if}
         {:else}
-          <div class="px-4 py-8 text-center text-gray-500">No items</div>
+          <div class="px-4 py-8 text-center text-(--color-text-muted) text-sm">No items</div>
         {/each}
       </div>
     </div>

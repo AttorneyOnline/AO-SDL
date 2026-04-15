@@ -27,106 +27,98 @@
     return () => clearInterval(interval);
   });
 
-  function metric(name) {
-    return metrics.get(name) ?? 0;
-  }
+  function m(name) { return metrics.get(name) ?? 0; }
 </script>
 
-<div class="space-y-6">
-  <h2 class="text-2xl font-bold">Dashboard</h2>
+<div class="space-y-5">
+  <h2 class="text-lg font-semibold">Dashboard</h2>
 
   {#if loading}
-    <p class="text-gray-500">Loading...</p>
+    <p class="text-(--color-text-muted) text-sm">Loading...</p>
   {:else}
-    <!-- Server info banner -->
     {#if serverInfo}
-      <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
-        <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <span class="text-lg font-semibold">{serverInfo.name}</span>
-          <span class="text-xs text-gray-500">v{serverInfo.version}</span>
-          {#if serverInfo.description}
-            <span class="text-sm text-gray-400">&mdash; {serverInfo.description}</span>
-          {/if}
-        </div>
+      <div class="bg-(--color-surface-1) border border-(--color-border) px-4 py-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span class="font-semibold text-sm">{serverInfo.name}</span>
+        <span class="text-xs text-(--color-text-muted)">v{serverInfo.version}</span>
+        {#if serverInfo.description}
+          <span class="text-xs text-(--color-text-secondary)">{serverInfo.description}</span>
+        {/if}
       </div>
     {/if}
 
-    <!-- Gauge cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-(--color-border)">
       {@render gauge('Players', serverInfo?.online ?? 0, '/' + (serverInfo?.max ?? '?'))}
-      {@render gauge('AO2 Clients', metric('kagami_ws_connections'), '')}
-      {@render gauge('REST Sessions', sessions.length, '')}
+      {@render gauge('WS Clients', m('kagami_ws_connections'), '')}
+      {@render gauge('REST', sessions.length, '')}
       {@render gauge('Areas', areas.length, '')}
-      {@render gauge('Moderators', metric('kagami_sessions_moderators'), '')}
+      {@render gauge('Mods', m('kagami_sessions_moderators'), '')}
+      {@render gauge('Chars', m('kagami_characters_taken'), '')}
     </div>
 
-    <!-- Area summary -->
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-800">
-        <h3 class="text-sm font-semibold text-gray-300">Areas</h3>
-      </div>
-      <div class="divide-y divide-gray-800">
-        {#each areas as area}
-          <div class="px-4 py-2 flex items-center justify-between text-sm">
-            <div>
-              <span class="font-medium">{area.name}</span>
-              {#if area.status && area.status !== 'IDLE'}
-                <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300">{area.status}</span>
-              {/if}
-              {#if area.locked && area.locked !== 'FREE'}
-                <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-yellow-900/50 text-yellow-300">{area.locked}</span>
-              {/if}
+    <div class="grid lg:grid-cols-2 gap-5">
+      <!-- Areas -->
+      <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
+        <div class="px-4 py-2 border-b border-(--color-border)">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">Areas</h3>
+        </div>
+        <div class="divide-y divide-(--color-border)">
+          {#each areas as area}
+            <div class="px-4 py-1.5 flex items-center justify-between text-sm">
+              <div class="flex items-center gap-2">
+                <span>{area.name}</span>
+                {#if area.status && area.status !== 'IDLE'}
+                  <span class="text-[10px] px-1 py-px bg-cyan-500/15 text-cyan-400 font-medium">{area.status}</span>
+                {/if}
+                {#if area.locked && area.locked !== 'FREE'}
+                  <span class="text-[10px] px-1 py-px bg-amber-500/15 text-amber-400 font-medium">{area.locked}</span>
+                {/if}
+              </div>
+              <span class="text-xs text-(--color-text-muted) tabular-nums">{area.players ?? 0}</span>
             </div>
-            <span class="text-gray-500">{area.players ?? 0} players</span>
-          </div>
-        {/each}
+          {/each}
+        </div>
       </div>
-    </div>
 
-    <!-- Session summary table -->
-    {#if sessions.length > 0}
-      <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-800">
-          <h3 class="text-sm font-semibold text-gray-300">Active Sessions</h3>
+      <!-- Sessions -->
+      <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
+        <div class="px-4 py-2 border-b border-(--color-border) flex items-center justify-between">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">Active Sessions</h3>
+          {#if sessions.length > 15}
+            <a href="#/sessions" class="text-xs text-(--color-text-muted) hover:text-(--color-text-primary)">View all</a>
+          {/if}
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="text-left text-xs text-gray-500 border-b border-gray-800">
-                <th class="px-4 py-2">Name</th>
-                <th class="px-4 py-2">Protocol</th>
-                <th class="px-4 py-2">Area</th>
-                <th class="px-4 py-2 text-right">Idle</th>
+              <tr class="text-left text-[10px] uppercase tracking-wider text-(--color-text-muted) border-b border-(--color-border)">
+                <th class="px-4 py-1.5">Name</th>
+                <th class="px-4 py-1.5">Area</th>
+                <th class="px-4 py-1.5 text-right">Idle</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-800/50">
-              {#each sessions.slice(0, 20) as s}
-                <tr class="hover:bg-gray-800/30">
-                  <td class="px-4 py-1.5">{s.display_name || '(anonymous)'}</td>
-                  <td class="px-4 py-1.5 text-gray-400">{s.protocol}</td>
-                  <td class="px-4 py-1.5 text-gray-400">{s.area}</td>
-                  <td class="px-4 py-1.5 text-right text-gray-500">{s.idle_seconds}s</td>
+            <tbody class="divide-y divide-(--color-border)/50">
+              {#each sessions.slice(0, 15) as s}
+                <tr class="hover:bg-(--color-surface-2)/50">
+                  <td class="px-4 py-1">{s.display_name || '(anon)'}</td>
+                  <td class="px-4 py-1 text-(--color-text-secondary)">{s.area}</td>
+                  <td class="px-4 py-1 text-right text-(--color-text-muted) tabular-nums">{s.idle_seconds}s</td>
                 </tr>
+              {:else}
+                <tr><td colspan="3" class="px-4 py-4 text-center text-(--color-text-muted) text-xs">No active sessions</td></tr>
               {/each}
             </tbody>
           </table>
         </div>
-        {#if sessions.length > 20}
-          <div class="px-4 py-2 text-xs text-gray-500 border-t border-gray-800">
-            Showing 20 of {sessions.length} &mdash;
-            <a href="#/sessions" class="text-blue-400 hover:underline">View all</a>
-          </div>
-        {/if}
       </div>
-    {/if}
+    </div>
   {/if}
 </div>
 
 {#snippet gauge(label, value, suffix)}
-  <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
-    <div class="text-2xl font-bold tabular-nums">
-      {value}<span class="text-sm text-gray-500 font-normal">{suffix}</span>
+  <div class="bg-(--color-surface-1) p-3">
+    <div class="text-xl font-semibold tabular-nums">
+      {value}<span class="text-xs text-(--color-text-muted) font-normal">{suffix}</span>
     </div>
-    <div class="text-xs text-gray-500 mt-1">{label}</div>
+    <div class="text-[10px] uppercase tracking-wider text-(--color-text-muted) mt-0.5">{label}</div>
   </div>
 {/snippet}

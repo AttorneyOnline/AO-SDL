@@ -9,133 +9,120 @@
   let actionReason = $state('');
   let actionResult = $state('');
 
-  async function loadAudit() {
-    loading = true;
-    const res = await get('/admin/moderation-events?limit=100');
-    if (res.status === 200) events = res.data?.events || [];
-    loading = false;
-  }
+  const ACTION_LABELS = {
+    '0': 'none', '1': 'log', '2': 'censor', '3': 'drop',
+    '4': 'mute', '5': 'kick', '6': 'ban', '7': 'perma_ban',
+    'none': 'none', 'log': 'log', 'censor': 'censor', 'drop': 'drop',
+    'mute': 'mute', 'kick': 'kick', 'ban': 'ban', 'perma_ban': 'perma_ban',
+  };
 
-  async function loadMutes() {
-    loading = true;
-    const res = await get('/admin/mutes');
-    if (res.status === 200) mutes = res.data?.mutes || [];
-    loading = false;
-  }
+  const ACTION_COLORS = {
+    ban: 'bg-red-500/15 text-red-400', perma_ban: 'bg-red-500/15 text-red-400',
+    kick: 'bg-amber-500/15 text-amber-400', mute: 'bg-orange-500/15 text-orange-400',
+    censor: 'bg-violet-500/15 text-violet-400', drop: 'bg-violet-500/15 text-violet-400',
+    log: 'bg-(--color-surface-3) text-(--color-text-muted)',
+    none: 'bg-(--color-surface-3) text-(--color-text-muted)',
+  };
 
-  $effect(() => {
-    if (tab === 'audit') loadAudit();
-    else if (tab === 'mutes') loadMutes();
-  });
+  function actionLabel(raw) { return ACTION_LABELS[String(raw)] || String(raw); }
+  function actionColor(raw) { return ACTION_COLORS[actionLabel(raw)] || 'bg-(--color-surface-3) text-(--color-text-muted)'; }
+
+  async function loadAudit() { loading = true; const r = await get('/admin/moderation-events?limit=200'); if (r.status === 200) events = r.data?.events || []; loading = false; }
+  async function loadMutes() { loading = true; const r = await get('/admin/mutes'); if (r.status === 200) mutes = r.data?.mutes || []; loading = false; }
+
+  $effect(() => { if (tab === 'audit') loadAudit(); else loadMutes(); });
 
   async function doAction(action) {
     if (!actionTarget) return;
     actionResult = '';
     const body = { action, target: actionTarget, reason: actionReason || undefined };
-    if (action === 'mute') body.duration = 900; // 15 min default
+    if (action === 'mute') body.duration = 900;
     const res = await post('/moderation/actions', body);
     actionResult = res.status === 200 ? `${action} applied` : (res.data?.reason || 'Failed');
-    actionTarget = '';
-    actionReason = '';
+    actionTarget = ''; actionReason = '';
     if (tab === 'mutes') loadMutes();
   }
 
-  async function unmute(ipid) {
-    await post('/moderation/actions', { action: 'unmute', target: ipid });
-    loadMutes();
-  }
+  async function unmute(ipid) { await post('/moderation/actions', { action: 'unmute', target: ipid }); loadMutes(); }
 </script>
 
 <div class="space-y-4">
-  <h2 class="text-2xl font-bold">Moderation</h2>
+  <h2 class="text-lg font-semibold">Moderation</h2>
 
-  <!-- Quick actions -->
-  <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
-    <h3 class="text-sm font-semibold text-gray-300 mb-3">Quick Action</h3>
-    <div class="flex flex-wrap gap-2">
-      <input bind:value={actionTarget} placeholder="IPID or session ID" class="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 w-40" />
-      <input bind:value={actionReason} placeholder="Reason (optional)" class="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 flex-1 min-w-32" />
-      <button onclick={() => doAction('kick')} class="px-3 py-1.5 text-sm bg-yellow-700 hover:bg-yellow-600 rounded-lg">Kick</button>
-      <button onclick={() => doAction('mute')} class="px-3 py-1.5 text-sm bg-orange-700 hover:bg-orange-600 rounded-lg">Mute</button>
-      <button onclick={() => doAction('ban')} class="px-3 py-1.5 text-sm bg-red-700 hover:bg-red-600 rounded-lg">Ban</button>
+  <div class="bg-(--color-surface-1) border border-(--color-border) p-4">
+    <h3 class="text-[10px] font-semibold uppercase tracking-wider text-(--color-text-muted) mb-3">Quick Action</h3>
+    <div class="flex flex-wrap gap-px">
+      <input bind:value={actionTarget} placeholder="IPID / session ID / IP" class="px-3 py-1.5 text-sm bg-(--color-surface-2) border border-(--color-border) text-(--color-text-primary) placeholder:text-(--color-text-muted) w-44 focus:outline-none focus:border-(--color-border-active)" />
+      <input bind:value={actionReason} placeholder="Reason" class="px-3 py-1.5 text-sm bg-(--color-surface-2) border border-(--color-border) text-(--color-text-primary) placeholder:text-(--color-text-muted) flex-1 min-w-24 focus:outline-none focus:border-(--color-border-active)" />
+      <button onclick={() => doAction('kick')} class="px-3 py-1.5 text-sm bg-amber-600 text-white hover:bg-amber-500">Kick</button>
+      <button onclick={() => doAction('mute')} class="px-3 py-1.5 text-sm bg-orange-600 text-white hover:bg-orange-500">Mute</button>
+      <button onclick={() => doAction('ban')} class="px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-500">Ban</button>
     </div>
-    {#if actionResult}
-      <p class="text-xs mt-2 text-gray-400">{actionResult}</p>
-    {/if}
+    {#if actionResult}<p class="text-xs mt-2 text-(--color-text-muted)">{actionResult}</p>{/if}
   </div>
 
-  <!-- Tabs -->
-  <div class="flex gap-1 border-b border-gray-800">
-    <button onclick={() => tab = 'audit'} class="px-4 py-2 text-sm {tab === 'audit' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}">Audit Log</button>
-    <button onclick={() => tab = 'mutes'} class="px-4 py-2 text-sm {tab === 'mutes' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}">Active Mutes</button>
+  <div class="flex gap-4 border-b border-(--color-border)">
+    <button onclick={() => tab = 'audit'} class="pb-2 text-sm border-b-2 transition-colors {tab === 'audit' ? 'border-(--color-accent) text-(--color-accent)' : 'border-transparent text-(--color-text-muted)'}">Audit Log</button>
+    <button onclick={() => tab = 'mutes'} class="pb-2 text-sm border-b-2 transition-colors {tab === 'mutes' ? 'border-(--color-accent) text-(--color-accent)' : 'border-transparent text-(--color-text-muted)'}">Active Mutes</button>
   </div>
 
   {#if loading}
-    <p class="text-gray-500">Loading...</p>
+    <p class="text-(--color-text-muted) text-sm">Loading...</p>
   {:else if tab === 'audit'}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
           <thead>
-            <tr class="text-left text-gray-500 border-b border-gray-800">
+            <tr class="text-left text-[10px] uppercase tracking-wider text-(--color-text-muted) border-b border-(--color-border)">
               <th class="px-3 py-2">Time</th>
               <th class="px-3 py-2">IPID</th>
-              <th class="px-3 py-2">Channel</th>
+              <th class="px-3 py-2">Ch</th>
               <th class="px-3 py-2">Action</th>
               <th class="px-3 py-2 hidden md:table-cell">Message</th>
               <th class="px-3 py-2 hidden lg:table-cell">Reason</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-800/50">
+          <tbody class="divide-y divide-(--color-border)/50">
             {#each events as e}
-              <tr class="hover:bg-gray-800/30">
-                <td class="px-3 py-1.5 text-gray-500">{new Date(e.timestamp_ms).toLocaleString()}</td>
+              <tr class="hover:bg-(--color-surface-2)/50">
+                <td class="px-3 py-1.5 text-(--color-text-muted)">{new Date(e.timestamp_ms).toLocaleString()}</td>
                 <td class="px-3 py-1.5 font-mono">{e.ipid}</td>
-                <td class="px-3 py-1.5 text-gray-400">{e.channel}</td>
+                <td class="px-3 py-1.5 text-(--color-text-secondary)">{e.channel}</td>
                 <td class="px-3 py-1.5">
-                  <span class="px-1.5 py-0.5 rounded text-xs
-                    {e.action === 'ban' || e.action === 'perma_ban' ? 'bg-red-900/50 text-red-300' :
-                     e.action === 'kick' ? 'bg-yellow-900/50 text-yellow-300' :
-                     e.action === 'mute' ? 'bg-orange-900/50 text-orange-300' :
-                     e.action === 'censor' ? 'bg-purple-900/50 text-purple-300' :
-                     'bg-gray-800 text-gray-400'}">
-                    {e.action}
-                  </span>
+                  <span class="text-[10px] px-1 py-px font-medium {actionColor(e.action)}">{actionLabel(e.action)}</span>
                 </td>
-                <td class="px-3 py-1.5 text-gray-400 max-w-xs truncate hidden md:table-cell">{e.message_sample}</td>
-                <td class="px-3 py-1.5 text-gray-500 max-w-xs truncate hidden lg:table-cell">{e.reason}</td>
+                <td class="px-3 py-1.5 text-(--color-text-secondary) max-w-xs truncate hidden md:table-cell">{e.message_sample}</td>
+                <td class="px-3 py-1.5 text-(--color-text-muted) max-w-xs truncate hidden lg:table-cell">{e.reason}</td>
               </tr>
             {:else}
-              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No moderation events</td></tr>
+              <tr><td colspan="6" class="px-4 py-8 text-center text-(--color-text-muted)">No events</td></tr>
             {/each}
           </tbody>
         </table>
       </div>
     </div>
-  {:else if tab === 'mutes'}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+  {:else}
+    <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-xs text-gray-500 border-b border-gray-800">
+            <tr class="text-left text-[10px] uppercase tracking-wider text-(--color-text-muted) border-b border-(--color-border)">
               <th class="px-4 py-2">IPID</th>
               <th class="px-4 py-2">Reason</th>
               <th class="px-4 py-2">Remaining</th>
               <th class="px-4 py-2"></th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-800/50">
+          <tbody class="divide-y divide-(--color-border)/50">
             {#each mutes as m}
-              <tr class="hover:bg-gray-800/30">
-                <td class="px-4 py-2 font-mono text-xs">{m.ipid}</td>
-                <td class="px-4 py-2 text-gray-400">{m.reason}</td>
-                <td class="px-4 py-2">{m.seconds_remaining < 0 ? 'Permanent' : Math.ceil(m.seconds_remaining / 60) + 'm'}</td>
-                <td class="px-4 py-2">
-                  <button onclick={() => unmute(m.ipid)} class="text-xs text-red-400 hover:text-red-300">Unmute</button>
-                </td>
+              <tr class="hover:bg-(--color-surface-2)/50">
+                <td class="px-4 py-1.5 font-mono text-xs">{m.ipid}</td>
+                <td class="px-4 py-1.5 text-(--color-text-secondary)">{m.reason}</td>
+                <td class="px-4 py-1.5">{m.seconds_remaining < 0 ? 'Permanent' : Math.ceil(m.seconds_remaining / 60) + 'm'}</td>
+                <td class="px-4 py-1.5"><button onclick={() => unmute(m.ipid)} class="text-xs text-red-400 hover:text-red-300">Unmute</button></td>
               </tr>
             {:else}
-              <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">No active mutes</td></tr>
+              <tr><td colspan="4" class="px-4 py-8 text-center text-(--color-text-muted)">No active mutes</td></tr>
             {/each}
           </tbody>
         </table>

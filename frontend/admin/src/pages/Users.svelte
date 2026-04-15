@@ -14,35 +14,35 @@
 </script>
 
 <div class="space-y-4">
-  <h2 class="text-2xl font-bold">Users</h2>
+  <h2 class="text-lg font-semibold">Accounts</h2>
 
   {#if loading}
-    <p class="text-gray-500">Loading...</p>
+    <p class="text-(--color-text-muted) text-sm">Loading...</p>
   {:else}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-xs text-gray-500 border-b border-gray-800">
+            <tr class="text-left text-[10px] uppercase tracking-wider text-(--color-text-muted) border-b border-(--color-border)">
               <th class="px-4 py-2">Username</th>
               <th class="px-4 py-2">Role</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-800/50">
+          <tbody class="divide-y divide-(--color-border)/50">
             {#each users as u}
-              <tr class="hover:bg-gray-800/30">
-                <td class="px-4 py-2 font-medium">{u.username}</td>
-                <td class="px-4 py-2">
-                  <span class="text-xs px-1.5 py-0.5 rounded
-                    {u.acl === 'SUPER' ? 'bg-purple-900/50 text-purple-300' :
-                     u.acl === 'NONE' ? 'bg-gray-800 text-gray-500' :
-                     'bg-blue-900/50 text-blue-300'}">
+              <tr class="hover:bg-(--color-surface-2)/50">
+                <td class="px-4 py-1.5 font-medium">{u.username}</td>
+                <td class="px-4 py-1.5">
+                  <span class="text-[10px] px-1 py-px font-medium
+                    {u.acl === 'SUPER' ? 'bg-violet-500/15 text-violet-400' :
+                     u.acl === 'NONE' ? 'bg-(--color-surface-3) text-(--color-text-muted)' :
+                     'bg-cyan-500/15 text-cyan-400'}">
                     {u.acl}
                   </span>
                 </td>
               </tr>
             {:else}
-              <tr><td colspan="2" class="px-4 py-8 text-center text-gray-500">No users</td></tr>
+              <tr><td colspan="2" class="px-4 py-8 text-center text-(--color-text-muted)">No accounts</td></tr>
             {/each}
           </tbody>
         </table>

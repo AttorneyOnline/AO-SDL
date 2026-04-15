@@ -20,7 +20,7 @@
     refresh();
   }
 
-  function formatDuration(d) {
+  function fmtDur(d) {
     if (d === -2) return 'Permanent';
     if (d === 0) return 'Invalidated';
     const h = Math.floor(d / 3600);
@@ -28,64 +28,57 @@
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
-  function formatTime(ts) {
-    return ts ? new Date(ts * 1000).toLocaleString() : '';
-  }
+  function fmtTime(ts) { return ts ? new Date(ts * 1000).toLocaleString() : ''; }
 </script>
 
 <div class="space-y-4">
   <div class="flex items-center justify-between flex-wrap gap-2">
-    <h2 class="text-2xl font-bold">Bans</h2>
-    <form onsubmit={(e) => { e.preventDefault(); refresh(); }} class="flex gap-2">
+    <h2 class="text-lg font-semibold">Bans</h2>
+    <form onsubmit={(e) => { e.preventDefault(); refresh(); }} class="flex gap-px">
       <input
-        type="text"
-        bind:value={query}
-        placeholder="Search by IPID, HDID, reason..."
-        class="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 w-64"
+        type="text" bind:value={query}
+        placeholder="Search IPID, HDID, reason..."
+        class="px-3 py-1.5 text-sm bg-(--color-surface-2) border border-(--color-border) text-(--color-text-primary)
+               placeholder:text-(--color-text-muted) focus:outline-none focus:border-(--color-border-active) w-56"
       />
-      <button type="submit" class="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg">Search</button>
+      <button type="submit" class="px-3 py-1.5 text-sm bg-(--color-surface-3) border border-(--color-border) text-(--color-text-secondary) hover:text-(--color-text-primary)">Search</button>
     </form>
   </div>
 
   {#if loading}
-    <p class="text-gray-500">Loading...</p>
+    <p class="text-(--color-text-muted) text-sm">Loading...</p>
   {:else}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <div class="bg-(--color-surface-1) border border-(--color-border) overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-xs text-gray-500 border-b border-gray-800">
+            <tr class="text-left text-[10px] uppercase tracking-wider text-(--color-text-muted) border-b border-(--color-border)">
               <th class="px-4 py-2">IPID</th>
-              <th class="px-4 py-2 hidden sm:table-cell">HDID</th>
               <th class="px-4 py-2">Reason</th>
-              <th class="px-4 py-2 hidden md:table-cell">Moderator</th>
+              <th class="px-4 py-2 hidden md:table-cell">By</th>
               <th class="px-4 py-2 hidden lg:table-cell">When</th>
               <th class="px-4 py-2">Duration</th>
               <th class="px-4 py-2"></th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-800/50">
+          <tbody class="divide-y divide-(--color-border)/50">
             {#each bans as b}
-              <tr class="hover:bg-gray-800/30">
-                <td class="px-4 py-2 font-mono text-xs">{b.ipid}</td>
-                <td class="px-4 py-2 font-mono text-xs text-gray-500 hidden sm:table-cell">{b.hdid}</td>
-                <td class="px-4 py-2 max-w-xs truncate">{b.reason}</td>
-                <td class="px-4 py-2 text-gray-400 hidden md:table-cell">{b.moderator}</td>
-                <td class="px-4 py-2 text-gray-500 text-xs hidden lg:table-cell">{formatTime(b.timestamp)}</td>
-                <td class="px-4 py-2">
-                  <span class="text-xs px-1.5 py-0.5 rounded {b.permanent ? 'bg-red-900/50 text-red-300' : 'bg-gray-800 text-gray-400'}">
-                    {formatDuration(b.duration)}
+              <tr class="hover:bg-(--color-surface-2)/50">
+                <td class="px-4 py-1.5 font-mono text-xs">{b.ipid}</td>
+                <td class="px-4 py-1.5 max-w-xs truncate">{b.reason}</td>
+                <td class="px-4 py-1.5 text-(--color-text-secondary) hidden md:table-cell">{b.moderator}</td>
+                <td class="px-4 py-1.5 text-(--color-text-muted) text-xs hidden lg:table-cell">{fmtTime(b.timestamp)}</td>
+                <td class="px-4 py-1.5">
+                  <span class="text-[10px] px-1 py-px font-medium {b.permanent ? 'bg-red-500/15 text-red-400' : 'bg-(--color-surface-3) text-(--color-text-muted)'}">
+                    {fmtDur(b.duration)}
                   </span>
                 </td>
-                <td class="px-4 py-2">
-                  <button
-                    onclick={() => unban(b.ipid)}
-                    class="text-xs text-red-400 hover:text-red-300"
-                  >Unban</button>
+                <td class="px-4 py-1.5">
+                  <button onclick={() => unban(b.ipid)} class="text-xs text-red-400 hover:text-red-300">Unban</button>
                 </td>
               </tr>
             {:else}
-              <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">No bans found</td></tr>
+              <tr><td colspan="6" class="px-4 py-8 text-center text-(--color-text-muted) text-sm">No bans found</td></tr>
             {/each}
           </tbody>
         </table>

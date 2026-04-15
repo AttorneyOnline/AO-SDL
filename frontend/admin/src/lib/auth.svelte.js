@@ -1,4 +1,4 @@
-import { post, getAuthToken } from './api.js';
+import { api, post, getAuthToken } from './api.js';
 
 /**
  * Auth state. Reactive via Svelte 5 $state.
@@ -73,12 +73,50 @@ export async function logout() {
 }
 
 /**
- * Check if the current session is still valid.
- * @returns {Promise<boolean>}
+ * Renew the session token. Called periodically to prevent expiry.
+ * If the session is expired, attempt to create a new one from the
+ * auth token. If that fails too, log out.
  */
-export async function checkSession() {
-  if (!auth.sessionToken) return false;
-  const res = await post('/session', null, { token: auth.sessionToken });
-  // PATCH /session (renew) would be better, but GET /server works as a health check
-  return res.status !== 401;
+async function renewSession() {
+  if (!auth.sessionToken) return;
+
+  // Try renewing via PATCH /session
+  const res = await api('PATCH', '/session', null);
+  if (res.status === 200) return; // renewed
+
+  // Session expired — try creating a new one from auth token
+  if (auth.authToken) {
+    const sessionRes = await post('/session', {
+      client_name: 'kagami-admin',
+      client_version: '1.0',
+      hdid: 'admin-dashboard-' + crypto.randomUUID().slice(0, 8),
+      auth: auth.authToken,
+    });
+    if (sessionRes.status === 201) {
+      auth.sessionToken = sessionRes.data.token;
+      persist();
+      return;
+    }
+  }
+
+  // Both failed — force logout
+  auth.authToken = '';
+  auth.sessionToken = '';
+  auth.username = '';
+  auth.acl = '';
+  auth.loggedIn = false;
+  persist();
+}
+
+// Auto-renew session every 60 seconds while the dashboard is open
+let _keepaliveInterval = null;
+export function startKeepalive() {
+  if (_keepaliveInterval) return;
+  _keepaliveInterval = setInterval(renewSession, 60_000);
+}
+export function stopKeepalive() {
+  if (_keepaliveInterval) {
+    clearInterval(_keepaliveInterval);
+    _keepaliveInterval = null;
+  }
 }
