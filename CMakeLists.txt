@@ -776,6 +776,7 @@ add_library(nx_net STATIC
     plugins/net/nx/endpoints/AdminDataEndpoints.cpp
     plugins/net/nx/endpoints/ModerationActionsEndpoint.cpp
     plugins/net/nx/endpoints/AdminContentPutEndpoint.cpp
+    plugins/net/nx/endpoints/AdminStopEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net

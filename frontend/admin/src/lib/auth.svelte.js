@@ -10,6 +10,7 @@ export const auth = $state({
   /** @type {string} */ username: localStorage.getItem('kagami_username') || '',
   /** @type {string} */ acl: localStorage.getItem('kagami_acl') || '',
   /** @type {boolean} */ loggedIn: !!localStorage.getItem('kagami_session_token'),
+  /** @type {string} */ logoutReason: '',
 });
 
 /** Persist auth state to localStorage whenever it changes. */
@@ -99,13 +100,15 @@ async function renewSession() {
     }
   }
 
-  // Both failed — force logout
+  // Both failed — force logout with message
   auth.authToken = '';
   auth.sessionToken = '';
   auth.username = '';
   auth.acl = '';
   auth.loggedIn = false;
+  auth.logoutReason = 'Session expired. The server may have restarted.';
   persist();
+  window.location.hash = '#/login';
 }
 
 // Auto-renew session every 60 seconds while the dashboard is open

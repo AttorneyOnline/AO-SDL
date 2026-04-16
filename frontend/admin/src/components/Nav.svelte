@@ -3,8 +3,9 @@
   import {
     LayoutDashboard, Users, MessageSquare, Settings, Ban,
     Shield, Map, KeyRound, Flame, FolderOpen, Sun, Moon,
-    ExternalLink, LogOut, Menu, X
+    ExternalLink, LogOut, Menu, X, Power
   } from 'lucide-svelte';
+  import { post } from '../lib/api.js';
 
   let { currentPage = 'dashboard' } = $props();
   let mobileOpen = $state(false);
@@ -46,6 +47,11 @@
   async function handleLogout() {
     await logout();
     window.location.hash = '#/login';
+  }
+
+  async function handleStop() {
+    if (!confirm('Shut down the server? All connections will be closed.')) return;
+    await post('/admin/stop');
   }
 </script>
 
@@ -104,13 +110,17 @@
   </nav>
 
   <div class="px-3 py-2 border-t border-(--color-border) flex items-center justify-between">
-    <button
-      onclick={handleLogout}
-      class="flex items-center gap-1.5 px-2 py-1 text-xs text-(--color-text-muted) hover:text-red-500 transition-colors"
-    >
-      <LogOut size={13} strokeWidth={1.5} />
-      Logout
-    </button>
+    <div class="flex items-center gap-1">
+      <button onclick={handleLogout}
+        class="flex items-center gap-1.5 px-2 py-1 text-xs text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors">
+        <LogOut size={13} strokeWidth={1.5} /> Logout
+      </button>
+      <button onclick={handleStop}
+        class="flex items-center gap-1 px-2 py-1 text-xs text-(--color-text-muted) hover:text-red-500 transition-colors"
+        title="Shut down server">
+        <Power size={13} strokeWidth={1.5} />
+      </button>
+    </div>
     <button
       onclick={toggleTheme}
       class="p-1 text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors"

@@ -722,6 +722,7 @@ int main(int /*argc*/, char* argv[]) {
         auto result = perform_reload(ctx, [](std::function<void()> fn) { fn(); });
         return result.format();
     });
+    room.set_stop_func([s = &stop_src]() { s->request_stop(); });
 
     if (interactive) {
         std::string line;

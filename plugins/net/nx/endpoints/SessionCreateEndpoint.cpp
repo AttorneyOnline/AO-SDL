@@ -92,6 +92,13 @@ class SessionCreateEndpoint : public NXEndpoint {
                 session->acl_role = auth_entry->acl;
                 session->moderator_name = auth_entry->username;
                 session->auth_token_id = auth;
+                // SUPER sessions from the admin dashboard are spectators —
+                // excluded from player counts and master server advertising.
+                if (auth_entry->acl == "SUPER") {
+                    session->spectator_admin = true;
+                    // Undo the joined++ from create_session — spectators don't count
+                    room().stats.joined.fetch_sub(1, std::memory_order_relaxed);
+                }
                 room().stats.moderators.fetch_add(1, std::memory_order_relaxed);
                 Log::log_print(INFO, "NX: session bound to auth token (user=%s, role=%s)", auth_entry->username.c_str(),
                                auth_entry->acl.c_str());

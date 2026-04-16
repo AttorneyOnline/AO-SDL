@@ -1,5 +1,5 @@
 <script>
-  import { login } from '../lib/auth.svelte.js';
+  import { login, auth } from '../lib/auth.svelte.js';
   import { KeyRound } from 'lucide-svelte';
 
   let username = $state('');
@@ -11,6 +11,7 @@
     e.preventDefault();
     error = '';
     loading = true;
+    auth.logoutReason = '';
     const result = await login(username, password);
     loading = false;
     if (!result.ok) {
@@ -27,6 +28,10 @@
         <h1 class="text-lg font-semibold tracking-wide uppercase">Kagami</h1>
       </div>
       <p class="text-xs text-(--color-text-muted) mb-6">Server Administration</p>
+
+      {#if auth.logoutReason}
+        <div class="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 px-3 py-2 mb-4">{auth.logoutReason}</div>
+      {/if}
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>

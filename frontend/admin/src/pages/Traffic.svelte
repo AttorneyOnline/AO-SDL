@@ -3,7 +3,8 @@
   import { MessageSquare } from 'lucide-svelte';
 
   let messages = $state([]);
-  let connected = $state(false);
+  /** @type {'disconnected'|'connecting'|'connected'} */
+  let status = $state('disconnected');
   let filter = $state('');
   let maxMessages = 500;
 
@@ -14,13 +15,14 @@
   }
 
   async function fetchSSE(token) {
+    status = 'connecting';
     try {
       const response = await fetch('/aonx/v1/events', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      if (!response.ok) { connected = false; return; }
-      connected = true;
+      if (!response.ok) { status = 'disconnected'; return; }
+      status = 'connected';
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -46,7 +48,7 @@
         }
       }
     } catch (e) { console.error('SSE error:', e); }
-    connected = false;
+    status = 'disconnected';
   }
 
   function handleEvent(event, dataStr) {
@@ -81,7 +83,7 @@
   <div class="flex items-center justify-between flex-wrap gap-2">
     <div class="flex items-center gap-2">
       <h2 class="text-lg font-semibold">Traffic</h2>
-      <span class="w-1.5 h-1.5 {connected ? 'bg-emerald-500' : 'bg-red-500'}"></span>
+      <span class="w-1.5 h-1.5 {status === 'connected' ? 'bg-emerald-500' : status === 'connecting' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}"></span>
     </div>
     <input
       type="text"
@@ -108,7 +110,7 @@
         </div>
       {:else}
         <div class="px-4 py-12 text-center text-(--color-text-muted)">
-          {connected ? 'Waiting for messages...' : 'Not connected'}
+          {status === 'connected' ? 'Waiting for messages...' : status === 'connecting' ? 'Connecting...' : 'Not connected'}
         </div>
       {/each}
     </div>
