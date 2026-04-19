@@ -16,12 +16,28 @@
 #include <json.hpp>
 
 #include <chrono>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 namespace {
 
 auto now_sec() {
     return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
+}
+
+/// Resolve the acting moderator's display name. Falls back through
+/// moderator_name → display_name → "REST API" so attribution is always
+/// set to the best available identity.
+std::string actor_name(const RestRequest& req) {
+    if (req.session) {
+        if (!req.session->moderator_name.empty())
+            return req.session->moderator_name;
+        if (!req.session->display_name.empty())
+            return req.session->display_name;
+    }
+    return "REST API";
 }
 
 /// POST /moderation/actions
@@ -40,6 +56,9 @@ class ModerationActionsEndpoint : public NXEndpoint {
     }
     bool requires_auth() const override {
         return true;
+    }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
     }
 
     RestResponse handle(const RestRequest& req) override {
@@ -66,7 +85,7 @@ class ModerationActionsEndpoint : public NXEndpoint {
         if (action == "unban")
             return do_unban(target, action_id);
         if (action == "mute")
-            return do_mute(target, reason, duration, action_id);
+            return do_mute(req, target, reason, duration, action_id);
         if (action == "unmute")
             return do_unmute(target, action_id);
         if (action == "notice")
@@ -89,36 +108,37 @@ class ModerationActionsEndpoint : public NXEndpoint {
                                        });
     }
 
+    /// Core kick logic shared by `do_kick` and `do_ban`. Walks sessions
+    /// once, collecting client_ids to destroy and notifying REST sessions
+    /// via SSE during the same pass — this closes the TOCTOU window
+    /// between a count-pass and a destroy-pass in the earlier version
+    /// where a session could appear/disappear between them.
+    int perform_kick(const std::string& target, const std::string& reason) {
+        std::vector<uint64_t> to_destroy;
+        room().for_each_session([&](const ServerSession& s) {
+            if (s.ipid != target && std::to_string(s.session_id) != target)
+                return;
+            if (!s.session_token.empty()) {
+                SSEEvent evt;
+                evt.event = "session_ended";
+                evt.data = nlohmann::json({{"reason", "Kicked: " + reason}}).dump();
+                evt.target_token = s.session_token;
+                EventManager::instance().get_channel<SSEEvent>().publish(std::move(evt));
+            }
+            to_destroy.push_back(s.client_id);
+        });
+        for (auto id : to_destroy)
+            room().destroy_session(id);
+        return static_cast<int>(to_destroy.size());
+    }
+
     RestResponse do_kick(const RestRequest& req, const std::string& target, const std::string& reason,
                          const std::string& action_id) {
         if (target.empty())
             return RestResponse::error(400, "kick requires a target (IPID or session_id)");
 
-        int kicked = 0;
-        room().for_each_session([&](const ServerSession& s) {
-            if (s.ipid == target || std::to_string(s.session_id) == target) {
-                // Send SSE notification if REST session
-                if (!s.session_token.empty()) {
-                    SSEEvent evt;
-                    evt.event = "session_ended";
-                    evt.data = nlohmann::json({{"reason", "Kicked: " + reason}}).dump();
-                    evt.target_token = s.session_token;
-                    EventManager::instance().get_channel<SSEEvent>().publish(std::move(evt));
-                }
-                ++kicked;
-            }
-        });
-
-        // Destroy sessions (separate pass to avoid mutating during iteration)
-        std::vector<uint64_t> to_destroy;
-        room().for_each_session([&](const ServerSession& s) {
-            if (s.ipid == target || std::to_string(s.session_id) == target)
-                to_destroy.push_back(s.client_id);
-        });
-        for (auto id : to_destroy)
-            room().destroy_session(id);
-
-        Log::log_print(INFO, "Moderation: %s kicked %s (%s) — %d session(s)", req.session->moderator_name.c_str(),
+        int kicked = perform_kick(target, reason);
+        Log::log_print(INFO, "Moderation: %s kicked %s (%s) — %d session(s)", actor_name(req).c_str(),
                        target.c_str(), reason.c_str(), kicked);
         return success_response("kick", action_id);
     }
@@ -132,7 +152,7 @@ class ModerationActionsEndpoint : public NXEndpoint {
         if (!bm)
             return RestResponse::error(503, "Ban manager unavailable");
 
-        // Look up IP from connected sessions for firewall integration
+        // Look up IP from connected sessions for firewall integration.
         std::string ip;
         room().for_each_session([&](const ServerSession& s) {
             if (s.ipid == target && !s.ip_address.empty())
@@ -143,17 +163,14 @@ class ModerationActionsEndpoint : public NXEndpoint {
         entry.ipid = target;
         entry.ip = ip;
         entry.reason = reason;
-        entry.moderator = req.session->moderator_name.empty() ? req.session->display_name
-                                                              : req.session->moderator_name;
+        entry.moderator = actor_name(req);
         entry.timestamp = now_sec();
         entry.duration = duration < 0 ? -2 : duration; // -2 = permanent
         bm->add_ban(std::move(entry));
 
-        // Kick the banned user
-        do_kick(req, target, "Banned: " + reason, action_id);
-
-        Log::log_print(INFO, "Moderation: %s banned %s for %ds (%s)", req.session->moderator_name.c_str(),
-                       target.c_str(), duration, reason.c_str());
+        int kicked = perform_kick(target, "Banned: " + reason);
+        Log::log_print(INFO, "Moderation: %s banned %s for %ds (%s) — %d session(s) dropped",
+                       actor_name(req).c_str(), target.c_str(), duration, reason.c_str(), kicked);
         return success_response("ban", action_id);
     }
 
@@ -172,7 +189,7 @@ class ModerationActionsEndpoint : public NXEndpoint {
         return success_response("unban", action_id);
     }
 
-    RestResponse do_mute(const std::string& target, const std::string& reason, int duration,
+    RestResponse do_mute(const RestRequest& req, const std::string& target, const std::string& reason, int duration,
                          const std::string& action_id) {
         if (target.empty())
             return RestResponse::error(400, "mute requires a target (IPID)");
@@ -186,10 +203,11 @@ class ModerationActionsEndpoint : public NXEndpoint {
         mute.started_at = now_sec();
         mute.expires_at = duration > 0 ? mute.started_at + duration : 0;
         mute.reason = reason;
-        mute.moderator = "REST API";
+        mute.moderator = actor_name(req);
         db->add_mute(std::move(mute));
 
-        Log::log_print(INFO, "Moderation: muted %s for %ds (%s)", target.c_str(), duration, reason.c_str());
+        Log::log_print(INFO, "Moderation: %s muted %s for %ds (%s)", actor_name(req).c_str(), target.c_str(),
+                       duration, reason.c_str());
         return success_response("mute", action_id);
     }
 
@@ -220,8 +238,7 @@ class ModerationActionsEndpoint : public NXEndpoint {
         ooc.message = message;
         room().handle_ooc(ooc);
 
-        Log::log_print(INFO, "Moderation: global notice from %s: %s", req.session->moderator_name.c_str(),
-                       message.c_str());
+        Log::log_print(INFO, "Moderation: global notice from %s: %s", actor_name(req).c_str(), message.c_str());
         return success_response("notice", action_id);
     }
 };

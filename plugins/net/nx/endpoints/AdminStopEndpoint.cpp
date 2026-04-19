@@ -23,6 +23,9 @@ class AdminStopEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (!req.session || !req.session->moderator)

@@ -41,6 +41,9 @@ class AdminBansEndpoint : public NXEndpoint {
     bool readonly() const override {
         return true;
     }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (auto err = require_super(req))
@@ -103,6 +106,9 @@ class AdminUsersEndpoint : public NXEndpoint {
     bool readonly() const override {
         return true;
     }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (auto err = require_super(req))
@@ -142,6 +148,9 @@ class AdminModerationEventsEndpoint : public NXEndpoint {
     bool readonly() const override {
         return true;
     }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (auto err = require_super(req))
@@ -159,15 +168,51 @@ class AdminModerationEventsEndpoint : public NXEndpoint {
             return std::nullopt;
         };
 
+        // Parse helpers that return an error response on bad input rather
+        // than throwing — otherwise a bogus `?since=abc` propagates a
+        // stoll exception and fails the whole request with a generic 500.
+        auto parse_int64 = [](const std::string& s, int64_t& out) -> bool {
+            try {
+                size_t idx = 0;
+                out = std::stoll(s, &idx);
+                return idx == s.size();
+            }
+            catch (...) {
+                return false;
+            }
+        };
+        auto parse_int = [](const std::string& s, int& out) -> bool {
+            try {
+                size_t idx = 0;
+                out = std::stoi(s, &idx);
+                return idx == s.size();
+            }
+            catch (...) {
+                return false;
+            }
+        };
+
         query.ipid = get_param("ipid");
         query.channel = get_param("channel");
         query.action = get_param("action");
-        if (auto s = get_param("since"))
-            query.since_ms = std::stoll(*s);
-        if (auto u = get_param("until"))
-            query.until_ms = std::stoll(*u);
-        if (auto l = get_param("limit"))
-            query.limit = std::clamp(std::stoi(*l), 1, 1000);
+        if (auto s = get_param("since")) {
+            int64_t v = 0;
+            if (!parse_int64(*s, v))
+                return RestResponse::error(400, "Invalid 'since' parameter");
+            query.since_ms = v;
+        }
+        if (auto u = get_param("until")) {
+            int64_t v = 0;
+            if (!parse_int64(*u, v))
+                return RestResponse::error(400, "Invalid 'until' parameter");
+            query.until_ms = v;
+        }
+        if (auto l = get_param("limit")) {
+            int v = 0;
+            if (!parse_int(*l, v))
+                return RestResponse::error(400, "Invalid 'limit' parameter");
+            query.limit = std::clamp(v, 1, 1000);
+        }
 
         auto events = db->query_moderation_events(std::move(query)).get();
         nlohmann::json arr = nlohmann::json::array();
@@ -204,6 +249,9 @@ class AdminMutesEndpoint : public NXEndpoint {
     }
     bool readonly() const override {
         return true;
+    }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
     }
 
     RestResponse handle(const RestRequest& req) override {
@@ -254,6 +302,9 @@ class AdminFirewallEndpoint : public NXEndpoint {
     bool readonly() const override {
         return true;
     }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
+    }
 
     RestResponse handle(const RestRequest& req) override {
         if (auto err = require_super(req))
@@ -297,6 +348,9 @@ class AdminASNReputationEndpoint : public NXEndpoint {
     }
     bool readonly() const override {
         return true;
+    }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
     }
 
     RestResponse handle(const RestRequest& req) override {
@@ -357,6 +411,9 @@ class AdminContentGetEndpoint : public NXEndpoint {
     }
     bool readonly() const override {
         return true;
+    }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
     }
 
     RestResponse handle(const RestRequest& req) override {

@@ -1,14 +1,14 @@
 /** @type {string} */
 const BASE = '/aonx/v1';
 
-/** Get the session token from localStorage. */
+/** Get the session token from sessionStorage. */
 export function getSessionToken() {
-  return localStorage.getItem('kagami_session_token') || '';
+  return sessionStorage.getItem('kagami_session_token') || '';
 }
 
-/** Get the auth token from localStorage. */
+/** Get the auth token from sessionStorage. */
 export function getAuthToken() {
-  return localStorage.getItem('kagami_auth_token') || '';
+  return sessionStorage.getItem('kagami_auth_token') || '';
 }
 
 /**

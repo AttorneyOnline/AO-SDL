@@ -21,6 +21,9 @@ class AdminSessionsEndpoint : public NXEndpoint {
     bool requires_auth() const override {
         return true;
     }
+    CorsPolicy cors_policy() const override {
+        return CorsPolicy::Restricted;
+    }
     bool readonly() const override {
         return true;
     }

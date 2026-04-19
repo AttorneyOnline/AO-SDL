@@ -547,11 +547,47 @@ int main(int /*argc*/, char* argv[]) {
             return "application/octet-stream";
         };
 
-        auto serve = [&](const std::string& asset_path, http::Response& res) {
+        // Security headers for the admin SPA. The dashboard is a single
+        // Vite-built bundle with no third-party scripts, no inline
+        // <script> blocks, and no dynamic HTML injection — the CSP below
+        // reflects that. If dependencies change (e.g. a CDN font), these
+        // constraints will fail fast in the browser console.
+        //
+        //   default-src 'none'              — deny everything by default
+        //   script-src 'self'               — only our bundled JS
+        //   style-src 'self' 'unsafe-inline' — Tailwind class-based + a few Svelte-injected rules
+        //   img-src 'self' data:            — icons + inline SVG data URIs
+        //   font-src 'self'                 — only self-hosted fonts
+        //   connect-src 'self'              — REST + SSE same-origin only
+        //   frame-ancestors 'none'          — block embedding (clickjacking)
+        //   base-uri 'none'                 — disallow <base> rewrites
+        //   form-action 'self'              — form POSTs cannot be retargeted
+        static constexpr const char* kCSP =
+            "default-src 'none'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'none'; "
+            "form-action 'self'";
+
+        auto apply_security_headers = [](http::Response& res) {
+            res.set_header("Content-Security-Policy", kCSP);
+            res.set_header("X-Content-Type-Options", "nosniff");
+            res.set_header("X-Frame-Options", "DENY");
+            res.set_header("Referrer-Policy", "no-referrer");
+            // Admin dashboard should never be cached by shared caches.
+            res.set_header("Cache-Control", "no-store");
+        };
+
+        auto serve = [&, apply_security_headers](const std::string& asset_path, http::Response& res) {
             auto it = admin_assets.find(asset_path);
             if (it != admin_assets.end()) {
                 res.set_content(reinterpret_cast<const char*>(it->second->data),
                                 it->second->size, mime_for(asset_path));
+                apply_security_headers(res);
                 return true;
             }
             return false;

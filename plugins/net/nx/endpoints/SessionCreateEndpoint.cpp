@@ -82,7 +82,12 @@ class SessionCreateEndpoint : public NXEndpoint {
             db->touch_auth_token(auth);
         }
 
-        auto info = server().create_session(hdid, client_name, client_version, req.remote_addr);
+        // SUPER sessions from the admin dashboard are spectators — excluded
+        // from player counts and master server advertising. Pass the flag
+        // into create_session so the stats counter is never incremented in
+        // the first place, rather than decrementing after the fact.
+        bool spectator_admin = auth_entry && auth_entry->acl == "SUPER";
+        auto info = server().create_session(hdid, client_name, client_version, req.remote_addr, spectator_admin);
 
         // Bind identity from auth token to session
         if (auth_entry) {
@@ -92,13 +97,6 @@ class SessionCreateEndpoint : public NXEndpoint {
                 session->acl_role = auth_entry->acl;
                 session->moderator_name = auth_entry->username;
                 session->auth_token_id = auth;
-                // SUPER sessions from the admin dashboard are spectators —
-                // excluded from player counts and master server advertising.
-                if (auth_entry->acl == "SUPER") {
-                    session->spectator_admin = true;
-                    // Undo the joined++ from create_session — spectators don't count
-                    room().stats.joined.fetch_sub(1, std::memory_order_relaxed);
-                }
                 room().stats.moderators.fetch_add(1, std::memory_order_relaxed);
                 Log::log_print(INFO, "NX: session bound to auth token (user=%s, role=%s)", auth_entry->username.c_str(),
                                auth_entry->acl.c_str());

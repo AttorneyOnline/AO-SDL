@@ -1,24 +1,42 @@
 import { api, post, getAuthToken } from './api.js';
 
+// Tokens live in sessionStorage, not localStorage:
+// - sessionStorage is scoped to the browser tab and cleared on close,
+//   so an XSS-stolen token stops working once the admin closes the tab.
+// - localStorage would persist the token across browser restarts, giving
+//   an attacker a much longer useful window.
+// The trade-off is that closing the tab logs the admin out, which for an
+// admin dashboard is an acceptable tax for XSS containment.
+//
+// We still proactively purge any legacy localStorage entries from earlier
+// builds so an upgrade doesn't leave credentials behind on disk.
+const LEGACY_KEYS = [
+  'kagami_auth_token',
+  'kagami_session_token',
+  'kagami_username',
+  'kagami_acl',
+];
+for (const k of LEGACY_KEYS) localStorage.removeItem(k);
+
 /**
  * Auth state. Reactive via Svelte 5 $state.
  * Stores both the durable auth token and the ephemeral session token.
  */
 export const auth = $state({
-  /** @type {string} */ authToken: localStorage.getItem('kagami_auth_token') || '',
-  /** @type {string} */ sessionToken: localStorage.getItem('kagami_session_token') || '',
-  /** @type {string} */ username: localStorage.getItem('kagami_username') || '',
-  /** @type {string} */ acl: localStorage.getItem('kagami_acl') || '',
-  /** @type {boolean} */ loggedIn: !!localStorage.getItem('kagami_session_token'),
+  /** @type {string} */ authToken: sessionStorage.getItem('kagami_auth_token') || '',
+  /** @type {string} */ sessionToken: sessionStorage.getItem('kagami_session_token') || '',
+  /** @type {string} */ username: sessionStorage.getItem('kagami_username') || '',
+  /** @type {string} */ acl: sessionStorage.getItem('kagami_acl') || '',
+  /** @type {boolean} */ loggedIn: !!sessionStorage.getItem('kagami_session_token'),
   /** @type {string} */ logoutReason: '',
 });
 
-/** Persist auth state to localStorage whenever it changes. */
+/** Persist auth state to sessionStorage whenever it changes. */
 function persist() {
-  localStorage.setItem('kagami_auth_token', auth.authToken);
-  localStorage.setItem('kagami_session_token', auth.sessionToken);
-  localStorage.setItem('kagami_username', auth.username);
-  localStorage.setItem('kagami_acl', auth.acl);
+  sessionStorage.setItem('kagami_auth_token', auth.authToken);
+  sessionStorage.setItem('kagami_session_token', auth.sessionToken);
+  sessionStorage.setItem('kagami_username', auth.username);
+  sessionStorage.setItem('kagami_acl', auth.acl);
 }
 
 /**
@@ -70,7 +88,10 @@ export async function logout() {
   auth.username = '';
   auth.acl = '';
   auth.loggedIn = false;
-  persist();
+  // Remove rather than overwrite so no empty-string credential lingers
+  // in the tab's storage bucket after logout.
+  for (const k of ['kagami_auth_token', 'kagami_session_token', 'kagami_username', 'kagami_acl'])
+    sessionStorage.removeItem(k);
 }
 
 /**

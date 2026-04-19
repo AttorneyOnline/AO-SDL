@@ -61,7 +61,8 @@ NXServer::NXServer(GameRoom& room) : room_(room) {
 }
 
 NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const std::string& client_name,
-                                               const std::string& client_version, const std::string& remote_addr) {
+                                               const std::string& client_version, const std::string& remote_addr,
+                                               bool spectator_admin) {
     uint64_t id = next_rest_id_++;
     auto token = generate_token();
 
@@ -70,6 +71,7 @@ NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const st
     session->client_software = client_name + "/" + client_version;
     session->hardware_id = hdid;
     session->ip_address = remote_addr;
+    session->spectator_admin = spectator_admin;
     // Match the AO2 HI-packet derivation: SHA-256 of the client IP,
     // first 8 hex chars. This gives cross-protocol moderation state
     // (heat, mutes) a stable key regardless of which backend the
@@ -77,7 +79,10 @@ NXServer::SessionInfo NXServer::create_session(const std::string& hdid, const st
     if (!remote_addr.empty())
         session->ipid = crypto::sha256(remote_addr).substr(0, 8);
     session->joined = true;
-    room_.stats.joined.fetch_add(1, std::memory_order_relaxed);
+    // Spectator admins are excluded from player counts and master server
+    // advertising — they're dashboard operators, not participants.
+    if (!spectator_admin)
+        room_.stats.joined.fetch_add(1, std::memory_order_relaxed);
 
     Log::log_print(INFO, "NX: session created (%s, client=%s, ipid=%s)", format_client_id(id).c_str(),
                    session->client_software.c_str(), session->ipid.c_str());
