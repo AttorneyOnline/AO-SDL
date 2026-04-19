@@ -37,6 +37,9 @@ class StubEndpoint : public RestEndpoint {
     bool requires_auth() const override {
         return auth_;
     }
+    CorsPolicy cors_policy() const override {
+        return cors_policy_;
+    }
     RestResponse handle(const RestRequest& req) override {
         last_path = req.path;
         last_path_params = req.path_params;
@@ -46,6 +49,7 @@ class StubEndpoint : public RestEndpoint {
         return response_;
     }
 
+    CorsPolicy cors_policy_ = CorsPolicy::Default;
     std::string last_path;
     std::unordered_map<std::string, std::string> last_path_params;
     std::unordered_map<std::string, std::string> last_query_params;
@@ -473,34 +477,98 @@ TEST_F(RestRouterTest, CorsNoDuplicateHeadersOnRegularRequest) {
     EXPECT_EQ(header_count(res, "Access-Control-Allow-Headers"), 1u);
 }
 
-TEST_F(RestRouterTest, CorsHeadersOnUnmatchedRoute) {
-    // CORS headers should appear even on 404 responses.
+TEST_F(RestRouterTest, UnmatchedRouteHasNoAllowOrigin) {
+    // Allow-Origin is set per-endpoint in dispatch (so Restricted endpoints
+    // can opt out). httplib's built-in 404 for unmatched routes bypasses
+    // dispatch, so Allow-Origin is intentionally absent. Methods/Headers
+    // defaults still go out, which lets browsers surface a CORS error
+    // cleanly instead of reporting a generic network failure.
     router_.set_cors_origins({"*"});
-    // No endpoints registered — any path is unmatched.
-
     start();
-    auto cli = client();
-    auto res = cli.Get("/nonexistent");
+    auto res = client().Get("/nonexistent");
 
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 404);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 0u);
+    // Method/Header defaults are still present — they're purely
+    // informational and don't grant cross-origin access on their own.
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Methods"), 1u);
+}
+
+TEST_F(RestRouterTest, UnmatchedPreflightHasNoAllowOrigin) {
+    router_.set_cors_origins({"https://example.com"});
+    start();
+    auto res = client().Options("/nonexistent");
+
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 0u);
+}
+
+// -- Per-endpoint CorsPolicy tiers -------------------------------------------
+//
+// These tests exercise the critical override path: a wildcard-configured
+// router must still produce NO Allow-Origin for Restricted endpoints
+// (and always "*" for Public endpoints), regardless of what the router
+// default would be. Pre-fix, the policy was applied in dispatch but
+// httplib's set_default_headers merge ran afterward and silently
+// re-added the wildcard — so cross-origin requests to /admin/* were
+// accepted in production despite the Restricted annotation.
+
+TEST_F(RestRouterTest, RestrictedEndpointOverridesWildcard) {
+    router_.set_cors_origins({"*"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/admin/thing", false, RestResponse::json(200, {}));
+    ep->cors_policy_ = CorsPolicy::Restricted;
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto res = client().Get("/admin/thing");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 0u);
+}
+
+TEST_F(RestRouterTest, RestrictedPreflightOverridesWildcard) {
+    router_.set_cors_origins({"*"});
+    auto ep = std::make_unique<StubEndpoint>("POST", "/admin/do", false, RestResponse::json(200, {}));
+    ep->cors_policy_ = CorsPolicy::Restricted;
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto res = client().Options("/admin/do");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 0u);
+}
+
+TEST_F(RestRouterTest, PublicEndpointForcesWildcard) {
+    // Router configured single-origin — Public tier must force "*" regardless.
+    router_.set_cors_origins({"https://internal.example"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/public/info", false, RestResponse::json(200, {}));
+    ep->cors_policy_ = CorsPolicy::Public;
+    router_.register_endpoint(std::move(ep));
+
+    start();
+    auto res = client().Get("/public/info");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
     EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "*");
     EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
 }
 
-TEST_F(RestRouterTest, CorsPreflightOnUnmatchedRouteStillHasHeaders) {
-    // OPTIONS to a path with no registered endpoint returns 404 (no catch-all
-    // regex support in this httplib), but default_headers still inject CORS.
-    router_.set_cors_origins({"https://example.com"});
+TEST_F(RestRouterTest, DefaultPolicyEchoesWildcardConfig) {
+    // Sanity: a Default-policy endpoint under a wildcard-configured router
+    // still gets "*" in Allow-Origin, because the policy falls through to
+    // the router config.
+    router_.set_cors_origins({"*"});
+    auto ep = std::make_unique<StubEndpoint>("GET", "/normal", false, RestResponse::json(200, {}));
+    // cors_policy_ stays Default.
+    router_.register_endpoint(std::move(ep));
 
     start();
-    auto cli = client();
-    auto res = cli.Options("/nonexistent");
-
+    auto res = client().Get("/normal");
     ASSERT_TRUE(res);
-    EXPECT_EQ(res->status, 404);
-    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "https://example.com");
-    EXPECT_EQ(header_count(res, "Access-Control-Allow-Origin"), 1u);
+    EXPECT_EQ(res->get_header_value("Access-Control-Allow-Origin"), "*");
 }
 
 // -- GameRoom session tests --------------------------------------------------

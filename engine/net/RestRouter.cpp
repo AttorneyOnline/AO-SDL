@@ -55,8 +55,10 @@ bool RestRouter::cors_enabled() const {
 }
 
 void RestRouter::apply_cors_origin(const http::Request& req, http::Response& res) const {
-    // Multi-origin mode: echo back the Origin if it matches the allow-list.
-    // Methods, Headers, and Vary are already set via set_default_headers.
+    // Multi-origin mode: Vary: Origin is required so HTTP caches key on
+    // the request Origin (since we echo it back selectively). Echo back
+    // the Origin only if it matches the allow-list.
+    res.set_header("Vary", "Origin");
     auto origin = req.get_header_value("Origin");
     for (const auto& allowed : cors_origins_) {
         if (origin == allowed) {
@@ -66,63 +68,60 @@ void RestRouter::apply_cors_origin(const http::Request& req, http::Response& res
     }
 }
 
-/// Apply the effective Access-Control-Allow-Origin for a given endpoint,
-/// overriding the router defaults if the endpoint has a non-Default
-/// policy. Called on both regular dispatch and preflight OPTIONS so
-/// browsers and handlers agree on the allowed origins.
+/// Apply the effective Access-Control-Allow-Origin for a given endpoint.
+/// Called on both regular dispatch and preflight OPTIONS so browsers and
+/// handlers agree on the allowed origins.
+///
+/// Allow-Origin is intentionally NOT set via set_default_headers — httplib
+/// merges defaults AFTER the handler runs, so handler-time erase() of a
+/// default header gets silently reverted. Setting per-response here is
+/// the only way Restricted actually strips the header end-to-end.
 void RestRouter::apply_cors_for_endpoint(const RestEndpoint& endpoint, const http::Request& req,
                                          http::Response& res) const {
     auto policy = endpoint.cors_policy();
 
     if (policy == CorsPolicy::Restricted) {
-        // Strip any Allow-Origin set by set_default_headers. Browsers will
-        // block credentialed cross-origin requests, making this route
-        // same-origin-only regardless of the router config.
-        res.headers.erase("Access-Control-Allow-Origin");
+        // No Allow-Origin at all. Browsers block credentialed cross-origin
+        // requests to this route regardless of the router config.
         return;
     }
 
     if (policy == CorsPolicy::Public) {
         // Unconditional wildcard. Good for discovery endpoints where the
         // response is public information anyway.
-        res.headers.erase("Access-Control-Allow-Origin");
         res.set_header("Access-Control-Allow-Origin", "*");
         return;
     }
 
-    // Default: fall back to the router-wide policy. Wildcard and single
-    // origin are set via set_default_headers(); multi-origin is echoed
-    // per request.
-    if (cors_origins_.size() > 1)
+    // Default: fall back to the router-wide policy.
+    if (cors_wildcard_) {
+        res.set_header("Access-Control-Allow-Origin", "*");
+    }
+    else if (cors_origins_.size() == 1) {
+        res.set_header("Access-Control-Allow-Origin", cors_origins_[0]);
+    }
+    else if (!cors_origins_.empty()) {
         apply_cors_origin(req, res);
+    }
 }
 
 void RestRouter::bind(http::Server& server) {
-    // Static CORS headers are set via set_default_headers so they appear on
-    // every response, including httplib's built-in 404 for unmatched routes.
+    // Methods/Headers are safe as defaults — they only describe what CORS
+    // *supports* and don't authorize anything on their own. Allow-Origin
+    // is the authorization gate and is set per-response in dispatch()
+    // (and per-preflight below) so Restricted endpoints can opt out even
+    // when the router is wildcard-configured. httplib's set_default_headers
+    // merges AFTER handlers run, which made handler-time erase() of a
+    // default unreliable — hence moving Allow-Origin out entirely.
     //
-    // For wildcard or single-origin configs, all CORS headers are static.
-    // For multi-origin, Allow-Origin varies per request and is set in each
-    // handler via apply_cors_origin(); the remaining headers are static.
-    if (cors_wildcard_) {
-        server.set_default_headers({
-            {"Access-Control-Allow-Origin", "*"},
-            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "*"},
-        });
-    }
-    else if (cors_origins_.size() == 1) {
-        server.set_default_headers({
-            {"Access-Control-Allow-Origin", cors_origins_[0]},
-            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "*"},
-        });
-    }
-    else if (!cors_origins_.empty()) {
+    // Consequence: responses from unmatched routes (httplib's built-in
+    // 404) will NOT carry Access-Control-Allow-Origin. That is the safer
+    // posture — browsers surface a CORS error for probing from unexpected
+    // origins instead of silently returning 404.
+    if (cors_enabled()) {
         server.set_default_headers({
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
             {"Access-Control-Allow-Headers", "*"},
-            {"Vary", "Origin"},
         });
     }
 
