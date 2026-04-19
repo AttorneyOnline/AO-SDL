@@ -98,6 +98,7 @@ set(TEST_SOURCES
     net/test_RateLimiter.cpp
     net/test_TrustedProxyList.cpp
     net/test_RestRouter.cpp
+    net/test_AdminEndpoints.cpp
     net/test_RFC9112.cpp
     net/test_RFC9110.cpp
     ao/net/test_AOServer.cpp

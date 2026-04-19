@@ -28,7 +28,8 @@ class NXServer {
     /// matches the AO2 HI-packet derivation and allows cross-protocol
     /// moderation state (heat, mutes) to key by the same identifier.
     SessionInfo create_session(const std::string& hdid, const std::string& client_name,
-                               const std::string& client_version, const std::string& remote_addr = "");
+                               const std::string& client_version, const std::string& remote_addr = "",
+                               bool spectator_admin = false);
     void destroy_session(uint64_t client_id);
 
     /// Generate a durable auth token (different prefix from session tokens).

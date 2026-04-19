@@ -277,6 +277,14 @@ class GameRoom {
         return reload_func_;
     }
 
+    using StopFunc = std::function<void()>;
+    void set_stop_func(StopFunc func) {
+        stop_func_ = std::move(func);
+    }
+    const StopFunc& stop_func() const {
+        return stop_func_;
+    }
+
     // --- Actions (called by protocol backends) ---
 
     /// Process an IC message. Validates, then broadcasts to area via all delegates.
@@ -339,6 +347,7 @@ class GameRoom {
     std::unordered_map<std::string, int> area_name_to_index_;      ///< name → index in areas[].
 
     ReloadFunc reload_func_;
+    StopFunc stop_func_;
 
     std::vector<ICBroadcast> ic_broadcasts_;
     std::vector<OOCBroadcast> ooc_broadcasts_;

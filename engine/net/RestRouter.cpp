@@ -55,8 +55,10 @@ bool RestRouter::cors_enabled() const {
 }
 
 void RestRouter::apply_cors_origin(const http::Request& req, http::Response& res) const {
-    // Multi-origin mode: echo back the Origin if it matches the allow-list.
-    // Methods, Headers, and Vary are already set via set_default_headers.
+    // Multi-origin mode: Vary: Origin is required so HTTP caches key on
+    // the request Origin (since we echo it back selectively). Echo back
+    // the Origin only if it matches the allow-list.
+    res.set_header("Vary", "Origin");
     auto origin = req.get_header_value("Origin");
     for (const auto& allowed : cors_origins_) {
         if (origin == allowed) {
@@ -66,32 +68,64 @@ void RestRouter::apply_cors_origin(const http::Request& req, http::Response& res
     }
 }
 
-void RestRouter::bind(http::Server& server) {
-    // Static CORS headers are set via set_default_headers so they appear on
-    // every response, including httplib's built-in 404 for unmatched routes.
-    //
-    // For wildcard or single-origin configs, all CORS headers are static.
-    // For multi-origin, Allow-Origin varies per request and is set in each
-    // handler via apply_cors_origin(); the remaining headers are static.
+/// Apply the effective Access-Control-Allow-Origin for a given endpoint.
+/// Called on both regular dispatch and preflight OPTIONS so browsers and
+/// handlers agree on the allowed origins.
+///
+/// Allow-Origin is intentionally NOT set via set_default_headers. The
+/// engine's serialize_response emits default_headers AND res.headers
+/// sequentially, unconditionally — there is no "merge if absent". So a
+/// handler can never SUPPRESS a default, only append. Keeping Allow-Origin
+/// out of defaults is the only way Restricted can produce a response with
+/// no Allow-Origin on the wire.
+void RestRouter::apply_cors_for_endpoint(const RestEndpoint& endpoint, const http::Request& req,
+                                         http::Response& res) const {
+    auto policy = endpoint.cors_policy();
+
+    if (policy == CorsPolicy::Restricted) {
+        // No Allow-Origin at all. Browsers block credentialed cross-origin
+        // requests to this route regardless of the router config.
+        return;
+    }
+
+    if (policy == CorsPolicy::Public) {
+        // Unconditional wildcard. Good for discovery endpoints where the
+        // response is public information anyway.
+        res.set_header("Access-Control-Allow-Origin", "*");
+        return;
+    }
+
+    // Default: fall back to the router-wide policy.
     if (cors_wildcard_) {
-        server.set_default_headers({
-            {"Access-Control-Allow-Origin", "*"},
-            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "*"},
-        });
+        res.set_header("Access-Control-Allow-Origin", "*");
     }
     else if (cors_origins_.size() == 1) {
-        server.set_default_headers({
-            {"Access-Control-Allow-Origin", cors_origins_[0]},
-            {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
-            {"Access-Control-Allow-Headers", "*"},
-        });
+        res.set_header("Access-Control-Allow-Origin", cors_origins_[0]);
     }
     else if (!cors_origins_.empty()) {
+        apply_cors_origin(req, res);
+    }
+}
+
+void RestRouter::bind(http::Server& server) {
+    // Methods/Headers are safe as defaults — they only describe what CORS
+    // *supports* and don't authorize anything on their own. Allow-Origin
+    // is the authorization gate and is set per-response in dispatch()
+    // (and per-preflight below) so Restricted endpoints can opt out even
+    // when the router is wildcard-configured. The engine emits defaults
+    // and response headers both unconditionally (no merge-on-absent), so
+    // anything placed in defaults ends up on the wire no matter what the
+    // handler does — Allow-Origin must stay out of this set.
+    //
+    // Consequence: responses from unmatched routes (the engine's built-in
+    // 404, which doesn't run through our dispatch) will NOT carry
+    // Access-Control-Allow-Origin. That's the safer posture — browsers
+    // surface a CORS error on unknown paths instead of silently 404ing
+    // under same-origin-looking headers.
+    if (cors_enabled()) {
         server.set_default_headers({
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
             {"Access-Control-Allow-Headers", "*"},
-            {"Vary", "Origin"},
         });
     }
 
@@ -115,26 +149,23 @@ void RestRouter::bind(http::Server& server) {
         else
             Log::log_print(ERR, "REST: unknown method '%s' for %s", method.c_str(), pattern.c_str());
 
-        // Preflight handler for this route
-        if (cors_origins_.size() > 1) {
-            server.Options(pattern, [this](const http::Request& req, http::Response& res) {
-                apply_cors_origin(req, res);
-                res.status = 204;
-            });
-        }
-        else {
-            server.Options(pattern, [](const http::Request&, http::Response& res) { res.status = 204; });
-        }
+        // Preflight handler for this route — resolve CORS via the
+        // endpoint's policy so Restricted/Public routes produce the
+        // same Allow-Origin on preflight as on the actual call.
+        server.Options(pattern, [this, raw_ep](const http::Request& req, http::Response& res) {
+            apply_cors_for_endpoint(*raw_ep, req, res);
+            res.status = 204;
+        });
     }
 }
 
 void RestRouter::dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res) {
     Log::log_print(VERBOSE, "REST: >> %s %s", req.method.c_str(), req.path.c_str());
 
-    // Static CORS headers are set via set_default_headers in bind().
-    // Multi-origin mode needs per-request Allow-Origin.
-    if (cors_origins_.size() > 1)
-        apply_cors_origin(req, res);
+    // Static CORS headers are set via set_default_headers in bind();
+    // apply the per-endpoint policy on top (Public forces "*",
+    // Restricted strips Allow-Origin, Default echoes the router config).
+    apply_cors_for_endpoint(endpoint, req, res);
 
     try {
         // Build RestRequest from http::Request (no lock needed — pure parsing)

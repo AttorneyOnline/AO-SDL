@@ -1923,8 +1923,8 @@ paths:
         prefixed by `event:` (the event type) and `data:` (the payload).
 
         Event types:
-        - `ic_message` — In-character message composition
-        - `ooc_message` — Out-of-character chat message
+        - `ic_message` — In-character message composition. Includes `area` (area name).
+        - `ooc_message` — Out-of-character chat message. Includes `area` (area name).
         - `area_update` — Area state change (players, status, cm, lock)
         - `background_change` — Area background changed
         - `music_change` — Music track started/stopped

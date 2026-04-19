@@ -69,6 +69,9 @@ struct ServerSession {
     /// Empty for anonymous sessions and AO2 clients that authenticated via OOC /login.
     std::string auth_token_id;
 
+    /// Admin dashboard sessions are excluded from player counts and advertising.
+    bool spectator_admin = false;
+
     /// Username from database auth (ADVANCED mode only). Empty in SIMPLE mode.
     std::string moderator_name;
 

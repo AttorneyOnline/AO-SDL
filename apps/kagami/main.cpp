@@ -1,5 +1,7 @@
 #include "ConfigReloader.h"
 #include "ContentConfig.h"
+
+#include "asset/MountEmbedded.h"
 #include "LogSinkSetup.h"
 #include "MasterServerAdvertiser.h"
 #include "MetricsCollector.h"
@@ -507,6 +509,108 @@ int main(int /*argc*/, char* argv[]) {
         res.set_content("Hello from " + cfg.server_name() + "\n", "text/plain");
     });
 
+    // --- Admin dashboard SPA (served from embedded assets) ---
+    {
+        // Build an index for O(1) lookup of embedded admin assets.
+        static std::unordered_map<std::string, const EmbeddedFile*> admin_assets;
+        static std::once_flag admin_init;
+        std::call_once(admin_init, [] {
+            for (const auto& file : embedded_assets()) {
+                std::string_view path(file.path);
+                if (path.starts_with("admin/"))
+                    admin_assets[std::string(path)] = &file;
+            }
+        });
+
+        // MIME type by extension.
+        auto mime_for = [](std::string_view path) -> const char* {
+            if (path.ends_with(".html"))
+                return "text/html; charset=utf-8";
+            if (path.ends_with(".js"))
+                return "application/javascript";
+            if (path.ends_with(".css"))
+                return "text/css";
+            if (path.ends_with(".json"))
+                return "application/json";
+            if (path.ends_with(".svg"))
+                return "image/svg+xml";
+            if (path.ends_with(".png"))
+                return "image/png";
+            if (path.ends_with(".jpg") || path.ends_with(".jpeg"))
+                return "image/jpeg";
+            if (path.ends_with(".woff2"))
+                return "font/woff2";
+            if (path.ends_with(".woff"))
+                return "font/woff";
+            if (path.ends_with(".ico"))
+                return "image/x-icon";
+            return "application/octet-stream";
+        };
+
+        // Security headers for the admin SPA. The dashboard is a single
+        // Vite-built bundle with no third-party scripts, no inline
+        // <script> blocks, and no dynamic HTML injection — the CSP below
+        // reflects that. If dependencies change (e.g. a CDN font), these
+        // constraints will fail fast in the browser console.
+        //
+        //   default-src 'none'              — deny everything by default
+        //   script-src 'self'               — only our bundled JS
+        //   style-src 'self' 'unsafe-inline' — Tailwind class-based + a few Svelte-injected rules
+        //   img-src 'self' data:            — icons + inline SVG data URIs
+        //   font-src 'self'                 — only self-hosted fonts
+        //   connect-src 'self'              — REST + SSE same-origin only
+        //   frame-ancestors 'none'          — block embedding (clickjacking)
+        //   base-uri 'none'                 — disallow <base> rewrites
+        //   form-action 'self'              — form POSTs cannot be retargeted
+        static constexpr const char* kCSP =
+            "default-src 'none'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'none'; "
+            "form-action 'self'";
+
+        auto apply_security_headers = [](http::Response& res) {
+            res.set_header("Content-Security-Policy", kCSP);
+            res.set_header("X-Content-Type-Options", "nosniff");
+            res.set_header("X-Frame-Options", "DENY");
+            res.set_header("Referrer-Policy", "no-referrer");
+            // Admin dashboard should never be cached by shared caches.
+            res.set_header("Cache-Control", "no-store");
+        };
+
+        auto serve = [&, apply_security_headers](const std::string& asset_path, http::Response& res) {
+            auto it = admin_assets.find(asset_path);
+            if (it != admin_assets.end()) {
+                res.set_content(reinterpret_cast<const char*>(it->second->data),
+                                it->second->size, mime_for(asset_path));
+                apply_security_headers(res);
+                return true;
+            }
+            return false;
+        };
+
+        // /admin and /admin/ → index.html (SPA entry point)
+        http.Get("/admin", [serve](const http::Request&, http::Response& res) {
+            if (!serve("admin/index.html", res))
+                res.set_content("Admin dashboard not built", "text/plain");
+        });
+        http.Get("/admin/", [serve](const http::Request&, http::Response& res) {
+            if (!serve("admin/index.html", res))
+                res.set_content("Admin dashboard not built", "text/plain");
+        });
+
+        // /admin/assets/:file → Vite build output (JS, CSS, images)
+        http.Get("/admin/assets/:file", [serve](const http::Request& req, http::Response& res) {
+            auto path = "admin/assets/" + req.path_params.at("file");
+            if (!serve(path, res))
+                res.status = 404;
+        });
+    }
+
     // Wire reverse proxy config into HTTP server
     {
         auto rp = cfg.reverse_proxy_config();
@@ -654,6 +758,7 @@ int main(int /*argc*/, char* argv[]) {
         auto result = perform_reload(ctx, [](std::function<void()> fn) { fn(); });
         return result.format();
     });
+    room.set_stop_func([s = &stop_src]() { s->request_stop(); });
 
     if (interactive) {
         std::string line;

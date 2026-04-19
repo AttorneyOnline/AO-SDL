@@ -243,6 +243,46 @@ configure_file(
 message(STATUS "AO-SDL version: ${AO_SDL_VERSION}")
 
 # =============================================================================
+# Admin dashboard SPA build (optional, requires Node.js)
+# =============================================================================
+option(KAGAMI_BUILD_ADMIN "Build admin dashboard SPA (requires Node.js + npm)" OFF)
+
+if(KAGAMI_BUILD_ADMIN)
+    find_program(NPM_EXECUTABLE npm)
+    if(NPM_EXECUTABLE)
+        # Install dependencies if node_modules is missing
+        if(NOT EXISTS "${CMAKE_SOURCE_DIR}/frontend/admin/node_modules")
+            execute_process(
+                COMMAND ${NPM_EXECUTABLE} install
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/frontend/admin"
+                RESULT_VARIABLE _npm_install_result
+            )
+            if(NOT _npm_install_result EQUAL 0)
+                message(WARNING "npm install failed — admin dashboard will not be built")
+                set(KAGAMI_BUILD_ADMIN OFF)
+            endif()
+        endif()
+
+        if(KAGAMI_BUILD_ADMIN)
+            add_custom_command(
+                OUTPUT "${CMAKE_SOURCE_DIR}/assets/admin/index.html"
+                COMMAND ${NPM_EXECUTABLE} run build
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/frontend/admin"
+                COMMENT "Building admin dashboard SPA"
+                DEPENDS "${CMAKE_SOURCE_DIR}/frontend/admin/src/App.svelte"
+            )
+            add_custom_target(admin_dashboard ALL
+                DEPENDS "${CMAKE_SOURCE_DIR}/assets/admin/index.html"
+            )
+            message(STATUS "Admin dashboard: enabled (npm at ${NPM_EXECUTABLE})")
+        endif()
+    else()
+        message(STATUS "Admin dashboard: disabled (npm not found)")
+        set(KAGAMI_BUILD_ADMIN OFF)
+    endif()
+endif()
+
+# =============================================================================
 # Embed assets/ directory into the binary
 # =============================================================================
 include(cmake/EmbedAssets.cmake)
@@ -733,6 +773,10 @@ add_library(nx_net STATIC
     plugins/net/nx/endpoints/AuthLogoutEndpoint.cpp
     plugins/net/nx/endpoints/AdminSessionsEndpoint.cpp
     plugins/net/nx/endpoints/AdminConfigEndpoint.cpp
+    plugins/net/nx/endpoints/AdminDataEndpoints.cpp
+    plugins/net/nx/endpoints/ModerationActionsEndpoint.cpp
+    plugins/net/nx/endpoints/AdminContentPutEndpoint.cpp
+    plugins/net/nx/endpoints/AdminStopEndpoint.cpp
 )
 set_property(TARGET nx_net PROPERTY CXX_STANDARD 20)
 target_include_directories(nx_net

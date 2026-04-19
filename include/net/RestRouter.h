@@ -96,6 +96,7 @@ class RestRouter {
   private:
     void dispatch(RestEndpoint& endpoint, const http::Request& req, http::Response& res);
     void apply_cors_origin(const http::Request& req, http::Response& res) const;
+    void apply_cors_for_endpoint(const RestEndpoint& endpoint, const http::Request& req, http::Response& res) const;
     bool cors_enabled() const;
 
     AuthFunc auth_func_;
