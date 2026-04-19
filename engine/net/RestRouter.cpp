@@ -72,10 +72,12 @@ void RestRouter::apply_cors_origin(const http::Request& req, http::Response& res
 /// Called on both regular dispatch and preflight OPTIONS so browsers and
 /// handlers agree on the allowed origins.
 ///
-/// Allow-Origin is intentionally NOT set via set_default_headers — httplib
-/// merges defaults AFTER the handler runs, so handler-time erase() of a
-/// default header gets silently reverted. Setting per-response here is
-/// the only way Restricted actually strips the header end-to-end.
+/// Allow-Origin is intentionally NOT set via set_default_headers. The
+/// engine's serialize_response emits default_headers AND res.headers
+/// sequentially, unconditionally — there is no "merge if absent". So a
+/// handler can never SUPPRESS a default, only append. Keeping Allow-Origin
+/// out of defaults is the only way Restricted can produce a response with
+/// no Allow-Origin on the wire.
 void RestRouter::apply_cors_for_endpoint(const RestEndpoint& endpoint, const http::Request& req,
                                          http::Response& res) const {
     auto policy = endpoint.cors_policy();
@@ -110,14 +112,16 @@ void RestRouter::bind(http::Server& server) {
     // *supports* and don't authorize anything on their own. Allow-Origin
     // is the authorization gate and is set per-response in dispatch()
     // (and per-preflight below) so Restricted endpoints can opt out even
-    // when the router is wildcard-configured. httplib's set_default_headers
-    // merges AFTER handlers run, which made handler-time erase() of a
-    // default unreliable — hence moving Allow-Origin out entirely.
+    // when the router is wildcard-configured. The engine emits defaults
+    // and response headers both unconditionally (no merge-on-absent), so
+    // anything placed in defaults ends up on the wire no matter what the
+    // handler does — Allow-Origin must stay out of this set.
     //
-    // Consequence: responses from unmatched routes (httplib's built-in
-    // 404) will NOT carry Access-Control-Allow-Origin. That is the safer
-    // posture — browsers surface a CORS error for probing from unexpected
-    // origins instead of silently returning 404.
+    // Consequence: responses from unmatched routes (the engine's built-in
+    // 404, which doesn't run through our dispatch) will NOT carry
+    // Access-Control-Allow-Origin. That's the safer posture — browsers
+    // surface a CORS error on unknown paths instead of silently 404ing
+    // under same-origin-looking headers.
     if (cors_enabled()) {
         server.set_default_headers({
             {"Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"},
